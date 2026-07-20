@@ -1,0 +1,406 @@
+using Microsoft.AspNetCore.Mvc;
+using TestingDemo.Services;
+using TestingDemo.ViewModels;
+
+namespace TestingDemo.Controllers;
+
+public class RoomsController : Controller
+{
+    private readonly IRoomService _roomService;
+    private readonly IWebHostEnvironment _environment;
+
+    public RoomsController(IRoomService roomService, IWebHostEnvironment environment)
+    {
+        _roomService = roomService;
+        _environment = environment;
+    }
+
+    public IActionResult Index()
+    {
+        return View();
+    }
+
+    public IActionResult List()
+    {
+        return RedirectToAction(nameof(Index), new { view = "list" });
+    }
+
+    public async Task<IActionResult> EditType(int id, CancellationToken cancellationToken)
+    {
+        var rooms = await _roomService.GetAllAsync(cancellationToken);
+        var roomsOfType = rooms
+            .Where(r => r.RoomTypeId == id)
+            .OrderBy(r => r.RoomNumber, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (roomsOfType.Count == 0)
+        {
+            return NotFound();
+        }
+
+        var model = RoomTypeFormViewModel.FromRooms(roomsOfType);
+        await PopulateLookupsAsync(model, cancellationToken);
+        return View(model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(60_000_000)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 60_000_000)]
+    public async Task<IActionResult> EditType(
+        RoomTypeFormViewModel model,
+        CancellationToken cancellationToken)
+    {
+        model.SelectedInclusions ??= new List<string>();
+        model.ExistingImages ??= new List<string>();
+        model.Rooms ??= new List<RoomNumberEditItem>();
+        model.EnsureRooms();
+        var uploadedFiles = CollectUploadedImages(model.UploadedImages);
+
+        ValidateEditTypeRoomNumbers(model);
+
+        if (!ModelState.IsValid)
+        {
+            await PopulateLookupsAsync(model, cancellationToken);
+            return View(model);
+        }
+
+        try
+        {
+            var previousImages = (await _roomService.GetAllAsync(cancellationToken))
+                .Where(r => r.RoomTypeId == model.RoomTypeId)
+                .SelectMany(r => r.Images)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var uploaded = await RoomImageStorage.SaveAsync(
+                _environment,
+                uploadedFiles,
+                model.Name,
+                cancellationToken);
+
+            var finalImages = model.ExistingImages
+                .Concat(uploaded)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (finalImages.Count > RoomImageStorage.MaxImages)
+            {
+                throw new InvalidOperationException(
+                    $"A room type can have at most {RoomImageStorage.MaxImages} images.");
+            }
+
+            var updatedCount = await _roomService.UpdateRoomTypeAsync(
+                model.ToDto(finalImages),
+                cancellationToken);
+
+            if (updatedCount == 0)
+            {
+                return NotFound();
+            }
+
+            var removed = previousImages
+                .Where(path => !finalImages.Contains(path, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+            RoomImageStorage.DeleteFiles(_environment, removed);
+
+            TempData["Success"] =
+                $"Room type updated successfully for {updatedCount} room(s).";
+            return RedirectToAction(nameof(Index));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or FluentValidation.ValidationException)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+            await PopulateLookupsAsync(model, cancellationToken);
+            return View(model);
+        }
+    }
+
+    public async Task<IActionResult> DeleteType(int id, CancellationToken cancellationToken)
+    {
+        var rooms = await _roomService.GetAllAsync(cancellationToken);
+        var roomType = RoomIndexViewModel.FromRooms(rooms).RoomTypes
+            .FirstOrDefault(t => t.RoomTypeId == id);
+
+        if (roomType is null)
+        {
+            return NotFound();
+        }
+
+        return View(roomType);
+    }
+
+    [HttpPost, ActionName("DeleteType")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteTypeConfirmed(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        var rooms = await _roomService.GetAllAsync(cancellationToken);
+        var images = rooms
+            .Where(r => r.RoomTypeId == id)
+            .SelectMany(r => r.Images)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var typeName = rooms.FirstOrDefault(r => r.RoomTypeId == id)?.Name ?? "Room type";
+        var deletedCount = await _roomService.DeleteRoomTypeAsync(id, cancellationToken);
+        if (deletedCount == 0)
+        {
+            return NotFound();
+        }
+
+        RoomImageStorage.DeleteFiles(_environment, images);
+
+        TempData["Success"] =
+            $"Room type '{typeName}' and {deletedCount} room(s) were deleted successfully.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Details(int id, CancellationToken cancellationToken)
+    {
+        var room = await _roomService.GetByIdAsync(id, cancellationToken);
+        if (room is null)
+        {
+            return NotFound();
+        }
+
+        return View(room);
+    }
+
+    public async Task<IActionResult> Create(CancellationToken cancellationToken)
+    {
+        var model = new CreateRoomsViewModel();
+        await PopulateCreateLookupsAsync(model, cancellationToken);
+        return View(model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(60_000_000)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 60_000_000)]
+    public async Task<IActionResult> Create(CreateRoomsViewModel model, CancellationToken cancellationToken)
+    {
+        model.SelectedInclusions ??= new List<string>();
+        model.ImagePaths ??= new List<string>();
+        // Prefer raw form files — more reliable than model-bound IFormFile[] after JS DataTransfer.
+        var uploadedFiles = CollectUploadedImages(model.UploadedImages);
+        model.EnsureAssignedRoomNumbers();
+
+        if (model.AssignedRoomNumbers.Count != model.RoomCount)
+        {
+            ModelState.AddModelError(nameof(model.AssignedRoomNumbers),
+                $"Please assign a room number for all {model.RoomCount} room(s).");
+        }
+
+        if (model.AssignedRoomNumbers.Any(string.IsNullOrWhiteSpace))
+        {
+            ModelState.AddModelError(nameof(model.AssignedRoomNumbers),
+                "Each room must have a room number selected.");
+        }
+
+        if (model.AssignedRoomNumbers.Distinct(StringComparer.OrdinalIgnoreCase).Count() != model.AssignedRoomNumbers.Count)
+        {
+            ModelState.AddModelError(nameof(model.AssignedRoomNumbers),
+                "Each room number must be unique.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            await PopulateCreateLookupsAsync(model, cancellationToken);
+            return View(model);
+        }
+
+        try
+        {
+            var uploaded = await RoomImageStorage.SaveAsync(
+                _environment,
+                uploadedFiles,
+                model.Name,
+                cancellationToken);
+
+            if (uploaded.Count > RoomImageStorage.MaxImages)
+            {
+                throw new InvalidOperationException(
+                    $"A room type can have at most {RoomImageStorage.MaxImages} images.");
+            }
+
+            model.ImagePaths = uploaded;
+            var createdCount = await _roomService.CreateBulkAsync(model.ToCreateDto(), cancellationToken);
+            TempData["Success"] = createdCount == 1
+                ? "Room created successfully."
+                : $"{createdCount} rooms created successfully.";
+            return RedirectToAction(nameof(List));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or FluentValidation.ValidationException)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+            await PopulateCreateLookupsAsync(model, cancellationToken);
+            return View(model);
+        }
+    }
+
+    public async Task<IActionResult> Edit(int id, CancellationToken cancellationToken)
+    {
+        var room = await _roomService.GetByIdAsync(id, cancellationToken);
+        if (room is null)
+        {
+            return NotFound();
+        }
+
+        var model = RoomFormViewModel.FromDto(room);
+        await PopulateLookupsAsync(model, cancellationToken);
+        return View(model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(int id, RoomFormViewModel model, CancellationToken cancellationToken)
+    {
+        if (id != model.Id)
+        {
+            return BadRequest();
+        }
+
+        model.SelectedInclusions ??= new List<string>();
+
+        if (!ModelState.IsValid)
+        {
+            await PopulateLookupsAsync(model, cancellationToken);
+            return View(model);
+        }
+
+        try
+        {
+            var updated = await _roomService.UpdateAsync(model.ToUpdateDto(), cancellationToken);
+            if (updated is null)
+            {
+                return NotFound();
+            }
+
+            TempData["Success"] = "Room updated successfully.";
+            return RedirectToAction(nameof(List));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or FluentValidation.ValidationException)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+            await PopulateLookupsAsync(model, cancellationToken);
+            return View(model);
+        }
+    }
+
+    public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
+    {
+        var room = await _roomService.GetByIdAsync(id, cancellationToken);
+        if (room is null)
+        {
+            return NotFound();
+        }
+
+        return View(room);
+    }
+
+    [HttpPost, ActionName("Delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteConfirmed(int id, CancellationToken cancellationToken)
+    {
+        var deleted = await _roomService.DeleteAsync(id, cancellationToken);
+        if (!deleted)
+        {
+            return NotFound();
+        }
+
+        TempData["Success"] = "Room deleted successfully.";
+        return RedirectToAction(nameof(List));
+    }
+
+    private List<IFormFile> CollectUploadedImages(IEnumerable<IFormFile>? boundFiles)
+    {
+        var fromForm = Request.HasFormContentType
+            ? Request.Form.Files
+                .Where(f => f.Length > 0 &&
+                            (f.Name.Equals(nameof(CreateRoomsViewModel.UploadedImages), StringComparison.OrdinalIgnoreCase) ||
+                             f.Name.StartsWith(nameof(CreateRoomsViewModel.UploadedImages) + "[", StringComparison.OrdinalIgnoreCase)))
+                .ToList()
+            : new List<IFormFile>();
+
+        if (fromForm.Count > 0)
+        {
+            return fromForm;
+        }
+
+        return (boundFiles ?? Enumerable.Empty<IFormFile>())
+            .Where(f => f is { Length: > 0 })
+            .ToList();
+    }
+
+    private async Task PopulateCreateLookupsAsync(CreateRoomsViewModel model, CancellationToken cancellationToken)
+    {
+        model.EnsureAssignedRoomNumbers();
+        model.AvailableInclusions = await GetAvailableInclusionsAsync(
+            model.SelectedInclusions,
+            cancellationToken);
+    }
+
+    private async Task PopulateLookupsAsync(RoomFormViewModel model, CancellationToken cancellationToken)
+    {
+        model.AvailableInclusions = await GetAvailableInclusionsAsync(
+            model.SelectedInclusions,
+            cancellationToken);
+    }
+
+    private async Task PopulateLookupsAsync(RoomTypeFormViewModel model, CancellationToken cancellationToken)
+    {
+        model.EnsureRooms();
+        model.AvailableInclusions = await GetAvailableInclusionsAsync(
+            model.SelectedInclusions,
+            cancellationToken);
+    }
+
+    private void ValidateEditTypeRoomNumbers(RoomTypeFormViewModel model)
+    {
+        if (model.RoomCount != model.Rooms.Count)
+        {
+            ModelState.AddModelError(
+                nameof(model.RoomCount),
+                "Room count must match the number of room number fields.");
+        }
+
+        if (model.Rooms.Count == 0)
+        {
+            ModelState.AddModelError(nameof(model.Rooms), "At least one room is required.");
+            return;
+        }
+
+        if (model.Rooms.Any(r => string.IsNullOrWhiteSpace(r.RoomNumber)))
+        {
+            ModelState.AddModelError(nameof(model.Rooms), "Each room must have a room number.");
+        }
+
+        if (model.Rooms
+                .Select(r => r.RoomNumber.Trim())
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count()
+            != model.Rooms.Count(r => !string.IsNullOrWhiteSpace(r.RoomNumber)))
+        {
+            ModelState.AddModelError(nameof(model.Rooms), "Each room number must be unique.");
+        }
+    }
+
+    private async Task<List<string>> GetAvailableInclusionsAsync(
+        IEnumerable<string>? selected,
+        CancellationToken cancellationToken)
+    {
+        var rooms = await _roomService.GetAllAsync(cancellationToken);
+        var fromRooms = rooms.SelectMany(r => r.Inclusions);
+
+        return InclusionCatalog.DefaultItems
+            .Concat(fromRooms)
+            .Concat(selected ?? Enumerable.Empty<string>())
+            .Select(i => i.Trim())
+            .Where(i => !string.IsNullOrWhiteSpace(i))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+}

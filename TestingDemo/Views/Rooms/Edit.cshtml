@@ -1,0 +1,49 @@
+@model TestingDemo.ViewModels.RoomFormViewModel
+@{
+    ViewData["Title"] = "Edit Room";
+}
+
+<section class="hotel-page-hero">
+    <div>
+        <p class="eyebrow">Room Management</p>
+        <h1>Edit Room @Model.RoomNumber</h1>
+        <p class="lede">Update this room’s details. Type-level photo changes are managed under Edit Room Type.</p>
+    </div>
+    <div class="hero-meta">
+        <span class="hotel-chip">@Model.Name</span>
+        <span class="hotel-chip">@(Model.IsAvailable ? "Available" : "Unavailable")</span>
+    </div>
+</section>
+
+<div class="row">
+    <div class="col-xl-9 col-lg-10">
+        <div class="hotel-panel">
+            <p class="text-muted small mb-3">Sections stay closed by default — open only what you need to change.</p>
+            <form asp-action="Edit" method="post" id="editRoomForm">
+                <input type="hidden" asp-for="Id" />
+                <input type="hidden" asp-for="RoomTypeId" />
+                <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+                <partial name="_RoomForm" model="Model" />
+                <div class="hotel-actions">
+                    <button type="submit" class="btn btn-primary">Save Room</button>
+                    <a asp-action="Details" asp-route-id="@Model.Id" class="btn btn-outline-secondary">Details</a>
+                    <a asp-action="List" class="btn btn-outline-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/inclusion-picker.js" asp-append-version="true"></script>
+    <script src="~/js/create-accordion.js" asp-append-version="true"></script>
+    <script src="~/js/money-input.js" asp-append-version="true"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            initHotelAccordion('editRoomAccordion');
+            initInclusionPicker();
+            initMoneyInputs(document.getElementById('editRoomForm'));
+        });
+    </script>
+}

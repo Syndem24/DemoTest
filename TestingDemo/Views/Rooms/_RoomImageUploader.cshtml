@@ -1,0 +1,72 @@
+@model TestingDemo.ViewModels.RoomImageUploaderViewModel
+@using TestingDemo.Services
+
+<div class="col-12">
+    <label class="form-label">Room type images</label>
+    <div class="border rounded p-3 hotel-uploader">
+        <ul class="small text-muted mb-3 ps-3">
+            <li>Select <strong>multiple</strong> photos (interior, bed, bathroom, view).</li>
+            <li>You can add more later or <strong>remove</strong> a file if you picked the wrong one.</li>
+            <li>Allowed: <strong>JPG, JPEG, PNG, WEBP</strong> · Max <strong>5 MB</strong> each · Up to <strong>@RoomImageStorage.MaxImages</strong> images</li>
+        </ul>
+
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+            <input type="file"
+                   id="roomImageInput"
+                   name="@Model.InputName"
+                   class="form-control"
+                   accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                   multiple />
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="clearSelectedImagesBtn">
+                Clear selected
+            </button>
+        </div>
+        <div class="form-text mb-2">Choosing more files adds them to the list (does not replace existing selections).</div>
+
+        <div id="selectedImageFiles" class="mt-3">
+            <div class="fw-semibold small mb-1">Selected files to upload</div>
+            <ul id="selectedImageFileNames" class="list-group list-group-flush small mb-0">
+                <li class="list-group-item px-0 text-muted" id="selectedImageEmpty">No new files selected yet. Choose files above to upload.</li>
+            </ul>
+        </div>
+
+        <div id="existingImages" class="mt-3">
+            <div class="fw-semibold small mb-2">
+                Current uploaded images
+                @if (Model.ExistingImages.Any())
+                {
+                    <span class="text-muted">(@Model.ExistingImages.Count)</span>
+                }
+            </div>
+            @if (!Model.ExistingImages.Any())
+            {
+                <div class="text-muted small" id="existingImageEmpty">No images uploaded yet. They will appear here after you save.</div>
+            }
+            else
+            {
+                <div class="row g-3" id="existingImageGrid">
+                    @foreach (var image in Model.ExistingImages)
+                    {
+                        var fileName = RoomImageStorage.GetFileName(image);
+                        <div class="col-md-4 existing-image-item" data-image-path="@image">
+                            <div class="border rounded p-2 h-100 bg-white">
+                                <img src="@image"
+                                     alt="@fileName"
+                                     class="img-fluid rounded mb-2"
+                                     style="max-height: 140px; width: 100%; object-fit: cover;"
+                                     data-photo-zoom
+                                     data-photo-zoom-group="room-uploader"
+                                     data-photo-zoom-src="@image"
+                                     title="Click to zoom" />
+                                <div class="small text-truncate" title="@fileName">@fileName</div>
+                                <input type="hidden" name="@Model.ExistingInputName" value="@image" class="existing-image-path" />
+                                <button type="button" class="btn btn-sm btn-outline-danger mt-2 remove-existing-image-btn">Remove</button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+    <div id="imageUploadError" class="text-danger small mt-1"></div>
+</div>

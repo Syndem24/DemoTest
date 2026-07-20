@@ -1,0 +1,72 @@
+@model TestingDemo.Models.RoomDto
+@{
+    ViewData["Title"] = "Delete Room";
+    var preview = Model.Images?.FirstOrDefault();
+}
+
+<section class="hotel-page-hero is-danger">
+    <div>
+        <p class="eyebrow">Confirm deletion</p>
+        <h1>Delete Room @Model.RoomNumber</h1>
+        <p class="lede">This removes only this room. Other rooms of type “@Model.Name” stay available.</p>
+    </div>
+    <div class="hero-meta">
+        <span class="hotel-chip">@Model.Name</span>
+        <span class="hotel-chip">@(Model.IsAvailable ? "Available" : "Unavailable")</span>
+    </div>
+</section>
+
+<div class="row">
+    <div class="col-lg-7">
+        <div class="hotel-panel">
+            <div class="hotel-warning" role="alert">
+                <span class="icon" aria-hidden="true">!</span>
+                <div>
+                    <strong>This cannot be undone.</strong>
+                    Booking history linked to this room may be affected. Double-check the room number before confirming.
+                </div>
+            </div>
+
+            <dl class="hotel-summary mb-0">
+                <div class="hotel-summary-row">
+                    <dt>Room number</dt>
+                    <dd>@Model.RoomNumber</dd>
+                </div>
+                <div class="hotel-summary-row">
+                    <dt>Room type</dt>
+                    <dd>@Model.Name</dd>
+                </div>
+                <div class="hotel-summary-row">
+                    <dt>Price / night</dt>
+                    <dd>@Model.PricePerNight.ToString("C")</dd>
+                </div>
+                <div class="hotel-summary-row">
+                    <dt>Occupancy</dt>
+                    <dd>@Model.MaxOccupancy guests / @Model.BedCount bed(s)</dd>
+                </div>
+                <div class="hotel-summary-row">
+                    <dt>Inclusions</dt>
+                    <dd>@(Model.Inclusions.Any() ? string.Join(", ", Model.Inclusions) : "—")</dd>
+                </div>
+            </dl>
+
+            @if (preview is not null)
+            {
+                <div class="hotel-thumb-strip">
+                    <img src="@preview"
+                         alt="@Model.Name"
+                         data-photo-zoom
+                         data-photo-zoom-src="@preview"
+                         title="Click to zoom" />
+                </div>
+            }
+
+            <form asp-action="Delete" method="post" class="hotel-actions">
+                <input type="hidden" name="id" value="@Model.Id" />
+                <button type="submit" class="btn btn-hotel-danger">Delete Room</button>
+                <a asp-action="Details" asp-route-id="@Model.Id" class="btn btn-outline-secondary">View Details</a>
+                <a asp-action="List" class="btn btn-outline-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>

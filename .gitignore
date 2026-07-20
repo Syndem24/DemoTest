@@ -1,0 +1,28 @@
+﻿## Build
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+*.user
+*.suo
+.vs/
+.idea/
+
+## Local env / secrets
+**/appsettings.*.local.json
+.env
+.env.*
+
+## Uploads (optional — keep empty folder if needed)
+TestingDemo/wwwroot/uploads/
+
+## OS
+Thumbs.db
+Desktop.ini
+
+## Local scratch / migration logs
+mig*.txt
+migrate-*.txt
+smoke-*.txt
+t-HotelBookingDb*.txt
+*.log

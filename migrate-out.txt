@@ -1,0 +1,328 @@
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (711ms) [Parameters=[], CommandType='Text', CommandTimeout='60']
+      CREATE DATABASE [HotelBookingDb_FreshTest];
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (161ms) [Parameters=[], CommandType='Text', CommandTimeout='60']
+      IF SERVERPROPERTY('EngineEdition') <> 5
+      BEGIN
+          ALTER DATABASE [HotelBookingDb_FreshTest] SET READ_COMMITTED_SNAPSHOT ON;
+      END;
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (18ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT 1
+info: Microsoft.EntityFrameworkCore.Migrations[20411]
+      Acquiring an exclusive lock for migration application. See https://aka.ms/efcore-docs-migrations-lock for more information if this takes too long.
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (66ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      DECLARE @result int;
+      EXEC @result = sp_getapplock @Resource = '__EFMigrationsLock', @LockOwner = 'Session', @LockMode = 'Exclusive';
+      SELECT @result
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (17ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL
+      BEGIN
+          CREATE TABLE [__EFMigrationsHistory] (
+              [MigrationId] nvarchar(150) NOT NULL,
+              [ProductVersion] nvarchar(32) NOT NULL,
+              CONSTRAINT [PK___EFMigrationsHistory] PRIMARY KEY ([MigrationId])
+          );
+      END;
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT OBJECT_ID(N'[__EFMigrationsHistory]');
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (17ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT [MigrationId], [ProductVersion]
+      FROM [__EFMigrationsHistory]
+      ORDER BY [MigrationId];
+info: Microsoft.EntityFrameworkCore.Migrations[20402]
+      Applying migration '20260709202104_InitialCreate'.
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (4ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      CREATE TABLE [Amenities] (
+          [Id] int NOT NULL IDENTITY,
+          [Name] nvarchar(100) NOT NULL,
+          [Description] nvarchar(500) NULL,
+          [Icon] nvarchar(50) NULL,
+          [IsActive] bit NOT NULL,
+          CONSTRAINT [PK_Amenities] PRIMARY KEY ([Id])
+      );
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (3ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      CREATE TABLE [Inclusions] (
+          [Id] int NOT NULL IDENTITY,
+          [Name] nvarchar(100) NOT NULL,
+          [Description] nvarchar(500) NULL,
+          [IsActive] bit NOT NULL,
+          CONSTRAINT [PK_Inclusions] PRIMARY KEY ([Id])
+      );
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (4ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      CREATE TABLE [Rooms] (
+          [Id] int NOT NULL IDENTITY,
+          [Name] nvarchar(100) NOT NULL,
+          [RoomNumber] nvarchar(20) NOT NULL,
+          [Description] nvarchar(1000) NULL,
+          [PricePerNight] decimal(18,2) NOT NULL,
+          [MaxOccupancy] int NOT NULL,
+          [BedCount] int NOT NULL,
+          [SizeSqm] float NULL,
+          [IsAvailable] bit NOT NULL,
+          [CreatedAt] datetime2 NOT NULL,
+          [UpdatedAt] datetime2 NULL,
+          CONSTRAINT [PK_Rooms] PRIMARY KEY ([Id])
+      );
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (6ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      CREATE TABLE [RoomAmenities] (
+          [RoomId] int NOT NULL,
+          [AmenityId] int NOT NULL,
+          CONSTRAINT [PK_RoomAmenities] PRIMARY KEY ([RoomId], [AmenityId]),
+          CONSTRAINT [FK_RoomAmenities_Amenities_AmenityId] FOREIGN KEY ([AmenityId]) REFERENCES [Amenities] ([Id]) ON DELETE NO ACTION,
+          CONSTRAINT [FK_RoomAmenities_Rooms_RoomId] FOREIGN KEY ([RoomId]) REFERENCES [Rooms] ([Id]) ON DELETE CASCADE
+      );
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (4ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      CREATE TABLE [RoomInclusions] (
+          [RoomId] int NOT NULL,
+          [InclusionId] int NOT NULL,
+          CONSTRAINT [PK_RoomInclusions] PRIMARY KEY ([RoomId], [InclusionId]),
+          CONSTRAINT [FK_RoomInclusions_Inclusions_InclusionId] FOREIGN KEY ([InclusionId]) REFERENCES [Inclusions] ([Id]) ON DELETE NO ACTION,
+          CONSTRAINT [FK_RoomInclusions_Rooms_RoomId] FOREIGN KEY ([RoomId]) REFERENCES [Rooms] ([Id]) ON DELETE CASCADE
+      );
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (141ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'Id', N'Description', N'Icon', N'IsActive', N'Name') AND [object_id] = OBJECT_ID(N'[Amenities]'))
+          SET IDENTITY_INSERT [Amenities] ON;
+      INSERT INTO [Amenities] ([Id], [Description], [Icon], [IsActive], [Name])
+      VALUES (1, N'High-speed wireless internet', N'wifi', CAST(1 AS bit), N'Wi-Fi'),
+      (2, N'Climate control', N'snowflake', CAST(1 AS bit), N'Air Conditioning'),
+      (3, N'Flat-screen television', N'tv', CAST(1 AS bit), N'TV'),
+      (4, N'In-room mini refrigerator', N'glass', CAST(1 AS bit), N'Mini Bar'),
+      (5, N'In-room safety deposit box', N'lock', CAST(1 AS bit), N'Safe'),
+      (6, N'Private balcony with view', N'sun', CAST(1 AS bit), N'Balcony');
+      IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'Id', N'Description', N'Icon', N'IsActive', N'Name') AND [object_id] = OBJECT_ID(N'[Amenities]'))
+          SET IDENTITY_INSERT [Amenities] OFF;
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (23ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'Id', N'Description', N'IsActive', N'Name') AND [object_id] = OBJECT_ID(N'[Inclusions]'))
+          SET IDENTITY_INSERT [Inclusions] ON;
+      INSERT INTO [Inclusions] ([Id], [Description], [IsActive], [Name])
+      VALUES (1, N'Complimentary breakfast', CAST(1 AS bit), N'Breakfast'),
+      (2, N'Free parking space', CAST(1 AS bit), N'Parking'),
+      (3, N'Round-trip airport transfer', CAST(1 AS bit), N'Airport Shuttle'),
+      (4, N'Checkout until 2 PM', CAST(1 AS bit), N'Late Checkout'),
+      (5, N'Complimentary welcome drink', CAST(1 AS bit), N'Welcome Drink');
+      IF EXISTS (SELECT * FROM [sys].[identity_columns] WHERE [name] IN (N'Id', N'Description', N'IsActive', N'Name') AND [object_id] = OBJECT_ID(N'[Inclusions]'))
+          SET IDENTITY_INSERT [Inclusions] OFF;
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (4ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      CREATE INDEX [IX_RoomAmenities_AmenityId] ON [RoomAmenities] ([AmenityId]);
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (3ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      CREATE INDEX [IX_RoomInclusions_InclusionId] ON [RoomInclusions] ([InclusionId]);
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (4ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      CREATE UNIQUE INDEX [IX_Rooms_RoomNumber] ON [Rooms] ([RoomNumber]);
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (4ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+      VALUES (N'20260709202104_InitialCreate', N'9.0.6');
+info: Microsoft.EntityFrameworkCore.Migrations[20402]
+      Applying migration '20260715093315_MergeAmenitiesIntoInclusions'.
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (41ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      INSERT INTO Inclusions (Name, Description, IsActive)
+      SELECT a.Name, a.Description, a.IsActive
+      FROM Amenities a
+      WHERE NOT EXISTS (
+          SELECT 1
+          FROM Inclusions i
+          WHERE LOWER(i.Name) = LOWER(a.Name)
+      );
+      
+      INSERT INTO RoomInclusions (RoomId, InclusionId)
+      SELECT ra.RoomId, i.Id
+      FROM RoomAmenities ra
+      INNER JOIN Amenities a ON ra.AmenityId = a.Id
+      INNER JOIN Inclusions i ON LOWER(i.Name) = LOWER(a.Name)
+      WHERE NOT EXISTS (
+          SELECT 1
+          FROM RoomInclusions ri
+          WHERE ri.RoomId = ra.RoomId
+            AND ri.InclusionId = i.Id
+      );
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (18ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      DROP TABLE [RoomAmenities];
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (4ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      DROP TABLE [Amenities];
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+      VALUES (N'20260715093315_MergeAmenitiesIntoInclusions', N'9.0.6');
+info: Microsoft.EntityFrameworkCore.Migrations[20402]
+      Applying migration '20260715101006_MergeInclusionsIntoRoom'.
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (9ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      IF COL_LENGTH('dbo.Rooms', 'Inclusions') IS NULL
+      BEGIN
+          ALTER TABLE [Rooms] ADD [Inclusions] nvarchar(max) NOT NULL CONSTRAINT [DF_Rooms_Inclusions] DEFAULT N'[]';
+      END
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (19ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      IF OBJECT_ID(N'[dbo].[RoomType]', N'U') IS NOT NULL
+      BEGIN
+          UPDATE r
+          SET Inclusions = ISNULL((
+              SELECT '[' + STRING_AGG(
+                  '"' + STRING_ESCAPE(i.Name, 'json') + '"',
+                  ','
+              ) WITHIN GROUP (ORDER BY i.Name) + ']'
+              FROM RoomType rt
+              INNER JOIN Inclusions i ON i.Id = rt.RoomTypeId
+              WHERE rt.RoomId = r.Id
+          ), '[]')
+          FROM Rooms r;
+      END
+      ELSE IF OBJECT_ID(N'[dbo].[RoomInclusions]', N'U') IS NOT NULL
+      BEGIN
+          UPDATE r
+          SET Inclusions = ISNULL((
+              SELECT '[' + STRING_AGG(
+                  '"' + STRING_ESCAPE(i.Name, 'json') + '"',
+                  ','
+              ) WITHIN GROUP (ORDER BY i.Name) + ']'
+              FROM RoomInclusions ri
+              INNER JOIN Inclusions i ON i.Id = ri.InclusionId
+              WHERE ri.RoomId = r.Id
+          ), '[]')
+          FROM Rooms r;
+      END
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (4ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      IF OBJECT_ID(N'[dbo].[RoomType]', N'U') IS NOT NULL
+          DROP TABLE [RoomType];
+      
+      IF OBJECT_ID(N'[dbo].[RoomInclusions]', N'U') IS NOT NULL
+          DROP TABLE [RoomInclusions];
+      
+      IF OBJECT_ID(N'[dbo].[Inclusions]', N'U') IS NOT NULL
+          DROP TABLE [Inclusions];
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+      VALUES (N'20260715101006_MergeInclusionsIntoRoom', N'9.0.6');
+info: Microsoft.EntityFrameworkCore.Migrations[20402]
+      Applying migration '20260715103124_AddRoomTypeImages'.
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (2ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      ALTER TABLE [Rooms] ADD [Images] nvarchar(max) NOT NULL DEFAULT N'';
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (0ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+      VALUES (N'20260715103124_AddRoomTypeImages', N'9.0.6');
+info: Microsoft.EntityFrameworkCore.Migrations[20402]
+      Applying migration '20260715104448_SplitRoomTypeAndRoomTables'.
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (3ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      CREATE TABLE [RoomType] (
+          [RoomTypeID] int NOT NULL IDENTITY,
+          [TypeName] nvarchar(100) NOT NULL,
+          [Images] nvarchar(max) NOT NULL,
+          CONSTRAINT [PK_RoomType] PRIMARY KEY ([RoomTypeID])
+      );
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      CREATE UNIQUE INDEX [IX_RoomType_TypeName] ON [RoomType] ([TypeName]);
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (5ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      INSERT INTO RoomType (TypeName, Images)
+      SELECT Name, ISNULL(NULLIF(Images, N''), N'[]')
+      FROM (
+          SELECT Name, Images,
+                 ROW_NUMBER() OVER (PARTITION BY LOWER(Name) ORDER BY Id) AS rn
+          FROM Rooms
+      ) ranked
+      WHERE rn = 1;
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      ALTER TABLE [Rooms] ADD [RoomTypeID] int NULL;
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (5ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      UPDATE r
+      SET RoomTypeID = rt.RoomTypeID
+      FROM Rooms r
+      INNER JOIN RoomType rt ON LOWER(rt.TypeName) = LOWER(r.Name);
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (2ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      IF EXISTS (SELECT 1 FROM Rooms WHERE RoomTypeID IS NULL)
+      BEGIN
+          THROW 51000, 'Unable to map all rooms to a RoomType during migration.', 1;
+      END
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (127ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      DECLARE @var sysname;
+      SELECT @var = [d].[name]
+      FROM [sys].[default_constraints] [d]
+      INNER JOIN [sys].[columns] [c] ON [d].[parent_column_id] = [c].[column_id] AND [d].[parent_object_id] = [c].[object_id]
+      WHERE ([d].[parent_object_id] = OBJECT_ID(N'[Rooms]') AND [c].[name] = N'RoomTypeID');
+      IF @var IS NOT NULL EXEC(N'ALTER TABLE [Rooms] DROP CONSTRAINT [' + @var + '];');
+      ALTER TABLE [Rooms] ALTER COLUMN [RoomTypeID] int NOT NULL;
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (41ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      DECLARE @var1 sysname;
+      SELECT @var1 = [d].[name]
+      FROM [sys].[default_constraints] [d]
+      INNER JOIN [sys].[columns] [c] ON [d].[parent_column_id] = [c].[column_id] AND [d].[parent_object_id] = [c].[object_id]
+      WHERE ([d].[parent_object_id] = OBJECT_ID(N'[Rooms]') AND [c].[name] = N'Images');
+      IF @var1 IS NOT NULL EXEC(N'ALTER TABLE [Rooms] DROP CONSTRAINT [' + @var1 + '];');
+      ALTER TABLE [Rooms] DROP COLUMN [Images];
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (27ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      DECLARE @var2 sysname;
+      SELECT @var2 = [d].[name]
+      FROM [sys].[default_constraints] [d]
+      INNER JOIN [sys].[columns] [c] ON [d].[parent_column_id] = [c].[column_id] AND [d].[parent_object_id] = [c].[object_id]
+      WHERE ([d].[parent_object_id] = OBJECT_ID(N'[Rooms]') AND [c].[name] = N'Name');
+      IF @var2 IS NOT NULL EXEC(N'ALTER TABLE [Rooms] DROP CONSTRAINT [' + @var2 + '];');
+      ALTER TABLE [Rooms] DROP COLUMN [Name];
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (6ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      ALTER TABLE [Rooms] DROP CONSTRAINT [PK_Rooms];
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (380ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      EXEC sp_rename N'[Rooms]', N'Room', 'OBJECT';
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (6ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      EXEC sp_rename N'[Room].[IX_Rooms_RoomNumber]', N'IX_Room_RoomNumber', 'INDEX';
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (9ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      ALTER TABLE [Room] ADD CONSTRAINT [PK_Room] PRIMARY KEY ([Id]);
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (2ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      CREATE INDEX [IX_Room_RoomTypeID] ON [Room] ([RoomTypeID]);
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (2ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      ALTER TABLE [Room] ADD CONSTRAINT [FK_Room_RoomType_RoomTypeID] FOREIGN KEY ([RoomTypeID]) REFERENCES [RoomType] ([RoomTypeID]) ON DELETE NO ACTION;
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (3ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+      VALUES (N'20260715104448_SplitRoomTypeAndRoomTables', N'9.0.6');
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (13ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      DECLARE @result int;
+      EXEC @result = sp_releaseapplock @Resource = '__EFMigrationsLock', @LockOwner = 'Session';
+      SELECT @result
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://127.0.0.1:5799
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Development
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: C:\Users\Kristian\Desktop\TestingDemo\TestingDemo

@@ -1,0 +1,127 @@
+﻿@{
+    var controller = ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty;
+    var action = ViewContext.RouteData.Values["action"]?.ToString() ?? string.Empty;
+
+    var homeActive = string.Equals(controller, "Home", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(action, "Index", StringComparison.OrdinalIgnoreCase)
+        ? "is-active"
+        : string.Empty;
+    var roomsActive = string.Equals(controller, "Rooms", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(action, "Create", StringComparison.OrdinalIgnoreCase)
+        ? "is-active"
+        : string.Empty;
+    var createActive = string.Equals(controller, "Rooms", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(action, "Create", StringComparison.OrdinalIgnoreCase)
+        ? "is-active"
+        : string.Empty;
+    var privacyActive = string.Equals(controller, "Home", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(action, "Privacy", StringComparison.OrdinalIgnoreCase)
+        ? "is-active"
+        : string.Empty;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Hotel Booking</title>
+    <script type="importmap"></script>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/TestingDemo.styles.css" asp-append-version="true" />
+</head>
+<body class="hotel-shell">
+    <div class="hotel-sidebar-backdrop" id="sidebarBackdrop" hidden></div>
+
+    <aside class="hotel-sidebar" id="hotelSidebar" aria-label="Main navigation">
+        <a class="hotel-sidebar-brand" asp-controller="Home" asp-action="Index" title="Hotel Booking">
+            <img src="~/Images/Logo.png" asp-append-version="true" alt="Hotel Booking" class="hotel-sidebar-logo" />
+        </a>
+
+        <nav class="hotel-sidebar-nav">
+            <a class="hotel-sidebar-link @homeActive"
+               asp-controller="Home"
+               asp-action="Index"
+               title="Home">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M4 11.5 12 4l8 7.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-8.5z"/>
+                </svg>
+                <span>Home</span>
+            </a>
+            <a class="hotel-sidebar-link @roomsActive"
+               asp-controller="Rooms"
+               asp-action="Index"
+               title="Room Management">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M4 7h16v3H4V7zm0 5h16v8H4v-8zm3 2v4h2v-4H7zm5 0v4h2v-4h-2zM3 4h18v2H3V4z"/>
+                </svg>
+                <span>Rooms</span>
+            </a>           
+            <a class="hotel-sidebar-link @privacyActive"
+               asp-controller="Home"
+               asp-action="Privacy"
+               title="Privacy">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3zm0 2.2 6 2.25V11c0 3.9-2.5 7.4-6 8.8-3.5-1.4-6-4.9-6-8.8V6.45l6-2.25zM11 10h2v5h-2v-5zm0-3h2v2h-2V7z"/>
+                </svg>
+                <span>Privacy</span>
+            </a>
+        </nav>
+    </aside>
+
+    <div class="hotel-content">
+        <header class="hotel-topbar">
+            <button type="button"
+                    class="hotel-sidebar-toggle"
+                    id="sidebarToggle"
+                    aria-controls="hotelSidebar"
+                    aria-expanded="false"
+                    aria-label="Open navigation">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            <div class="hotel-topbar-title">
+                <span class="hotel-topbar-eyebrow">Hotel Booking</span>
+                <strong>@(ViewData["Title"] ?? "Dashboard")</strong>
+            </div>
+        </header>
+
+        <main role="main" class="hotel-main">
+            @RenderBody()
+        </main>
+
+        <footer class="hotel-footer">
+            &copy; 2026 - Hotel Booking -
+            <a asp-controller="Home" asp-action="Privacy">Privacy</a>
+        </footer>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    <script src="~/js/photo-zoom.js" asp-append-version="true"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const shell = document.body;
+            const toggle = document.getElementById('sidebarToggle');
+            const backdrop = document.getElementById('sidebarBackdrop');
+
+            function setOpen(open) {
+                shell.classList.toggle('sidebar-open', open);
+                if (toggle) {
+                    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                    toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+                }
+                if (backdrop) {
+                    backdrop.hidden = !open;
+                }
+            }
+
+            toggle?.addEventListener('click', () => setOpen(!shell.classList.contains('sidebar-open')));
+            backdrop?.addEventListener('click', () => setOpen(false));
+        });
+    </script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

@@ -1,0 +1,225 @@
+@model TestingDemo.Models.RoomDto
+@using TestingDemo.Services
+@{
+    ViewData["Title"] = $"Room {Model.RoomNumber}";
+    var images = Model.Images ?? new List<string>();
+    var mainImage = images.FirstOrDefault();
+    var hasDescription = !string.IsNullOrWhiteSpace(Model.Description);
+}
+
+<section class="hotel-page-hero">
+    <div>
+        <p class="eyebrow">Room details</p>
+        <h1>Room @Model.RoomNumber</h1>
+        <p class="lede">@Model.Name · review photos, pricing, and inclusions.</p>
+    </div>
+    <div class="hero-meta">
+        <span class="hotel-chip">@Model.Name</span>
+        <span class="hotel-chip">@Model.PricePerNight.ToString("C") / night</span>
+        <span class="hotel-chip">@(Model.IsAvailable ? "Available" : "Unavailable")</span>
+    </div>
+</section>
+
+<div class="row g-4 hotel-details-layout">
+    <div class="col-xl-7">
+        <div class="hotel-panel hotel-details-gallery mb-3">
+            @if (images.Any())
+            {
+                <div class="hotel-gallery-main">
+                    <img id="mainRoomImage"
+                         src="@mainImage"
+                         alt="@RoomImageStorage.GetFileName(mainImage!)"
+                         data-photo-zoom
+                         data-photo-zoom-group="room-details"
+                         data-photo-zoom-src="@mainImage" />
+                    <div class="hotel-gallery-caption">
+                        <span id="mainRoomImageName">@RoomImageStorage.GetFileName(mainImage!)</span>
+                        <span class="hotel-gallery-count">@images.Count photo@(images.Count == 1 ? "" : "s") · click to zoom</span>
+                    </div>
+                </div>
+                <div class="hotel-gallery-thumbs" role="list">
+                    @foreach (var image in images)
+                    {
+                        var fileName = RoomImageStorage.GetFileName(image);
+                        var isActive = string.Equals(image, mainImage, StringComparison.OrdinalIgnoreCase);
+                        <button type="button"
+                                class="hotel-gallery-thumb @(isActive ? "is-active" : string.Empty) room-image-thumb"
+                                data-image-src="@image"
+                                data-image-name="@fileName"
+                                title="@fileName"
+                                role="listitem">
+                            <img src="@image"
+                                 alt="@fileName"
+                                 loading="lazy"
+                                 data-photo-zoom
+                                 data-photo-zoom-group="room-details"
+                                 data-photo-zoom-src="@image" />
+                        </button>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="hotel-gallery-empty">
+                    <strong>No photos yet</strong>
+                    <p>Add images from the room type settings.</p>
+                    <a asp-action="EditType" asp-route-id="@Model.RoomTypeId" class="btn btn-primary btn-sm">Add photos</a>
+                </div>
+            }
+        </div>
+
+        <div class="hotel-panel hotel-details-actions-bar">
+            <div class="hotel-details-actions-main">
+                <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-primary">
+                    Edit this room
+                </a>
+                <a asp-action="List" class="btn btn-outline-secondary">
+                    Back to room list
+                </a>
+            </div>
+            <div class="hotel-details-actions-links">
+                <a asp-action="EditType" asp-route-id="@Model.RoomTypeId" class="hotel-action-link">
+                    Edit room type (all @Model.Name rooms)
+                </a>
+                <a asp-action="Delete" asp-route-id="@Model.Id" class="hotel-action-link is-danger">
+                    Delete this room
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-5">
+        <div class="hotel-panel mb-3">
+            <div class="hotel-details-stats">
+                <div class="hotel-stat">
+                    <span class="hotel-stat-label">Price</span>
+                    <strong>@Model.PricePerNight.ToString("C")</strong>
+                    <span class="hotel-stat-note">per night</span>
+                </div>
+                <div class="hotel-stat">
+                    <span class="hotel-stat-label">Guests</span>
+                    <strong>@Model.MaxOccupancy</strong>
+                    <span class="hotel-stat-note">max occupancy</span>
+                </div>
+                <div class="hotel-stat">
+                    <span class="hotel-stat-label">Beds</span>
+                    <strong>@Model.BedCount</strong>
+                    <span class="hotel-stat-note">bed count</span>
+                </div>
+                <div class="hotel-stat">
+                    <span class="hotel-stat-label">Size</span>
+                    <strong>@(Model.SizeSqm.HasValue ? Model.SizeSqm.Value.ToString("0.##") : "—")</strong>
+                    <span class="hotel-stat-note">@(Model.SizeSqm.HasValue ? "sqm" : "not set")</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="hotel-panel mb-3">
+            <h2 class="hotel-details-heading">Overview</h2>
+            <dl class="hotel-summary mb-0">
+                <div class="hotel-summary-row">
+                    <dt>Room number</dt>
+                    <dd>@Model.RoomNumber</dd>
+                </div>
+                <div class="hotel-summary-row">
+                    <dt>Room type</dt>
+                    <dd>@Model.Name</dd>
+                </div>
+                <div class="hotel-summary-row">
+                    <dt>Status</dt>
+                    <dd>
+                        <span class="hotel-status @(Model.IsAvailable ? "is-available" : "is-unavailable")">
+                            @(Model.IsAvailable ? "Available" : "Unavailable")
+                        </span>
+                    </dd>
+                </div>
+            </dl>
+
+            <div class="hotel-desc-collapse @(hasDescription ? string.Empty : "is-empty")" id="roomDescriptionCollapse">
+                <button type="button"
+                        class="hotel-desc-toggle"
+                        id="roomDescriptionToggle"
+                        aria-expanded="false"
+                        aria-controls="roomDescriptionBody"
+                        @(!hasDescription ? "disabled" : null)>
+                    <span>Description</span>
+                    <span class="hotel-desc-chevron" aria-hidden="true"></span>
+                </button>
+                <div class="hotel-desc-body is-collapsed" id="roomDescriptionBody" hidden>
+                    @if (hasDescription)
+                    {
+                        <p>@Model.Description</p>
+                    }
+                    else
+                    {
+                        <p class="text-muted mb-0">No description provided.</p>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="hotel-panel mb-3">
+            <h2 class="hotel-details-heading">Inclusions</h2>
+            @if (Model.Inclusions.Any())
+            {
+                <div class="hotel-inclusion-chips">
+                    @foreach (var inclusion in Model.Inclusions)
+                    {
+                        <span class="hotel-inclusion-chip">@inclusion</span>
+                    }
+                </div>
+            }
+            else
+            {
+                <p class="text-muted mb-0">No inclusions assigned.</p>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const main = document.getElementById('mainRoomImage');
+            const mainName = document.getElementById('mainRoomImageName');
+            const descToggle = document.getElementById('roomDescriptionToggle');
+            const descBody = document.getElementById('roomDescriptionBody');
+            const descWrap = document.getElementById('roomDescriptionCollapse');
+
+            if (descToggle && descBody && descWrap && !descToggle.disabled) {
+                descToggle.addEventListener('click', function () {
+                    const open = descToggle.getAttribute('aria-expanded') === 'true';
+                    const next = !open;
+                    descToggle.setAttribute('aria-expanded', next ? 'true' : 'false');
+                    descWrap.classList.toggle('is-open', next);
+                    descBody.classList.toggle('is-collapsed', !next);
+                    descBody.hidden = !next;
+                });
+            }
+
+            if (!main) {
+                return;
+            }
+
+            document.querySelectorAll('.room-image-thumb').forEach(button => {
+                button.addEventListener('click', function (event) {
+                    // Let photo-zoom handle clicks on the thumbnail image itself.
+                    if (event.target instanceof HTMLElement && event.target.closest('[data-photo-zoom]')) {
+                        return;
+                    }
+
+                    main.src = this.dataset.imageSrc;
+                    main.setAttribute('data-photo-zoom-src', this.dataset.imageSrc || '');
+                    main.alt = this.dataset.imageName || '';
+                    if (mainName) {
+                        mainName.textContent = this.dataset.imageName || '';
+                    }
+                    document.querySelectorAll('.room-image-thumb').forEach(el => el.classList.remove('is-active'));
+                    this.classList.add('is-active');
+                });
+            });
+
+            window.initPhotoZoom?.(document.querySelector('.hotel-details-gallery'));
+        });
+    </script>
+}

@@ -1,0 +1,112 @@
+@model TestingDemo.ViewModels.InclusionPickerViewModel
+@using TestingDemo.Services
+
+@{
+    var selectedSet = new HashSet<string>(
+        Model.SelectedInclusions
+            .Where(i => !string.IsNullOrWhiteSpace(i))
+            .Select(i => i.Trim()),
+        StringComparer.OrdinalIgnoreCase);
+
+    var catalogItems = InclusionCatalog.DefaultItems
+        .Select(i => i.Trim())
+        .Where(i => !string.IsNullOrWhiteSpace(i))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    var catalogSet = new HashSet<string>(catalogItems, StringComparer.OrdinalIgnoreCase);
+
+    var customItems = Model.AvailableInclusions
+        .Concat(Model.SelectedInclusions)
+        .Where(i => !string.IsNullOrWhiteSpace(i))
+        .Select(i => i.Trim())
+        .Where(i => !catalogSet.Contains(i))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(i => i, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    string SafeId(string name) =>
+        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(name))
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .TrimEnd('=');
+}
+
+<div class="col-12">
+    <label class="form-label">Inclusions</label>
+    <div class="form-text mb-2">Check what this room type includes. Uncheck to exclude. Custom items you add can be deleted if mistyped.</div>
+    <div id="inclusionList" class="border rounded p-3 mb-2 inclusion-checklist">
+        @foreach (var category in InclusionCatalog.Categories)
+        {
+            <div class="inclusion-category" data-category="@category.Name">
+                <div class="inclusion-category-title">@category.Name</div>
+                <div class="inclusion-category-items">
+                    @foreach (var inclusion in category.Items)
+                    {
+                        var isChecked = selectedSet.Contains(inclusion);
+                        var safeId = SafeId(inclusion);
+                        <div class="form-check" data-inclusion-name="@inclusion" data-inclusion-default="true">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   name="SelectedInclusions"
+                                   value="@inclusion"
+                                   id="inclusion_@safeId"
+                                   @(isChecked ? "checked" : null) />
+                            <label class="form-check-label" for="inclusion_@safeId">@inclusion</label>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <div class="inclusion-category" data-category="Custom" id="customInclusionCategory">
+            <div class="inclusion-category-title">Custom</div>
+            <div class="inclusion-category-items" id="customInclusionItems">
+                @if (!customItems.Any())
+                {
+                    <div id="inclusionEmptyState" class="text-muted small">No custom inclusions yet.</div>
+                }
+                @foreach (var inclusion in customItems)
+                {
+                    var isChecked = selectedSet.Contains(inclusion);
+                    var safeId = SafeId(inclusion);
+                    <div class="form-check inclusion-custom-row"
+                         data-inclusion-name="@inclusion"
+                         data-inclusion-default="false">
+                        <input class="form-check-input"
+                               type="checkbox"
+                               name="SelectedInclusions"
+                               value="@inclusion"
+                               id="inclusion_@safeId"
+                               @(isChecked ? "checked" : null) />
+                        <label class="form-check-label" for="inclusion_@safeId">@inclusion</label>
+                        <button type="button"
+                                class="btn btn-sm btn-outline-danger delete-inclusion-btn"
+                                data-name="@inclusion"
+                                title="Delete this custom inclusion"
+                                aria-label="Delete @inclusion">
+                            Delete
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="input-group input-group-sm">
+        <input type="text"
+               id="newInclusionName"
+               class="form-control"
+               list="inclusionSuggestions"
+               placeholder="Add inclusion..."
+               maxlength="100" />
+        <datalist id="inclusionSuggestions">
+            @foreach (var suggestion in catalogItems.Concat(customItems))
+            {
+                <option value="@suggestion"></option>
+            }
+        </datalist>
+        <button type="button" class="btn btn-outline-primary" id="addInclusionBtn">Add</button>
+    </div>
+    <div id="inclusionError" class="text-danger small mt-1"></div>
+    <div class="form-text">Only checked items are saved. Use Delete on custom items to fix a mistype.</div>
+</div>

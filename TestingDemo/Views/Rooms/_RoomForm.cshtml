@@ -1,0 +1,101 @@
+@model TestingDemo.ViewModels.RoomFormViewModel
+
+<div class="hotel-accordion-list" id="editRoomAccordion">
+    <section class="hotel-accordion" data-section="details">
+        <button type="button" class="hotel-accordion-toggle" aria-expanded="false">
+            <span class="step">1</span>
+            <span class="hotel-accordion-copy">
+                <span class="hotel-accordion-title">Room type details</span>
+                <span class="hotel-accordion-hint">Shared settings for this room’s type</span>
+            </span>
+            <span class="hotel-accordion-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="hotel-accordion-body is-collapsed">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label asp-for="Name" class="form-label"></label>
+                    <input asp-for="Name" class="form-control" />
+                    <span asp-validation-for="Name" class="text-danger"></span>
+                </div>
+                <div class="col-12">
+                    <label asp-for="Description" class="form-label"></label>
+                    <textarea asp-for="Description" class="form-control" rows="3"></textarea>
+                    <span asp-validation-for="Description" class="text-danger"></span>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="PricePerNight" class="form-label"></label>
+                    <div class="input-group">
+                        <span class="input-group-text money-prefix">₱</span>
+                        <input asp-for="PricePerNight"
+                               class="form-control money-input"
+                               inputmode="decimal"
+                               placeholder="0.00" />
+                    </div>
+                    <div class="form-text">Philippine peso (₱).</div>
+                    <span asp-validation-for="PricePerNight" class="text-danger"></span>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="MaxOccupancy" class="form-label"></label>
+                    <input asp-for="MaxOccupancy" class="form-control" />
+                    <span asp-validation-for="MaxOccupancy" class="text-danger"></span>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="BedCount" class="form-label"></label>
+                    <input asp-for="BedCount" class="form-control" />
+                    <span asp-validation-for="BedCount" class="text-danger"></span>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="SizeSqm" class="form-label"></label>
+                    <input asp-for="SizeSqm" class="form-control" />
+                    <span asp-validation-for="SizeSqm" class="text-danger"></span>
+                </div>
+                <div class="col-md-8 d-flex align-items-end">
+                    <div class="form-check mb-2">
+                        <input asp-for="IsAvailable" class="form-check-input" />
+                        <label asp-for="IsAvailable" class="form-check-label"></label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="hotel-accordion" data-section="inclusions">
+        <button type="button" class="hotel-accordion-toggle" aria-expanded="false">
+            <span class="step">2</span>
+            <span class="hotel-accordion-copy">
+                <span class="hotel-accordion-title">Inclusions</span>
+                <span class="hotel-accordion-hint">What’s included with this room</span>
+            </span>
+            <span class="hotel-accordion-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="hotel-accordion-body is-collapsed">
+            <div class="row g-3">
+                <partial name="_InclusionPicker" model="new InclusionPickerViewModel
+                {
+                    SelectedInclusions = Model.SelectedInclusions,
+                    AvailableInclusions = Model.AvailableInclusions
+                }" />
+            </div>
+        </div>
+    </section>
+
+    <section class="hotel-accordion" data-section="room">
+        <button type="button" class="hotel-accordion-toggle" aria-expanded="false">
+            <span class="step">3</span>
+            <span class="hotel-accordion-copy">
+                <span class="hotel-accordion-title">Room number</span>
+                <span class="hotel-accordion-hint">Physical room assignment</span>
+            </span>
+            <span class="hotel-accordion-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="hotel-accordion-body is-collapsed">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label asp-for="RoomNumber" class="form-label"></label>
+                    <input asp-for="RoomNumber" class="form-control" />
+                    <span asp-validation-for="RoomNumber" class="text-danger"></span>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>

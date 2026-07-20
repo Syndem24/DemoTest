@@ -1,0 +1,56 @@
+@model TestingDemo.ViewModels.RoomTypeFormViewModel
+@{
+    ViewData["Title"] = "Edit Room Type";
+}
+
+<section class="hotel-page-hero">
+    <div>
+        <p class="eyebrow">Room Management</p>
+        <h1>Edit “@Model.Name”</h1>
+        <p class="lede">Changes here apply to every room of this type. Adjust how many rooms belong to this type and set their numbers.</p>
+    </div>
+    <div class="hero-meta">
+        <span class="hotel-chip">Type-wide update</span>
+        <span class="hotel-chip">@Model.RoomCount room(s)</span>
+        <span class="hotel-chip">@(Model.IsAvailable ? "Available" : "Unavailable")</span>
+    </div>
+</section>
+
+<div class="row">
+    <div class="col-xl-9 col-lg-10">
+        <div class="hotel-panel">
+            <p class="text-muted small mb-3">Open a section to edit it. Photos support multiple uploads with remove before save.</p>
+            <form asp-action="EditType" method="post" enctype="multipart/form-data" id="editTypeForm">
+                <input type="hidden" asp-for="RoomTypeId" />
+                <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+                <partial name="_EditTypeForm" model="Model" />
+                <div class="hotel-actions">
+                    <button type="submit" class="btn btn-primary">Save Room Type</button>
+                    <a asp-action="Index" class="btn btn-outline-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/inclusion-picker.js" asp-append-version="true"></script>
+    <script src="~/js/room-image-uploader.js" asp-append-version="true"></script>
+    <script src="~/js/create-accordion.js" asp-append-version="true"></script>
+    <script src="~/js/edit-room-type.js" asp-append-version="true"></script>
+    <script src="~/js/money-input.js" asp-append-version="true"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const rooms = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+                Model.Rooms.Select(r => new { roomId = r.RoomId, roomNumber = r.RoomNumber })));
+
+            initHotelAccordion('editTypeAccordion');
+            initEditTypeRoomsForm(rooms);
+            initInclusionPicker();
+            initRoomImageUploader();
+            initMoneyInputs(document.getElementById('editTypeForm'));
+            initPhotoZoom?.(document.getElementById('editTypeForm'));
+        });
+    </script>
+}

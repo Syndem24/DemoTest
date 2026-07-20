@@ -1,0 +1,23 @@
+@{
+    ViewData["Title"] = "Room Management";
+    var view = Context.Request.Query["view"].ToString();
+    if (!string.Equals(view, "list", StringComparison.OrdinalIgnoreCase))
+    {
+        view = "types";
+    }
+}
+
+@section Scripts {
+    <script type="module" src="~/room-management/room-app.js" asp-append-version="true"></script>
+}
+
+@if (TempData["Success"] is string success)
+{
+    <div class="alert alert-hotel alert-dismissible fade show" role="alert">
+        @success
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<link rel="stylesheet" href="~/room-management/room-app.css" asp-append-version="true" />
+<div id="room-management-root" data-view="@view"></div>

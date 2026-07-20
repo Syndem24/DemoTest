@@ -1,0 +1,87 @@
+@model TestingDemo.ViewModels.RoomListViewModel
+@{
+    ViewData["Title"] = "Room List";
+    var hasRooms = Model.RoomGroups.Any();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Room List</h1>
+    <div class="d-flex gap-2">
+        <a asp-action="Index" class="btn btn-outline-secondary">Back to Room Types</a>
+        <a asp-action="Create" class="btn btn-primary">Create Room Type</a>
+    </div>
+</div>
+
+@if (TempData["Success"] is string success)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @success
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (!hasRooms)
+{
+    <div class="alert alert-info">No rooms yet. Create a room type to add rooms.</div>
+}
+else
+{
+    @foreach (var group in Model.RoomGroups)
+    {
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><strong>@group.Name</strong></span>
+                <span class="text-muted small">@group.Rooms.Count room(s)</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Room #</th>
+                            <th>Price / Night</th>
+                            <th>Occupancy</th>
+                            <th>Inclusions</th>
+                            <th>Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var room in group.Rooms)
+                        {
+                            <tr>
+                                <td><strong>@room.RoomNumber</strong></td>
+                                <td>@room.PricePerNight.ToString("C")</td>
+                                <td>@room.MaxOccupancy guests / @room.BedCount bed(s)</td>
+                                <td>
+                                    @if (room.Inclusions.Any())
+                                    {
+                                        @string.Join(", ", room.Inclusions)
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (room.IsAvailable)
+                                    {
+                                        <span class="badge text-bg-success">Available</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge text-bg-secondary">Unavailable</span>
+                                    }
+                                </td>
+                                <td class="text-end text-nowrap">
+                                    <a asp-action="Details" asp-route-id="@room.Id" class="btn btn-sm btn-outline-secondary">Details</a>
+                                    <a asp-action="Edit" asp-route-id="@room.Id" class="btn btn-sm btn-outline-primary">Edit</a>
+                                    <a asp-action="Delete" asp-route-id="@room.Id" class="btn btn-sm btn-outline-danger">Delete</a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}

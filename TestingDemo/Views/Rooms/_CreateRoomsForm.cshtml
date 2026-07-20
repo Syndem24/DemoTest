@@ -1,0 +1,128 @@
+@model TestingDemo.ViewModels.CreateRoomsViewModel
+
+<div class="hotel-accordion-list" id="createRoomAccordion">
+    <section class="hotel-accordion" data-section="details">
+        <button type="button" class="hotel-accordion-toggle" aria-expanded="false">
+            <span class="step">1</span>
+            <span class="hotel-accordion-copy">
+                <span class="hotel-accordion-title">Room type details</span>
+                <span class="hotel-accordion-hint">Name, price, occupancy, and availability</span>
+            </span>
+            <span class="hotel-accordion-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="hotel-accordion-body is-collapsed">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label asp-for="Name" class="form-label"></label>
+                    <input asp-for="Name" class="form-control" placeholder="e.g. Deluxe King" autocomplete="off" />
+                    <span asp-validation-for="Name" class="text-danger"></span>
+                </div>
+                <div class="col-12">
+                    <label asp-for="Description" class="form-label"></label>
+                    <textarea asp-for="Description" class="form-control" rows="3" placeholder="Short description guests will see"></textarea>
+                    <span asp-validation-for="Description" class="text-danger"></span>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="PricePerNight" class="form-label"></label>
+                    <div class="input-group">
+                        <span class="input-group-text money-prefix">₱</span>
+                        <input asp-for="PricePerNight"
+                               class="form-control money-input"
+                               inputmode="decimal"
+                               placeholder="0.00" />
+                    </div>
+                    <div class="form-text">Enter amount in Philippine peso (e.g. 2,500.00).</div>
+                    <span asp-validation-for="PricePerNight" class="text-danger"></span>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="MaxOccupancy" class="form-label"></label>
+                    <input asp-for="MaxOccupancy" class="form-control" />
+                    <span asp-validation-for="MaxOccupancy" class="text-danger"></span>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="BedCount" class="form-label"></label>
+                    <input asp-for="BedCount" class="form-control" />
+                    <span asp-validation-for="BedCount" class="text-danger"></span>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="SizeSqm" class="form-label"></label>
+                    <input asp-for="SizeSqm" class="form-control" placeholder="Optional" />
+                    <span asp-validation-for="SizeSqm" class="text-danger"></span>
+                </div>
+                <div class="col-md-8 d-flex align-items-end">
+                    <div class="form-check mb-2">
+                        <input asp-for="IsAvailable" class="form-check-input" />
+                        <label asp-for="IsAvailable" class="form-check-label"></label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="hotel-accordion" data-section="inclusions">
+        <button type="button" class="hotel-accordion-toggle" aria-expanded="false">
+            <span class="step">2</span>
+            <span class="hotel-accordion-copy">
+                <span class="hotel-accordion-title">Inclusions</span>
+                <span class="hotel-accordion-hint">What is included with this room type</span>
+            </span>
+            <span class="hotel-accordion-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="hotel-accordion-body is-collapsed">
+            <div class="row g-3">
+                <partial name="_InclusionPicker" model="new InclusionPickerViewModel
+                {
+                    SelectedInclusions = Model.SelectedInclusions,
+                    AvailableInclusions = Model.AvailableInclusions
+                }" />
+            </div>
+        </div>
+    </section>
+
+    <section class="hotel-accordion" data-section="photos">
+        <button type="button" class="hotel-accordion-toggle" aria-expanded="false">
+            <span class="step">3</span>
+            <span class="hotel-accordion-copy">
+                <span class="hotel-accordion-title">Photos</span>
+                <span class="hotel-accordion-hint">Multiple images — add, preview, and remove before saving</span>
+            </span>
+            <span class="hotel-accordion-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="hotel-accordion-body is-collapsed">
+            <div class="row g-3">
+                <partial name="_RoomImageUploader" model="new RoomImageUploaderViewModel
+                {
+                    ExistingImages = Model.ImagePaths,
+                    InputName = nameof(CreateRoomsViewModel.UploadedImages),
+                    ExistingInputName = nameof(CreateRoomsViewModel.ImagePaths)
+                }" />
+            </div>
+        </div>
+    </section>
+
+    <section class="hotel-accordion" data-section="rooms">
+        <button type="button" class="hotel-accordion-toggle" aria-expanded="false">
+            <span class="step">4</span>
+            <span class="hotel-accordion-copy">
+                <span class="hotel-accordion-title">Room numbers</span>
+                <span class="hotel-accordion-hint">How many rooms and their numbers</span>
+            </span>
+            <span class="hotel-accordion-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="hotel-accordion-body is-collapsed">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label asp-for="RoomCount" class="form-label"></label>
+                    <input asp-for="RoomCount" class="form-control" type="number" min="1" max="50" id="roomCount" />
+                    <span asp-validation-for="RoomCount" class="text-danger"></span>
+                    <div class="form-text">How many rooms to create (1–50), then assign each number below.</div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Assign room numbers</label>
+                    <div id="roomNumberAssignments" class="border rounded p-3"></div>
+                    <div class="form-text">Each room number must be unique.</div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>

@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" Version="11.11.0" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.11.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.6">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.6" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.6">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <SpaRoot>ClientApp\</SpaRoot>
+    <RoomAppJs>wwwroot\room-management\room-app.js</RoomAppJs>
+    <NpmCmd Condition="Exists('C:\Program Files\nodejs\npm.cmd')">"C:\Program Files\nodejs\npm.cmd"</NpmCmd>
+    <NpmCmd Condition="'$(NpmCmd)' == '' And Exists('$(ProgramW6432)\nodejs\npm.cmd')">"$(ProgramW6432)\nodejs\npm.cmd"</NpmCmd>
+    <NpmCmd Condition="'$(NpmCmd)' == ''">npm</NpmCmd>
+  </PropertyGroup>
+
+  <!-- Rebuild React only when output is missing or ForceSpaBuild=true. MSBuild often lacks npm on PATH (exit 9009). -->
+  <Target Name="BuildRoomManagementApp"
+          BeforeTargets="Build"
+          Condition="Exists('$(SpaRoot)package.json') And '$(DesignTimeBuild)' != 'true' And '$(SkipSpaBuild)' != 'true' And ('$(ForceSpaBuild)' == 'true' Or !Exists('$(RoomAppJs)'))">
+    <Exec WorkingDirectory="$(SpaRoot)" Command="$(NpmCmd) ci" Condition="Exists('$(SpaRoot)package-lock.json') And !Exists('$(SpaRoot)node_modules')" />
+    <Exec WorkingDirectory="$(SpaRoot)" Command="$(NpmCmd) install" Condition="!Exists('$(SpaRoot)node_modules')" />
+    <Exec WorkingDirectory="$(SpaRoot)" Command="$(NpmCmd) run build" />
+  </Target>
+
+</Project>

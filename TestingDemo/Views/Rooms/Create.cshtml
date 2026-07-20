@@ -1,0 +1,63 @@
+@model TestingDemo.ViewModels.CreateRoomsViewModel
+@{
+    ViewData["Title"] = "Create Room Type";
+
+    var validationToasts = ViewData.ModelState
+        .SelectMany(entry => entry.Value?.Errors ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.ModelBinding.ModelError>())
+        .Select(error => error.ErrorMessage)
+        .Where(message => !string.IsNullOrWhiteSpace(message))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+}
+
+<section class="hotel-page-hero">
+    <div>
+        <p class="eyebrow">Room Management</p>
+        <h1>Create Room Type</h1>
+        <p class="lede">Define the shared room type, add photos and inclusions, then assign room numbers in one flow.</p>
+    </div>
+    <div class="hero-meta">
+        <span class="hotel-chip">Sections collapse by default</span>
+        <span class="hotel-chip">Multi-image upload</span>
+    </div>
+</section>
+
+<div class="row">
+    <div class="col-xl-9 col-lg-10">
+        <div class="hotel-panel">
+            <p class="text-muted small mb-3">Open only the sections you need — each category stays closed so you don’t scroll as far.</p>
+            <form asp-action="Create" method="post" enctype="multipart/form-data" id="createRoomForm">
+                <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+                <partial name="_CreateRoomsForm" model="Model" />
+                <div class="hotel-actions">
+                    <button type="submit" class="btn btn-primary">Create Room Type</button>
+                    <a asp-action="Index" class="btn btn-outline-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/inclusion-picker.js" asp-append-version="true"></script>
+    <script src="~/js/room-image-uploader.js" asp-append-version="true"></script>
+    <script src="~/js/create-rooms.js" asp-append-version="true"></script>
+    <script src="~/js/create-accordion.js" asp-append-version="true"></script>
+    <script src="~/js/hotel-toast.js" asp-append-version="true"></script>
+    <script src="~/js/money-input.js" asp-append-version="true"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const assigned = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.AssignedRoomNumbers));
+            const serverErrors = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(validationToasts));
+
+            initHotelAccordion('createRoomAccordion');
+            initCreateRoomsForm(assigned);
+            initInclusionPicker();
+            initRoomImageUploader();
+            initMoneyInputs(document.getElementById('createRoomForm'));
+            initFormValidationToasts('createRoomForm', serverErrors);
+            initPhotoZoom?.(document.getElementById('createRoomForm'));
+        });
+    </script>
+}
