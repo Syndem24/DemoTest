@@ -2,7 +2,7 @@
 **/bin/
 **/obj/
 **/node_modules/
-**/dist/
+ClientApp/dist/
 *.user
 *.suo
 .vs/
