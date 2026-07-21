@@ -40,8 +40,7 @@ public class RoomsApiController : ControllerBase
                 r.PricePerNight,
                 r.MaxOccupancy,
                 r.BedCount,
-                r.SizeSqm,
-                r.IsAvailable,
+                Status = r.Status.ToString(),
                 r.Inclusions,
                 r.Images
             })

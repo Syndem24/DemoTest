@@ -230,11 +230,16 @@ public class RoomsController : Controller
             TempData["Success"] = createdCount == 1
                 ? "Room created successfully."
                 : $"{createdCount} rooms created successfully.";
-            return RedirectToAction(nameof(List));
+            return RedirectToAction(nameof(Index), new { view = "list" });
         }
-        catch (Exception ex) when (ex is InvalidOperationException or FluentValidation.ValidationException)
+        catch (Exception ex)
         {
-            ModelState.AddModelError(string.Empty, ex.Message);
+            // Keep the site running; show the error on the form instead of killing the process/debugger.
+            ModelState.AddModelError(
+                string.Empty,
+                string.IsNullOrWhiteSpace(ex.Message)
+                    ? "Could not create the room type."
+                    : ex.Message);
             await PopulateCreateLookupsAsync(model, cancellationToken);
             return View(model);
         }

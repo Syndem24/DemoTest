@@ -67,8 +67,7 @@ public class RoomService : IRoomService
             PricePerNight = dto.PricePerNight,
             MaxOccupancy = dto.MaxOccupancy,
             BedCount = dto.BedCount,
-            SizeSqm = dto.SizeSqm,
-            IsAvailable = dto.IsAvailable
+            Status = RoomStatus.Available
         };
 
         _db.Rooms.Add(room);
@@ -125,8 +124,7 @@ public class RoomService : IRoomService
                 PricePerNight = dto.PricePerNight,
                 MaxOccupancy = dto.MaxOccupancy,
                 BedCount = dto.BedCount,
-                SizeSqm = dto.SizeSqm,
-                IsAvailable = dto.IsAvailable
+                Status = RoomStatus.Available
             });
         }
 
@@ -193,9 +191,7 @@ public class RoomService : IRoomService
         room.PricePerNight = dto.PricePerNight;
         room.MaxOccupancy = dto.MaxOccupancy;
         room.BedCount = dto.BedCount;
-        room.SizeSqm = dto.SizeSqm;
-        room.IsAvailable = dto.IsAvailable;
-        room.UpdatedAt = DateTime.UtcNow;
+        room.Status = RoomStatus.Available;
 
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -256,9 +252,7 @@ public class RoomService : IRoomService
             room.PricePerNight = dto.PricePerNight;
             room.MaxOccupancy = dto.MaxOccupancy;
             room.BedCount = dto.BedCount;
-            room.SizeSqm = dto.SizeSqm;
-            room.IsAvailable = dto.IsAvailable;
-            room.UpdatedAt = DateTime.UtcNow;
+            room.Status = RoomStatus.Available;
         }
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -305,7 +299,7 @@ public class RoomService : IRoomService
                 {
                     RoomTypeId = roomTypeId,
                     RoomNumber = number,
-                    IsAvailable = true
+                    Status = RoomStatus.Available
                 };
                 _db.Rooms.Add(room);
                 result.Add(room);

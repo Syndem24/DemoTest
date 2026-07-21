@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TestingDemo.Data;
 
@@ -11,9 +12,11 @@ using TestingDemo.Data;
 namespace TestingDemo.Data.Migrations
 {
     [DbContext(typeof(HotelBookingDbContext))]
-    partial class HotelBookingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260721071938_RemoveRoomSizeSqm")]
+    partial class RemoveRoomSizeSqm
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -33,6 +36,9 @@ namespace TestingDemo.Data.Migrations
                     b.Property<int>("BedCount")
                         .HasColumnType("int");
 
+                    b.Property<bool>("IsAvailable")
+                        .HasColumnType("bit");
+
                     b.Property<int>("MaxOccupancy")
                         .HasColumnType("int");
 
@@ -49,10 +55,8 @@ namespace TestingDemo.Data.Migrations
                         .HasColumnType("int")
                         .HasColumnName("RoomTypeID");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
 
                     b.HasKey("Id");
 

@@ -63,14 +63,9 @@ else
                                     }
                                 </td>
                                 <td>
-                                    @if (room.IsAvailable)
-                                    {
-                                        <span class="badge text-bg-success">Available</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge text-bg-secondary">Unavailable</span>
-                                    }
+                                    <span class="badge @(room.Status == TestingDemo.Models.RoomStatus.Available ? "text-bg-success" : "text-bg-secondary")">
+                                        @room.Status
+                                    </span>
                                 </td>
                                 <td class="text-end text-nowrap">
                                     <a asp-action="Details" asp-route-id="@room.Id" class="btn btn-sm btn-outline-secondary">Details</a>

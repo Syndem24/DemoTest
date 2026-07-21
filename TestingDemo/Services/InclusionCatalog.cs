@@ -10,7 +10,6 @@ public static class InclusionCatalog
     [
         new("Video and audio",
         [
-            "TV set",
             "Smart TV"
         ]),
         new("Internet and telephony",
@@ -22,17 +21,12 @@ public static class InclusionCatalog
             "air conditioning",
             "electronic lock",
             "heater",
-            "water dispenser in the hall",
-            "desk lamp",
-            "lamp"
+            "desk lamp"
         ]),
         new("Bathroom",
         [
-            "bathroom",
             "toiletries",
-            "bath towels",
-            "toilet",
-            "toilet bowl"
+            "bath towels"
         ]),
         new("Outdoor area and window view",
         [
@@ -42,18 +36,9 @@ public static class InclusionCatalog
         new("Beds",
         [
             "queen bed",
-            "two double beds"
+            "twin beds"
         ]),
-        new("Furniture",
-        [
-            "chair",
-            "mirror",
-            "accent table"
-        ]),
-        new("Other",
-        [
-            "bottled water"
-        ])
+        
     ];
 
     public static IReadOnlyList<string> DefaultItems { get; } = Categories

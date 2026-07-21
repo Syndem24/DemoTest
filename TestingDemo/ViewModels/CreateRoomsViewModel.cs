@@ -29,13 +29,6 @@ public class CreateRoomsViewModel
     [Display(Name = "Bed Count")]
     public int BedCount { get; set; } = 1;
 
-    [Display(Name = "Size (sqm)")]
-    [Range(1, 1000)]
-    public double? SizeSqm { get; set; }
-
-    [Display(Name = "Available")]
-    public bool IsAvailable { get; set; } = true;
-
     [Required]
     [Range(1, 50)]
     [Display(Name = "How Many Rooms")]
@@ -78,8 +71,6 @@ public class CreateRoomsViewModel
             PricePerNight = PricePerNight,
             MaxOccupancy = MaxOccupancy,
             BedCount = BedCount,
-            SizeSqm = SizeSqm,
-            IsAvailable = IsAvailable,
             Inclusions = SelectedInclusions ?? new List<string>(),
             Images = ImagePaths ?? new List<string>(),
             RoomNumbers = AssignedRoomNumbers

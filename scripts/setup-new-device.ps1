@@ -68,11 +68,17 @@ Write-Host @"
 
 Setup complete.
 
-Run the app:
-  cd TestingDemo
-  dotnet run
+Run the app (HTTP — recommended):
+  .\run.ps1
 
-On first start the app applies the baseline migration and creates HotelBookingDb.
+Or:
+  cd TestingDemo
+  dotnet run --launch-profile http
+
+Then open:
+  http://localhost:5288/Rooms
+
+Do NOT use https://localhost:7211 unless you chose the https profile and trusted the dev certificate.
 
 If migrations still fail, re-run:
   powershell -File scripts\setup-new-device.ps1 -ResetDatabase

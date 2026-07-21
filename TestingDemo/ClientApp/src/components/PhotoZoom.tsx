@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 type PhotoZoomProps = {
   images: string[]
@@ -16,22 +17,27 @@ export function PhotoZoom({
   onClose,
 }: PhotoZoomProps) {
   const [index, setIndex] = useState(startIndex)
-  const sources = images.filter(Boolean)
+  const [closeEnabled, setCloseEnabled] = useState(false)
+  const onCloseRef = useRef(onClose)
+  const sources = useMemo(() => images.filter(Boolean), [images])
+  const titleId = useId()
 
-  useEffect(() => {
-    if (open) {
-      setIndex(Math.min(Math.max(startIndex, 0), Math.max(sources.length - 1, 0)))
-    }
-  }, [open, startIndex, sources.length])
+  onCloseRef.current = onClose
 
   useEffect(() => {
     if (!open) {
+      setCloseEnabled(false)
       return
     }
 
+    setIndex(Math.min(Math.max(startIndex, 0), Math.max(sources.length - 1, 0)))
+
+    // Ignore the same click that opened the modal so the backdrop does not close it immediately.
+    const enableTimer = window.setTimeout(() => setCloseEnabled(true), 0)
+
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onClose()
+        onCloseRef.current()
       } else if (event.key === 'ArrowLeft' && sources.length > 1) {
         setIndex((value) => (value - 1 + sources.length) % sources.length)
       } else if (event.key === 'ArrowRight' && sources.length > 1) {
@@ -41,11 +47,20 @@ export function PhotoZoom({
 
     document.body.classList.add('rm-photo-zoom-open')
     window.addEventListener('keydown', onKey)
+
     return () => {
+      window.clearTimeout(enableTimer)
       document.body.classList.remove('rm-photo-zoom-open')
       window.removeEventListener('keydown', onKey)
     }
-  }, [open, onClose, sources.length])
+  }, [open, startIndex, sources.length])
+
+  const handleBackdropClose = () => {
+    if (!closeEnabled) {
+      return
+    }
+    onClose()
+  }
 
   if (!open || sources.length === 0) {
     return null
@@ -54,9 +69,21 @@ export function PhotoZoom({
   const src = sources[index] ?? sources[0]
   const multi = sources.length > 1
 
-  return (
-    <div className="rm-photo-zoom" role="dialog" aria-modal="true" aria-label="Photo zoom">
-      <button type="button" className="rm-photo-zoom-backdrop" aria-label="Close" onClick={onClose} />
+  return createPortal(
+    <div
+      className="rm-photo-zoom"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        className="rm-photo-zoom-backdrop"
+        aria-label="Close"
+        onClick={handleBackdropClose}
+      />
       <div className="rm-photo-zoom-dialog">
         <button type="button" className="rm-photo-zoom-close" aria-label="Close" onClick={onClose}>
           ×
@@ -82,14 +109,15 @@ export function PhotoZoom({
             ›
           </button>
         ) : null}
-        <div className="rm-photo-zoom-meta">
+        <div className="rm-photo-zoom-meta" id={titleId}>
           <span className="rm-photo-zoom-caption">{alt}</span>
           <span className="rm-photo-zoom-counter">
             {multi ? `${index + 1} / ${sources.length}` : ''}
           </span>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -109,8 +137,12 @@ export function ZoomableImage({
   loading = 'lazy',
 }: ZoomableImageProps) {
   const [open, setOpen] = useState(false)
-  const gallery = (images?.length ? images : [src]).filter(Boolean)
+  const gallery = useMemo(
+    () => (images?.length ? images : [src]).filter(Boolean),
+    [images, src],
+  )
   const startIndex = Math.max(0, gallery.indexOf(src))
+  const close = useCallback(() => setOpen(false), [])
 
   return (
     <>
@@ -122,17 +154,21 @@ export function ZoomableImage({
           event.stopPropagation()
           setOpen(true)
         }}
+        onMouseDown={(event) => {
+          // Keep the opening gesture from falling through to anything underneath.
+          event.stopPropagation()
+        }}
         title="Click to zoom"
         aria-label={`Zoom ${alt}`}
       >
-        <img src={src} alt={alt} loading={loading} />
+        <img src={src} alt={alt} loading={loading} draggable={false} />
       </button>
       <PhotoZoom
         open={open}
         images={gallery}
-        startIndex={startIndex}
+        startIndex={startIndex < 0 ? 0 : startIndex}
         alt={alt}
-        onClose={() => setOpen(false)}
+        onClose={close}
       />
     </>
   )

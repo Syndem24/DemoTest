@@ -8,9 +8,7 @@ public class Room
     public decimal PricePerNight { get; set; }
     public int MaxOccupancy { get; set; }
     public int BedCount { get; set; }
-    public double? SizeSqm { get; set; }
-    public bool IsAvailable { get; set; } = true;
-    public DateTime? UpdatedAt { get; set; }
+    public RoomStatus Status { get; set; } = RoomStatus.Available;
 
     public RoomType RoomType { get; set; } = null!;
 }

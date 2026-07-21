@@ -16,7 +16,7 @@
     <div class="hero-meta">
         <span class="hotel-chip">@Model.Name</span>
         <span class="hotel-chip">@Model.PricePerNight.ToString("C") / night</span>
-        <span class="hotel-chip">@(Model.IsAvailable ? "Available" : "Unavailable")</span>
+        <span class="hotel-chip">@Model.Status</span>
     </div>
 </section>
 
@@ -106,11 +106,6 @@
                     <strong>@Model.BedCount</strong>
                     <span class="hotel-stat-note">bed count</span>
                 </div>
-                <div class="hotel-stat">
-                    <span class="hotel-stat-label">Size</span>
-                    <strong>@(Model.SizeSqm.HasValue ? Model.SizeSqm.Value.ToString("0.##") : "—")</strong>
-                    <span class="hotel-stat-note">@(Model.SizeSqm.HasValue ? "sqm" : "not set")</span>
-                </div>
             </div>
         </div>
 
@@ -128,8 +123,8 @@
                 <div class="hotel-summary-row">
                     <dt>Status</dt>
                     <dd>
-                        <span class="hotel-status @(Model.IsAvailable ? "is-available" : "is-unavailable")">
-                            @(Model.IsAvailable ? "Available" : "Unavailable")
+                        <span class="hotel-status @(Model.Status == TestingDemo.Models.RoomStatus.Available ? "is-available" : "is-unavailable")">
+                            @Model.Status
                         </span>
                     </dd>
                 </div>

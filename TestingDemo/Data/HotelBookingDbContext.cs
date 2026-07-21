@@ -42,6 +42,10 @@ public class HotelBookingDbContext : DbContext
             entity.HasIndex(e => e.RoomNumber).IsUnique();
             entity.Property(e => e.PricePerNight).HasPrecision(18, 2);
             entity.Property(e => e.RoomTypeId).HasColumnName("RoomTypeID");
+            entity.Property(e => e.Status)
+                .HasConversion<string>()
+                .HasMaxLength(20)
+                .IsRequired();
 
             entity.HasOne(e => e.RoomType)
                 .WithMany(t => t.Rooms)

@@ -32,9 +32,5 @@ public class UpdateRoomDtoValidator : AbstractValidator<UpdateRoomDto>
 
         RuleFor(x => x.BedCount)
             .GreaterThan(0).WithMessage("Bed count must be at least 1.");
-
-        RuleFor(x => x.SizeSqm)
-            .GreaterThan(0).When(x => x.SizeSqm.HasValue)
-            .WithMessage("Size must be greater than zero when provided.");
     }
 }

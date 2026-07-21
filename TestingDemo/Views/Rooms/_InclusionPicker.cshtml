@@ -34,12 +34,29 @@
 
 <div class="col-12">
     <label class="form-label">Inclusions</label>
-    <div class="form-text mb-2">Check what this room type includes. Uncheck to exclude. Custom items you add can be deleted if mistyped.</div>
+    <div class="form-text mb-2">Each shaded category header has a <strong>Select all</strong> checkbox for that group. Items listed under it are the individual inclusions.</div>
     <div id="inclusionList" class="border rounded p-3 mb-2 inclusion-checklist">
         @foreach (var category in InclusionCatalog.Categories)
         {
+            var categoryId = SafeId(category.Name);
+            var itemStates = category.Items.Select(i => selectedSet.Contains(i)).ToList();
+            var allChecked = itemStates.Count > 0 && itemStates.All(x => x);
+            var someChecked = itemStates.Any(x => x) && !allChecked;
             <div class="inclusion-category" data-category="@category.Name">
-                <div class="inclusion-category-title">@category.Name</div>
+                <div class="inclusion-category-header">
+                    <div class="form-check inclusion-category-select-all mb-0">
+                        <input class="form-check-input inclusion-select-all"
+                               type="checkbox"
+                               id="category_all_@categoryId"
+                               data-category-toggle="@category.Name"
+                               @(allChecked ? "checked" : null)
+                               @(someChecked ? "data-indeterminate=true" : null) />
+                        <label class="form-check-label" for="category_all_@categoryId">
+                            <span class="inclusion-category-name">@category.Name</span>
+                            <span class="inclusion-select-all-hint">Select all in this category</span>
+                        </label>
+                    </div>
+                </div>
                 <div class="inclusion-category-items">
                     @foreach (var inclusion in category.Items)
                     {
@@ -59,8 +76,25 @@
             </div>
         }
 
+        @{
+            var customAllChecked = customItems.Count > 0 && customItems.All(i => selectedSet.Contains(i));
+            var customSomeChecked = customItems.Any(i => selectedSet.Contains(i)) && !customAllChecked;
+        }
         <div class="inclusion-category" data-category="Custom" id="customInclusionCategory">
-            <div class="inclusion-category-title">Custom</div>
+            <div class="inclusion-category-header">
+                <div class="form-check inclusion-category-select-all mb-0">
+                    <input class="form-check-input inclusion-select-all"
+                           type="checkbox"
+                           id="category_all_Custom"
+                           data-category-toggle="Custom"
+                           @(customAllChecked ? "checked" : null)
+                           @(customSomeChecked ? "data-indeterminate=true" : null) />
+                    <label class="form-check-label" for="category_all_Custom">
+                        <span class="inclusion-category-name">Custom</span>
+                        <span class="inclusion-select-all-hint">Select all in this category</span>
+                    </label>
+                </div>
+            </div>
             <div class="inclusion-category-items" id="customInclusionItems">
                 @if (!customItems.Any())
                 {
@@ -92,10 +126,17 @@
             </div>
         </div>
     </div>
-    <div class="input-group input-group-sm">
+    <div class="inclusion-add-row">
+        <select id="newInclusionCategory" class="form-select form-select-sm" aria-label="Inclusion category">
+            @foreach (var category in InclusionCatalog.Categories)
+            {
+                <option value="@category.Name">@category.Name</option>
+            }
+            <option value="Custom" selected>Custom</option>
+        </select>
         <input type="text"
                id="newInclusionName"
-               class="form-control"
+               class="form-control form-control-sm"
                list="inclusionSuggestions"
                placeholder="Add inclusion..."
                maxlength="100" />
@@ -105,8 +146,8 @@
                 <option value="@suggestion"></option>
             }
         </datalist>
-        <button type="button" class="btn btn-outline-primary" id="addInclusionBtn">Add</button>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="addInclusionBtn">Add</button>
     </div>
     <div id="inclusionError" class="text-danger small mt-1"></div>
-    <div class="form-text">Only checked items are saved. Use Delete on custom items to fix a mistype.</div>
+    <div class="form-text">Choose a category, then add the inclusion. Only checked items are saved. Use Delete on custom items to fix a mistype.</div>
 </div>

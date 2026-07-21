@@ -20,6 +20,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <SpaRoot>ClientApp\</SpaRoot>
     <RoomAppJs>wwwroot\room-management\room-app.js</RoomAppJs>
+    <!-- Avoid Visual Studio Hot Reload killing TestingDemo.exe mid-session (exit 0xffffffff). -->
+    <HotReloadEnabled>false</HotReloadEnabled>
     <NpmCmd Condition="Exists('C:\Program Files\nodejs\npm.cmd')">"C:\Program Files\nodejs\npm.cmd"</NpmCmd>
     <NpmCmd Condition="'$(NpmCmd)' == '' And Exists('$(ProgramW6432)\nodejs\npm.cmd')">"$(ProgramW6432)\nodejs\npm.cmd"</NpmCmd>
     <NpmCmd Condition="'$(NpmCmd)' == ''">npm</NpmCmd>

@@ -2,6 +2,23 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "stop-app",
+            "type": "shell",
+            "command": "Get-Process -Name TestingDemo -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 400; exit 0",
+            "options": {
+                "shell": {
+                    "executable": "powershell.exe",
+                    "args": ["-NoProfile", "-Command"]
+                }
+            },
+            "presentation": {
+                "reveal": "silent",
+                "panel": "shared",
+                "showReuseMessage": false
+            },
+            "problemMatcher": []
+        },
+        {
             "label": "build",
             "command": "dotnet",
             "type": "process",
@@ -9,9 +26,59 @@
                 "build",
                 "${workspaceFolder}/TestingDemo/TestingDemo.csproj",
                 "/property:GenerateFullPaths=true",
-                "/consoleloggerparameters:NoSummary;ForceNoAlign"
+                "/consoleloggerparameters:NoSummary;ForceNoAlign",
+                "/p:SkipSpaBuild=true"
             ],
-            "problemMatcher": "$msCompile"
+            "problemMatcher": "$msCompile",
+            "group": "build"
+        },
+        {
+            "label": "stop-and-build",
+            "dependsOrder": "sequence",
+            "dependsOn": ["stop-app", "build"],
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "run",
+            "dependsOn": ["stop-and-build"],
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "run",
+                "--project",
+                "${workspaceFolder}/TestingDemo/TestingDemo.csproj",
+                "--launch-profile",
+                "TestingDemo",
+                "--no-build"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/TestingDemo",
+                "env": {
+                    "SkipSpaBuild": "true",
+                    "ASPNETCORE_ENVIRONMENT": "Development"
+                }
+            },
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "aspnet",
+                "pattern": {
+                    "regexp": "^$"
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": ".",
+                    "endsPattern": "Now listening on:"
+                }
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "focus": true
+            }
         },
         {
             "label": "publish",
@@ -27,15 +94,33 @@
         },
         {
             "label": "watch",
+            "dependsOn": ["stop-app"],
             "command": "dotnet",
             "type": "process",
             "args": [
                 "watch",
                 "run",
                 "--project",
-                "${workspaceFolder}/TestingDemo/TestingDemo.csproj"
+                "${workspaceFolder}/TestingDemo/TestingDemo.csproj",
+                "--launch-profile",
+                "TestingDemo"
             ],
-            "problemMatcher": "$msCompile"
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "aspnet-watch",
+                "pattern": {
+                    "regexp": "^$"
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": ".",
+                    "endsPattern": "Now listening on:"
+                }
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
         }
     ]
 }

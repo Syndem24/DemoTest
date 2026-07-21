@@ -16,10 +16,8 @@ public static class RoomMappings
             PricePerNight = room.PricePerNight,
             MaxOccupancy = room.MaxOccupancy,
             BedCount = room.BedCount,
-            SizeSqm = room.SizeSqm,
-            IsAvailable = room.IsAvailable,
+            Status = room.Status,
             CreatedAt = room.RoomType?.CreatedAt ?? default,
-            UpdatedAt = room.UpdatedAt,
             Inclusions = NormalizeInclusions(room.RoomType?.Inclusions),
             Images = NormalizeImages(room.RoomType?.Images)
         };

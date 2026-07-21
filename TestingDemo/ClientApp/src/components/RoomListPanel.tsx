@@ -114,8 +114,8 @@ function RoomCard({ room }: { room: RoomItem }) {
         ) : (
           <div className="rm-card-media-empty">No photo</div>
         )}
-        <span className={`rm-pill rm-card-status ${room.isAvailable ? 'is-available' : 'is-unavailable'}`}>
-          {room.isAvailable ? 'Available' : 'Unavailable'}
+        <span className={`rm-pill rm-card-status ${room.status === 'Available' ? 'is-available' : 'is-unavailable'}`}>
+          {room.status}
         </span>
       </div>
 
@@ -179,7 +179,7 @@ export function RoomListPanel({ data, loading, error }: Props) {
             item.roomNumber,
             item.description ?? '',
             item.inclusions.join(' '),
-            item.isAvailable ? 'available' : 'unavailable',
+            item.status,
           ]
             .join(' ')
             .toLowerCase()
@@ -284,9 +284,9 @@ export function RoomListPanel({ data, loading, error }: Props) {
                   <th>
                     <SortButton
                       label="Status"
-                      active={sortKey === 'isAvailable'}
+                      active={sortKey === 'status'}
                       dir={sortDir}
-                      onClick={() => toggleSort('isAvailable')}
+                      onClick={() => toggleSort('status')}
                     />
                   </th>
                   <th className="rm-col-actions">Actions</th>
@@ -330,9 +330,6 @@ export function RoomListPanel({ data, loading, error }: Props) {
                         </td>
                         <td>
                           <div className="rm-title">{room.name}</div>
-                          {room.sizeSqm != null ? (
-                            <div className="rm-muted">{room.sizeSqm} sqm</div>
-                          ) : null}
                         </td>
                         <td>
                           <div className="rm-price">{formatMoney(room.pricePerNight)}</div>
@@ -359,8 +356,8 @@ export function RoomListPanel({ data, loading, error }: Props) {
                           )}
                         </td>
                         <td>
-                          <span className={`rm-pill ${room.isAvailable ? 'is-available' : 'is-unavailable'}`}>
-                            {room.isAvailable ? 'Available' : 'Unavailable'}
+                          <span className={`rm-pill ${room.status === 'Available' ? 'is-available' : 'is-unavailable'}`}>
+                            {room.status}
                           </span>
                         </td>
                         <td className="rm-col-actions">

@@ -31,13 +31,6 @@ public class RoomTypeFormViewModel
     [Display(Name = "Bed Count")]
     public int BedCount { get; set; }
 
-    [Range(1, 1000)]
-    [Display(Name = "Size (sqm)")]
-    public double? SizeSqm { get; set; }
-
-    [Display(Name = "Available")]
-    public bool IsAvailable { get; set; }
-
     public List<string> SelectedInclusions { get; set; } = new();
     public List<string> AvailableInclusions { get; set; } = new();
 
@@ -104,8 +97,6 @@ public class RoomTypeFormViewModel
             PricePerNight = sample.PricePerNight,
             MaxOccupancy = sample.MaxOccupancy,
             BedCount = sample.BedCount,
-            SizeSqm = sample.SizeSqm,
-            IsAvailable = sample.IsAvailable,
             SelectedInclusions = sample.Inclusions.ToList(),
             ExistingImages = sample.Images.ToList(),
             RoomCount = rooms.Count,
@@ -125,8 +116,6 @@ public class RoomTypeFormViewModel
             PricePerNight = PricePerNight,
             MaxOccupancy = MaxOccupancy,
             BedCount = BedCount,
-            SizeSqm = SizeSqm,
-            IsAvailable = IsAvailable,
             Inclusions = SelectedInclusions ?? new List<string>(),
             Images = images.ToList(),
             RoomNumbers = Rooms

@@ -156,9 +156,6 @@ export function RoomTypesPanel({ data, loading, error }: Props) {
                     <td>{formatMoney(item.pricePerNight)}</td>
                     <td>
                       {item.maxOccupancy} guests / {item.bedCount} bed(s)
-                      {item.sizeSqm != null ? (
-                        <div className="rm-muted">{item.sizeSqm} sqm</div>
-                      ) : null}
                     </td>
                     <td>{item.roomCount}</td>
                     <td>

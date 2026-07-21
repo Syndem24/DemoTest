@@ -42,9 +42,8 @@ public class RoomIndexViewModel
                     PricePerNight = representative.PricePerNight,
                     MaxOccupancy = representative.MaxOccupancy,
                     BedCount = representative.BedCount,
-                    SizeSqm = representative.SizeSqm,
                     RoomCount = g.Rooms.Count,
-                    AvailableCount = g.Rooms.Count(r => r.IsAvailable),
+                    AvailableCount = g.Rooms.Count(r => r.Status == RoomStatus.Available),
                     Inclusions = representative.Inclusions.ToList(),
                     Images = representative.Images.ToList()
                 };
@@ -74,7 +73,6 @@ public class RoomTypeSummaryViewModel
     public decimal PricePerNight { get; set; }
     public int MaxOccupancy { get; set; }
     public int BedCount { get; set; }
-    public double? SizeSqm { get; set; }
     public int RoomCount { get; set; }
     public int AvailableCount { get; set; }
     public List<string> Inclusions { get; set; } = new();

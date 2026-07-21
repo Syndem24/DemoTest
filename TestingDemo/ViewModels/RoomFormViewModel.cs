@@ -37,13 +37,6 @@ public class RoomFormViewModel
     [Display(Name = "Bed Count")]
     public int BedCount { get; set; } = 1;
 
-    [Display(Name = "Size (sqm)")]
-    [Range(1, 1000)]
-    public double? SizeSqm { get; set; }
-
-    [Display(Name = "Available")]
-    public bool IsAvailable { get; set; } = true;
-
     [Display(Name = "Inclusions")]
     public List<string> SelectedInclusions { get; set; } = new();
 
@@ -61,8 +54,6 @@ public class RoomFormViewModel
             PricePerNight = dto.PricePerNight,
             MaxOccupancy = dto.MaxOccupancy,
             BedCount = dto.BedCount,
-            SizeSqm = dto.SizeSqm,
-            IsAvailable = dto.IsAvailable,
             SelectedInclusions = dto.Inclusions.ToList()
         };
     }
@@ -79,8 +70,6 @@ public class RoomFormViewModel
             PricePerNight = PricePerNight,
             MaxOccupancy = MaxOccupancy,
             BedCount = BedCount,
-            SizeSqm = SizeSqm,
-            IsAvailable = IsAvailable,
             Inclusions = SelectedInclusions ?? new List<string>()
         };
     }

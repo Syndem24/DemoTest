@@ -26,10 +26,6 @@ public class UpdateRoomTypeDtoValidator : AbstractValidator<UpdateRoomTypeDto>
         RuleFor(x => x.BedCount)
             .InclusiveBetween(1, 10);
 
-        RuleFor(x => x.SizeSqm)
-            .InclusiveBetween(1, 1000)
-            .When(x => x.SizeSqm.HasValue);
-
         RuleFor(x => x.RoomNumbers)
             .NotEmpty().WithMessage("At least one room number is required.")
             .Must(items => items.Count is >= 1 and <= 50)

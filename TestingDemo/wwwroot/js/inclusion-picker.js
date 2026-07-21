@@ -6,6 +6,53 @@
             .replace(/=+$/g, '');
     }
 
+    function getCategoryRoot(categoryName) {
+        const list = document.getElementById('inclusionList');
+        if (!list) {
+            return null;
+        }
+
+        return Array.from(list.querySelectorAll('.inclusion-category'))
+            .find(el => (el.dataset.category || '').toLowerCase() === categoryName.toLowerCase())
+            || null;
+    }
+
+    function getCategoryItemsContainer(categoryName) {
+        return getCategoryRoot(categoryName)?.querySelector('.inclusion-category-items') || null;
+    }
+
+    function getCategoryItemCheckboxes(categoryRoot) {
+        return Array.from(categoryRoot.querySelectorAll('.inclusion-category-items input[name="SelectedInclusions"]'));
+    }
+
+    function syncCategorySelectAll(categoryRoot) {
+        if (!categoryRoot) {
+            return;
+        }
+
+        const selectAll = categoryRoot.querySelector('.inclusion-select-all');
+        if (!selectAll) {
+            return;
+        }
+
+        const boxes = getCategoryItemCheckboxes(categoryRoot);
+        if (boxes.length === 0) {
+            selectAll.checked = false;
+            selectAll.indeterminate = false;
+            selectAll.disabled = true;
+            return;
+        }
+
+        selectAll.disabled = false;
+        const checkedCount = boxes.filter(box => box.checked).length;
+        selectAll.checked = checkedCount === boxes.length;
+        selectAll.indeterminate = checkedCount > 0 && checkedCount < boxes.length;
+    }
+
+    function syncAllCategorySelectAll() {
+        document.querySelectorAll('#inclusionList .inclusion-category').forEach(syncCategorySelectAll);
+    }
+
     function syncCustomEmptyState() {
         const customItems = document.getElementById('customInclusionItems');
         if (!customItems) {
@@ -17,6 +64,7 @@
 
         if (hasCustom) {
             empty?.remove();
+            syncCategorySelectAll(getCategoryRoot('Custom'));
             return;
         }
 
@@ -27,15 +75,17 @@
             placeholder.textContent = 'No custom inclusions yet.';
             customItems.appendChild(placeholder);
         }
+
+        syncCategorySelectAll(getCategoryRoot('Custom'));
     }
 
-    function appendCheckbox(name, checked) {
+    function appendCheckbox(name, checked, categoryName) {
         const list = document.getElementById('inclusionList');
-        const customItems = document.getElementById('customInclusionItems');
-        if (!list || !customItems) {
+        if (!list) {
             return;
         }
 
+        const targetCategory = (categoryName || 'Custom').trim() || 'Custom';
         const existing = Array.from(list.querySelectorAll('[data-inclusion-name]'))
             .find(el => el.dataset.inclusionName.toLowerCase() === name.toLowerCase());
 
@@ -44,15 +94,25 @@
             if (checkbox) {
                 checkbox.checked = !!checked;
             }
+            syncCategorySelectAll(existing.closest('.inclusion-category'));
             return;
         }
 
-        document.getElementById('inclusionEmptyState')?.remove();
+        const container = getCategoryItemsContainer(targetCategory)
+            || document.getElementById('customInclusionItems');
+        if (!container) {
+            return;
+        }
+
+        if (container.id === 'customInclusionItems') {
+            document.getElementById('inclusionEmptyState')?.remove();
+        }
 
         const wrapper = document.createElement('div');
         wrapper.className = 'form-check inclusion-custom-row';
         wrapper.dataset.inclusionName = name;
         wrapper.dataset.inclusionDefault = 'false';
+        wrapper.dataset.inclusionCategory = targetCategory;
 
         const inputId = `inclusion_${toSafeId(name)}`;
 
@@ -80,8 +140,9 @@
         wrapper.appendChild(checkbox);
         wrapper.appendChild(label);
         wrapper.appendChild(button);
-        customItems.appendChild(wrapper);
+        container.appendChild(wrapper);
         syncCustomEmptyState();
+        syncCategorySelectAll(container.closest('.inclusion-category'));
     }
 
     window.initInclusionPicker = function () {
@@ -89,11 +150,19 @@
         const inclusionBtn = document.getElementById('addInclusionBtn');
         const inclusionList = document.getElementById('inclusionList');
         const inclusionError = document.getElementById('inclusionError');
+        const categorySelect = document.getElementById('newInclusionCategory');
         const form = inclusionList?.closest('form');
 
         if (!inclusionBtn || !inclusionList || !inclusionInput) {
             return;
         }
+
+        // Apply server-rendered indeterminate state for partial selections.
+        inclusionList.querySelectorAll('.inclusion-select-all[data-indeterminate="true"]').forEach(input => {
+            input.indeterminate = true;
+            input.removeAttribute('data-indeterminate');
+        });
+        syncAllCategorySelectAll();
 
         const addInclusion = () => {
             const name = inclusionInput.value.trim();
@@ -102,10 +171,36 @@
                 return;
             }
 
-            appendCheckbox(name, true);
+            const category = categorySelect?.value?.trim() || 'Custom';
+            appendCheckbox(name, true, category);
             inclusionInput.value = '';
             inclusionError.textContent = '';
+            inclusionInput.focus();
         };
+
+        inclusionList.addEventListener('change', event => {
+            const target = event.target;
+            if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') {
+                return;
+            }
+
+            if (target.classList.contains('inclusion-select-all')) {
+                const categoryRoot = target.closest('.inclusion-category');
+                if (!categoryRoot) {
+                    return;
+                }
+
+                getCategoryItemCheckboxes(categoryRoot).forEach(box => {
+                    box.checked = target.checked;
+                });
+                target.indeterminate = false;
+                return;
+            }
+
+            if (target.name === 'SelectedInclusions') {
+                syncCategorySelectAll(target.closest('.inclusion-category'));
+            }
+        });
 
         inclusionList.addEventListener('click', event => {
             const button = event.target.closest('.delete-inclusion-btn');
@@ -126,8 +221,10 @@
                     el.dataset.inclusionDefault === 'false' &&
                     el.dataset.inclusionName.toLowerCase() === name.toLowerCase());
 
+            const categoryRoot = row?.closest('.inclusion-category');
             row?.remove();
             syncCustomEmptyState();
+            syncCategorySelectAll(categoryRoot);
             inclusionError.textContent = '';
         });
 

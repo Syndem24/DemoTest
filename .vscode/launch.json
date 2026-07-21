@@ -1,27 +1,29 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
-            "name": ".NET Core Launch (web)",
+            "name": "Run Hotel Booking (http)",
             "type": "coreclr",
             "request": "launch",
-            "preLaunchTask": "build",
+            "preLaunchTask": "stop-and-build",
             "program": "${workspaceFolder}/TestingDemo/bin/Debug/net9.0/TestingDemo.dll",
             "args": [],
             "cwd": "${workspaceFolder}/TestingDemo",
             "stopAtEntry": false,
+            "console": "integratedTerminal",
+            "launchSettingsFilePath": "${workspaceFolder}/TestingDemo/Properties/launchSettings.json",
+            "launchSettingsProfile": "TestingDemo",
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_URLS": "http://localhost:5288"
+            },
             "serverReadyAction": {
                 "action": "openExternally",
-                "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
-            },
-            "env": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
+                "pattern": "Now listening on:",
+                "uriFormat": "http://localhost:5288/Rooms"
             },
             "sourceFileMap": {
-                "/Views": "${workspaceFolder}/Views"
+                "/Views": "${workspaceFolder}/TestingDemo/Views"
             }
         },
         {

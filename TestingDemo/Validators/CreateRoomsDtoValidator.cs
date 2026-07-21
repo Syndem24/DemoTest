@@ -23,10 +23,6 @@ public class CreateRoomsDtoValidator : AbstractValidator<CreateRoomsDto>
         RuleFor(x => x.BedCount)
             .GreaterThan(0).WithMessage("Bed count must be at least 1.");
 
-        RuleFor(x => x.SizeSqm)
-            .GreaterThan(0).When(x => x.SizeSqm.HasValue)
-            .WithMessage("Size must be greater than zero when provided.");
-
         RuleFor(x => x.RoomNumbers)
             .NotEmpty().WithMessage("At least one room number must be assigned.")
             .Must(numbers => numbers.Count <= 50)

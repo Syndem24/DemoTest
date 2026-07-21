@@ -8,7 +8,5 @@ public class CreateRoomDto
     public decimal PricePerNight { get; set; }
     public int MaxOccupancy { get; set; }
     public int BedCount { get; set; }
-    public double? SizeSqm { get; set; }
-    public bool IsAvailable { get; set; } = true;
     public List<string> Inclusions { get; set; } = new();
 }

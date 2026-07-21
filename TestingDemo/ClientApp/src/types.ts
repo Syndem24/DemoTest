@@ -1,3 +1,5 @@
+export type RoomStatus = 'Available' | 'Unavailable'
+
 export type RoomTypeSummary = {
   roomTypeId: number
   name: string
@@ -5,7 +7,6 @@ export type RoomTypeSummary = {
   pricePerNight: number
   maxOccupancy: number
   bedCount: number
-  sizeSqm?: number | null
   roomCount: number
   availableCount: number
   inclusions: string[]
@@ -21,8 +22,7 @@ export type RoomItem = {
   pricePerNight: number
   maxOccupancy: number
   bedCount: number
-  sizeSqm?: number | null
-  isAvailable: boolean
+  status: RoomStatus
   inclusions: string[]
   images: string[]
 }
@@ -43,4 +43,4 @@ export type RoomSortKey =
   | 'name'
   | 'pricePerNight'
   | 'maxOccupancy'
-  | 'isAvailable'
+  | 'status'

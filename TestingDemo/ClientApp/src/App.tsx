@@ -67,9 +67,6 @@ export default function App() {
           <a className="rm-btn rm-btn-accent" href="/Rooms/Create">
             Create Room Type
           </a>
-          <button type="button" className="rm-btn rm-btn-ghost" onClick={() => void load()} disabled={loading}>
-            Refresh
-          </button>
         </div>
       </header>
 
