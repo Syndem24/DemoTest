@@ -4,11 +4,13 @@
     "TestingDemo": {
       "commandName": "Project",
       "dotnetRunMessages": true,
-      "launchBrowser": true,
-      "launchUrl": "Rooms",
+      "launchBrowser": false,
       "applicationUrl": "http://localhost:5288",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "HOTEL_OPEN_BROWSER": "1",
+        "DOTNET_WATCH_SUPPRESS_BROWSER_REFRESH": "1",
+        "DOTNET_HOTRELOAD_ENABLED": "0"
       }
     }
   }

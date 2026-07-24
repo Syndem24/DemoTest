@@ -57,6 +57,7 @@ public class RoomService : IRoomService
             dto.TypeName,
             dto.Description,
             dto.Inclusions,
+            dto.CustomCategories,
             Array.Empty<string>(),
             cancellationToken);
 
@@ -109,6 +110,7 @@ public class RoomService : IRoomService
             Description = dto.Description?.Trim(),
             CreatedAt = DateTime.UtcNow,
             Inclusions = inclusions.ToList(),
+            CustomCategories = RoomMappings.NormalizeCustomCategories(dto.CustomCategories),
             Images = images.ToList()
         };
 
@@ -185,7 +187,9 @@ public class RoomService : IRoomService
         roomType.TypeName = dto.TypeName.Trim();
         roomType.Description = dto.Description?.Trim();
         roomType.Inclusions = RoomMappings.NormalizeInclusions(dto.Inclusions);
+        roomType.CustomCategories = RoomMappings.NormalizeCustomCategories(dto.CustomCategories);
         _db.Entry(roomType).Property(t => t.Inclusions).IsModified = true;
+        _db.Entry(roomType).Property(t => t.CustomCategories).IsModified = true;
 
         room.RoomNumber = dto.RoomNumber.Trim();
         room.PricePerNight = dto.PricePerNight;
@@ -221,8 +225,10 @@ public class RoomService : IRoomService
         roomType.TypeName = dto.TypeName.Trim();
         roomType.Description = dto.Description?.Trim();
         roomType.Inclusions = RoomMappings.NormalizeInclusions(dto.Inclusions);
+        roomType.CustomCategories = RoomMappings.NormalizeCustomCategories(dto.CustomCategories);
         roomType.Images = RoomMappings.NormalizeImages(dto.Images);
         _db.Entry(roomType).Property(t => t.Inclusions).IsModified = true;
+        _db.Entry(roomType).Property(t => t.CustomCategories).IsModified = true;
         _db.Entry(roomType).Property(t => t.Images).IsModified = true;
 
         var existingRooms = await _db.Rooms
@@ -402,18 +408,22 @@ public class RoomService : IRoomService
         string typeName,
         string? description,
         IEnumerable<string> inclusions,
+        IEnumerable<CustomInclusionCategory> customCategories,
         IEnumerable<string> images,
         CancellationToken cancellationToken)
     {
         var normalized = typeName.Trim();
         var normalizedInclusions = RoomMappings.NormalizeInclusions(inclusions);
+        var normalizedCustomCategories = RoomMappings.NormalizeCustomCategories(customCategories);
         var existing = await _db.RoomTypes
             .FirstOrDefaultAsync(t => t.TypeName.ToLower() == normalized.ToLower(), cancellationToken);
         if (existing is not null)
         {
             existing.Description = description?.Trim();
             existing.Inclusions = normalizedInclusions;
+            existing.CustomCategories = normalizedCustomCategories;
             _db.Entry(existing).Property(t => t.Inclusions).IsModified = true;
+            _db.Entry(existing).Property(t => t.CustomCategories).IsModified = true;
             await _db.SaveChangesAsync(cancellationToken);
             return existing;
         }
@@ -424,6 +434,7 @@ public class RoomService : IRoomService
             Description = description?.Trim(),
             CreatedAt = DateTime.UtcNow,
             Inclusions = normalizedInclusions,
+            CustomCategories = normalizedCustomCategories,
             Images = RoomMappings.NormalizeImages(images)
         };
 

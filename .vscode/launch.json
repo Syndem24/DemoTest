@@ -15,12 +15,8 @@
             "launchSettingsProfile": "TestingDemo",
             "env": {
                 "ASPNETCORE_ENVIRONMENT": "Development",
-                "ASPNETCORE_URLS": "http://localhost:5288"
-            },
-            "serverReadyAction": {
-                "action": "openExternally",
-                "pattern": "Now listening on:",
-                "uriFormat": "http://localhost:5288/Rooms"
+                "ASPNETCORE_URLS": "http://localhost:5288",
+                "HOTEL_OPEN_BROWSER": "1"
             },
             "sourceFileMap": {
                 "/Views": "${workspaceFolder}/TestingDemo/Views"

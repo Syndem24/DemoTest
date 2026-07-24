@@ -33,12 +33,6 @@ public static class InclusionCatalog
             "city view",
             "no window"
         ]),
-        new("Beds",
-        [
-            "queen bed",
-            "twin beds"
-        ]),
-        
     ];
 
     public static IReadOnlyList<string> DefaultItems { get; } = Categories

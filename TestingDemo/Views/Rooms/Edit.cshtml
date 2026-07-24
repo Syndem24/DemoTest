@@ -1,6 +1,20 @@
 @model TestingDemo.ViewModels.RoomFormViewModel
 @{
     ViewData["Title"] = "Edit Room";
+
+    var validationToasts = ViewData.ModelState
+        .SelectMany(entry => entry.Value?.Errors ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.ModelBinding.ModelError>())
+        .Select(error => error.ErrorMessage)
+        .Where(message => !string.IsNullOrWhiteSpace(message))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    var openSections = new List<string>();
+    if (ViewData.ModelState.ContainsKey(nameof(RoomFormViewModel.RoomNumber))
+        || validationToasts.Any(m => m.Contains("room number", StringComparison.OrdinalIgnoreCase)))
+    {
+        openSections.Add("room");
+    }
 }
 
 <section class="hotel-page-hero">
@@ -38,12 +52,19 @@
     <partial name="_ValidationScriptsPartial" />
     <script src="~/js/inclusion-picker.js" asp-append-version="true"></script>
     <script src="~/js/create-accordion.js" asp-append-version="true"></script>
+    <script src="~/js/hotel-toast.js" asp-append-version="true"></script>
     <script src="~/js/money-input.js" asp-append-version="true"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            initHotelAccordion('editRoomAccordion');
+            const serverErrors = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(validationToasts));
+
+            initHotelAccordion('editRoomAccordion', {
+                openSections: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(openSections)),
+                messages: serverErrors
+            });
             initInclusionPicker();
             initMoneyInputs(document.getElementById('editRoomForm'));
+            initFormValidationToasts('editRoomForm', serverErrors);
         });
     </script>
 }

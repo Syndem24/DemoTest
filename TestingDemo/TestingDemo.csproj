@@ -20,12 +20,19 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <SpaRoot>ClientApp\</SpaRoot>
     <RoomAppJs>wwwroot\room-management\room-app.js</RoomAppJs>
-    <!-- Avoid Visual Studio Hot Reload killing TestingDemo.exe mid-session (exit 0xffffffff). -->
+    <!-- Avoid Visual Studio Hot Reload / browser-refresh killing TestingDemo.exe (exit 0xffffffff). -->
     <HotReloadEnabled>false</HotReloadEnabled>
+    <UseBrowserLink>false</UseBrowserLink>
     <NpmCmd Condition="Exists('C:\Program Files\nodejs\npm.cmd')">"C:\Program Files\nodejs\npm.cmd"</NpmCmd>
     <NpmCmd Condition="'$(NpmCmd)' == '' And Exists('$(ProgramW6432)\nodejs\npm.cmd')">"$(ProgramW6432)\nodejs\npm.cmd"</NpmCmd>
     <NpmCmd Condition="'$(NpmCmd)' == ''">npm</NpmCmd>
   </PropertyGroup>
+
+  <!-- Creating rooms writes photos under wwwroot/uploads; watching those files can restart/kill VS debug. -->
+  <ItemGroup>
+    <Watch Remove="wwwroot\uploads\**\*" />
+    <Content Update="wwwroot\uploads\**\*" CopyToOutputDirectory="Never" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 
   <!-- Rebuild React only when output is missing or ForceSpaBuild=true. MSBuild often lacks npm on PATH (exit 9009). -->
   <Target Name="BuildRoomManagementApp"

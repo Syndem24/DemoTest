@@ -31,6 +31,7 @@ public class HotelBookingDbContext : DbContext
             entity.HasIndex(e => e.TypeName).IsUnique();
             entity.Property(e => e.Description).HasMaxLength(1000);
             ConfigureStringList(entity.Property(e => e.Inclusions));
+            ConfigureCustomCategories(entity.Property(e => e.CustomCategories));
             ConfigureStringList(entity.Property(e => e.Images));
         });
 
@@ -72,5 +73,29 @@ public class HotelBookingDbContext : DbContext
                     : value.Aggregate(0, (hash, item) =>
                         HashCode.Combine(hash, StringComparer.OrdinalIgnoreCase.GetHashCode(item))),
                 value => value == null ? new List<string>() : value.ToList()));
+    }
+
+    private static void ConfigureCustomCategories(PropertyBuilder<List<CustomInclusionCategory>> property)
+    {
+        property
+            .HasConversion(
+                v => JsonSerializer.Serialize(v ?? new List<CustomInclusionCategory>(), JsonOptions),
+                v => string.IsNullOrWhiteSpace(v)
+                    ? new List<CustomInclusionCategory>()
+                    : JsonSerializer.Deserialize<List<CustomInclusionCategory>>(v, JsonOptions)
+                      ?? new List<CustomInclusionCategory>())
+            .HasColumnType("nvarchar(max)")
+            .Metadata.SetValueComparer(new ValueComparer<List<CustomInclusionCategory>>(
+                (left, right) =>
+                    JsonSerializer.Serialize(left ?? new List<CustomInclusionCategory>(), JsonOptions)
+                    == JsonSerializer.Serialize(right ?? new List<CustomInclusionCategory>(), JsonOptions),
+                value => JsonSerializer.Serialize(value ?? new List<CustomInclusionCategory>(), JsonOptions).GetHashCode(),
+                value => value == null
+                    ? new List<CustomInclusionCategory>()
+                    : value.Select(c => new CustomInclusionCategory
+                    {
+                        Name = c.Name,
+                        Items = c.Items == null ? new List<string>() : c.Items.ToList()
+                    }).ToList()));
     }
 }

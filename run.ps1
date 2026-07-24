@@ -32,24 +32,10 @@ Start-Sleep -Milliseconds 500
 
 Write-Host ""
 Write-Host "Starting app at http://localhost:5288 ..." -ForegroundColor Cyan
-Write-Host "Browser will open http://localhost:5288/Rooms" -ForegroundColor Green
+Write-Host "Browser opens automatically when the server is ready." -ForegroundColor Green
 Write-Host "Press Ctrl+C to stop." -ForegroundColor DarkGray
 Write-Host ""
 
-# Open the site once Kestrel is listening (does not block dotnet run).
-Start-Job -ScriptBlock {
-    for ($i = 0; $i -lt 60; $i++) {
-        try {
-            $r = Invoke-WebRequest -Uri "http://localhost:5288/" -UseBasicParsing -TimeoutSec 1
-            if ($r.StatusCode -ge 200) {
-                Start-Process "http://localhost:5288/Rooms"
-                return
-            }
-        } catch {
-            Start-Sleep -Milliseconds 500
-        }
-    }
-} | Out-Null
-
 Set-Location "$root\TestingDemo"
+$env:HOTEL_OPEN_BROWSER = "1"
 dotnet run --launch-profile TestingDemo --project TestingDemo.csproj

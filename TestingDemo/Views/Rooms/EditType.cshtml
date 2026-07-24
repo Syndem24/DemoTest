@@ -1,6 +1,22 @@
 @model TestingDemo.ViewModels.RoomTypeFormViewModel
 @{
     ViewData["Title"] = "Edit Room Type";
+
+    var validationToasts = ViewData.ModelState
+        .SelectMany(entry => entry.Value?.Errors ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.ModelBinding.ModelError>())
+        .Select(error => error.ErrorMessage)
+        .Where(message => !string.IsNullOrWhiteSpace(message))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    var openSections = new List<string>();
+    if (ViewData.ModelState.ContainsKey(nameof(RoomTypeFormViewModel.Rooms))
+        || ViewData.ModelState.ContainsKey(nameof(RoomTypeFormViewModel.RoomCount))
+        || validationToasts.Any(m => m.Contains("room number", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("room count", StringComparison.OrdinalIgnoreCase)))
+    {
+        openSections.Add("room-numbers");
+    }
 }
 
 <section class="hotel-page-hero">
@@ -39,17 +55,23 @@
     <script src="~/js/room-image-uploader.js" asp-append-version="true"></script>
     <script src="~/js/create-accordion.js" asp-append-version="true"></script>
     <script src="~/js/edit-room-type.js" asp-append-version="true"></script>
+    <script src="~/js/hotel-toast.js" asp-append-version="true"></script>
     <script src="~/js/money-input.js" asp-append-version="true"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const rooms = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
                 Model.Rooms.Select(r => new { roomId = r.RoomId, roomNumber = r.RoomNumber })));
+            const serverErrors = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(validationToasts));
 
-            initHotelAccordion('editTypeAccordion');
+            initHotelAccordion('editTypeAccordion', {
+                openSections: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(openSections)),
+                messages: serverErrors
+            });
             initEditTypeRoomsForm(rooms);
             initInclusionPicker();
             initRoomImageUploader();
             initMoneyInputs(document.getElementById('editTypeForm'));
+            initFormValidationToasts('editTypeForm', serverErrors);
             initPhotoZoom?.(document.getElementById('editTypeForm'));
         });
     </script>

@@ -8,6 +8,15 @@
         .Where(message => !string.IsNullOrWhiteSpace(message))
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToList();
+
+    var openSections = new List<string>();
+    if (ViewData.ModelState.ContainsKey(nameof(CreateRoomsViewModel.AssignedRoomNumbers))
+        || ViewData.ModelState.ContainsKey(nameof(CreateRoomsViewModel.RoomCount))
+        || validationToasts.Any(m => m.Contains("room number", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("room count", StringComparison.OrdinalIgnoreCase)))
+    {
+        openSections.Add("rooms");
+    }
 }
 
 <section class="hotel-page-hero">
@@ -51,7 +60,10 @@
             const assigned = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.AssignedRoomNumbers));
             const serverErrors = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(validationToasts));
 
-            initHotelAccordion('createRoomAccordion');
+            initHotelAccordion('createRoomAccordion', {
+                openSections: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(openSections)),
+                messages: serverErrors
+            });
             initCreateRoomsForm(assigned);
             initInclusionPicker();
             initRoomImageUploader();

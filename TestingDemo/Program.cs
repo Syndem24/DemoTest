@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using FluentValidation;
 using Microsoft.AspNetCore.Localization;
@@ -67,13 +68,23 @@ try
             pattern: "{controller=Home}/{action=Index}/{id?}")
         .WithStaticAssets();
 
+    const string siteUrl = "http://localhost:5288";
+
     Console.WriteLine();
     Console.WriteLine("========================================");
     Console.WriteLine("  Hotel Booking is running");
-    Console.WriteLine("  Open: http://localhost:5288/Rooms");
+    Console.WriteLine($"  Open: {siteUrl}");
     Console.WriteLine("  Keep this window/debug session open.");
     Console.WriteLine("========================================");
     Console.WriteLine();
+
+    // Open the browser from the app (not Visual Studio's launchBrowser).
+    // VS "launchBrowser" ties the debugger to the browser window and often kills the
+    // process (0xffffffff / ERR_CONNECTION_REFUSED) after create or photo pick.
+    if (ShouldOpenBrowser(app.Environment))
+    {
+        app.Lifetime.ApplicationStarted.Register(() => TryOpenBrowser(siteUrl));
+    }
 
     app.Run();
 }
@@ -92,6 +103,41 @@ catch (Exception ex)
     }
 
     Environment.ExitCode = 1;
+}
+
+static bool ShouldOpenBrowser(IHostEnvironment environment)
+{
+    if (!environment.IsDevelopment())
+    {
+        return false;
+    }
+
+    var flag = Environment.GetEnvironmentVariable("HOTEL_OPEN_BROWSER");
+    if (string.Equals(flag, "0", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(flag, "false", StringComparison.OrdinalIgnoreCase))
+    {
+        return false;
+    }
+
+    // Default on in Development (also when HOTEL_OPEN_BROWSER=1).
+    return true;
+}
+
+static void TryOpenBrowser(string url)
+{
+    try
+    {
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = url,
+            UseShellExecute = true
+        });
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Could not open browser automatically: {ex.Message}");
+        Console.WriteLine($"Open manually: {url}");
+    }
 }
 
 static CultureInfo CreatePesoCulture()

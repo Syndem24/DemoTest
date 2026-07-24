@@ -11,4 +11,5 @@ public class UpdateRoomDto
     public int MaxOccupancy { get; set; }
     public int BedCount { get; set; }
     public List<string> Inclusions { get; set; } = new();
+    public List<CustomInclusionCategory> CustomCategories { get; set; } = new();
 }

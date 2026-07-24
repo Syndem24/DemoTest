@@ -56,31 +56,34 @@
         return overlay;
     }
 
-    function openSectionsForInvalidFields(form) {
+    function openSectionsForInvalidFields(form, messages) {
         if (typeof window.openHotelAccordionSectionsForElements === 'function') {
             const invalid = form.querySelectorAll(
                 '.input-validation-error, :invalid, .field-validation-error:not(:empty)');
             window.openHotelAccordionSectionsForElements(invalid);
-            return;
+        } else {
+            form.querySelectorAll('.hotel-accordion').forEach(section => {
+                const hasError = section.querySelector(
+                    '.input-validation-error, :invalid, .field-validation-error:not(:empty)');
+                if (!hasError) {
+                    return;
+                }
+                const toggle = section.querySelector('.hotel-accordion-toggle');
+                const body = section.querySelector('.hotel-accordion-body');
+                if (!toggle || !body) {
+                    return;
+                }
+                toggle.setAttribute('aria-expanded', 'true');
+                section.classList.add('is-open');
+                body.classList.remove('is-collapsed');
+                body.hidden = false;
+            });
         }
 
-        // Fallback: open any accordion that contains validation errors
-        form.querySelectorAll('.hotel-accordion').forEach(section => {
-            const hasError = section.querySelector(
-                '.input-validation-error, :invalid, .field-validation-error:not(:empty)');
-            if (!hasError) {
-                return;
-            }
-            const toggle = section.querySelector('.hotel-accordion-toggle');
-            const body = section.querySelector('.hotel-accordion-body');
-            if (!toggle || !body) {
-                return;
-            }
-            toggle.setAttribute('aria-expanded', 'true');
-            section.classList.add('is-open');
-            body.classList.remove('is-collapsed');
-            body.hidden = false;
-        });
+        const fromDom = Array.from(
+            form.querySelectorAll('.field-validation-error, .validation-summary-errors li'))
+            .map(el => el.textContent);
+        window.openHotelAccordionForMessages?.(form, [...(messages || []), ...fromDom]);
     }
 
     window.hideHotelWarning = function () {
@@ -118,7 +121,6 @@
         overlay.querySelector('#hotelWarningOk')?.focus();
     };
 
-    // Keep older helpers working as centered warning dialogs
     window.showHotelToast = function (message) {
         window.showHotelWarning([message]);
     };
@@ -138,15 +140,23 @@
             if (!unique.length) {
                 unique.push('Please complete the required fields before saving.');
             }
-            openSectionsForInvalidFields(form);
+            openSectionsForInvalidFields(form, unique);
             window.showHotelWarning(unique);
 
-            // Scroll first invalid field into view after dropdown opens
             window.setTimeout(() => {
-                const firstInvalid = form.querySelector('.input-validation-error, :invalid');
-                firstInvalid?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                if (firstInvalid && typeof firstInvalid.focus === 'function') {
-                    try { firstInvalid.focus({ preventScroll: true }); } catch { firstInvalid.focus(); }
+                const roomSection = form.querySelector(
+                    '[data-section="rooms"].is-open, [data-section="room-numbers"].is-open, [data-section="room"].is-open');
+                const firstInvalid = form.querySelector(
+                    '.input-validation-error, :invalid, .field-validation-error:not(:empty)');
+                const scrollTarget = firstInvalid
+                    || roomSection
+                    || form.querySelector('#roomNumberAssignments, #editTypeRoomNumberAssignments');
+                scrollTarget?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                const focusTarget = form.querySelector('.room-number-input, #RoomNumber')
+                    || firstInvalid;
+                if (focusTarget && typeof focusTarget.focus === 'function') {
+                    try { focusTarget.focus({ preventScroll: true }); } catch { focusTarget.focus(); }
                 }
             }, 120);
         };

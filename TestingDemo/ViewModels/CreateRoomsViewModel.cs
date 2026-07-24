@@ -42,6 +42,13 @@ public class CreateRoomsViewModel
 
     public List<string> AvailableInclusions { get; set; } = new();
 
+    /// <summary>
+    /// JSON payload of user-defined inclusion categories from the inclusion picker.
+    /// </summary>
+    public string? CustomCategoriesJson { get; set; }
+
+    public List<CustomInclusionCategory> CustomCategories { get; set; } = new();
+
     [Display(Name = "Room Type Images")]
     public IFormFile[]? UploadedImages { get; set; }
 
@@ -72,6 +79,7 @@ public class CreateRoomsViewModel
             MaxOccupancy = MaxOccupancy,
             BedCount = BedCount,
             Inclusions = SelectedInclusions ?? new List<string>(),
+            CustomCategories = CustomCategoryFormHelper.Parse(CustomCategoriesJson),
             Images = ImagePaths ?? new List<string>(),
             RoomNumbers = AssignedRoomNumbers
                 .Where(n => !string.IsNullOrWhiteSpace(n))

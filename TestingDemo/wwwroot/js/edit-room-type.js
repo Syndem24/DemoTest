@@ -47,6 +47,7 @@
                            name="Rooms[${i}].RoomNumber"
                            maxlength="20"
                            placeholder="e.g. 101"
+                           required
                            value="${escapedNumber}" />
                 </div>
             `;

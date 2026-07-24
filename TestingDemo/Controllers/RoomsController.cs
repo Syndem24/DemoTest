@@ -59,6 +59,19 @@ public class RoomsController : Controller
 
         ValidateEditTypeRoomNumbers(model);
 
+        // Persist new uploads immediately so they are not lost when the form is redisplayed.
+        if (!await TryStageUploadedImagesAsync(
+                uploadedFiles,
+                model.Name,
+                paths => model.ExistingImages = paths,
+                model.ExistingImages,
+                nameof(model.UploadedImages),
+                cancellationToken))
+        {
+            await PopulateLookupsAsync(model, cancellationToken);
+            return View(model);
+        }
+
         if (!ModelState.IsValid)
         {
             await PopulateLookupsAsync(model, cancellationToken);
@@ -73,14 +86,7 @@ public class RoomsController : Controller
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            var uploaded = await RoomImageStorage.SaveAsync(
-                _environment,
-                uploadedFiles,
-                model.Name,
-                cancellationToken);
-
             var finalImages = model.ExistingImages
-                .Concat(uploaded)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
@@ -205,6 +211,20 @@ public class RoomsController : Controller
                 "Each room number must be unique.");
         }
 
+        // File inputs cannot be restored after a round-trip. Persist any new uploads now so
+        // they survive validation errors and show under "Current uploaded images".
+        if (!await TryStageUploadedImagesAsync(
+                uploadedFiles,
+                model.Name,
+                paths => model.ImagePaths = paths,
+                model.ImagePaths,
+                nameof(model.UploadedImages),
+                cancellationToken))
+        {
+            await PopulateCreateLookupsAsync(model, cancellationToken);
+            return View(model);
+        }
+
         if (!ModelState.IsValid)
         {
             await PopulateCreateLookupsAsync(model, cancellationToken);
@@ -213,19 +233,12 @@ public class RoomsController : Controller
 
         try
         {
-            var uploaded = await RoomImageStorage.SaveAsync(
-                _environment,
-                uploadedFiles,
-                model.Name,
-                cancellationToken);
-
-            if (uploaded.Count > RoomImageStorage.MaxImages)
+            if (model.ImagePaths.Count > RoomImageStorage.MaxImages)
             {
                 throw new InvalidOperationException(
                     $"A room type can have at most {RoomImageStorage.MaxImages} images.");
             }
 
-            model.ImagePaths = uploaded;
             var createdCount = await _roomService.CreateBulkAsync(model.ToCreateDto(), cancellationToken);
             TempData["Success"] = createdCount == 1
                 ? "Room created successfully."
@@ -337,6 +350,68 @@ public class RoomsController : Controller
         return (boundFiles ?? Enumerable.Empty<IFormFile>())
             .Where(f => f is { Length: > 0 })
             .ToList();
+    }
+
+    /// <summary>
+    /// Saves newly posted files to disk and merges them into the preserved image path list.
+    /// Browsers cannot restore file inputs after a failed post, so staging is required.
+    /// </summary>
+    private async Task<bool> TryStageUploadedImagesAsync(
+        IReadOnlyList<IFormFile> uploadedFiles,
+        string roomTypeName,
+        Action<List<string>> assignPaths,
+        IEnumerable<string> existingPaths,
+        string errorKey,
+        CancellationToken cancellationToken)
+    {
+        var preserved = (existingPaths ?? Enumerable.Empty<string>())
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (uploadedFiles.Count == 0)
+        {
+            assignPaths(preserved);
+            return true;
+        }
+
+        try
+        {
+            var uploaded = await RoomImageStorage.SaveAsync(
+                _environment,
+                uploadedFiles,
+                roomTypeName,
+                cancellationToken);
+
+            var merged = preserved
+                .Concat(uploaded)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (merged.Count > RoomImageStorage.MaxImages)
+            {
+                RoomImageStorage.DeleteFiles(_environment, uploaded);
+                ModelState.AddModelError(
+                    errorKey,
+                    $"A room type can have at most {RoomImageStorage.MaxImages} images.");
+                assignPaths(preserved);
+                return false;
+            }
+
+            assignPaths(merged);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ModelState.AddModelError(
+                errorKey,
+                string.IsNullOrWhiteSpace(ex.Message)
+                    ? "Could not upload the selected images."
+                    : ex.Message);
+            assignPaths(preserved);
+            return false;
+        }
     }
 
     private async Task PopulateCreateLookupsAsync(CreateRoomsViewModel model, CancellationToken cancellationToken)

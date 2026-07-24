@@ -696,6 +696,11 @@ a:hover {
 }
 
 .inclusion-category-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
   background: var(--navy-soft);
   border-bottom: 1px solid var(--navy-line);
   padding: 0.55rem 0.75rem;
@@ -812,8 +817,16 @@ a:hover {
   align-items: center;
 }
 
+.inclusion-add-category-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.45rem;
+  align-items: center;
+}
+
 @media (max-width: 576px) {
-  .inclusion-add-row {
+  .inclusion-add-row,
+  .inclusion-add-category-row {
     grid-template-columns: 1fr;
   }
 }
