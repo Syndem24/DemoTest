@@ -45,6 +45,13 @@ public class RoomIndexViewModel
                     RoomCount = g.Rooms.Count,
                     AvailableCount = g.Rooms.Count(r => r.Status == RoomStatus.Available),
                     Inclusions = representative.Inclusions.ToList(),
+                    CustomCategories = representative.CustomCategories
+                        .Select(c => new CustomInclusionCategory
+                        {
+                            Name = c.Name,
+                            Items = c.Items.ToList()
+                        })
+                        .ToList(),
                     Images = representative.Images.ToList()
                 };
             })
@@ -76,6 +83,7 @@ public class RoomTypeSummaryViewModel
     public int RoomCount { get; set; }
     public int AvailableCount { get; set; }
     public List<string> Inclusions { get; set; } = new();
+    public List<CustomInclusionCategory> CustomCategories { get; set; } = new();
     public List<string> Images { get; set; } = new();
 }
 

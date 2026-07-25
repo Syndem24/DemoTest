@@ -10,7 +10,9 @@ public class CreateRoomsViewModel
     [Display(Name = "Room Type")]
     public string Name { get; set; } = string.Empty;
 
-    [StringLength(1000)]
+    [StringLength(5000)]
+    [Display(Name = "Description")]
+    [DataType(DataType.MultilineText)]
     public string? Description { get; set; }
 
     [Required]

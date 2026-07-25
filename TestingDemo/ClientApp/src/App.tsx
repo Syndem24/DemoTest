@@ -59,7 +59,7 @@ export default function App() {
     <div className="rm-app">
       <header className="rm-header">
         <div>
-          <p className="rm-eyebrow">Hotel Booking</p>
+          <p className="rm-eyebrow">Mori International Hotel · Admin</p>
           <h1>Room Management</h1>
           <p className="rm-subtitle">Browse room types and individual rooms with fast search and sorting.</p>
         </div>

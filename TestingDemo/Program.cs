@@ -65,15 +65,16 @@ try
     app.MapControllers();
     app.MapControllerRoute(
             name: "default",
-            pattern: "{controller=Home}/{action=Index}/{id?}")
+            pattern: "{controller=Booking}/{action=Index}/{id?}")
         .WithStaticAssets();
 
     const string siteUrl = "http://localhost:5288";
 
     Console.WriteLine();
     Console.WriteLine("========================================");
-    Console.WriteLine("  Hotel Booking is running");
-    Console.WriteLine($"  Open: {siteUrl}");
+    Console.WriteLine("  Mori International Hotel is running");
+    Console.WriteLine($"  Guest site: {siteUrl}");
+    Console.WriteLine($"  Admin rooms: {siteUrl}/Rooms");
     Console.WriteLine("  Keep this window/debug session open.");
     Console.WriteLine("========================================");
     Console.WriteLine();

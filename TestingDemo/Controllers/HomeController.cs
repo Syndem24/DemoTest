@@ -15,7 +15,8 @@ namespace TestingDemo.Controllers
 
         public IActionResult Index()
         {
-            return View();
+            // Public visitors land on the guest booking site.
+            return RedirectToAction("Index", "Booking");
         }
 
         public IActionResult Privacy()

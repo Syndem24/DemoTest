@@ -187,17 +187,64 @@
             return '[]';
         }
 
-        const categories = Array.from(list.querySelectorAll('.inclusion-category[data-user-category="true"]'))
-            .map(root => {
-                const name = (root.dataset.category || '').trim();
-                const items = Array.from(root.querySelectorAll('[data-inclusion-name]'))
-                    .map(el => (el.dataset.inclusionName || '').trim())
-                    .filter(Boolean);
-                return { Name: name, Items: items };
-            })
-            .filter(c => c.Name);
+        const byName = new Map();
 
-        return JSON.stringify(categories);
+        function ensureCategory(name) {
+            const key = name.toLowerCase();
+            if (!byName.has(key)) {
+                byName.set(key, { Name: name, Items: [] });
+            }
+            return byName.get(key);
+        }
+
+        function pushItem(category, itemName) {
+            const item = (itemName || '').trim();
+            if (!item) return;
+            if (!category.Items.some(i => i.toLowerCase() === item.toLowerCase())) {
+                category.Items.push(item);
+            }
+        }
+
+        // User-defined categories (full item lists).
+        list.querySelectorAll('.inclusion-category[data-user-category="true"]').forEach(root => {
+            const name = (root.dataset.category || '').trim();
+            if (!name) return;
+            const category = ensureCategory(name);
+            category.Name = name;
+            root.querySelectorAll('[data-inclusion-name]').forEach(el => {
+                pushItem(category, el.dataset.inclusionName);
+            });
+        });
+
+        // Extra items added under built-in catalog categories.
+        list.querySelectorAll('.inclusion-category[data-built-in="true"]').forEach(root => {
+            const name = (root.dataset.category || '').trim();
+            if (!name) return;
+            const extras = Array.from(
+                root.querySelectorAll('[data-inclusion-name][data-inclusion-default="false"]')
+            );
+            if (!extras.length) return;
+            const category = ensureCategory(name);
+            category.Name = name;
+            extras.forEach(el => pushItem(category, el.dataset.inclusionName));
+        });
+
+        // Reserved Custom bucket.
+        const customRoot = document.getElementById('customInclusionCategory');
+        if (customRoot) {
+            const customItems = Array.from(customRoot.querySelectorAll('[data-inclusion-name]'))
+                .map(el => (el.dataset.inclusionName || '').trim())
+                .filter(Boolean);
+            if (customItems.length) {
+                const category = ensureCategory('Custom');
+                category.Name = 'Custom';
+                customItems.forEach(item => pushItem(category, item));
+            }
+        }
+
+        return JSON.stringify(
+            Array.from(byName.values()).filter(c => c.Name && c.Items.length > 0)
+        );
     }
 
     function appendCheckbox(name, checked, categoryName) {

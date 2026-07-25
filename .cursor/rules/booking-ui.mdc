@@ -1,0 +1,15 @@
+---
+description: Customer booking page CSS/JS conventions
+globs: TestingDemo/**/{Booking/**,**/_CustomerLayout.cshtml,wwwroot/css/booking.css,wwwroot/js/booking-ui.js}
+alwaysApply: false
+---
+
+# Booking UI conventions
+
+- Styles live in `wwwroot/css/booking.css` with `guest-*` classes
+- Behavior in `wwwroot/js/booking-ui.js` (modals, toasts, form preview)
+- Available rooms come from server model (`BookingPageViewModel`), not mock arrays
+- Keep hero image only on `.guest-hero`
+- Preserve mobile nav toggle (`#guestNav` / `#guestNavToggle`)
+- Logo on customer header → `Home/Index` unless user changes it
+- No new CSS framework; extend existing guest styles

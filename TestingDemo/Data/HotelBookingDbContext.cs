@@ -29,7 +29,7 @@ public class HotelBookingDbContext : DbContext
             entity.Property(e => e.RoomTypeId).HasColumnName("RoomTypeID");
             entity.Property(e => e.TypeName).HasMaxLength(100).IsRequired();
             entity.HasIndex(e => e.TypeName).IsUnique();
-            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.Description).HasMaxLength(5000);
             ConfigureStringList(entity.Property(e => e.Inclusions));
             ConfigureCustomCategories(entity.Property(e => e.CustomCategories));
             ConfigureStringList(entity.Property(e => e.Images));

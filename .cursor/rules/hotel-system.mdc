@@ -1,0 +1,37 @@
+---
+description: Hotel Booking System architecture, stack, and product boundaries
+alwaysApply: true
+---
+
+# Hotel Booking System
+
+## Stack
+- ASP.NET Core MVC (.NET 9) + EF Core SQL Server
+- React/Vite SPA only for Room Management (`ClientApp` → `wwwroot/room-management`)
+- Customer site = Razor + `booking.css` / `booking-ui.js` (not React unless asked)
+
+## Brand
+- Public hotel name: **Mori International Hotel**
+- Guest/public site = `_CustomerLayout` + **Booking** (`/` / `/Booking`)
+- One guest book flow only: book ahead → auto reservation; near arrival (min lead time) → booking
+- Do not add a separate Reserve page/route
+- Admin staff shell = `_Layout` (`/Rooms`, etc.) — label as Admin when needed
+
+## Surfaces
+- **Admin**: `Views/Shared/_Layout.cshtml` + sidebar (Home, Guest, Rooms, Privacy)
+- **Guest/public**: `Views/Shared/_CustomerLayout.cshtml` + `BookingController` (default route)
+- **Rooms data**: `IRoomService` / `RoomDto` / `RoomStatus` (Available | Unavailable)
+- **Booking page** must show rooms with `Status == Available` from Room Management
+
+## Design (customer UI)
+- Colors only: `--navy`, `--white`, `--teal` (and soft variants already in CSS)
+- Hero photo: `/Images/moriyama.jpg` on `.guest-hero` only — never full-page background
+- Keep UI scalable: fluid `clamp()`, `auto-fit` grids, no horizontal overflow
+- Prefer UI-only first (modals, toasts, validation messages) unless user asks for persistence
+
+## Do / Don't
+- Do reuse existing services, DTOs, CSS variables, and layouts
+- Do keep admin and customer shells separate
+- Don't invent a second design system or purple/cream AI themes
+- Don't add booking DB/API until the user asks for real save/submit behavior
+- Don't expand scope beyond the request; match existing file patterns

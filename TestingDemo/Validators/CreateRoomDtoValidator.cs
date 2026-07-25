@@ -16,7 +16,7 @@ public class CreateRoomDtoValidator : AbstractValidator<CreateRoomDto>
             .MaximumLength(20);
 
         RuleFor(x => x.Description)
-            .MaximumLength(1000);
+            .MaximumLength(5000);
 
         RuleFor(x => x.PricePerNight)
             .GreaterThan(0).WithMessage("Price must be greater than zero.");

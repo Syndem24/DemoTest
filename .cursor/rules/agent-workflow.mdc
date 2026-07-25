@@ -1,0 +1,28 @@
+---
+description: How the agent should interpret prompts and ship changes smoothly
+alwaysApply: true
+---
+
+# Agent workflow for this project
+
+## Interpret short prompts
+Assume hotel-system context. Expand vague asks using project conventions:
+- "booking page" → customer `/Booking` Razor UI
+- "rooms" / "room management" → admin Rooms + React SPA
+- "logo" → admin sidebar brand unless customer header is mentioned
+- "UI only" → modals/messages/validation, no DB writes
+- "scalable" → responsive CSS, not performance micro-optimizations
+
+## Execution order
+1. Find the existing controller/view/CSS/JS pattern before creating new stacks
+2. Implement the smallest change that satisfies the ask
+3. Build/check only when C#/project structure changed
+4. Reply with what changed + where to click/test (1 short block)
+
+## Clarifications
+Ask only if blocked by a real choice (e.g. persist vs UI-only, admin vs customer).
+Otherwise choose the project default and proceed.
+
+## Prompt quality boost (for the user)
+Best prompts name: **surface** (admin/customer), **goal**, **constraint** (UI-only / wire data / responsive), **done look**.
+Example: `Customer booking: show available rooms as cards; UI-only reserve modal; keep 3-color theme.`

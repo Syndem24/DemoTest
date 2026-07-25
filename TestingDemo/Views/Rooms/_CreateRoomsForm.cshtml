@@ -19,7 +19,8 @@
                 </div>
                 <div class="col-12">
                     <label asp-for="Description" class="form-label"></label>
-                    <textarea asp-for="Description" class="form-control" rows="3" placeholder="Short description guests will see"></textarea>
+                    <textarea asp-for="Description" class="form-control" rows="8" maxlength="5000" placeholder="Full room type description guests will see (amenities, view, layout, policies…)"></textarea>
+                    <div class="form-text">Up to 5,000 characters. Longer text shows in guest Details dropdowns.</div>
                     <span asp-validation-for="Description" class="text-danger"></span>
                 </div>
                 <div class="col-md-4">

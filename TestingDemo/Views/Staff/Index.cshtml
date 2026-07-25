@@ -1,0 +1,31 @@
+@{
+    Layout = "~/Views/Shared/_CustomerLayout.cshtml";
+    ViewData["Title"] = "Staff Entry";
+}
+
+<section class="guest-section staff-entry">
+    <div class="guest-reserve-panel staff-entry-panel">
+        <div>
+            <p class="guest-eyebrow">Staff portal</p>
+            <h2>Mori International Hotel · Admin</h2>
+            <p class="guest-section-copy staff-entry-copy">
+                Temporary staff entry only. Real login will be added later — this page just lets you open the admin side for now.
+            </p>
+        </div>
+
+        <form asp-controller="Staff" asp-action="Enter" method="post" class="guest-form">
+            @Html.AntiForgeryToken()
+            <label>
+                <span>Staff code (placeholder)</span>
+                <input type="text" name="staffCode" value="admin" readonly aria-label="Placeholder staff code" />
+            </label>
+            <p class="guest-form-message is-ok">
+                Auth is not enabled yet. Click continue to open Room Management.
+            </p>
+            <div class="guest-form-actions">
+                <button type="submit" class="guest-btn guest-btn-primary">Continue to Admin</button>
+                <a class="guest-btn guest-btn-ghost" asp-controller="Booking" asp-action="Index">Back to guest site</a>
+            </div>
+        </form>
+    </div>
+</section>

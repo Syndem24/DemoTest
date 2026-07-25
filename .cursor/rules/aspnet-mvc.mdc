@@ -1,0 +1,16 @@
+---
+description: ASP.NET MVC / EF conventions for Hotel Booking System
+globs: TestingDemo/**/*.{cs,cshtml}
+alwaysApply: false
+---
+
+# ASP.NET MVC conventions
+
+- Controllers thin; business logic in `Services/`
+- New customer pages: controller + view + optional view model under `ViewModels/`
+- Customer pages set `Layout = "~/Views/Shared/_CustomerLayout.cshtml"`
+- Admin pages use default `_Layout.cshtml`
+- JSON lists for SPAs go through `*ApiController` with `[Route("api/...")]`
+- Prefer `IRoomService` over querying `DbContext` from controllers
+- Status checks use `RoomStatus.Available` / `Unavailable`
+- After structural C# changes, `dotnet build` the project
