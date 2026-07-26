@@ -1,535 +1,207 @@
-@model TestingDemo.ViewModels.BookingPageViewModel
 @{
     Layout = "~/Views/Shared/_CustomerLayout.cshtml";
-    ViewData["Title"] = "Book a Stay";
-    var availableCount = Model.AvailableRooms.Count;
-    var typeCount = Model.RoomTypes.Count;
+    ViewData["Title"] = "Mori International Hotel";
+    ViewData["GuestImmersive"] = true;
 }
 
-<section class="guest-hero guest-hero-book">
-    <div class="guest-hero-copy">
-        <p class="guest-brand-mark">Mori International Hotel</p>
-        <h1>Book your stay in one place.</h1>
-        <p class="guest-hero-lede">
-            One booking form for every guest. Book ahead and your room is held as a reservation automatically.
-            Arriving within the minimum lead time? It stays a standard booking.
-        </p>
-        <div class="guest-hero-actions">
-            <a class="guest-btn guest-btn-primary" href="#book-rooms">View available rooms</a>
-            <button type="button" class="guest-btn guest-btn-ghost" data-guest-modal="book">
-                Start booking
-            </button>
+<section class="guest-hero guest-hero-book guest-hero-immersive" id="guestHero">
+    <div class="guest-hero-media" aria-hidden="true">
+        <img src="~/Images/moriyama.jpg" asp-append-version="true" alt="" />
+    </div>
+    <div class="guest-hero-copy" id="guestHeroCopy">
+        <p class="guest-brand-mark guest-typewriter" id="heroBrandType" data-typewriter aria-label="Mori International Hotel">Mori International Hotel</p>
+        <h1 class="guest-typewriter" id="heroTitleType" data-typewriter aria-label="Stay close to everything in Cebu.">Stay close to everything in Cebu.</h1>
+        <div class="guest-hero-reveal">
+            <p class="guest-hero-lede">
+                Clean rooms, easy parking, and a simple way to book your stay.
+            </p>
+            <div class="guest-hero-actions">
+                <a class="guest-btn guest-btn-primary"
+                   asp-controller="Booking"
+                   asp-action="Accommodations">
+                    View accommodations
+                </a>
+                <a class="guest-btn guest-btn-ghost" href="#gallery">Explore the hotel</a>
+            </div>
+        </div>
+    </div>
+    <a class="guest-hero-scroll" id="guestHeroScroll" href="#about" aria-label="Scroll to content" hidden>
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
+    </a>
+    <div class="guest-hero-sentinel" id="guestHeroSentinel" aria-hidden="true"></div>
+</section>
+
+<section class="guest-section guest-intro" id="about">
+    <div class="guest-intro-frame">
+        <p class="guest-intro-kana guest-reveal" data-reveal aria-hidden="true">森</p>
+        <div class="guest-intro-copy guest-reveal" data-reveal>
+            <p class="guest-eyebrow">Mandaue, Cebu</p>
+            <h2>A quiet stay with a Japanese spirit</h2>
+            <p class="guest-intro-lede">
+                Welcome to Mori International Hotel — where traditional Japanese calm meets contemporary comfort.
+            </p>
+        </div>
+
+        <div class="guest-intro-story">
+            <figure class="guest-intro-media guest-reveal" data-reveal>
+                <img src="~/Images/INtro.jpg"
+                     asp-append-version="true"
+                     alt="Mori International Hotel exterior in Mandaue, Cebu"
+                     loading="lazy" />
+            </figure>
+            <div class="guest-intro-body guest-reveal" data-reveal>
+                <p>
+                    Our property features a pioneering modular design with 19 cozy rooms of about 18 square meters,
+                    each with inverter air conditioning, 24-hour hot and cold showers, complimentary drinking water,
+                    unlimited Wi-Fi, and ample parking.
+                </p>
+                <p>
+                    Just 6 kilometers from the airport and 4 kilometers from Cebu City’s major seaports,
+                    you are close to restaurants, shops, and everyday conveniences — without losing the sense of rest.
+                </p>
+                <p class="guest-intro-note">
+                    Book ahead and your room is held as a reservation. Arriving within the minimum lead time?
+                    It stays a standard booking.
+                </p>
+                <a class="guest-btn guest-btn-primary"
+                   asp-controller="Booking"
+                   asp-action="Accommodations">
+                    Browse rooms
+                </a>
+            </div>
         </div>
     </div>
 </section>
 
-<section class="guest-section" id="how-it-works">
-    <div class="guest-flow-compare">
-        <article class="guest-flow-card is-active">
-            <p class="guest-eyebrow">Book ahead</p>
-            <h2>Automatic reservation</h2>
-            <p>If check-in is farther out than the minimum lead time, your booking is treated as a reserved stay.</p>
-        </article>
-        <article class="guest-flow-card">
-            <p class="guest-eyebrow">Near arrival</p>
-            <h2>Standard booking</h2>
-            <p>If arrival is within the minimum lead time, it is processed as a regular booking.</p>
-        </article>
-    </div>
-</section>
-
-<section class="guest-section" id="book-rooms">
-    <div class="guest-section-head">
+<section class="guest-section guest-gallery" id="gallery">
+    <div class="guest-section-head guest-reveal" data-reveal>
         <div>
-            <p class="guest-eyebrow">Available now</p>
-            <h2>Rooms open for booking</h2>
-            <p class="guest-section-copy">
-                Pick a room, enter your dates, and we classify reservation vs booking from your check-in time.
-            </p>
-        </div>
-        <div class="guest-count-pills" aria-label="Availability summary">
-            <span>@typeCount room type@(typeCount == 1 ? "" : "s")</span>
-            <span>@availableCount room@(availableCount == 1 ? "" : "s") open</span>
+            <p class="guest-eyebrow">Inside the hotel</p>
+            <h2>Photo gallery</h2>
+            <p class="guest-section-copy">Building, hallway, rooms, and reception — a quiet look around.</p>
         </div>
     </div>
 
-    @if (!Model.RoomTypes.Any())
-    {
-        <div class="guest-empty" role="status">
-            <strong>No rooms are available right now.</strong>
-            <p>Please check back soon, or contact the front desk for assistance.</p>
-        </div>
-    }
-    else
-    {
-        <div class="guest-room-grid">
-            @foreach (var type in Model.RoomTypes)
-            {
-                var images = type.Images ?? new List<string>();
-                var inclusions = type.Inclusions ?? new List<string>();
-                var categories = type.CustomCategories ?? new List<TestingDemo.Models.CustomInclusionCategory>();
-                var image = images.FirstOrDefault();
-                var description = string.IsNullOrWhiteSpace(type.Description)
-                    ? "A comfortable stay with everything you need for a quiet night in."
-                    : type.Description;
-                var imagesJson = System.Text.Json.JsonSerializer.Serialize(images);
-                var inclusionsJson = System.Text.Json.JsonSerializer.Serialize(inclusions);
-                var categoriesJson = System.Text.Json.JsonSerializer.Serialize(categories);
+    <div class="guest-gallery-grid">
+        <figure class="guest-gallery-item is-building guest-reveal" data-reveal>
+            <img src="~/Images/moriyama.jpg"
+                 asp-append-version="true"
+                 alt="Hotel building exterior"
+                 loading="lazy" />
+            <figcaption>
+                <span class="guest-gallery-label">Building</span>
+                <span class="guest-gallery-caption">Facade &amp; arrival</span>
+            </figcaption>
+        </figure>
 
-                <article class="guest-room"
-                         data-guest-modal="details"
-                         data-fill-room="@type.Name"
-                         data-room-type="@type.Name"
-                         data-price="@type.PricePerNight.ToString("0.00")"
-                         data-occupancy="@type.MaxOccupancy"
-                         data-beds="@type.BedCount"
-                         data-available="@type.AvailableCount"
-                         data-images='@Html.Raw(imagesJson)'
-                         data-inclusions='@Html.Raw(inclusionsJson)'
-                         data-categories='@Html.Raw(categoriesJson)'
-                         role="button"
-                         tabindex="0"
-                         aria-label="View details for @type.Name">
-                    <div class="guest-room-desc-full" hidden>@description</div>
-                    <div class="guest-room-media">
-                        @if (!string.IsNullOrWhiteSpace(image))
-                        {
-                            <img src="@image" alt="@type.Name" loading="lazy" />
-                        }
-                        else
-                        {
-                            <div class="guest-room-placeholder" aria-hidden="true">
-                                <span>@(string.IsNullOrWhiteSpace(type.Name) ? "R" : type.Name.Trim()[0].ToString().ToUpperInvariant())</span>
-                            </div>
-                        }
-                        <span class="guest-room-badge">@type.AvailableCount available</span>
-                    </div>
+        <figure class="guest-gallery-item is-hallway guest-reveal" data-reveal>
+            <img src="~/Images/INtro.jpg"
+                 asp-append-version="true"
+                 alt="Hotel hallway"
+                 loading="lazy"
+                 style="object-position: 35% 55%;" />
+            <figcaption>
+                <span class="guest-gallery-label">Hallway</span>
+                <span class="guest-gallery-caption">Quiet corridors</span>
+            </figcaption>
+        </figure>
 
-                    <div class="guest-room-body">
-                        <div class="guest-room-top">
-                            <h3>@type.Name</h3>
-                            <p class="guest-price">
-                                <span>₱@type.PricePerNight.ToString("N2")</span>
-                                <small>/ night</small>
-                            </p>
-                        </div>
+        <figure class="guest-gallery-item is-rooms guest-reveal" data-reveal>
+            <img src="~/Images/NIghtPicIm.jpg"
+                 asp-append-version="true"
+                 alt="Guest rooms atmosphere"
+                 loading="lazy"
+                 style="object-position: 50% 40%;" />
+            <figcaption>
+                <span class="guest-gallery-label">Rooms</span>
+                <span class="guest-gallery-caption">Rest &amp; comfort</span>
+            </figcaption>
+        </figure>
 
-                        <p class="guest-room-desc">
-                            @(description.Length > 140 ? description.Substring(0, 140).TrimEnd() + "…" : description)
-                        </p>
-
-                        <ul class="guest-room-meta">
-                            <li>Up to @type.MaxOccupancy guests</li>
-                            <li>@type.BedCount bed@(type.BedCount == 1 ? "" : "s")</li>
-                        </ul>
-
-                        @if (inclusions.Count > 0)
-                        {
-                            <ul class="guest-inclusions">
-                                @foreach (var inclusion in inclusions.Take(4))
-                                {
-                                    <li>@inclusion</li>
-                                }
-                            </ul>
-                        }
-
-                        <div class="guest-room-actions">
-                            <button type="button"
-                                    class="guest-btn guest-btn-primary guest-btn-sm"
-                                    data-guest-modal="book"
-                                    data-fill-room="@type.Name">
-                                Book
-                            </button>
-                            <button type="button"
-                                    class="guest-btn guest-btn-ghost guest-btn-sm"
-                                    data-guest-modal="details"
-                                    data-fill-room="@type.Name">
-                                Details
-                            </button>
-                        </div>
-                    </div>
-                </article>
-            }
-        </div>
-    }
+        <figure class="guest-gallery-item is-reception guest-reveal" data-reveal>
+            <img src="~/Images/moriyama.jpg"
+                 asp-append-version="true"
+                 alt="Reception area"
+                 loading="lazy"
+                 style="object-position: 48% 70%;" />
+            <figcaption>
+                <span class="guest-gallery-label">Reception</span>
+                <span class="guest-gallery-caption">Welcome desk</span>
+            </figcaption>
+        </figure>
+    </div>
 </section>
 
-<section class="guest-section guest-book-panel-wrap" id="book">
-    <div class="guest-reserve-panel guest-book-panel">
+<section class="guest-section guest-contact" id="contact">
+    <div class="guest-section-head guest-reveal" data-reveal>
         <div>
-            <p class="guest-eyebrow">Guest booking</p>
-            <h2>Book a room</h2>
-            <p class="guest-section-copy">
-                Enter your stay details. Ahead-of-time check-ins become a reservation automatically.
+            <p class="guest-eyebrow">Get in touch</p>
+            <h2>Contact Us</h2>
+            <p class="guest-section-copy">Mori International Hotel, Cebu</p>
+        </div>
+    </div>
+
+    <div class="guest-contact-layout guest-reveal" data-reveal>
+        <div class="guest-contact-main">
+            <p class="guest-contact-address">
+                MCity Properties Building, AS Fortuna, Mandaue City, Cebu
             </p>
-            <p class="guest-lead-hint" id="bookLeadHint" hidden></p>
+
+            <ul class="guest-contact-list">
+                <li>
+                    <a href="tel:+639604417525">+63 960 441 7525</a>
+                    <span>24/7 Hotel Staff</span>
+                </li>
+                <li>
+                    <a href="tel:+63322388855">(032) 238 8855</a>
+                    <span>Hotel Phone Number</span>
+                </li>
+                <li>
+                    <a href="mailto:moriyamahotel@gmail.com">moriyamahotel&#64;gmail.com</a>
+                    <span>Hotel Official email</span>
+                </li>
+            </ul>
+
+            <div class="guest-contact-cta">
+                <p>
+                    Always busy? No time for calls? You wish to book a room in the soonest possible time
+                    and make sure the room will be ready for you by the time you arrive? We recommend that
+                    you use our online booking with best available prices!
+                </p>
+                <a class="guest-btn guest-btn-primary"
+                   asp-controller="Booking"
+                   asp-action="Accommodations">
+                    Book now
+                </a>
+            </div>
         </div>
 
-        <form class="guest-form" id="quickBookForm" novalidate data-min-lead-hours="24">
-            <div class="guest-form-grid">
-                <label>
-                    <span>Full name</span>
-                    <input type="text" name="bookGuestName" id="bookGuestName" placeholder="Guest full name" required />
-                </label>
-                <label>
-                    <span>Email</span>
-                    <input type="email" name="bookGuestEmail" id="bookGuestEmail" placeholder="name@email.com" required />
-                </label>
-                <label>
-                    <span>Phone</span>
-                    <input type="tel" name="bookGuestPhone" id="bookGuestPhone" placeholder="+63 9XX XXX XXXX" autocomplete="tel" required />
-                </label>
-                <label>
-                    <span>Check-in</span>
-                    <input type="date" name="bookCheckIn" id="bookCheckIn" required />
-                </label>
-                <label>
-                    <span>Check-out</span>
-                    <input type="date" name="bookCheckOut" id="bookCheckOut" required />
-                </label>
-                <label>
-                    <span>Guests</span>
-                    <input type="number" name="bookGuests" id="bookGuests" min="1" max="12" value="2" required />
-                </label>
-                <label>
-                    <span>Room type</span>
-                    <select name="bookRoomType" id="bookRoomTypeSelect" required>
-                        <option value="">Select a room</option>
-                        @foreach (var type in Model.RoomTypes)
-                        {
-                            <option value="@type.Name"
-                                    data-available="@type.AvailableCount"
-                                    data-price="@type.PricePerNight.ToString("0.00")">
-                                @type.Name · @type.AvailableCount open
-                            </option>
-                        }
-                    </select>
-                </label>
+        <div class="guest-contact-location">
+            <h3>Location and directions</h3>
+            <p class="guest-contact-address">
+                MCity Properties, AS Fortuna Street, Mandaue City, Cebu
+            </p>
+            <p>
+                The hotel's convenient location, approximately 700 meters from SM Jmall and just a mere
+                four-minute drive from Oakridge Business Park, makes it an ideal choice for business
+                travelers and tourists alike. Its close proximity to these key destinations allows for
+                easy access to shopping, dining, and commercial activities in the area.
+            </p>
+            <div class="guest-contact-map">
+                <iframe
+                    title="Mori International Hotel location on AS Fortuna, Mandaue City, Cebu"
+                    loading="lazy"
+                    referrerpolicy="no-referrer-when-downgrade"
+                    src="https://maps.google.com/maps?q=Moriyama+Hotel%4010.3388879%2C123.9281139&ll=10.3388879%2C123.9281139&z=17&output=embed">
+                </iframe>
             </div>
-
-            <p class="guest-form-message" id="bookPageFormMessage" hidden></p>
-
-            <div class="guest-form-actions">
-                <button type="submit" class="guest-btn guest-btn-primary">Continue to booking</button>
-                <button type="button" class="guest-btn guest-btn-ghost" id="clearBookForm">Clear</button>
+            <div class="guest-contact-map-meta">
+                <div>
+                    <strong>Mori International Hotel, Mandaue City, Cebu</strong>
+                    <span>MCity Properties Building, AS Fortuna, Mandaue City, Cebu</span>
+                </div>
             </div>
-        </form>
+        </div>
     </div>
 </section>
-
-@* Details modal *@
-<div class="guest-modal" id="detailsModal" hidden>
-    <div class="guest-modal-backdrop" data-close-modal></div>
-    <div class="guest-modal-dialog guest-modal-dialog-lg" role="dialog" aria-modal="true" aria-labelledby="detailsTitle">
-        <div class="guest-details-header">
-            <div class="guest-details-title-row">
-                <h2 id="detailsTitle">Room</h2>
-                <span class="guest-pill is-available" id="detailsStatusPill">Available</span>
-                <div class="guest-details-rate-wrap">
-                    <span class="guest-details-rate" id="detailsPrice">—</span>
-                    <span class="guest-details-rate-period">/ night</span>
-                </div>
-            </div>
-            <button type="button" class="guest-modal-close" data-close-modal aria-label="Close">&times;</button>
-        </div>
-
-        <div class="guest-details-layout">
-            <div class="guest-details-media">
-                <div class="guest-details-gallery">
-                    <div class="guest-details-stage" id="detailsPhotoStage" tabIndex="0" role="button" aria-label="Click to enlarge photo">
-                        <img id="detailsMainImage" class="guest-details-main-image" alt="" hidden />
-                        <div id="detailsImageEmpty" class="guest-details-image-empty" hidden>
-                            <span>No photos yet</span>
-                        </div>
-                        <button type="button" class="guest-gallery-nav is-prev" id="detailsPrevPhoto" aria-label="Previous photo" hidden>&lsaquo;</button>
-                        <button type="button" class="guest-gallery-nav is-next" id="detailsNextPhoto" aria-label="Next photo" hidden>&rsaquo;</button>
-                        <span class="guest-gallery-count" id="detailsPhotoCount" hidden></span>
-                        <div class="guest-gallery-zoom-hint" id="detailsZoomHint" hidden>
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35M11 8v6M8 11h6"/></svg>
-                            <span>Click photo to expand</span>
-                        </div>
-                    </div>
-                    <div class="guest-details-thumbs" id="detailsThumbs" hidden></div>
-                </div>
-
-                <div class="guest-modal-actions guest-modal-actions-under-photo">
-                    <button type="button" class="guest-btn guest-btn-primary" data-guest-modal="book" id="detailsBookBtn">
-                        Book this room
-                    </button>
-                    <button type="button" class="guest-btn guest-btn-ghost" data-close-modal>Close</button>
-                </div>
-            </div>
-
-            <div class="guest-details-copy">
-                <!-- Quick Specs Grid -->
-                <div class="guest-specs-grid">
-                    <div class="guest-spec-chip">
-                        <div class="guest-spec-icon">
-                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                        </div>
-                        <div class="guest-spec-meta">
-                            <span class="guest-spec-label">Capacity</span>
-                            <strong id="detailsOccupancy">—</strong>
-                        </div>
-                    </div>
-
-                    <div class="guest-spec-chip">
-                        <div class="guest-spec-icon">
-                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16M2 8h20M2 17h20M22 4v16"/><path d="M6 12h12"/></svg>
-                        </div>
-                        <div class="guest-spec-meta">
-                            <span class="guest-spec-label">Bed Setup</span>
-                            <strong id="detailsBeds">—</strong>
-                        </div>
-                    </div>
-
-                    <div class="guest-spec-chip">
-                        <div class="guest-spec-icon">
-                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                        </div>
-                        <div class="guest-spec-meta">
-                            <span class="guest-spec-label">Check-in</span>
-                            <strong>14:00</strong>
-                        </div>
-                    </div>
-
-                    <div class="guest-spec-chip">
-                        <div class="guest-spec-icon">
-                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l-4-2"/></svg>
-                        </div>
-                        <div class="guest-spec-meta">
-                            <span class="guest-spec-label">Check-out</span>
-                            <strong>12:00</strong>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="guest-details-accordions">
-                    <details class="guest-acc">
-                        <summary>
-                            <span>Description & Experience</span>
-                        </summary>
-                        <div class="guest-acc-body">
-                            <p class="guest-details-desc" id="detailsDescription"></p>
-                        </div>
-                    </details>
-
-                    <details class="guest-acc">
-                        <summary>
-                            <span>Inclusions & Amenities</span>
-                        </summary>
-                        <div class="guest-acc-body">
-                            <div class="guest-inclusion-groups" id="detailsInclusions"></div>
-                        </div>
-                    </details>
-
-                    <details class="guest-acc">
-                        <summary>
-                            <span>Terms of Stay</span>
-                        </summary>
-                        <div class="guest-acc-body">
-                            <div class="guest-terms-stay">
-                                <p class="guest-terms-intro">
-                                    Our top priority is ensuring your comfort and satisfaction throughout your stay with us. From the moment you walk through our doors, you will experience exceptional hospitality and personalized service designed to cater to your every need. Thank you for choosing us as your home away from home – we look forward to exceeding all of your expectations during your stay at our hotel.
-                                </p>
-                                <dl class="guest-terms-schedule">
-                                    <div>
-                                        <dt>Check-in</dt>
-                                        <dd>14:00</dd>
-                                    </div>
-                                    <div>
-                                        <dt>Check-out</dt>
-                                        <dd>12:00</dd>
-                                    </div>
-                                </dl>
-                                <div class="guest-terms-cancellation">
-                                    <strong>Booking cancellation</strong>
-                                    <p>Cancellation and prepayment policies vary according to accommodation type. Please check the conditions of your required room.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </details>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-@* Booking modal *@
-<div class="guest-modal" id="bookModal" hidden>
-    <div class="guest-modal-backdrop" data-close-modal></div>
-    <div class="guest-modal-dialog guest-modal-dialog-lg guest-modal-dialog-book" role="dialog" aria-modal="true" aria-labelledby="bookTitle">
-        <button type="button" class="guest-modal-close" data-close-modal aria-label="Close">&times;</button>
-
-        <header class="guest-book-modal-head">
-            <p class="guest-eyebrow">Booking</p>
-            <h2 id="bookTitle">Complete your booking</h2>
-            <p class="guest-modal-lede">
-                Fill in your details, choose dates, then add every room you need.
-                Submit once when your cart looks right.
-            </p>
-            <ol class="guest-book-steps" aria-label="Booking steps">
-                <li class="is-guest">
-                    <span class="guest-book-step-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    </span>
-                    <span>Guest</span>
-                </li>
-                <li class="is-dates">
-                    <span class="guest-book-step-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                    </span>
-                    <span>Dates</span>
-                </li>
-                <li class="is-rooms">
-                    <span class="guest-book-step-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-6h6v6"/></svg>
-                    </span>
-                    <span>Rooms</span>
-                </li>
-                <li class="is-submit">
-                    <span class="guest-book-step-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
-                    </span>
-                    <span>Submit</span>
-                </li>
-            </ol>
-        </header>
-
-        <form class="guest-form guest-book-modal-form" id="bookModalForm" novalidate data-min-lead-hours="24">
-            <section class="guest-book-section is-guest">
-                <div class="guest-book-section-head">
-                    <span class="guest-book-section-num">1</span>
-                    <div>
-                        <h3>
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                            Guest details
-                        </h3>
-                        <p>How we reach you about this stay.</p>
-                    </div>
-                </div>
-                <div class="guest-form-grid">
-                    <label>
-                        <span>Full name</span>
-                        <input type="text" name="guestName" id="guestName" placeholder="Guest full name" required />
-                    </label>
-                    <label>
-                        <span>Email</span>
-                        <input type="email" name="guestEmail" id="guestEmail" placeholder="name@email.com" required />
-                    </label>
-                    <label>
-                        <span>Phone</span>
-                        <input type="tel" name="guestPhone" id="guestPhone" placeholder="+63 9XX XXX XXXX" autocomplete="tel" required />
-                    </label>
-                </div>
-            </section>
-
-            <section class="guest-book-section is-dates">
-                <div class="guest-book-section-head">
-                    <span class="guest-book-section-num">2</span>
-                    <div>
-                        <h3>
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                            Stay dates
-                        </h3>
-                        <p>One date range applies to every room in this booking.</p>
-                    </div>
-                </div>
-                <div class="guest-form-grid guest-form-grid-2">
-                    <label>
-                        <span>Check-in</span>
-                        <input type="date" name="modalCheckIn" id="modalCheckIn" required />
-                    </label>
-                    <label>
-                        <span>Check-out</span>
-                        <input type="date" name="modalCheckOut" id="modalCheckOut" required />
-                    </label>
-                </div>
-                <p class="guest-lead-hint" id="modalLeadHint" hidden></p>
-            </section>
-
-            <section class="guest-book-section is-rooms">
-                <div class="guest-book-section-head">
-                    <span class="guest-book-section-num">3</span>
-                    <div>
-                        <h3>
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-6h6v6"/></svg>
-                            Rooms in this booking
-                        </h3>
-                        <p>Add each room type you need. Same type increases quantity.</p>
-                    </div>
-                    <span class="guest-cart-status is-empty" id="bookingCartStatus">Cart empty</span>
-                </div>
-
-                <fieldset class="guest-cart-adder">
-                    <legend class="visually-hidden">Add rooms</legend>
-                    <div class="guest-cart-adder-row">
-                        <label class="guest-cart-room-field">
-                            <span>Room type</span>
-                            <select name="modalRoomType" id="modalRoomType">
-                                <option value="">Select a room</option>
-                                @foreach (var type in Model.RoomTypes)
-                                {
-                                    <option value="@type.Name"
-                                            data-available="@type.AvailableCount"
-                                            data-price="@type.PricePerNight.ToString("0.00")">
-                                        @type.Name · @type.AvailableCount open · ₱@type.PricePerNight.ToString("N0")
-                                    </option>
-                                }
-                            </select>
-                        </label>
-                        <label class="guest-cart-qty-field">
-                            <span>Qty</span>
-                            <input type="number" name="modalRoomQty" id="modalRoomQty" min="1" value="1" />
-                        </label>
-                        <button type="button" class="guest-btn guest-btn-primary guest-cart-add-btn" id="addRoomToCartBtn">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-                            Add room
-                        </button>
-                    </div>
-                </fieldset>
-
-                <div class="guest-booking-cart" id="bookingCart" aria-live="polite">
-                    <div class="guest-cart-empty" id="bookingCartEmpty">
-                        <span class="guest-cart-empty-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h18l-1.5 12H4.5L3 7z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg>
-                        </span>
-                        <strong>Your cart is empty</strong>
-                        <span>Choose a room type above, set quantity, then tap Add room.</span>
-                    </div>
-                    <ul class="guest-cart-list" id="bookingCartList" hidden></ul>
-                    <div class="guest-cart-summary" id="bookingCartSummary" hidden>
-                        <span id="bookingCartSummaryLabel">0 rooms</span>
-                        <strong id="bookingCartSummaryTotal">₱0.00 / night</strong>
-                    </div>
-                </div>
-            </section>
-
-            <p class="guest-form-message" id="bookFormMessage" hidden></p>
-
-            <div class="guest-modal-actions guest-book-modal-actions">
-                <button type="submit" class="guest-btn guest-btn-primary guest-btn-lg" id="bookModalSubmit" disabled>
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-                    Submit booking
-                </button>
-                <button type="button" class="guest-btn guest-btn-ghost" data-close-modal>Cancel</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-@* Success modal *@
-<div class="guest-modal" id="successModal" hidden>
-    <div class="guest-modal-backdrop" data-close-modal></div>
-    <div class="guest-modal-dialog guest-modal-dialog-sm" role="dialog" aria-modal="true" aria-labelledby="successTitle">
-        <button type="button" class="guest-modal-close" data-close-modal aria-label="Close">&times;</button>
-        <p class="guest-eyebrow" id="successEyebrow">Booking</p>
-        <h2 id="successTitle">Booking preview</h2>
-        <p class="guest-modal-lede" id="successMessage">
-            Your request looks ready. Saving will be added later.
-        </p>
-        <div class="guest-modal-actions">
-            <button type="button" class="guest-btn guest-btn-primary" data-close-modal>Done</button>
-        </div>
-    </div>
-</div>

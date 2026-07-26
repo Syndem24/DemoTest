@@ -1,6 +1,12 @@
 @{
     var controller = ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty;
-    var bookingNav = string.Equals(controller, "Booking", StringComparison.OrdinalIgnoreCase) ? "is-active" : string.Empty;
+    var action = ViewContext.RouteData.Values["action"]?.ToString() ?? string.Empty;
+    var isBookingHome = string.Equals(controller, "Booking", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(action, "Index", StringComparison.OrdinalIgnoreCase);
+    var isAccommodations = string.Equals(controller, "Booking", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(action, "Accommodations", StringComparison.OrdinalIgnoreCase);
+    var immersive = ViewData["GuestImmersive"] as bool? == true;
+    var shellClass = immersive ? "guest-shell guest-shell--immersive" : "guest-shell";
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -16,7 +22,7 @@
     <link rel="stylesheet" href="~/css/booking.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/TestingDemo.styles.css" asp-append-version="true" />
 </head>
-<body class="guest-shell">
+<body class="@shellClass">
     <header class="guest-nav" id="guestNav">
         <div class="guest-nav-inner">
             <a class="guest-brand" asp-controller="Booking" asp-action="Index" title="Mori International Hotel">
@@ -25,13 +31,27 @@
             </a>
 
             <nav class="guest-nav-links" id="guestNavLinks" aria-label="Guest navigation">
-                <a href="#book-rooms">Rooms</a>
-                <a href="#book">Book</a>
-                <a href="#contact">Contact</a>
+                @if (isBookingHome)
+                {
+                    <a href="#about">About</a>
+                    <a asp-controller="Booking" asp-action="Accommodations">Rooms</a>
+                    <a href="#contact">Contact</a>
+                }
+                else
+                {
+                    <a asp-controller="Booking" asp-action="Index" asp-fragment="about">About</a>
+                    <a class="@(isAccommodations ? "is-active" : null)"
+                       asp-controller="Booking"
+                       asp-action="Accommodations">Rooms</a>
+                    <a asp-controller="Booking" asp-action="Index" asp-fragment="contact">Contact</a>
+                }
                 <a class="guest-nav-staff" asp-controller="Staff" asp-action="Index">Staff</a>
             </nav>
 
-            <a class="guest-nav-cta" href="#book">Book a stay</a>
+            <a class="guest-nav-cta"
+               asp-controller="Booking"
+               asp-action="Accommodations"
+               asp-fragment="rooms">Book a stay</a>
 
             <button type="button"
                     class="guest-nav-toggle"
@@ -50,17 +70,11 @@
         @RenderBody()
     </main>
 
-    <footer class="guest-footer" id="contact">
+    <footer class="guest-footer">
         <div class="guest-footer-inner">
-            <div>
-                <strong>Mori International Hotel</strong>
-                <p>Book ahead and your stay is reserved automatically. Near arrivals stay as bookings.</p>
-            </div>
-            <div class="guest-footer-meta">
-                <span>Front desk · (555) 010-2000</span>
-                <span>hello&#64;moriinternational.hotel</span>
-                <a class="guest-footer-staff" asp-controller="Staff" asp-action="Index">Staff portal</a>
-            </div>
+            <p class="guest-footer-copy">
+                © Mori International Hotel, Mandaue City, Cebu · 2026, Official site
+            </p>
         </div>
     </footer>
 

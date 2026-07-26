@@ -1,0 +1,486 @@
+@model TestingDemo.ViewModels.BookingPageViewModel
+@{
+    Layout = "~/Views/Shared/_CustomerLayout.cshtml";
+    ViewData["Title"] = "Accommodations";
+    var typeCount = Model.RoomTypes.Count;
+    var featureIndex = 0;
+}
+
+<div class="guest-rooms-page" id="rooms">
+    <header class="guest-section guest-rooms-intro guest-reveal" data-reveal>
+        <p class="guest-intro-kana guest-rooms-kana" aria-hidden="true">宿</p>
+        <p class="guest-eyebrow">Stay with us</p>
+        <h1>Accommodations</h1>
+        <div class="guest-rooms-intro-copy">
+            <p>
+                Quiet rooms shaped with a Japanese sense of calm — compact, considered, and ready for rest
+                after a day in Cebu.
+            </p>
+            <p>
+                Each room is thoughtfully appointed with inverter air conditioning, hot and cold showers,
+                complimentary drinking water, and unlimited Wi‑Fi so your stay feels simple from the first night.
+            </p>
+        </div>
+        @if (typeCount > 0)
+        {
+            <p class="guest-rooms-intro-meta">@typeCount room type@(typeCount == 1 ? "" : "s") available</p>
+        }
+    </header>
+
+    @if (!Model.RoomTypes.Any())
+    {
+        <section class="guest-section">
+            <div class="guest-empty" role="status">
+                <strong>No rooms are available right now.</strong>
+                <p>Please check back soon, or contact the front desk for assistance.</p>
+            </div>
+        </section>
+    }
+    else
+    {
+        <div class="guest-room-features">
+            @foreach (var type in Model.RoomTypes)
+            {
+                var images = type.Images ?? new List<string>();
+                var inclusions = type.Inclusions ?? new List<string>();
+                var categories = type.CustomCategories ?? new List<TestingDemo.Models.CustomInclusionCategory>();
+                var image = images.FirstOrDefault();
+                var description = string.IsNullOrWhiteSpace(type.Description)
+                    ? "A comfortable stay with everything you need for a quiet night in."
+                    : type.Description;
+                var imagesJson = System.Text.Json.JsonSerializer.Serialize(images);
+                var inclusionsJson = System.Text.Json.JsonSerializer.Serialize(inclusions);
+                var categoriesJson = System.Text.Json.JsonSerializer.Serialize(categories);
+                var flipClass = featureIndex % 2 == 1 ? " is-flip" : string.Empty;
+                featureIndex++;
+
+                <article class="guest-room guest-room-feature guest-reveal@(flipClass)"
+                         data-reveal
+                         data-guest-modal="details"
+                         data-fill-room="@type.Name"
+                         data-room-type="@type.Name"
+                         data-price="@type.PricePerNight.ToString("0.00")"
+                         data-occupancy="@type.MaxOccupancy"
+                         data-beds="@type.BedCount"
+                         data-available="@type.AvailableCount"
+                         data-images='@Html.Raw(imagesJson)'
+                         data-inclusions='@Html.Raw(inclusionsJson)'
+                         data-categories='@Html.Raw(categoriesJson)'
+                         role="button"
+                         tabindex="0"
+                         aria-label="View details for @type.Name">
+                    <div class="guest-room-desc-full" hidden>@description</div>
+
+                    <div class="guest-room-feature-media" data-feature-media>
+                        @if (!string.IsNullOrWhiteSpace(image))
+                        {
+                            <img src="@image"
+                                 alt="@type.Name"
+                                 loading="lazy"
+                                 data-feature-image />
+                        }
+                        else
+                        {
+                            <div class="guest-room-placeholder" aria-hidden="true">
+                                <span>@(string.IsNullOrWhiteSpace(type.Name) ? "R" : type.Name.Trim()[0].ToString().ToUpperInvariant())</span>
+                            </div>
+                        }
+
+                        @if (images.Count > 1)
+                        {
+                            <div class="guest-feature-pager" data-feature-pager>
+                                <button type="button"
+                                        class="guest-feature-pager-btn is-prev"
+                                        data-feature-prev
+                                        aria-label="Previous photo for @type.Name">
+                                    ‹
+                                </button>
+                                <span class="guest-feature-pager-count" data-feature-count>1 / @images.Count</span>
+                                <button type="button"
+                                        class="guest-feature-pager-btn is-next"
+                                        data-feature-next
+                                        aria-label="Next photo for @type.Name">
+                                    ›
+                                </button>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="guest-room-feature-copy">
+                        <p class="guest-eyebrow">Guest room</p>
+                        <h2>@type.Name</h2>
+                        <p class="guest-room-feature-desc">
+                            @(description.Length > 180 ? description.Substring(0, 180).TrimEnd() + "…" : description)
+                        </p>
+
+                        <ul class="guest-room-feature-meta">
+                            <li>Up to @type.MaxOccupancy guests</li>
+                            <li>@type.BedCount bed@(type.BedCount == 1 ? "" : "s")</li>
+                        </ul>
+
+                        @if (inclusions.Count > 0)
+                        {
+                            <ul class="guest-room-feature-tags">
+                                @foreach (var inclusion in inclusions.Take(4))
+                                {
+                                    <li>@inclusion</li>
+                                }
+                            </ul>
+                        }
+
+                        <p class="guest-room-feature-price">
+                            <span>₱@type.PricePerNight.ToString("N2")</span>
+                            <small>/ night</small>
+                        </p>
+
+                        <div class="guest-room-feature-actions">
+                            <button type="button"
+                                    class="guest-btn guest-btn-ghost"
+                                    data-guest-modal="details"
+                                    data-fill-room="@type.Name">
+                                Details
+                            </button>
+                            <button type="button"
+                                    class="guest-btn guest-btn-primary"
+                                    data-guest-modal="book"
+                                    data-fill-room="@type.Name">
+                                Book
+                            </button>
+                        </div>
+                    </div>
+                </article>
+            }
+        </div>
+    }
+
+    <section class="guest-section guest-rooms-amenities guest-reveal" data-reveal>
+        <div class="guest-rooms-amenities-inner">
+            <p class="guest-eyebrow">Every stay</p>
+            <h2>All guest rooms include</h2>
+            <ul class="guest-rooms-amenities-list">
+                <li>1.5hp inverter split-type air conditioning</li>
+                <li>24-hour hot and cold shower</li>
+                <li>Complimentary flowing drinking water</li>
+                <li>Unlimited Wi‑Fi</li>
+                <li>Approximately 18 m² modular room</li>
+                <li>Ample on-site parking</li>
+            </ul>
+        </div>
+    </section>
+</div>
+
+@* Details modal *@
+<div class="guest-modal" id="detailsModal" hidden>
+    <div class="guest-modal-backdrop" data-close-modal></div>
+    <div class="guest-modal-dialog guest-modal-dialog-lg" role="dialog" aria-modal="true" aria-labelledby="detailsTitle">
+        <div class="guest-details-header">
+            <div class="guest-details-title-row">
+                <h2 id="detailsTitle">Room</h2>
+                <span class="guest-pill is-available" id="detailsStatusPill">Available</span>
+                <div class="guest-details-rate-wrap">
+                    <span class="guest-details-rate" id="detailsPrice">—</span>
+                    <span class="guest-details-rate-period">/ night</span>
+                </div>
+            </div>
+            <button type="button" class="guest-modal-close" data-close-modal aria-label="Close">&times;</button>
+        </div>
+
+        <div class="guest-details-layout">
+            <div class="guest-details-media">
+                <div class="guest-details-gallery">
+                    <div class="guest-details-stage" id="detailsPhotoStage" tabIndex="0" role="button" aria-label="Click to enlarge photo">
+                        <img id="detailsMainImage" class="guest-details-main-image" alt="" hidden />
+                        <div id="detailsImageEmpty" class="guest-details-image-empty" hidden>
+                            <span>No photos yet</span>
+                        </div>
+                        <button type="button" class="guest-gallery-nav is-prev" id="detailsPrevPhoto" aria-label="Previous photo" hidden>&lsaquo;</button>
+                        <button type="button" class="guest-gallery-nav is-next" id="detailsNextPhoto" aria-label="Next photo" hidden>&rsaquo;</button>
+                        <span class="guest-gallery-count" id="detailsPhotoCount" hidden></span>
+                        <div class="guest-gallery-zoom-hint" id="detailsZoomHint" hidden>
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35M11 8v6M8 11h6"/></svg>
+                            <span>Click photo to expand</span>
+                        </div>
+                    </div>
+                    <div class="guest-details-thumbs" id="detailsThumbs" hidden></div>
+                </div>
+
+                <div class="guest-modal-actions guest-modal-actions-under-photo">
+                    <button type="button" class="guest-btn guest-btn-primary" data-guest-modal="book" id="detailsBookBtn">
+                        Book this room
+                    </button>
+                    <button type="button" class="guest-btn guest-btn-ghost" data-close-modal>Close</button>
+                </div>
+            </div>
+
+            <div class="guest-details-copy">
+                <div class="guest-specs-grid">
+                    <div class="guest-spec-chip">
+                        <div class="guest-spec-icon">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        </div>
+                        <div class="guest-spec-meta">
+                            <span class="guest-spec-label">Capacity</span>
+                            <strong id="detailsOccupancy">—</strong>
+                        </div>
+                    </div>
+
+                    <div class="guest-spec-chip">
+                        <div class="guest-spec-icon">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16M2 8h20M2 17h20M22 4v16"/><path d="M6 12h12"/></svg>
+                        </div>
+                        <div class="guest-spec-meta">
+                            <span class="guest-spec-label">Bed Setup</span>
+                            <strong id="detailsBeds">—</strong>
+                        </div>
+                    </div>
+
+                    <div class="guest-spec-chip">
+                        <div class="guest-spec-icon">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                        </div>
+                        <div class="guest-spec-meta">
+                            <span class="guest-spec-label">Check-in</span>
+                            <strong>14:00</strong>
+                        </div>
+                    </div>
+
+                    <div class="guest-spec-chip">
+                        <div class="guest-spec-icon">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l-4-2"/></svg>
+                        </div>
+                        <div class="guest-spec-meta">
+                            <span class="guest-spec-label">Check-out</span>
+                            <strong>12:00</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="guest-details-accordions">
+                    <details class="guest-acc">
+                        <summary>
+                            <span>Description & Experience</span>
+                        </summary>
+                        <div class="guest-acc-body">
+                            <p class="guest-details-desc" id="detailsDescription"></p>
+                        </div>
+                    </details>
+
+                    <details class="guest-acc">
+                        <summary>
+                            <span>Inclusions & Amenities</span>
+                        </summary>
+                        <div class="guest-acc-body">
+                            <div class="guest-inclusion-groups" id="detailsInclusions"></div>
+                        </div>
+                    </details>
+
+                    <details class="guest-acc">
+                        <summary>
+                            <span>Terms of Stay</span>
+                        </summary>
+                        <div class="guest-acc-body">
+                            <div class="guest-terms-stay">
+                                <p class="guest-terms-intro">
+                                    Our top priority is ensuring your comfort and satisfaction throughout your stay with us. From the moment you walk through our doors, you will experience exceptional hospitality and personalized service designed to cater to your every need. Thank you for choosing us as your home away from home – we look forward to exceeding all of your expectations during your stay at our hotel.
+                                </p>
+                                <dl class="guest-terms-schedule">
+                                    <div>
+                                        <dt>Check-in</dt>
+                                        <dd>14:00</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Check-out</dt>
+                                        <dd>12:00</dd>
+                                    </div>
+                                </dl>
+                                <div class="guest-terms-cancellation">
+                                    <strong>Booking cancellation</strong>
+                                    <p>Cancellation and prepayment policies vary according to accommodation type. Please check the conditions of your required room.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Booking modal *@
+<div class="guest-modal" id="bookModal" hidden>
+    <div class="guest-modal-backdrop" data-close-modal></div>
+    <div class="guest-modal-dialog guest-modal-dialog-lg guest-modal-dialog-book" role="dialog" aria-modal="true" aria-labelledby="bookTitle">
+        <button type="button" class="guest-modal-close" data-close-modal aria-label="Close">&times;</button>
+
+        <header class="guest-book-modal-head">
+            <p class="guest-eyebrow">Booking</p>
+            <h2 id="bookTitle">Complete your booking</h2>
+            <p class="guest-modal-lede">
+                Fill in your details, choose dates, then add every room you need.
+                Submit once when your cart looks right.
+            </p>
+            <ol class="guest-book-steps" aria-label="Booking steps">
+                <li class="is-guest">
+                    <span class="guest-book-step-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    </span>
+                    <span>Guest</span>
+                </li>
+                <li class="is-dates">
+                    <span class="guest-book-step-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                    </span>
+                    <span>Dates</span>
+                </li>
+                <li class="is-rooms">
+                    <span class="guest-book-step-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-6h6v6"/></svg>
+                    </span>
+                    <span>Rooms</span>
+                </li>
+                <li class="is-submit">
+                    <span class="guest-book-step-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+                    </span>
+                    <span>Submit</span>
+                </li>
+            </ol>
+        </header>
+
+        <form class="guest-form guest-book-modal-form" id="bookModalForm" novalidate data-min-lead-hours="24">
+            <section class="guest-book-section is-guest">
+                <div class="guest-book-section-head">
+                    <span class="guest-book-section-num">1</span>
+                    <div>
+                        <h3>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            Guest details
+                        </h3>
+                        <p>How we reach you about this stay.</p>
+                    </div>
+                </div>
+                <div class="guest-form-grid">
+                    <label>
+                        <span>Full name</span>
+                        <input type="text" name="guestName" id="guestName" placeholder="Guest full name" required />
+                    </label>
+                    <label>
+                        <span>Email</span>
+                        <input type="email" name="guestEmail" id="guestEmail" placeholder="name@email.com" required />
+                    </label>
+                    <label>
+                        <span>Phone</span>
+                        <input type="tel" name="guestPhone" id="guestPhone" placeholder="+63 9XX XXX XXXX" autocomplete="tel" required />
+                    </label>
+                </div>
+            </section>
+
+            <section class="guest-book-section is-dates">
+                <div class="guest-book-section-head">
+                    <span class="guest-book-section-num">2</span>
+                    <div>
+                        <h3>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                            Stay dates
+                        </h3>
+                        <p>One date range applies to every room in this booking.</p>
+                    </div>
+                </div>
+                <div class="guest-form-grid guest-form-grid-2">
+                    <label>
+                        <span>Check-in</span>
+                        <input type="date" name="modalCheckIn" id="modalCheckIn" required />
+                    </label>
+                    <label>
+                        <span>Check-out</span>
+                        <input type="date" name="modalCheckOut" id="modalCheckOut" required />
+                    </label>
+                </div>
+                <p class="guest-lead-hint" id="modalLeadHint" hidden></p>
+            </section>
+
+            <section class="guest-book-section is-rooms">
+                <div class="guest-book-section-head">
+                    <span class="guest-book-section-num">3</span>
+                    <div>
+                        <h3>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-6h6v6"/></svg>
+                            Rooms in this booking
+                        </h3>
+                        <p>Add each room type you need. Same type increases quantity.</p>
+                    </div>
+                    <span class="guest-cart-status is-empty" id="bookingCartStatus">Cart empty</span>
+                </div>
+
+                <fieldset class="guest-cart-adder">
+                    <legend class="visually-hidden">Add rooms</legend>
+                    <div class="guest-cart-adder-row">
+                        <label class="guest-cart-room-field">
+                            <span>Room type</span>
+                            <select name="modalRoomType" id="modalRoomType">
+                                <option value="">Select a room</option>
+                                @foreach (var type in Model.RoomTypes)
+                                {
+                                <option value="@type.Name"
+                                        data-available="@type.AvailableCount"
+                                        data-price="@type.PricePerNight.ToString("0.00")">
+                                    @type.Name · ₱@type.PricePerNight.ToString("N0")
+                                </option>
+                                }
+                            </select>
+                        </label>
+                        <label class="guest-cart-qty-field">
+                            <span>Qty</span>
+                            <input type="number" name="modalRoomQty" id="modalRoomQty" min="1" value="1" />
+                        </label>
+                        <button type="button" class="guest-btn guest-btn-primary guest-cart-add-btn" id="addRoomToCartBtn">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                            Add room
+                        </button>
+                    </div>
+                </fieldset>
+
+                <div class="guest-booking-cart" id="bookingCart" aria-live="polite">
+                    <div class="guest-cart-empty" id="bookingCartEmpty">
+                        <span class="guest-cart-empty-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h18l-1.5 12H4.5L3 7z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg>
+                        </span>
+                        <strong>Your cart is empty</strong>
+                        <span>Choose a room type above, set quantity, then tap Add room.</span>
+                    </div>
+                    <ul class="guest-cart-list" id="bookingCartList" hidden></ul>
+                    <div class="guest-cart-summary" id="bookingCartSummary" hidden>
+                        <span id="bookingCartSummaryLabel">0 rooms</span>
+                        <strong id="bookingCartSummaryTotal">₱0.00 / night</strong>
+                    </div>
+                </div>
+            </section>
+
+            <p class="guest-form-message" id="bookFormMessage" hidden></p>
+
+            <div class="guest-modal-actions guest-book-modal-actions">
+                <button type="submit" class="guest-btn guest-btn-primary guest-btn-lg" id="bookModalSubmit" disabled>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                    Submit booking
+                </button>
+                <button type="button" class="guest-btn guest-btn-ghost" data-close-modal>Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@* Success modal *@
+<div class="guest-modal" id="successModal" hidden>
+    <div class="guest-modal-backdrop" data-close-modal></div>
+    <div class="guest-modal-dialog guest-modal-dialog-sm" role="dialog" aria-modal="true" aria-labelledby="successTitle">
+        <button type="button" class="guest-modal-close" data-close-modal aria-label="Close">&times;</button>
+        <p class="guest-eyebrow" id="successEyebrow">Booking</p>
+        <h2 id="successTitle">Booking preview</h2>
+        <p class="guest-modal-lede" id="successMessage">
+            Your request looks ready. Saving will be added later.
+        </p>
+        <div class="guest-modal-actions">
+            <button type="button" class="guest-btn guest-btn-primary" data-close-modal>Done</button>
+        </div>
+    </div>
+</div>

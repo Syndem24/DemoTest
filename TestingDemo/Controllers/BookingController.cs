@@ -15,7 +15,13 @@ public class BookingController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> Index(CancellationToken cancellationToken)
+    public IActionResult Index()
+    {
+        return View();
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Accommodations(CancellationToken cancellationToken)
     {
         var rooms = await _roomService.GetAllAsync(cancellationToken);
         var available = rooms
