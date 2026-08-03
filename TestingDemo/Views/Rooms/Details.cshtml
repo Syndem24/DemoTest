@@ -1,24 +1,49 @@
-@model TestingDemo.Models.RoomDto
+@model TestingDemo.ViewModels.RoomDetailsViewModel
 @using TestingDemo.Services
 @{
-    ViewData["Title"] = $"Room {Model.RoomNumber}";
-    var images = Model.Images ?? new List<string>();
+    var room = Model.Room;
+    var stay = Model.CurrentStay;
+    ViewData["Title"] = $"Room {room.RoomNumber}";
+    var images = room.Images ?? new List<string>();
     var mainImage = images.FirstOrDefault();
-    var hasDescription = !string.IsNullOrWhiteSpace(Model.Description);
+    var hasDescription = !string.IsNullOrWhiteSpace(room.Description);
+    var assignedRooms = stay?.Items
+        .SelectMany(item => item.AssignedRooms)
+        .Select(item => item.RoomNumber)
+        .Where(number => !string.IsNullOrWhiteSpace(number))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(number => number, StringComparer.OrdinalIgnoreCase)
+        .ToList() ?? new List<string>();
 }
 
 <section class="hotel-page-hero">
     <div>
         <p class="eyebrow">Room details</p>
-        <h1>Room @Model.RoomNumber</h1>
-        <p class="lede">@Model.Name · review photos, pricing, and inclusions.</p>
+        <h1>Room @room.RoomNumber</h1>
+        <p class="lede">@room.Name · review photos, pricing, and inclusions.</p>
     </div>
     <div class="hero-meta">
-        <span class="hotel-chip">@Model.Name</span>
-        <span class="hotel-chip">@Model.PricePerNight.ToString("C") / night</span>
-        <span class="hotel-chip">@Model.Status</span>
+        <span class="hotel-chip">@room.Name</span>
+        <span class="hotel-chip">@room.PricePerNight.ToString("C") / night</span>
+        <span class="hotel-chip">@room.Status</span>
     </div>
 </section>
+
+@if (TempData["Success"] is string success)
+{
+    <div class="alert alert-hotel alert-dismissible fade show" role="alert">
+        @success
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["Error"] is string error)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @error
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
 
 <div class="row g-4 hotel-details-layout">
     <div class="col-xl-7">
@@ -63,25 +88,25 @@
                 <div class="hotel-gallery-empty">
                     <strong>No photos yet</strong>
                     <p>Add images from the room type settings.</p>
-                    <a asp-action="EditType" asp-route-id="@Model.RoomTypeId" class="btn btn-primary btn-sm">Add photos</a>
+                    <a asp-action="EditType" asp-route-id="@room.RoomTypeId" class="btn btn-primary btn-sm">Add photos</a>
                 </div>
             }
         </div>
 
         <div class="hotel-panel hotel-details-actions-bar">
             <div class="hotel-details-actions-main">
-                <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-primary">
+                <a asp-action="Edit" asp-route-id="@room.Id" class="btn btn-primary">
                     Edit this room
                 </a>
-                <a asp-action="List" class="btn btn-outline-secondary">
+                <a asp-action="Index" asp-route-view="list" class="btn btn-outline-secondary">
                     Back to room list
                 </a>
             </div>
             <div class="hotel-details-actions-links">
-                <a asp-action="EditType" asp-route-id="@Model.RoomTypeId" class="hotel-action-link">
-                    Edit room type (all @Model.Name rooms)
+                <a asp-action="EditType" asp-route-id="@room.RoomTypeId" class="hotel-action-link">
+                    Edit room type (all @room.Name rooms)
                 </a>
-                <a asp-action="Delete" asp-route-id="@Model.Id" class="hotel-action-link is-danger">
+                <a asp-action="Delete" asp-route-id="@room.Id" class="hotel-action-link is-danger">
                     Delete this room
                 </a>
             </div>
@@ -89,21 +114,110 @@
     </div>
 
     <div class="col-xl-5">
+        @if (room.Status == TestingDemo.Models.RoomStatus.Occupied)
+        {
+            var guestLabel = stay?.GuestName ?? "Current guest";
+            var checkoutConfirm = stay is null
+                ? string.Empty
+                : assignedRooms.Count > 1
+                    ? $"Check out {stay.Reference} and free rooms {string.Join(", ", assignedRooms)}?"
+                    : $"Check out {stay.Reference}?";
+
+            <div class="hotel-panel hotel-guest-stay mb-3">
+                <div class="hotel-desc-collapse hotel-guest-stay-dropdown" id="guestStayCollapse">
+                    <button type="button"
+                            class="hotel-desc-toggle hotel-guest-stay-toggle"
+                            id="guestStayToggle"
+                            aria-expanded="false"
+                            aria-controls="guestStayBody">
+                        <span class="hotel-guest-stay-toggle-label">
+                            <span class="hotel-status is-occupied">Occupied</span>
+                            <span>
+                                <strong>Guest details</strong>
+                                <small>@guestLabel</small>
+                            </span>
+                        </span>
+                        <span class="hotel-desc-chevron" aria-hidden="true"></span>
+                    </button>
+                    <div class="hotel-desc-body is-collapsed" id="guestStayBody" hidden>
+                        @if (stay is not null)
+                        {
+                            <dl class="hotel-summary mb-0">
+                                <div class="hotel-summary-row">
+                                    <dt>Guest</dt>
+                                    <dd>@stay.GuestName</dd>
+                                </div>
+                                <div class="hotel-summary-row">
+                                    <dt>Email</dt>
+                                    <dd><a href="mailto:@stay.GuestEmail">@stay.GuestEmail</a></dd>
+                                </div>
+                                <div class="hotel-summary-row">
+                                    <dt>Phone</dt>
+                                    <dd><a href="tel:@stay.GuestPhone">@stay.GuestPhone</a></dd>
+                                </div>
+                                <div class="hotel-summary-row">
+                                    <dt>Reference</dt>
+                                    <dd>@stay.Reference</dd>
+                                </div>
+                                <div class="hotel-summary-row">
+                                    <dt>Stay</dt>
+                                    <dd>@stay.CheckIn.ToString("MMM d, yyyy") → @stay.CheckOut.ToString("MMM d, yyyy")</dd>
+                                </div>
+                                <div class="hotel-summary-row">
+                                    <dt>Type</dt>
+                                    <dd>@stay.Kind</dd>
+                                </div>
+                                <div class="hotel-summary-row">
+                                    <dt>Total</dt>
+                                    <dd>@stay.TotalAmount.ToString("C")</dd>
+                                </div>
+                                @if (assignedRooms.Count > 0)
+                                {
+                                    <div class="hotel-summary-row">
+                                        <dt>Assigned rooms</dt>
+                                        <dd>@string.Join(", ", assignedRooms)</dd>
+                                    </div>
+                                }
+                            </dl>
+                            <p class="hotel-guest-stay-note">
+                                Check out ends this stay and sets assigned rooms back to Available.
+                            </p>
+                            <form asp-action="Checkout"
+                                  asp-route-id="@room.Id"
+                                  method="post"
+                                  class="hotel-guest-stay-actions"
+                                  onsubmit="return confirm(@System.Text.Json.JsonSerializer.Serialize(checkoutConfirm));">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="rowVersion" value="@stay.RowVersion" />
+                                <button type="submit" class="btn btn-primary">Check out guest</button>
+                            </form>
+                        }
+                        else
+                        {
+                            <p class="text-muted mb-0">
+                                This room is marked Occupied, but no confirmed booking assignment was found.
+                            </p>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+
         <div class="hotel-panel mb-3">
             <div class="hotel-details-stats">
                 <div class="hotel-stat">
                     <span class="hotel-stat-label">Price</span>
-                    <strong>@Model.PricePerNight.ToString("C")</strong>
+                    <strong>@room.PricePerNight.ToString("C")</strong>
                     <span class="hotel-stat-note">per night</span>
                 </div>
                 <div class="hotel-stat">
                     <span class="hotel-stat-label">Guests</span>
-                    <strong>@Model.MaxOccupancy</strong>
+                    <strong>@room.MaxOccupancy</strong>
                     <span class="hotel-stat-note">max occupancy</span>
                 </div>
                 <div class="hotel-stat">
                     <span class="hotel-stat-label">Beds</span>
-                    <strong>@Model.BedCount</strong>
+                    <strong>@room.BedCount</strong>
                     <span class="hotel-stat-note">bed count</span>
                 </div>
             </div>
@@ -114,17 +228,17 @@
             <dl class="hotel-summary mb-0">
                 <div class="hotel-summary-row">
                     <dt>Room number</dt>
-                    <dd>@Model.RoomNumber</dd>
+                    <dd>@room.RoomNumber</dd>
                 </div>
                 <div class="hotel-summary-row">
                     <dt>Room type</dt>
-                    <dd>@Model.Name</dd>
+                    <dd>@room.Name</dd>
                 </div>
                 <div class="hotel-summary-row">
                     <dt>Status</dt>
                     <dd>
-                        <span class="hotel-status @(Model.Status == TestingDemo.Models.RoomStatus.Available ? "is-available" : "is-unavailable")">
-                            @Model.Status
+                        <span class="hotel-status @(room.Status == TestingDemo.Models.RoomStatus.Available ? "is-available" : room.Status == TestingDemo.Models.RoomStatus.Occupied ? "is-occupied" : "is-unavailable")">
+                            @room.Status
                         </span>
                     </dd>
                 </div>
@@ -143,7 +257,7 @@
                 <div class="hotel-desc-body is-collapsed" id="roomDescriptionBody" hidden>
                     @if (hasDescription)
                     {
-                        <p>@Model.Description</p>
+                        <p>@room.Description</p>
                     }
                     else
                     {
@@ -155,10 +269,10 @@
 
         <div class="hotel-panel mb-3">
             <h2 class="hotel-details-heading">Inclusions</h2>
-            @if (Model.Inclusions.Any())
+            @if (room.Inclusions.Any())
             {
                 <div class="hotel-inclusion-chips">
-                    @foreach (var inclusion in Model.Inclusions)
+                    @foreach (var inclusion in room.Inclusions)
                     {
                         <span class="hotel-inclusion-chip">@inclusion</span>
                     }
@@ -181,16 +295,26 @@
             const descBody = document.getElementById('roomDescriptionBody');
             const descWrap = document.getElementById('roomDescriptionCollapse');
 
-            if (descToggle && descBody && descWrap && !descToggle.disabled) {
-                descToggle.addEventListener('click', function () {
-                    const open = descToggle.getAttribute('aria-expanded') === 'true';
+            function wireCollapse(toggle, body, wrap) {
+                if (!toggle || !body || !wrap || toggle.disabled) {
+                    return;
+                }
+
+                toggle.addEventListener('click', function () {
+                    const open = toggle.getAttribute('aria-expanded') === 'true';
                     const next = !open;
-                    descToggle.setAttribute('aria-expanded', next ? 'true' : 'false');
-                    descWrap.classList.toggle('is-open', next);
-                    descBody.classList.toggle('is-collapsed', !next);
-                    descBody.hidden = !next;
+                    toggle.setAttribute('aria-expanded', next ? 'true' : 'false');
+                    wrap.classList.toggle('is-open', next);
+                    body.classList.toggle('is-collapsed', !next);
+                    body.hidden = !next;
                 });
             }
+
+            wireCollapse(descToggle, descBody, descWrap);
+            wireCollapse(
+                document.getElementById('guestStayToggle'),
+                document.getElementById('guestStayBody'),
+                document.getElementById('guestStayCollapse'));
 
             if (!main) {
                 return;

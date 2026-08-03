@@ -1,4 +1,4 @@
-﻿@{
+@{
     var controller = ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty;
     var action = ViewContext.RouteData.Values["action"]?.ToString() ?? string.Empty;
 
@@ -7,6 +7,9 @@
         : string.Empty;
     var roomsActive = string.Equals(controller, "Rooms", StringComparison.OrdinalIgnoreCase)
         && !string.Equals(action, "Create", StringComparison.OrdinalIgnoreCase)
+        ? "is-active"
+        : string.Empty;
+    var adminBookingsActive = string.Equals(controller, "AdminBookings", StringComparison.OrdinalIgnoreCase)
         ? "is-active"
         : string.Empty;
     var createActive = string.Equals(controller, "Rooms", StringComparison.OrdinalIgnoreCase)
@@ -47,6 +50,15 @@
                 </svg>
                 <span>Rooms</span>
             </a>
+            <a class="hotel-sidebar-link @adminBookingsActive"
+               asp-controller="AdminBookings"
+               asp-action="Index"
+               title="Guest bookings">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M7 3h10a2 2 0 0 1 2 2v16l-7-3-7 3V5a2 2 0 0 1 2-2zm2 4v2h6V7H9zm0 4v2h6v-2H9z"/>
+                </svg>
+                <span>Bookings</span>
+            </a>
             <a class="hotel-sidebar-link @bookingActive"
                asp-controller="Booking"
                asp-action="Index"
@@ -84,6 +96,32 @@
                 <span class="hotel-topbar-eyebrow">Mori International Hotel · Admin</span>
                 <strong>@(ViewData["Title"] ?? "Dashboard")</strong>
             </div>
+            <div class="hotel-topbar-actions">
+                <div class="admin-notification" data-admin-notification>
+                    <button type="button"
+                            class="admin-notification-bell"
+                            data-notification-toggle
+                            aria-label="Open booking notifications"
+                            aria-expanded="false">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 22a2.5 2.5 0 0 0 2.35-1.65h-4.7A2.5 2.5 0 0 0 12 22zm7-6.5-1.5-1.9V9a5.5 5.5 0 0 0-4.5-5.4V2h-2v1.6A5.5 5.5 0 0 0 6.5 9v4.6L5 15.5V18h14v-2.5z"/>
+                        </svg>
+                        <span class="admin-notification-badge" data-notification-badge hidden>0</span>
+                    </button>
+                    <div class="admin-notification-panel" data-notification-panel hidden>
+                        <div class="admin-notification-head">
+                            <strong>New bookings</strong>
+                            <button type="button" data-notification-sound aria-pressed="false">Sound on</button>
+                        </div>
+                        <div class="admin-notification-items" data-notification-items>
+                            <p>Loading…</p>
+                        </div>
+                        <a asp-controller="AdminBookings" asp-action="Index" class="admin-notification-view-all">
+                            View all bookings
+                        </a>
+                    </div>
+                </div>
+            </div>
         </header>
 
         <main role="main" class="hotel-main">
@@ -98,8 +136,17 @@
 
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/lib/signalr/signalr.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
     <script src="~/js/photo-zoom.js" asp-append-version="true"></script>
+    @if (!string.IsNullOrEmpty(adminBookingsActive))
+    {
+        <script src="~/lib/fullcalendar/core.min.js"></script>
+        <script src="~/lib/fullcalendar/daygrid.min.js"></script>
+        <script src="~/lib/fullcalendar/list.min.js"></script>
+    }
+    <div id="adminAntiForgery" hidden>@Html.AntiForgeryToken()</div>
+    <script src="~/js/admin-bookings.js" asp-append-version="true"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const shell = document.body;

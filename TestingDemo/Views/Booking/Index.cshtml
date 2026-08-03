@@ -1,12 +1,75 @@
+@model TestingDemo.ViewModels.BookingPageViewModel
 @{
     Layout = "~/Views/Shared/_CustomerLayout.cshtml";
     ViewData["Title"] = "Mori International Hotel";
     ViewData["GuestImmersive"] = true;
+    var galleryJsonOptions = new System.Text.Json.JsonSerializerOptions
+    {
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+    };
+    var buildingsPhotos = new[]
+    {
+        new { Src = "/Images/Buildings/Building1.jpg", Alt = "Wide daytime view of Mori International Hotel and guest parking" },
+        new { Src = "/Images/Buildings/Building2.jpg", Alt = "Front entrance of Mori International Hotel in the evening" },
+        new { Src = "/Images/Buildings/Building3.jpg", Alt = "Front façade and entrance of Mori International Hotel" }
+    };
+    var hallwaysPhotos = new[]
+    {
+        new { Src = "/Images/Hallways/Hallway1.jpg", Alt = "Illuminated hotel entrance and inner hallway at night" },
+        new { Src = "/Images/Hallways/Hallway3.jpg", Alt = "Upper guest corridor with stairs and indoor palms" },
+        new { Src = "/Images/Hallways/Hallway4.jpg", Alt = "Ground-floor hallway with palms and guest room entrances" },
+        new { Src = "/Images/Hallways/Hallway5.jpg", Alt = "Open guest corridor overlooking the hotel entrance" }
+    };
+    var loungePhotos = new[]
+    {
+        new { Src = "/Images/Hallways/Hallway2.jpg", Alt = "Bright shared courtyard lounge with greenery and seating" },
+        new { Src = "/Images/Lounge/Lounge1.jpg", Alt = "Quiet guest lounge with seating and artwork" }
+    };
+    var receptionPhotos = new[]
+    {
+        new { Src = "/Images/ReceptionArea/Reception1.jpg", Alt = "Mori International Hotel reception desk framed by indoor plants" }
+    };
+    var buildingsJson = System.Text.Json.JsonSerializer.Serialize(buildingsPhotos, galleryJsonOptions);
+    var hallwaysJson = System.Text.Json.JsonSerializer.Serialize(hallwaysPhotos, galleryJsonOptions);
+    var loungeJson = System.Text.Json.JsonSerializer.Serialize(loungePhotos, galleryJsonOptions);
+    var receptionJson = System.Text.Json.JsonSerializer.Serialize(receptionPhotos, galleryJsonOptions);
+    var galleryWallTiles = new[]
+    {
+        new { Slot = "a5-left", Label = "Hallways", ItemsJson = hallwaysJson, Photo = hallwaysPhotos[2], Count = hallwaysPhotos.Length },
+        new { Slot = "a5-mid", Label = "Reception", ItemsJson = receptionJson, Photo = receptionPhotos[0], Count = receptionPhotos.Length },
+        new { Slot = "a4", Label = "Lounge", ItemsJson = loungeJson, Photo = loungePhotos[0], Count = loungePhotos.Length },
+        new { Slot = "a3", Label = "Buildings", ItemsJson = buildingsJson, Photo = buildingsPhotos[0], Count = buildingsPhotos.Length }
+    };
+}
+
+@{
+    var landingHeroTour = new[]
+    {
+        new { Src = "/Images/Buildings/Building1.jpg", Position = "54% 46%" },
+        new { Src = "/Images/Hallways/Hallway4.jpg", Position = "50% 42%" },
+        new { Src = "/Images/Lounge/Lounge1.jpg", Position = "50% 52%" },
+        new { Src = "/Images/Rooms/Room1.jpg", Position = "42% 48%" }
+    };
 }
 
 <section class="guest-hero guest-hero-book guest-hero-immersive" id="guestHero">
-    <div class="guest-hero-media" aria-hidden="true">
-        <img src="~/Images/moriyama.jpg" asp-append-version="true" alt="" />
+    <div class="guest-hero-media guest-hero-tour"
+         data-hero-tour
+         data-hero-tour-duration="12000"
+         aria-hidden="true">
+        @for (var i = 0; i < landingHeroTour.Length; i++)
+        {
+            var slide = landingHeroTour[i];
+            <img src="@slide.Src"
+                 asp-append-version="true"
+                 alt=""
+                 decoding="async"
+                 fetchpriority="@(i == 0 ? "high" : "low")"
+                 loading="@(i < 3 ? "eager" : "lazy")"
+                 class="@(i == 0 ? "is-active is-drifting" : null)"
+                 style="--hero-tour-position: @slide.Position"
+                 data-hero-tour-slide />
+        }
     </div>
     <div class="guest-hero-copy" id="guestHeroCopy">
         <p class="guest-brand-mark guest-typewriter" id="heroBrandType" data-typewriter aria-label="Mori International Hotel">Mori International Hotel</p>
@@ -45,10 +108,14 @@
 
         <div class="guest-intro-story">
             <figure class="guest-intro-media guest-reveal" data-reveal>
-                <img src="~/Images/INtro.jpg"
+                <img src="~/Images/Hallways/Hallway2.jpg"
                      asp-append-version="true"
-                     alt="Mori International Hotel exterior in Mandaue, Cebu"
+                     alt="Bright inner courtyard and guest floors at Mori International Hotel"
                      loading="lazy" />
+                <figcaption>
+                    <span>Inside Mori</span>
+                    <strong>Light, greenery, and quiet spaces</strong>
+                </figcaption>
             </figure>
             <div class="guest-intro-body guest-reveal" data-reveal>
                 <p>
@@ -77,60 +144,107 @@
 <section class="guest-section guest-gallery" id="gallery">
     <div class="guest-section-head guest-reveal" data-reveal>
         <div>
-            <p class="guest-eyebrow">Inside the hotel</p>
-            <h2>Photo gallery</h2>
-            <p class="guest-section-copy">Building, hallway, rooms, and reception — a quiet look around.</p>
+            <p class="guest-eyebrow">A closer look</p>
+            <h2>Inside Mori</h2>
+            <p class="guest-section-copy">
+                Buildings, Hallways, Lounge, and Reception — tap a frame to browse that album.
+            </p>
         </div>
+        <a class="guest-gallery-all-rooms"
+           asp-controller="Booking"
+           asp-action="Accommodations">
+            View all accommodations
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+        </a>
     </div>
 
-    <div class="guest-gallery-grid">
-        <figure class="guest-gallery-item is-building guest-reveal" data-reveal>
-            <img src="~/Images/moriyama.jpg"
-                 asp-append-version="true"
-                 alt="Hotel building exterior"
-                 loading="lazy" />
-            <figcaption>
-                <span class="guest-gallery-label">Building</span>
-                <span class="guest-gallery-caption">Facade &amp; arrival</span>
-            </figcaption>
-        </figure>
-
-        <figure class="guest-gallery-item is-hallway guest-reveal" data-reveal>
-            <img src="~/Images/INtro.jpg"
-                 asp-append-version="true"
-                 alt="Hotel hallway"
-                 loading="lazy"
-                 style="object-position: 35% 55%;" />
-            <figcaption>
-                <span class="guest-gallery-label">Hallway</span>
-                <span class="guest-gallery-caption">Quiet corridors</span>
-            </figcaption>
-        </figure>
-
-        <figure class="guest-gallery-item is-rooms guest-reveal" data-reveal>
-            <img src="~/Images/NIghtPicIm.jpg"
-                 asp-append-version="true"
-                 alt="Guest rooms atmosphere"
-                 loading="lazy"
-                 style="object-position: 50% 40%;" />
-            <figcaption>
-                <span class="guest-gallery-label">Rooms</span>
-                <span class="guest-gallery-caption">Rest &amp; comfort</span>
-            </figcaption>
-        </figure>
-
-        <figure class="guest-gallery-item is-reception guest-reveal" data-reveal>
-            <img src="~/Images/moriyama.jpg"
-                 asp-append-version="true"
-                 alt="Reception area"
-                 loading="lazy"
-                 style="object-position: 48% 70%;" />
-            <figcaption>
-                <span class="guest-gallery-label">Reception</span>
-                <span class="guest-gallery-caption">Welcome desk</span>
-            </figcaption>
-        </figure>
+    <div class="guest-gallery-wall guest-reveal" data-reveal aria-label="Hotel photo gallery wall">
+        @foreach (var tile in galleryWallTiles)
+        {
+            <figure class="guest-gallery-wall-tile is-@tile.Slot">
+                <button type="button"
+                        class="guest-gallery-wall-photo"
+                        data-photo-zoom
+                        data-photo-zoom-items='@Html.Raw(tile.ItemsJson)'
+                        data-photo-zoom-src="@tile.Photo.Src"
+                        data-photo-zoom-alt="@tile.Photo.Alt"
+                        aria-label="Open @tile.Label gallery starting with @tile.Photo.Alt">
+                    <img src="@tile.Photo.Src"
+                         alt="@tile.Photo.Alt"
+                         loading="lazy"
+                         decoding="async" />
+                    <span class="guest-gallery-wall-caption">
+                        <span class="guest-gallery-caption">@tile.Label</span>
+                        <strong>@tile.Count photo@(tile.Count == 1 ? "" : "s")</strong>
+                    </span>
+                </button>
+            </figure>
+        }
     </div>
+
+    @if (Model.RoomTypes.Any())
+    {
+        <div class="guest-gallery-rooms">
+            <div class="guest-gallery-rooms-head guest-reveal" data-reveal>
+                <div>
+                    <p class="guest-eyebrow">Choose your stay</p>
+                    <h3>Our room types</h3>
+                </div>
+                <p>Each room shown below is currently available to book.</p>
+            </div>
+
+            <div class="guest-room-carousel guest-gallery-room-carousel"
+                 data-room-carousel
+                 data-carousel-page-size="3"
+                 aria-label="Available room types">
+                <button type="button"
+                        class="guest-room-carousel-nav is-prev"
+                        data-room-carousel-prev
+                        aria-label="Show previous room types">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+
+                <div class="guest-gallery-room-track guest-room-track"
+                     data-room-carousel-track
+                     tabindex="0"
+                     aria-label="Room types. Use the left and right arrow keys to browse.">
+                    @foreach (var roomType in Model.RoomTypes)
+                    {
+                        var roomImage = roomType.Images.FirstOrDefault();
+                        var roomImageSrc = string.IsNullOrWhiteSpace(roomImage)
+                            ? "/Images/NIghtPicIm.jpg"
+                            : roomImage;
+
+                        <a class="guest-gallery-room guest-reveal"
+                           data-reveal
+                           asp-controller="Booking"
+                           asp-action="Accommodations"
+                           asp-fragment="rooms"
+                           aria-label="View @roomType.Name accommodation">
+                            <img src="@roomImageSrc"
+                                 alt="@roomType.Name guest room"
+                                 loading="lazy" />
+                            <span class="guest-gallery-room-overlay">
+                                <span class="guest-gallery-caption">Room type</span>
+                                <strong>@roomType.Name</strong>
+                                <span class="guest-gallery-room-link">
+                                    View room
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                                </span>
+                            </span>
+                        </a>
+                    }
+                </div>
+
+                <button type="button"
+                        class="guest-room-carousel-nav is-next"
+                        data-room-carousel-next
+                        aria-label="Show next room types">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                </button>
+            </div>
+        </div>
+    }
 </section>
 
 <section class="guest-section guest-contact" id="contact">

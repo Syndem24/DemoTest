@@ -54,10 +54,9 @@ public class RoomService : IRoomService
         }
 
         var roomType = await GetOrCreateRoomTypeAsync(
-            dto.TypeName,
+            dto.Name,
             dto.Description,
             dto.Inclusions,
-            dto.CustomCategories,
             Array.Empty<string>(),
             cancellationToken);
 
@@ -98,7 +97,7 @@ public class RoomService : IRoomService
             }
         }
 
-        var typeName = dto.TypeName.Trim();
+        var typeName = dto.Name.Trim();
         if (await TypeNameExistsAsync(typeName, cancellationToken: cancellationToken))
         {
             throw new InvalidOperationException($"Room type '{typeName}' already exists.");
@@ -106,11 +105,10 @@ public class RoomService : IRoomService
 
         var roomType = new RoomType
         {
-            TypeName = typeName,
+            Name = typeName,
             Description = dto.Description?.Trim(),
             CreatedAt = DateTime.UtcNow,
             Inclusions = inclusions.ToList(),
-            CustomCategories = RoomMappings.NormalizeCustomCategories(dto.CustomCategories),
             Images = images.ToList()
         };
 
@@ -179,17 +177,15 @@ public class RoomService : IRoomService
             .FirstOrDefaultAsync(t => t.RoomTypeId == dto.RoomTypeId, cancellationToken)
             ?? throw new InvalidOperationException("Room type not found.");
 
-        if (await TypeNameExistsAsync(dto.TypeName, roomType.RoomTypeId, cancellationToken))
+        if (await TypeNameExistsAsync(dto.Name, roomType.RoomTypeId, cancellationToken))
         {
-            throw new InvalidOperationException($"Room type '{dto.TypeName.Trim()}' already exists.");
+            throw new InvalidOperationException($"Room type '{dto.Name.Trim()}' already exists.");
         }
 
-        roomType.TypeName = dto.TypeName.Trim();
+        roomType.Name = dto.Name.Trim();
         roomType.Description = dto.Description?.Trim();
         roomType.Inclusions = RoomMappings.NormalizeInclusions(dto.Inclusions);
-        roomType.CustomCategories = RoomMappings.NormalizeCustomCategories(dto.CustomCategories);
         _db.Entry(roomType).Property(t => t.Inclusions).IsModified = true;
-        _db.Entry(roomType).Property(t => t.CustomCategories).IsModified = true;
 
         room.RoomNumber = dto.RoomNumber.Trim();
         room.PricePerNight = dto.PricePerNight;
@@ -217,18 +213,16 @@ public class RoomService : IRoomService
             return 0;
         }
 
-        if (await TypeNameExistsAsync(dto.TypeName, dto.RoomTypeId, cancellationToken))
+        if (await TypeNameExistsAsync(dto.Name, dto.RoomTypeId, cancellationToken))
         {
-            throw new InvalidOperationException($"Room type '{dto.TypeName.Trim()}' already exists.");
+            throw new InvalidOperationException($"Room type '{dto.Name.Trim()}' already exists.");
         }
 
-        roomType.TypeName = dto.TypeName.Trim();
+        roomType.Name = dto.Name.Trim();
         roomType.Description = dto.Description?.Trim();
         roomType.Inclusions = RoomMappings.NormalizeInclusions(dto.Inclusions);
-        roomType.CustomCategories = RoomMappings.NormalizeCustomCategories(dto.CustomCategories);
         roomType.Images = RoomMappings.NormalizeImages(dto.Images);
         _db.Entry(roomType).Property(t => t.Inclusions).IsModified = true;
-        _db.Entry(roomType).Property(t => t.CustomCategories).IsModified = true;
         _db.Entry(roomType).Property(t => t.Images).IsModified = true;
 
         var existingRooms = await _db.Rooms
@@ -394,7 +388,7 @@ public class RoomService : IRoomService
     {
         var normalized = typeName.Trim();
         var query = _db.RoomTypes.AsNoTracking()
-            .Where(t => t.TypeName.ToLower() == normalized.ToLower());
+            .Where(t => t.Name.ToLower() == normalized.ToLower());
 
         if (excludeRoomTypeId.HasValue)
         {
@@ -408,33 +402,28 @@ public class RoomService : IRoomService
         string typeName,
         string? description,
         IEnumerable<string> inclusions,
-        IEnumerable<CustomInclusionCategory> customCategories,
         IEnumerable<string> images,
         CancellationToken cancellationToken)
     {
         var normalized = typeName.Trim();
         var normalizedInclusions = RoomMappings.NormalizeInclusions(inclusions);
-        var normalizedCustomCategories = RoomMappings.NormalizeCustomCategories(customCategories);
         var existing = await _db.RoomTypes
-            .FirstOrDefaultAsync(t => t.TypeName.ToLower() == normalized.ToLower(), cancellationToken);
+            .FirstOrDefaultAsync(t => t.Name.ToLower() == normalized.ToLower(), cancellationToken);
         if (existing is not null)
         {
             existing.Description = description?.Trim();
             existing.Inclusions = normalizedInclusions;
-            existing.CustomCategories = normalizedCustomCategories;
             _db.Entry(existing).Property(t => t.Inclusions).IsModified = true;
-            _db.Entry(existing).Property(t => t.CustomCategories).IsModified = true;
             await _db.SaveChangesAsync(cancellationToken);
             return existing;
         }
 
         var roomType = new RoomType
         {
-            TypeName = normalized,
+            Name = normalized,
             Description = description?.Trim(),
             CreatedAt = DateTime.UtcNow,
             Inclusions = normalizedInclusions,
-            CustomCategories = normalizedCustomCategories,
             Images = RoomMappings.NormalizeImages(images)
         };
 

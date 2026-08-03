@@ -1,0 +1,104 @@
+@{
+    ViewData["Title"] = "Bookings";
+}
+
+<section class="hotel-page-hero">
+    <div>
+        <p class="hero-eyebrow">Guest requests</p>
+        <h1>Bookings</h1>
+        <p>Review requests in a compact table or scan upcoming reservations on the calendar.</p>
+    </div>
+</section>
+
+<section class="hotel-panel admin-bookings-panel" data-admin-bookings>
+    @Html.AntiForgeryToken()
+
+    <div class="admin-booking-view-tabs" role="tablist" aria-label="Booking views">
+        <button type="button" class="is-active" role="tab" aria-selected="true" data-booking-view="table">
+            Booking table
+        </button>
+        <button type="button" role="tab" aria-selected="false" data-booking-view="calendar">
+            Booking calendar
+        </button>
+        <button type="button" role="tab" aria-selected="false" data-booking-view="history">
+            History
+        </button>
+    </div>
+
+    <div data-booking-table-panel>
+        <div class="admin-bookings-toolbar">
+            <div class="admin-booking-filters" role="group" aria-label="Filter bookings">
+                <button type="button" class="admin-booking-filter is-active" data-booking-filter="">All</button>
+                <button type="button" class="admin-booking-filter" data-booking-filter="Pending">Pending</button>
+                <button type="button" class="admin-booking-filter" data-booking-filter="Confirmed">Confirmed</button>
+            </div>
+            <label class="admin-booking-search">
+                <span class="visually-hidden">Search bookings</span>
+                <input type="search" placeholder="Search reference or guest…" data-booking-search />
+            </label>
+            <button type="button" class="admin-booking-refresh" data-booking-refresh>Refresh</button>
+        </div>
+
+        <p class="admin-bookings-message" data-bookings-message role="status" hidden></p>
+
+        <div class="admin-bookings-table-wrap">
+            <table class="admin-bookings-table">
+                <thead>
+                    <tr>
+                        <th>Reference</th>
+                        <th>Guest</th>
+                        <th>Stay</th>
+                        <th>Rooms</th>
+                        <th>Type</th>
+                        <th>Payment</th>
+                        <th>Status</th>
+                        <th><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody data-bookings-list aria-live="polite">
+                    <tr><td colspan="8" class="admin-bookings-loading">Loading bookings…</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <nav class="admin-bookings-pagination" aria-label="Booking pages">
+            <button type="button" data-bookings-prev disabled>Previous</button>
+            <span data-bookings-page>Page 1</span>
+            <button type="button" data-bookings-next disabled>Next</button>
+        </nav>
+    </div>
+
+    <div class="admin-reservation-calendar-panel" data-booking-calendar-panel hidden>
+        <div class="admin-calendar-intro">
+            <div>
+                <strong>Booking calendar</strong>
+                <p>Shows advance bookings (full payment) and half-payment reservations for the visible range.</p>
+            </div>
+            <div class="admin-calendar-legend" aria-label="Payment legend">
+                <span class="is-full">Advance booking · full</span>
+                <span class="is-half">Reservation · half</span>
+            </div>
+        </div>
+        <div class="admin-reservation-calendar" data-reservation-calendar></div>
+        <p class="admin-calendar-fallback" data-calendar-fallback hidden>
+            The calendar could not load. Use the booking table instead.
+        </p>
+    </div>
+</section>
+
+<div class="admin-booking-modal" data-booking-modal hidden>
+    <button type="button" class="admin-booking-modal-backdrop" data-booking-modal-close aria-label="Close details"></button>
+    <section class="admin-booking-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="adminBookingDetailTitle">
+        <header>
+            <div>
+                <span class="admin-booking-reference" data-detail-reference></span>
+                <h2 id="adminBookingDetailTitle" data-detail-guest>Booking details</h2>
+            </div>
+            <button type="button" class="admin-booking-modal-close" data-booking-modal-close aria-label="Close">&times;</button>
+        </header>
+        <div class="admin-booking-detail-body" data-booking-detail>
+            <p>Loading details…</p>
+        </div>
+        <footer class="admin-booking-detail-actions" data-booking-detail-actions></footer>
+    </section>
+</div>

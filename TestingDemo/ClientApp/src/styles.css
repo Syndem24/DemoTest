@@ -533,6 +533,12 @@
   border-color: var(--navy-line);
 }
 
+.rm-pill.is-occupied {
+  background: rgba(11, 31, 58, 0.92);
+  color: var(--white);
+  border-color: rgba(11, 31, 58, 0.92);
+}
+
 .rm-actions {
   display: flex;
   gap: 0.35rem;
@@ -871,4 +877,117 @@ body.rm-photo-zoom-open {
   width: min(100%, 720px);
   color: rgba(255, 255, 255, 0.9);
   font-size: 0.85rem;
+}
+
+.rm-card-guest {
+  margin: 0.35rem 0 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--teal);
+}
+
+.rm-btn-sm {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+  border-radius: 8px;
+}
+
+.rm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(11, 31, 58, 0.48);
+  animation: rm-fade-in 0.2s ease;
+}
+
+.rm-modal {
+  width: min(100%, 28rem);
+  max-height: min(90vh, 40rem);
+  overflow: auto;
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--navy-line);
+}
+
+.rm-modal-head,
+.rm-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.15rem;
+}
+
+.rm-modal-head {
+  border-bottom: 1px solid var(--navy-line);
+}
+
+.rm-modal-eyebrow {
+  margin: 0 0 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+
+.rm-modal-head h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.rm-modal-body {
+  padding: 1rem 1.15rem;
+}
+
+.rm-modal-actions {
+  border-top: 1px solid var(--navy-line);
+  justify-content: flex-end;
+}
+
+.rm-stay-summary {
+  margin: 0;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.rm-stay-summary > div {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.rm-stay-summary dt {
+  margin: 0;
+  color: rgba(11, 31, 58, 0.65);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.rm-stay-summary dd {
+  margin: 0;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.rm-stay-summary a {
+  color: var(--navy);
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+
+.rm-stay-summary a:hover {
+  color: var(--teal);
+}
+
+@media (max-width: 560px) {
+  .rm-stay-summary > div {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
 }

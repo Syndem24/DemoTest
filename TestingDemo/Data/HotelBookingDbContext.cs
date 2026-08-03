@@ -17,6 +17,10 @@ public class HotelBookingDbContext : DbContext
 
     public DbSet<Room> Rooms => Set<Room>();
     public DbSet<RoomType> RoomTypes => Set<RoomType>();
+    public DbSet<Booking> Bookings => Set<Booking>();
+    public DbSet<BookingItem> BookingItems => Set<BookingItem>();
+    public DbSet<AssignedRoom> AssignedRooms => Set<AssignedRoom>();
+    public DbSet<StaffUser> StaffUsers => Set<StaffUser>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,11 +31,10 @@ public class HotelBookingDbContext : DbContext
             entity.ToTable("RoomType");
             entity.HasKey(e => e.RoomTypeId);
             entity.Property(e => e.RoomTypeId).HasColumnName("RoomTypeID");
-            entity.Property(e => e.TypeName).HasMaxLength(100).IsRequired();
-            entity.HasIndex(e => e.TypeName).IsUnique();
+            entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+            entity.HasIndex(e => e.Name).IsUnique();
             entity.Property(e => e.Description).HasMaxLength(5000);
             ConfigureStringList(entity.Property(e => e.Inclusions));
-            ConfigureCustomCategories(entity.Property(e => e.CustomCategories));
             ConfigureStringList(entity.Property(e => e.Images));
         });
 
@@ -53,6 +56,79 @@ public class HotelBookingDbContext : DbContext
                 .HasForeignKey(e => e.RoomTypeId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
+
+        modelBuilder.Entity<Booking>(entity =>
+        {
+            entity.ToTable("Booking");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Reference).HasMaxLength(24).IsRequired();
+            entity.HasIndex(e => e.Reference).IsUnique();
+            entity.Property(e => e.GuestName).HasMaxLength(120).IsRequired();
+            entity.Property(e => e.GuestEmail).HasMaxLength(254).IsRequired();
+            entity.Property(e => e.GuestPhone).HasMaxLength(40).IsRequired();
+            entity.Property(e => e.CheckIn).HasColumnType("date");
+            entity.Property(e => e.CheckOut).HasColumnType("date");
+            entity.Property(e => e.Kind)
+                .HasConversion<string>()
+                .HasMaxLength(20)
+                .IsRequired();
+            entity.Property(e => e.PaymentOption)
+                .HasConversion<string>()
+                .HasMaxLength(20)
+                .IsRequired();
+            entity.Property(e => e.Status)
+                .HasConversion<string>()
+                .HasMaxLength(20)
+                .IsRequired();
+            entity.Property(e => e.TotalAmount).HasPrecision(18, 2);
+            entity.Property(e => e.AmountDueNow).HasPrecision(18, 2);
+            entity.Property(e => e.RowVersion).IsRowVersion();
+            entity.HasIndex(e => new { e.IsArchived, e.Status, e.CheckIn, e.CheckOut });
+            entity.HasIndex(e => e.CreatedAtUtc);
+        });
+
+        modelBuilder.Entity<BookingItem>(entity =>
+        {
+            entity.ToTable("BookingItem");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.RoomTypeName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.PricePerNight).HasPrecision(18, 2);
+            entity.HasIndex(e => new { e.BookingId, e.RoomTypeId }).IsUnique();
+            entity.HasOne(e => e.Booking)
+                .WithMany(b => b.Items)
+                .HasForeignKey(e => e.BookingId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.RoomType)
+                .WithMany()
+                .HasForeignKey(e => e.RoomTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AssignedRoom>(entity =>
+        {
+            entity.ToTable("AssignedRoom");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.BookingItemId, e.RoomId }).IsUnique();
+            entity.HasIndex(e => e.RoomId);
+            entity.HasOne(e => e.BookingItem)
+                .WithMany(item => item.AssignedRooms)
+                .HasForeignKey(e => e.BookingItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Room)
+                .WithMany()
+                .HasForeignKey(e => e.RoomId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<StaffUser>(entity =>
+        {
+            entity.ToTable("StaffUser");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Username).HasMaxLength(80).IsRequired();
+            entity.HasIndex(e => e.Username).IsUnique();
+            entity.Property(e => e.DisplayName).HasMaxLength(120).IsRequired();
+            entity.Property(e => e.PasswordHash).HasMaxLength(500).IsRequired();
+        });
     }
 
     private static void ConfigureStringList(PropertyBuilder<List<string>> property)
@@ -73,29 +149,5 @@ public class HotelBookingDbContext : DbContext
                     : value.Aggregate(0, (hash, item) =>
                         HashCode.Combine(hash, StringComparer.OrdinalIgnoreCase.GetHashCode(item))),
                 value => value == null ? new List<string>() : value.ToList()));
-    }
-
-    private static void ConfigureCustomCategories(PropertyBuilder<List<CustomInclusionCategory>> property)
-    {
-        property
-            .HasConversion(
-                v => JsonSerializer.Serialize(v ?? new List<CustomInclusionCategory>(), JsonOptions),
-                v => string.IsNullOrWhiteSpace(v)
-                    ? new List<CustomInclusionCategory>()
-                    : JsonSerializer.Deserialize<List<CustomInclusionCategory>>(v, JsonOptions)
-                      ?? new List<CustomInclusionCategory>())
-            .HasColumnType("nvarchar(max)")
-            .Metadata.SetValueComparer(new ValueComparer<List<CustomInclusionCategory>>(
-                (left, right) =>
-                    JsonSerializer.Serialize(left ?? new List<CustomInclusionCategory>(), JsonOptions)
-                    == JsonSerializer.Serialize(right ?? new List<CustomInclusionCategory>(), JsonOptions),
-                value => JsonSerializer.Serialize(value ?? new List<CustomInclusionCategory>(), JsonOptions).GetHashCode(),
-                value => value == null
-                    ? new List<CustomInclusionCategory>()
-                    : value.Select(c => new CustomInclusionCategory
-                    {
-                        Name = c.Name,
-                        Items = c.Items == null ? new List<string>() : c.Items.ToList()
-                    }).ToList()));
     }
 }

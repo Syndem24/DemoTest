@@ -10,7 +10,7 @@ public static class RoomMappings
         {
             Id = room.Id,
             RoomTypeId = room.RoomTypeId,
-            Name = room.RoomType?.TypeName ?? string.Empty,
+            Name = room.RoomType?.Name ?? string.Empty,
             RoomNumber = room.RoomNumber,
             Description = room.RoomType?.Description,
             PricePerNight = room.PricePerNight,
@@ -19,7 +19,6 @@ public static class RoomMappings
             Status = room.Status,
             CreatedAt = room.RoomType?.CreatedAt ?? default,
             Inclusions = NormalizeInclusions(room.RoomType?.Inclusions),
-            CustomCategories = NormalizeCustomCategories(room.RoomType?.CustomCategories),
             Images = NormalizeImages(room.RoomType?.Images)
         };
     }
@@ -31,26 +30,6 @@ public static class RoomMappings
             .Where(i => !string.IsNullOrWhiteSpace(i))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(i => i, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
-
-    public static List<CustomInclusionCategory> NormalizeCustomCategories(
-        IEnumerable<CustomInclusionCategory>? categories)
-    {
-        return (categories ?? Enumerable.Empty<CustomInclusionCategory>())
-            .Select(c => new CustomInclusionCategory
-            {
-                Name = (c.Name ?? string.Empty).Trim(),
-                Items = NormalizeInclusions(c.Items)
-            })
-            .Where(c => !string.IsNullOrWhiteSpace(c.Name))
-            .GroupBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(g => new CustomInclusionCategory
-            {
-                Name = g.First().Name,
-                Items = NormalizeInclusions(g.SelectMany(c => c.Items))
-            })
-            .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 

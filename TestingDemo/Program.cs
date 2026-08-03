@@ -1,9 +1,13 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using FluentValidation;
 using Microsoft.AspNetCore.Localization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using TestingDemo.Data;
+using TestingDemo.Hubs;
 using TestingDemo.Services;
 using TestingDemo.Validators;
 
@@ -26,7 +30,32 @@ try
         .AddJsonOptions(options =>
         {
             options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+            options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
         });
+
+    builder.Services.AddSignalR()
+        .AddJsonProtocol(options =>
+        {
+            options.PayloadSerializerOptions.PropertyNamingPolicy =
+                System.Text.Json.JsonNamingPolicy.CamelCase;
+            options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+        });
+
+    builder.Services.AddAntiforgery(options => options.HeaderName = "RequestVerificationToken");
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        options.AddPolicy("guest-bookings", context =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 5,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                    AutoReplenishment = true
+                }));
+    });
 
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
         ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
@@ -36,6 +65,7 @@ try
 
     builder.Services.AddValidatorsFromAssemblyContaining<CreateRoomDtoValidator>();
     builder.Services.AddScoped<IRoomService, RoomService>();
+    builder.Services.AddScoped<IBookingService, BookingService>();
 
     var app = builder.Build();
 
@@ -60,9 +90,10 @@ try
 
     app.UseRequestLocalization();
     app.UseRouting();
-    app.UseAuthorization();
+    app.UseRateLimiter();
     app.MapStaticAssets();
     app.MapControllers();
+    app.MapHub<BookingNotificationsHub>("/hubs/bookings");
     app.MapControllerRoute(
             name: "default",
             pattern: "{controller=Booking}/{action=Index}/{id?}")

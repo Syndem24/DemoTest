@@ -63,10 +63,7 @@
                 <partial name="_InclusionPicker" model="new InclusionPickerViewModel
                 {
                     SelectedInclusions = Model.SelectedInclusions,
-                    AvailableInclusions = Model.AvailableInclusions,
-                    CustomCategories = Model.CustomCategories?.Count > 0
-                        ? Model.CustomCategories
-                        : CustomCategoryFormHelper.Parse(Model.CustomCategoriesJson)
+                    AvailableInclusions = Model.AvailableInclusions
                 }" />
             </div>
         </div>

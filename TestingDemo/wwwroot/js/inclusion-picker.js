@@ -17,10 +17,6 @@
             || null;
     }
 
-    function getCategoryItemsContainer(categoryName) {
-        return getCategoryRoot(categoryName)?.querySelector('.inclusion-category-items') || null;
-    }
-
     function getCategoryItemCheckboxes(categoryRoot) {
         return Array.from(categoryRoot.querySelectorAll('.inclusion-category-items input[name="SelectedInclusions"]'));
     }
@@ -79,181 +75,12 @@
         syncCategorySelectAll(getCategoryRoot('Custom'));
     }
 
-    function categoryExists(name) {
-        return !!getCategoryRoot(name);
-    }
-
-    function addCategoryOption(name) {
-        const select = document.getElementById('newInclusionCategory');
-        if (!select) {
-            return;
-        }
-
-        const exists = Array.from(select.options)
-            .some(opt => opt.value.toLowerCase() === name.toLowerCase());
-        if (exists) {
-            return;
-        }
-
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
-
-        const customOption = Array.from(select.options)
-            .find(opt => opt.value.toLowerCase() === 'custom');
-        if (customOption) {
-            select.insertBefore(option, customOption);
-        } else {
-            select.appendChild(option);
-        }
-    }
-
-    function removeCategoryOption(name) {
-        const select = document.getElementById('newInclusionCategory');
-        if (!select) {
-            return;
-        }
-
-        Array.from(select.options)
-            .filter(opt => opt.value.toLowerCase() === name.toLowerCase())
-            .forEach(opt => opt.remove());
-
-        if (!select.value) {
-            select.value = 'Custom';
-        }
-    }
-
-    function createUserCategory(name) {
-        const list = document.getElementById('inclusionList');
-        const customRoot = document.getElementById('customInclusionCategory');
-        if (!list || !customRoot) {
-            return null;
-        }
-
-        const categoryId = toSafeId(name);
-        const root = document.createElement('div');
-        root.className = 'inclusion-category';
-        root.dataset.category = name;
-        root.dataset.userCategory = 'true';
-
-        const header = document.createElement('div');
-        header.className = 'inclusion-category-header';
-
-        const selectAllWrap = document.createElement('div');
-        selectAllWrap.className = 'form-check inclusion-category-select-all mb-0';
-
-        const selectAll = document.createElement('input');
-        selectAll.className = 'form-check-input inclusion-select-all';
-        selectAll.type = 'checkbox';
-        selectAll.id = `category_all_${categoryId}`;
-        selectAll.dataset.categoryToggle = name;
-        selectAll.disabled = true;
-
-        const label = document.createElement('label');
-        label.className = 'form-check-label';
-        label.htmlFor = selectAll.id;
-        label.innerHTML =
-            `<span class="inclusion-category-name"></span>` +
-            `<span class="inclusion-select-all-hint">Select all in this category</span>`;
-        label.querySelector('.inclusion-category-name').textContent = name;
-
-        selectAllWrap.appendChild(selectAll);
-        selectAllWrap.appendChild(label);
-
-        const deleteBtn = document.createElement('button');
-        deleteBtn.type = 'button';
-        deleteBtn.className = 'btn btn-sm btn-outline-danger delete-category-btn';
-        deleteBtn.dataset.category = name;
-        deleteBtn.title = 'Delete this category';
-        deleteBtn.setAttribute('aria-label', `Delete category ${name}`);
-        deleteBtn.textContent = 'Delete category';
-
-        header.appendChild(selectAllWrap);
-        header.appendChild(deleteBtn);
-
-        const items = document.createElement('div');
-        items.className = 'inclusion-category-items';
-
-        root.appendChild(header);
-        root.appendChild(items);
-        list.insertBefore(root, customRoot);
-        addCategoryOption(name);
-        return root;
-    }
-
-    function collectCustomCategoriesJson() {
-        const list = document.getElementById('inclusionList');
-        if (!list) {
-            return '[]';
-        }
-
-        const byName = new Map();
-
-        function ensureCategory(name) {
-            const key = name.toLowerCase();
-            if (!byName.has(key)) {
-                byName.set(key, { Name: name, Items: [] });
-            }
-            return byName.get(key);
-        }
-
-        function pushItem(category, itemName) {
-            const item = (itemName || '').trim();
-            if (!item) return;
-            if (!category.Items.some(i => i.toLowerCase() === item.toLowerCase())) {
-                category.Items.push(item);
-            }
-        }
-
-        // User-defined categories (full item lists).
-        list.querySelectorAll('.inclusion-category[data-user-category="true"]').forEach(root => {
-            const name = (root.dataset.category || '').trim();
-            if (!name) return;
-            const category = ensureCategory(name);
-            category.Name = name;
-            root.querySelectorAll('[data-inclusion-name]').forEach(el => {
-                pushItem(category, el.dataset.inclusionName);
-            });
-        });
-
-        // Extra items added under built-in catalog categories.
-        list.querySelectorAll('.inclusion-category[data-built-in="true"]').forEach(root => {
-            const name = (root.dataset.category || '').trim();
-            if (!name) return;
-            const extras = Array.from(
-                root.querySelectorAll('[data-inclusion-name][data-inclusion-default="false"]')
-            );
-            if (!extras.length) return;
-            const category = ensureCategory(name);
-            category.Name = name;
-            extras.forEach(el => pushItem(category, el.dataset.inclusionName));
-        });
-
-        // Reserved Custom bucket.
-        const customRoot = document.getElementById('customInclusionCategory');
-        if (customRoot) {
-            const customItems = Array.from(customRoot.querySelectorAll('[data-inclusion-name]'))
-                .map(el => (el.dataset.inclusionName || '').trim())
-                .filter(Boolean);
-            if (customItems.length) {
-                const category = ensureCategory('Custom');
-                category.Name = 'Custom';
-                customItems.forEach(item => pushItem(category, item));
-            }
-        }
-
-        return JSON.stringify(
-            Array.from(byName.values()).filter(c => c.Name && c.Items.length > 0)
-        );
-    }
-
-    function appendCheckbox(name, checked, categoryName) {
+    function appendCheckbox(name, checked) {
         const list = document.getElementById('inclusionList');
         if (!list) {
             return;
         }
 
-        const targetCategory = (categoryName || 'Custom').trim() || 'Custom';
         const existing = Array.from(list.querySelectorAll('[data-inclusion-name]'))
             .find(el => el.dataset.inclusionName.toLowerCase() === name.toLowerCase());
 
@@ -266,25 +93,18 @@
             return;
         }
 
-        if (!getCategoryRoot(targetCategory) && targetCategory.toLowerCase() !== 'custom') {
-            createUserCategory(targetCategory);
-        }
-
-        const container = getCategoryItemsContainer(targetCategory)
-            || document.getElementById('customInclusionItems');
+        const container = document.getElementById('customInclusionItems');
         if (!container) {
             return;
         }
 
-        if (container.id === 'customInclusionItems') {
-            document.getElementById('inclusionEmptyState')?.remove();
-        }
+        document.getElementById('inclusionEmptyState')?.remove();
 
         const wrapper = document.createElement('div');
         wrapper.className = 'form-check inclusion-custom-row';
         wrapper.dataset.inclusionName = name;
         wrapper.dataset.inclusionDefault = 'false';
-        wrapper.dataset.inclusionCategory = targetCategory;
+        wrapper.dataset.inclusionCategory = 'Custom';
 
         const inputId = `inclusion_${toSafeId(name)}`;
 
@@ -314,7 +134,7 @@
         wrapper.appendChild(button);
         container.appendChild(wrapper);
         syncCustomEmptyState();
-        syncCategorySelectAll(container.closest('.inclusion-category'));
+        syncCategorySelectAll(getCategoryRoot('Custom'));
     }
 
     window.initInclusionPicker = function () {
@@ -322,17 +142,12 @@
         const inclusionBtn = document.getElementById('addInclusionBtn');
         const inclusionList = document.getElementById('inclusionList');
         const inclusionError = document.getElementById('inclusionError');
-        const categorySelect = document.getElementById('newInclusionCategory');
-        const categoryInput = document.getElementById('newCategoryName');
-        const categoryBtn = document.getElementById('addCategoryBtn');
-        const customCategoriesJson = document.getElementById('customCategoriesJson');
         const form = inclusionList?.closest('form');
 
         if (!inclusionBtn || !inclusionList || !inclusionInput) {
             return;
         }
 
-        // Apply server-rendered indeterminate state for partial selections.
         inclusionList.querySelectorAll('.inclusion-select-all[data-indeterminate="true"]').forEach(input => {
             input.indeterminate = true;
             input.removeAttribute('data-indeterminate');
@@ -346,38 +161,8 @@
                 return;
             }
 
-            const category = categorySelect?.value?.trim() || 'Custom';
-            appendCheckbox(name, true, category);
+            appendCheckbox(name, true);
             inclusionInput.value = '';
-            inclusionError.textContent = '';
-            inclusionInput.focus();
-        };
-
-        const addCategory = () => {
-            const name = categoryInput?.value.trim() || '';
-            if (!name) {
-                inclusionError.textContent = 'Enter a category name.';
-                return;
-            }
-
-            if (name.toLowerCase() === 'custom') {
-                inclusionError.textContent = '“Custom” is reserved. Choose another name.';
-                return;
-            }
-
-            if (categoryExists(name)) {
-                inclusionError.textContent = 'That category already exists.';
-                categorySelect.value = getCategoryRoot(name)?.dataset.category || name;
-                return;
-            }
-
-            createUserCategory(name);
-            if (categorySelect) {
-                categorySelect.value = name;
-            }
-            if (categoryInput) {
-                categoryInput.value = '';
-            }
             inclusionError.textContent = '';
             inclusionInput.focus();
         };
@@ -407,29 +192,6 @@
         });
 
         inclusionList.addEventListener('click', event => {
-            const deleteCategoryBtn = event.target.closest('.delete-category-btn');
-            if (deleteCategoryBtn) {
-                event.preventDefault();
-                event.stopPropagation();
-
-                const categoryName = deleteCategoryBtn.dataset.category;
-                const categoryRoot = getCategoryRoot(categoryName || '');
-                if (!categoryRoot || categoryRoot.dataset.userCategory !== 'true') {
-                    return;
-                }
-
-                const customItems = document.getElementById('customInclusionItems');
-                categoryRoot.querySelectorAll('[data-inclusion-name]').forEach(row => {
-                    row.dataset.inclusionCategory = 'Custom';
-                    customItems?.appendChild(row);
-                });
-                categoryRoot.remove();
-                removeCategoryOption(categoryName);
-                syncCustomEmptyState();
-                inclusionError.textContent = '';
-                return;
-            }
-
             const button = event.target.closest('.delete-inclusion-btn');
             if (!button) {
                 return;
@@ -455,12 +217,7 @@
             inclusionError.textContent = '';
         });
 
-        // Only checked SelectedInclusions are posted; always sync custom categories JSON.
         form?.addEventListener('submit', () => {
-            if (customCategoriesJson) {
-                customCategoriesJson.value = collectCustomCategoriesJson();
-            }
-
             inclusionList.querySelectorAll('input[name="SelectedInclusions"]').forEach(input => {
                 if (!input.checked) {
                     input.disabled = true;
@@ -469,19 +226,11 @@
         });
 
         inclusionBtn.addEventListener('click', addInclusion);
-        categoryBtn?.addEventListener('click', addCategory);
 
         inclusionInput.addEventListener('keydown', event => {
             if (event.key === 'Enter') {
                 event.preventDefault();
                 addInclusion();
-            }
-        });
-
-        categoryInput?.addEventListener('keydown', event => {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                addCategory();
             }
         });
     };

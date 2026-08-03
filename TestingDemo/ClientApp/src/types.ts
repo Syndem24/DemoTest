@@ -1,4 +1,4 @@
-export type RoomStatus = 'Available' | 'Unavailable'
+export type RoomStatus = 'Available' | 'Unavailable' | 'Occupied'
 
 export type RoomTypeSummary = {
   roomTypeId: number
@@ -25,6 +25,9 @@ export type RoomItem = {
   status: RoomStatus
   inclusions: string[]
   images: string[]
+  currentGuestName?: string | null
+  currentBookingReference?: string | null
+  currentBookingId?: number | null
 }
 
 export type ViewMode = 'types' | 'list'

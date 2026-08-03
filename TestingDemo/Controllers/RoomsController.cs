@@ -1,4 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
+using TestingDemo.Hubs;
+using TestingDemo.Models;
 using TestingDemo.Services;
 using TestingDemo.ViewModels;
 
@@ -7,11 +10,19 @@ namespace TestingDemo.Controllers;
 public class RoomsController : Controller
 {
     private readonly IRoomService _roomService;
+    private readonly IBookingService _bookingService;
+    private readonly IHubContext<BookingNotificationsHub, IBookingNotificationsClient> _hub;
     private readonly IWebHostEnvironment _environment;
 
-    public RoomsController(IRoomService roomService, IWebHostEnvironment environment)
+    public RoomsController(
+        IRoomService roomService,
+        IBookingService bookingService,
+        IHubContext<BookingNotificationsHub, IBookingNotificationsClient> hub,
+        IWebHostEnvironment environment)
     {
         _roomService = roomService;
+        _bookingService = bookingService;
+        _hub = hub;
         _environment = environment;
     }
 
@@ -171,7 +182,47 @@ public class RoomsController : Controller
             return NotFound();
         }
 
-        return View(room);
+        var currentStay = room.Status == RoomStatus.Occupied
+            ? await _bookingService.GetActiveStayByRoomIdAsync(id, cancellationToken)
+            : null;
+
+        return View(new RoomDetailsViewModel
+        {
+            Room = room,
+            CurrentStay = currentStay
+        });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Checkout(
+        int id,
+        string rowVersion,
+        CancellationToken cancellationToken)
+    {
+        var stay = await _bookingService.GetActiveStayByRoomIdAsync(id, cancellationToken);
+        if (stay is null)
+        {
+            TempData["Error"] = "No confirmed guest stay is assigned to this room.";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        try
+        {
+            var booking = await _bookingService.CheckoutAsync(
+                stay.Id,
+                rowVersion,
+                cancellationToken);
+            await _hub.Clients.All.BookingArchived(booking.Id);
+            TempData["Success"] =
+                $"Checked out {booking.Reference}. Room is available again.";
+            return RedirectToAction(nameof(Index), new { view = "list" });
+        }
+        catch (BookingConcurrencyException ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Details), new { id });
+        }
     }
 
     public async Task<IActionResult> Create(CancellationToken cancellationToken)

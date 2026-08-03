@@ -15,13 +15,18 @@ public class BookingController : Controller
     }
 
     [HttpGet]
-    public IActionResult Index()
+    public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
-        return View();
+        return View(await BuildPageModelAsync(cancellationToken));
     }
 
     [HttpGet]
     public async Task<IActionResult> Accommodations(CancellationToken cancellationToken)
+    {
+        return View(await BuildPageModelAsync(cancellationToken));
+    }
+
+    private async Task<BookingPageViewModel> BuildPageModelAsync(CancellationToken cancellationToken)
     {
         var rooms = await _roomService.GetAllAsync(cancellationToken);
         var available = rooms
@@ -36,6 +41,6 @@ public class BookingController : Controller
                 .ToList()
         };
 
-        return View(model);
+        return model;
     }
 }

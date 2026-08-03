@@ -3,10 +3,12 @@ import type { RoomItem, RoomTypeSummary } from './types'
 async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
     headers: { Accept: 'application/json' },
+    credentials: 'same-origin',
   })
 
   if (!response.ok) {
-    throw new Error(`Request failed (${response.status})`)
+    const payload = (await response.json().catch(() => ({}))) as { message?: string }
+    throw new Error(payload.message || `Request failed (${response.status})`)
   }
 
   return response.json() as Promise<T>

@@ -1,6 +1,5 @@
 @model TestingDemo.ViewModels.InclusionPickerViewModel
 @using TestingDemo.Services
-@using TestingDemo.Models
 
 @{
     var selectedSet = new HashSet<string>(
@@ -17,56 +16,11 @@
 
     var catalogSet = new HashSet<string>(catalogItems, StringComparer.OrdinalIgnoreCase);
 
-    var normalizedCustomCategories = (Model.CustomCategories ?? new List<CustomInclusionCategory>())
-        .Where(c => !string.IsNullOrWhiteSpace(c.Name))
-        .Select(c => new CustomInclusionCategory
-        {
-            Name = c.Name.Trim(),
-            Items = (c.Items ?? new List<string>())
-                .Where(i => !string.IsNullOrWhiteSpace(i))
-                .Select(i => i.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(i => i, StringComparer.OrdinalIgnoreCase)
-                .ToList()
-        })
-        .GroupBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-        .Select(g => g.First())
-        .ToList();
-
-    // Extras saved under a built-in catalog category name.
-    var builtInExtras = InclusionCatalog.Categories.ToDictionary(
-        c => c.Name,
-        c => normalizedCustomCategories
-            .FirstOrDefault(x => x.Name.Equals(c.Name, StringComparison.OrdinalIgnoreCase))
-            ?.Items
-            .Where(i => !catalogSet.Contains(i))
-            .ToList()
-            ?? new List<string>(),
-        StringComparer.OrdinalIgnoreCase);
-
-    var userCategories = normalizedCustomCategories
-        .Where(c => !c.Name.Equals("Custom", StringComparison.OrdinalIgnoreCase)
-                    && !InclusionCatalog.Categories.Any(d => d.Name.Equals(c.Name, StringComparison.OrdinalIgnoreCase)))
-        .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-        .ToList();
-
-    var assignedItemSet = new HashSet<string>(
-        catalogItems
-            .Concat(builtInExtras.Values.SelectMany(i => i))
-            .Concat(userCategories.SelectMany(c => c.Items)),
-        StringComparer.OrdinalIgnoreCase);
-
-    var savedCustomBucket = normalizedCustomCategories
-        .FirstOrDefault(c => c.Name.Equals("Custom", StringComparison.OrdinalIgnoreCase))
-        ?.Items
-        ?? new List<string>();
-
     var customItems = Model.AvailableInclusions
         .Concat(Model.SelectedInclusions)
-        .Concat(savedCustomBucket)
         .Where(i => !string.IsNullOrWhiteSpace(i))
         .Select(i => i.Trim())
-        .Where(i => !assignedItemSet.Contains(i))
+        .Where(i => !catalogSet.Contains(i))
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .OrderBy(i => i, StringComparer.OrdinalIgnoreCase)
         .ToList();
@@ -85,11 +39,7 @@
         @foreach (var category in InclusionCatalog.Categories)
         {
             var categoryId = SafeId(category.Name);
-            var extraItems = builtInExtras.TryGetValue(category.Name, out var extras)
-                ? extras
-                : new List<string>();
-            var selectableItems = category.Items.Concat(extraItems).ToList();
-            var itemStates = selectableItems.Select(i => selectedSet.Contains(i)).ToList();
+            var itemStates = category.Items.Select(i => selectedSet.Contains(i)).ToList();
             var allChecked = itemStates.Count > 0 && itemStates.All(x => x);
             var someChecked = itemStates.Any(x => x) && !allChecked;
             <div class="inclusion-category" data-category="@category.Name" data-built-in="true">
@@ -120,89 +70,6 @@
                                    id="inclusion_@safeId"
                                    @(isChecked ? "checked" : null) />
                             <label class="form-check-label" for="inclusion_@safeId">@inclusion</label>
-                        </div>
-                    }
-                    @foreach (var inclusion in extraItems)
-                    {
-                        var isChecked = selectedSet.Contains(inclusion);
-                        var safeId = SafeId(inclusion);
-                        <div class="form-check inclusion-custom-row"
-                             data-inclusion-name="@inclusion"
-                             data-inclusion-default="false"
-                             data-inclusion-category="@category.Name">
-                            <input class="form-check-input"
-                                   type="checkbox"
-                                   name="SelectedInclusions"
-                                   value="@inclusion"
-                                   id="inclusion_@safeId"
-                                   @(isChecked ? "checked" : null) />
-                            <label class="form-check-label" for="inclusion_@safeId">@inclusion</label>
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-danger delete-inclusion-btn"
-                                    data-name="@inclusion"
-                                    title="Delete this custom inclusion"
-                                    aria-label="Delete @inclusion">
-                                Delete
-                            </button>
-                        </div>
-                    }
-                </div>
-            </div>
-        }
-
-        @foreach (var category in userCategories)
-        {
-            var categoryId = SafeId(category.Name);
-            var itemStates = category.Items.Select(i => selectedSet.Contains(i)).ToList();
-            var allChecked = itemStates.Count > 0 && itemStates.All(x => x);
-            var someChecked = itemStates.Any(x => x) && !allChecked;
-            <div class="inclusion-category"
-                 data-category="@category.Name"
-                 data-user-category="true">
-                <div class="inclusion-category-header">
-                    <div class="form-check inclusion-category-select-all mb-0">
-                        <input class="form-check-input inclusion-select-all"
-                               type="checkbox"
-                               id="category_all_@categoryId"
-                               data-category-toggle="@category.Name"
-                               @(allChecked ? "checked" : null)
-                               @(someChecked ? "data-indeterminate=true" : null) />
-                        <label class="form-check-label" for="category_all_@categoryId">
-                            <span class="inclusion-category-name">@category.Name</span>
-                            <span class="inclusion-select-all-hint">Select all in this category</span>
-                        </label>
-                    </div>
-                    <button type="button"
-                            class="btn btn-sm btn-outline-danger delete-category-btn"
-                            data-category="@category.Name"
-                            title="Delete this category"
-                            aria-label="Delete category @category.Name">
-                        Delete category
-                    </button>
-                </div>
-                <div class="inclusion-category-items">
-                    @foreach (var inclusion in category.Items)
-                    {
-                        var isChecked = selectedSet.Contains(inclusion);
-                        var safeId = SafeId(inclusion);
-                        <div class="form-check inclusion-custom-row"
-                             data-inclusion-name="@inclusion"
-                             data-inclusion-default="false"
-                             data-inclusion-category="@category.Name">
-                            <input class="form-check-input"
-                                   type="checkbox"
-                                   name="SelectedInclusions"
-                                   value="@inclusion"
-                                   id="inclusion_@safeId"
-                                   @(isChecked ? "checked" : null) />
-                            <label class="form-check-label" for="inclusion_@safeId">@inclusion</label>
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-danger delete-inclusion-btn"
-                                    data-name="@inclusion"
-                                    title="Delete this custom inclusion"
-                                    aria-label="Delete @inclusion">
-                                Delete
-                            </button>
                         </div>
                     }
                 </div>
@@ -261,37 +128,15 @@
         </div>
     </div>
 
-    <input type="hidden" name="CustomCategoriesJson" id="customCategoriesJson" value="" />
-
-    <div class="inclusion-add-category-row mb-2">
-        <input type="text"
-               id="newCategoryName"
-               class="form-control form-control-sm"
-               placeholder="New category name..."
-               maxlength="80" />
-        <button type="button" class="btn btn-sm btn-outline-secondary" id="addCategoryBtn">Add category</button>
-    </div>
-
     <div class="inclusion-add-row">
-        <select id="newInclusionCategory" class="form-select form-select-sm" aria-label="Inclusion category">
-            @foreach (var category in InclusionCatalog.Categories)
-            {
-                <option value="@category.Name">@category.Name</option>
-            }
-            @foreach (var category in userCategories)
-            {
-                <option value="@category.Name">@category.Name</option>
-            }
-            <option value="Custom" selected>Custom</option>
-        </select>
         <input type="text"
                id="newInclusionName"
                class="form-control form-control-sm"
                list="inclusionSuggestions"
-               placeholder="Add inclusion..."
+               placeholder="Add custom inclusion..."
                maxlength="100" />
         <datalist id="inclusionSuggestions">
-            @foreach (var suggestion in assignedItemSet.Concat(customItems).Distinct(StringComparer.OrdinalIgnoreCase))
+            @foreach (var suggestion in catalogItems.Concat(customItems).Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 <option value="@suggestion"></option>
             }
@@ -299,5 +144,5 @@
         <button type="button" class="btn btn-sm btn-outline-primary" id="addInclusionBtn">Add</button>
     </div>
     <div id="inclusionError" class="text-danger small mt-1"></div>
-    <div class="form-text">Add a category if you need one, choose it, then add inclusions. Only checked items are saved.</div>
+    <div class="form-text">Checked catalog items and custom inclusions are saved as a single list.</div>
 </div>

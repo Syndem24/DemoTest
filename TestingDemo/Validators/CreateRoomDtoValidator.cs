@@ -7,7 +7,7 @@ public class CreateRoomDtoValidator : AbstractValidator<CreateRoomDto>
 {
     public CreateRoomDtoValidator()
     {
-        RuleFor(x => x.TypeName)
+        RuleFor(x => x.Name)
             .NotEmpty().WithMessage("Room type is required.")
             .MaximumLength(100);
 

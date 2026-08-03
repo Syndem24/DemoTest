@@ -13,6 +13,5 @@ public class RoomDto
     public RoomStatus Status { get; set; } = RoomStatus.Available;
     public DateTime CreatedAt { get; set; }
     public List<string> Inclusions { get; set; } = new();
-    public List<CustomInclusionCategory> CustomCategories { get; set; } = new();
     public List<string> Images { get; set; } = new();
 }

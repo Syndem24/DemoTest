@@ -10,6 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fullcalendar/core": "^6.1.21",
+    "@fullcalendar/daygrid": "^6.1.21",
+    "@fullcalendar/list": "^6.1.21",
+    "@microsoft/signalr": "^10.0.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

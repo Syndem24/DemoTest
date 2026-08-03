@@ -44,13 +44,6 @@ public class RoomFormViewModel
 
     public List<string> AvailableInclusions { get; set; } = new();
 
-    /// <summary>
-    /// JSON payload of user-defined inclusion categories from the inclusion picker.
-    /// </summary>
-    public string? CustomCategoriesJson { get; set; }
-
-    public List<CustomInclusionCategory> CustomCategories { get; set; } = new();
-
     public static RoomFormViewModel FromDto(RoomDto dto)
     {
         return new RoomFormViewModel
@@ -63,8 +56,7 @@ public class RoomFormViewModel
             PricePerNight = dto.PricePerNight,
             MaxOccupancy = dto.MaxOccupancy,
             BedCount = dto.BedCount,
-            SelectedInclusions = dto.Inclusions.ToList(),
-            CustomCategories = dto.CustomCategories.ToList()
+            SelectedInclusions = dto.Inclusions.ToList()
         };
     }
 
@@ -74,14 +66,13 @@ public class RoomFormViewModel
         {
             Id = Id,
             RoomTypeId = RoomTypeId,
-            TypeName = Name,
+            Name = Name,
             RoomNumber = RoomNumber,
             Description = Description,
             PricePerNight = PricePerNight,
             MaxOccupancy = MaxOccupancy,
             BedCount = BedCount,
-            Inclusions = SelectedInclusions ?? new List<string>(),
-            CustomCategories = CustomCategoryFormHelper.Parse(CustomCategoriesJson)
+            Inclusions = SelectedInclusions ?? new List<string>()
         };
     }
 }

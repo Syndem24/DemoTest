@@ -16,6 +16,12 @@ type Props = {
 
 type LayoutMode = 'grid' | 'list'
 
+function statusClass(status: string) {
+  if (status === 'Available') return 'is-available'
+  if (status === 'Occupied') return 'is-occupied'
+  return 'is-unavailable'
+}
+
 type RoomTypeGroup = {
   roomTypeId: number
   name: string
@@ -114,7 +120,7 @@ function RoomCard({ room }: { room: RoomItem }) {
         ) : (
           <div className="rm-card-media-empty">No photo</div>
         )}
-        <span className={`rm-pill rm-card-status ${room.status === 'Available' ? 'is-available' : 'is-unavailable'}`}>
+        <span className={`rm-pill rm-card-status ${statusClass(room.status)}`}>
           {room.status}
         </span>
       </div>
@@ -126,6 +132,9 @@ function RoomCard({ room }: { room: RoomItem }) {
               <h3 className="rm-card-title">Room {room.roomNumber}</h3>
             </a>
             <p className="rm-card-type">{room.name}</p>
+            {room.status === 'Occupied' && room.currentGuestName ? (
+              <p className="rm-card-guest">{room.currentGuestName}</p>
+            ) : null}
           </div>
           <div className="rm-card-price">
             <strong>{formatMoney(room.pricePerNight)}</strong>
@@ -180,6 +189,8 @@ export function RoomListPanel({ data, loading, error }: Props) {
             item.description ?? '',
             item.inclusions.join(' '),
             item.status,
+            item.currentGuestName ?? '',
+            item.currentBookingReference ?? '',
           ]
             .join(' ')
             .toLowerCase()
@@ -212,7 +223,7 @@ export function RoomListPanel({ data, loading, error }: Props) {
         <Toolbar
           search={search}
           onSearchChange={setSearch}
-          placeholder="Search by room #, type, inclusion, status…"
+          placeholder="Search by room #, guest, type, inclusion, status…"
           resultCount={filtered.length}
           totalCount={data.length}
         />
@@ -322,10 +333,12 @@ export function RoomListPanel({ data, loading, error }: Props) {
                           <a className="rm-title-link" href={`/Rooms/Details/${room.id}`}>
                             <div className="rm-title">Room {room.roomNumber}</div>
                           </a>
-                          {room.description ? (
+                          {room.status === 'Occupied' && room.currentGuestName ? (
+                            <div className="rm-card-guest">{room.currentGuestName}</div>
+                          ) : room.description ? (
                             <div className="rm-muted rm-clamp">{room.description}</div>
                           ) : (
-                            <div className="rm-muted">Tap details for full info</div>
+                            <div className="rm-muted">Open details for guest checkout</div>
                           )}
                         </td>
                         <td>
@@ -356,7 +369,7 @@ export function RoomListPanel({ data, loading, error }: Props) {
                           )}
                         </td>
                         <td>
-                          <span className={`rm-pill ${room.status === 'Available' ? 'is-available' : 'is-unavailable'}`}>
+                          <span className={`rm-pill ${statusClass(room.status)}`}>
                             {room.status}
                           </span>
                         </td>

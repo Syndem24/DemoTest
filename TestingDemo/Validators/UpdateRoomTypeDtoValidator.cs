@@ -10,7 +10,7 @@ public class UpdateRoomTypeDtoValidator : AbstractValidator<UpdateRoomTypeDto>
         RuleFor(x => x.RoomTypeId)
             .GreaterThan(0);
 
-        RuleFor(x => x.TypeName)
+        RuleFor(x => x.Name)
             .NotEmpty().WithMessage("Room type is required.")
             .MaximumLength(100);
 
