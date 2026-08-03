@@ -243,26 +243,87 @@ a:hover {
   border-bottom: 1px solid var(--navy-line);
 }
 
+.admin-notification-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .admin-notification-items {
   display: grid;
 }
 
 .admin-notification-item {
   width: 100%;
-  display: grid;
-  gap: 0.2rem;
-  padding: 0.75rem 0.85rem;
-  text-align: left;
-  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.65rem 0.85rem;
   border-bottom: 1px solid var(--navy-line);
   background: var(--white);
   color: var(--navy);
-  cursor: pointer;
+  transition: background 0.15s ease;
 }
 
 .admin-notification-item.is-unread {
   background: var(--teal-soft);
   box-shadow: inset 3px 0 0 var(--teal);
+}
+
+.admin-notification-content {
+  flex: 1;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-notification-msg {
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
+  margin-top: 0.2rem;
+  display: inline-block;
+}
+
+.admin-notification-msg.is-warning {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.admin-notification-msg.is-info {
+  background: #e0f2fe;
+  color: #075985;
+  border: 1px solid #bae6fd;
+}
+
+.admin-notification-dismiss {
+  display: inline-grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(11, 31, 58, 0.45);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.admin-notification-dismiss:hover {
+  background: rgba(11, 31, 58, 0.12);
+  color: var(--navy);
 }
 
 .admin-notification-item span,

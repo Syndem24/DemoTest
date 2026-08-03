@@ -1531,14 +1531,35 @@
     return html;
   }
 
+  function clampGuestRoomsCapacity() {
+    for (let i = 0; i < guestRooms.length; i += 1) {
+      const room = guestRooms[i];
+      let a = Number(room.adults) || 1;
+      let c = Number(room.children) || 0;
+      if (a + c > MAX_GUESTS_PER_ROOM) {
+        c = Math.max(0, MAX_GUESTS_PER_ROOM - a);
+        if (a > MAX_GUESTS_PER_ROOM) a = MAX_GUESTS_PER_ROOM;
+        room.adults = a;
+        room.children = c;
+        if (Array.isArray(room.childAges)) {
+          room.childAges.length = c;
+        }
+      }
+    }
+  }
+
   function renderGuestsRooms() {
     const list = document.getElementById('guestsRoomList');
     if (!list) return;
+
+    clampGuestRoomsCapacity();
 
     list.innerHTML = guestRooms
       .map((room, index) => {
         const total = (Number(room.adults) || 0) + (Number(room.children) || 0);
         const overCapacity = total > MAX_GUESTS_PER_ROOM;
+        const atCapacity = total >= MAX_GUESTS_PER_ROOM;
+        const canInc = total < MAX_GUESTS_PER_ROOM;
         const canDecAdult = (Number(room.adults) || 0) > 1;
         const canDecChild = (Number(room.children) || 0) > 0;
         const removeBtn =
@@ -1566,11 +1587,11 @@
               </div>`
             : '';
 
-        const capacityMsg = overCapacity
-          ? `<p class="guest-room-capacity-msg">Guests (${total}) exceed this room’s capacity (${MAX_GUESTS_PER_ROOM}). Add another room or reduce guests.</p>`
-          : '';
+        const tooltipMsg = 'Maximum capacity reached (2 guests per room). Please add another room for additional guests.';
+        const tooltipAttr = !canInc ? ` data-tooltip="${tooltipMsg}"` : '';
+        const titleAttr = !canInc ? ` title="${tooltipMsg}"` : '';
 
-        return `<article class="guest-guests-room${overCapacity ? ' is-over-capacity' : ''}" data-guest-room="${index}">
+        return `<article class="guest-guests-room${atCapacity ? ' is-at-capacity' : ''}${overCapacity ? ' is-over-capacity' : ''}" data-guest-room="${index}">
           <div class="guest-guests-room-head">
             <h3>Room ${index + 1}</h3>
             ${removeBtn}
@@ -1579,22 +1600,29 @@
             <div class="guest-guests-counter">
               <span class="guest-guests-counter-label">Adults</span>
               <div class="guest-guests-stepper">
-                <button type="button" data-guest-step="adults" data-guest-room-index="${index}" data-guest-delta="-1" aria-label="Fewer adults in room ${index + 1}" ${canDecAdult ? '' : 'disabled'}>−</button>
+                <div class="guest-stepper-btn-wrap">
+                  <button type="button" data-guest-step="adults" data-guest-room-index="${index}" data-guest-delta="-1" aria-label="Fewer adults in room ${index + 1}" ${canDecAdult ? '' : 'disabled'}>−</button>
+                </div>
                 <span aria-live="polite">${room.adults}</span>
-                <button type="button" data-guest-step="adults" data-guest-room-index="${index}" data-guest-delta="1" aria-label="More adults in room ${index + 1}">+</button>
+                <div class="guest-stepper-btn-wrap${!canInc ? ' has-tooltip' : ''}"${tooltipAttr}>
+                  <button type="button" data-guest-step="adults" data-guest-room-index="${index}" data-guest-delta="1" aria-label="More adults in room ${index + 1}" ${canInc ? '' : 'disabled'}${titleAttr}>+</button>
+                </div>
               </div>
             </div>
             <div class="guest-guests-counter">
               <span class="guest-guests-counter-label">Children under 12 years old</span>
               <div class="guest-guests-stepper">
-                <button type="button" data-guest-step="children" data-guest-room-index="${index}" data-guest-delta="-1" aria-label="Fewer children in room ${index + 1}" ${canDecChild ? '' : 'disabled'}>−</button>
+                <div class="guest-stepper-btn-wrap">
+                  <button type="button" data-guest-step="children" data-guest-room-index="${index}" data-guest-delta="-1" aria-label="Fewer children in room ${index + 1}" ${canDecChild ? '' : 'disabled'}>−</button>
+                </div>
                 <span aria-live="polite">${room.children}</span>
-                <button type="button" data-guest-step="children" data-guest-room-index="${index}" data-guest-delta="1" aria-label="More children in room ${index + 1}">+</button>
+                <div class="guest-stepper-btn-wrap${!canInc ? ' has-tooltip' : ''}"${tooltipAttr}>
+                  <button type="button" data-guest-step="children" data-guest-room-index="${index}" data-guest-delta="1" aria-label="More children in room ${index + 1}" ${canInc ? '' : 'disabled'}${titleAttr}>+</button>
+                </div>
               </div>
             </div>
           </div>
           ${ages}
-          ${capacityMsg}
         </article>`;
       })
       .join('');
@@ -1619,14 +1647,28 @@
 
     const adults = Number(room.adults) || 0;
     const children = Number(room.children) || 0;
+    const currentTotal = adults + children;
+
+    if (delta > 0 && currentTotal >= MAX_GUESTS_PER_ROOM) {
+      showGuestsHint('Each room holds up to 2 guests. Please add another room for additional guests.');
+      return;
+    }
 
     if (field === 'adults') {
       const next = adults + delta;
       if (next < 1) return;
+      if (next + children > MAX_GUESTS_PER_ROOM) {
+        showGuestsHint('Each room holds up to 2 guests. Please add another room for additional guests.');
+        return;
+      }
       room.adults = next;
     } else {
       const next = children + delta;
       if (next < 0) return;
+      if (adults + next > MAX_GUESTS_PER_ROOM) {
+        showGuestsHint('Each room holds up to 2 guests. Please add another room for additional guests.');
+        return;
+      }
       room.children = next;
       while (room.childAges.length < next) room.childAges.push(null);
       room.childAges.length = next;
@@ -2027,6 +2069,12 @@
     const removeRoom = event.target.closest('[data-guest-remove-room]');
     if (removeRoom) {
       removeGuestRoom(Number(removeRoom.getAttribute('data-guest-remove-room') || -1));
+      return;
+    }
+
+    const inlineAddRoom = event.target.closest('[data-guest-add-room-inline]');
+    if (inlineAddRoom) {
+      addGuestRoom();
       return;
     }
 

@@ -40,6 +40,9 @@ public class Booking
     public DateTime? AdminReadAtUtc { get; set; }
     public bool IsArchived { get; set; }
     public DateTime? ArchivedAtUtc { get; set; }
+    public TimeOnly? CheckOutTime { get; set; }
+    public DateTime? CheckoutWarningSentAtUtc { get; set; }
+    public DateTime? AutoCheckedOutAtUtc { get; set; }
     public byte[] RowVersion { get; set; } = Array.Empty<byte>();
 
     public ICollection<BookingItem> Items { get; set; } = new List<BookingItem>();

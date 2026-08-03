@@ -61,11 +61,16 @@ try
         ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
     builder.Services.AddDbContext<HotelBookingDbContext>(options =>
-        options.UseSqlServer(connectionString));
+    {
+        options.UseSqlServer(connectionString);
+        options.ConfigureWarnings(warnings =>
+            warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+    });
 
     builder.Services.AddValidatorsFromAssemblyContaining<CreateRoomDtoValidator>();
     builder.Services.AddScoped<IRoomService, RoomService>();
     builder.Services.AddScoped<IBookingService, BookingService>();
+    builder.Services.AddHostedService<AutomaticCheckoutBackgroundService>();
 
     var app = builder.Build();
 
@@ -90,6 +95,7 @@ try
 
     app.UseRequestLocalization();
     app.UseRouting();
+    app.UseStatusCodePagesWithReExecute("/Home/NotFoundPage");
     app.UseRateLimiter();
     app.MapStaticAssets();
     app.MapControllers();
@@ -139,11 +145,6 @@ catch (Exception ex)
 
 static bool ShouldOpenBrowser(IHostEnvironment environment)
 {
-    if (!environment.IsDevelopment())
-    {
-        return false;
-    }
-
     var flag = Environment.GetEnvironmentVariable("HOTEL_OPEN_BROWSER");
     if (string.Equals(flag, "0", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(flag, "false", StringComparison.OrdinalIgnoreCase))
@@ -151,7 +152,7 @@ static bool ShouldOpenBrowser(IHostEnvironment environment)
         return false;
     }
 
-    // Default on in Development (also when HOTEL_OPEN_BROWSER=1).
+    // Default to true so browser opens automatically when running the app
     return true;
 }
 
@@ -165,10 +166,23 @@ static void TryOpenBrowser(string url)
             UseShellExecute = true
         });
     }
-    catch (Exception ex)
+    catch
     {
-        Console.WriteLine($"Could not open browser automatically: {ex.Message}");
-        Console.WriteLine($"Open manually: {url}");
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "cmd",
+                Arguments = $"/c start {url}",
+                CreateNoWindow = true,
+                UseShellExecute = false
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Could not open browser automatically: {ex.Message}");
+            Console.WriteLine($"Open manually in browser: {url}");
+        }
     }
 }
 

@@ -38,6 +38,9 @@ public interface IBookingService
         CancellationToken cancellationToken = default);
     Task<int> GetUnreadCountAsync(CancellationToken cancellationToken = default);
     Task<BookingDto?> MarkReadAsync(int id, CancellationToken cancellationToken = default);
+    Task MarkAllAsReadAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BookingDto>> AutoCheckoutExpiredBookingsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BookingDto>> ProcessCheckoutWarningsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AssignableRoomsByTypeDto>> GetAssignableRoomsAsync(
         int bookingId,
         CancellationToken cancellationToken = default);

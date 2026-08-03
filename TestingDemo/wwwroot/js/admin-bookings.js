@@ -10,6 +10,7 @@
   const panel = root.querySelector('[data-notification-panel]');
   const notificationItems = root.querySelector('[data-notification-items]');
   const soundButton = root.querySelector('[data-notification-sound]');
+  const clearButton = root.querySelector('[data-notification-clear]');
   const bookingsRoot = document.querySelector('[data-admin-bookings]');
   const bookingList = bookingsRoot?.querySelector('[data-bookings-list]');
   const bookingMessage = bookingsRoot?.querySelector('[data-bookings-message]');
@@ -85,6 +86,15 @@
     if (soundEnabled) unlockAudio();
   });
 
+  clearButton?.addEventListener('click', async () => {
+    try {
+      await apiFetch('/api/admin/bookings/notifications/read-all', { method: 'POST' });
+      await refreshNotifications();
+    } catch (error) {
+      console.error('Failed to clear notifications:', error);
+    }
+  });
+
   bell?.addEventListener('click', () => {
     const open = panel?.hidden ?? true;
     if (panel) panel.hidden = !open;
@@ -157,9 +167,12 @@
   }
 
   function notificationNode(item) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = `admin-notification-item${item.isRead ? '' : ' is-unread'}`;
+    const itemContainer = document.createElement('div');
+    itemContainer.className = `admin-notification-item${item.isRead ? '' : ' is-unread'}`;
+
+    const contentBtn = document.createElement('button');
+    contentBtn.type = 'button';
+    contentBtn.className = 'admin-notification-content';
 
     const title = document.createElement('strong');
     title.textContent = `${item.reference} · ${item.guestName}`;
@@ -167,16 +180,41 @@
     meta.textContent = `${displayEnum(item.kind)} · ${formatDate(item.checkIn)}`;
     const time = document.createElement('small');
     time.textContent = formatDateTime(item.createdAtUtc);
-    button.append(title, meta, time);
+    contentBtn.append(title, meta, time);
 
-    button.addEventListener('click', async () => {
+    if (item.message) {
+      const msg = document.createElement('div');
+      msg.className = `admin-notification-msg ${item.message.includes('Warning') ? 'is-warning' : 'is-info'}`;
+      msg.textContent = item.message;
+      contentBtn.append(msg);
+    }
+
+    contentBtn.addEventListener('click', async () => {
       try {
         await apiFetch(`/api/admin/bookings/${item.id}/read`, { method: 'POST' });
       } finally {
         window.location.assign(`/AdminBookings?booking=${item.id}`);
       }
     });
-    return button;
+
+    const dismissBtn = document.createElement('button');
+    dismissBtn.type = 'button';
+    dismissBtn.className = 'admin-notification-dismiss';
+    dismissBtn.setAttribute('aria-label', 'Clear notification');
+    dismissBtn.title = 'Clear notification';
+    dismissBtn.innerHTML = '&times;';
+    dismissBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      try {
+        await apiFetch(`/api/admin/bookings/${item.id}/read`, { method: 'POST' });
+        await refreshNotifications();
+      } catch (error) {
+        console.error('Failed to clear notification:', error);
+      }
+    });
+
+    itemContainer.append(contentBtn, dismissBtn);
+    return itemContainer;
   }
 
   async function refreshNotifications() {
@@ -188,7 +226,7 @@
       if (!payload.items?.length) {
         const empty = document.createElement('p');
         empty.className = 'admin-notification-empty';
-        empty.textContent = 'No bookings yet.';
+        empty.textContent = 'No new notifications.';
         notificationItems.append(empty);
         return;
       }

@@ -132,7 +132,8 @@ public sealed record BookingNotificationDto(
     BookingStatus Status,
     DateOnly CheckIn,
     DateTime CreatedAtUtc,
-    bool IsRead);
+    bool IsRead,
+    string? Message = null);
 
 public sealed record PagedBookingsDto(
     IReadOnlyList<BookingDto> Items,

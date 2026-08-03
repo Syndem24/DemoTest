@@ -1,0 +1,41 @@
+{
+  "name": "Mori International Hotel UI/UX Pro Max System",
+  "brandColors": {
+    "navy": {
+      "primary": "#0B1F3A",
+      "darkBg": "#061122",
+      "deepMidnight": "#040D1A",
+      "line": "rgba(11, 31, 58, 0.12)"
+    },
+    "teal": {
+      "primary": "#1AA6A6",
+      "emerald": "#0D9488",
+      "accent": "#2DD4BF",
+      "soft": "rgba(26, 166, 166, 0.08)",
+      "softBg": "#E6F7F7"
+    },
+    "white": {
+      "pure": "#FFFFFF",
+      "canvas": "#F4F8FA",
+      "surface": "#FAFDFF"
+    }
+  },
+  "typography": {
+    "display": {
+      "fontFamily": "Cormorant Garamond, Georgia, serif",
+      "weights": [600, 700]
+    },
+    "body": {
+      "fontFamily": "Outfit, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+      "weights": [400, 500, 600, 700]
+    }
+  },
+  "layout": {
+    "fullBleed": {
+      "width": "100vw",
+      "minHeight": "100vh",
+      "edgeToEdge": true
+    },
+    "gridScale": [8, 16, 24, 32, 48, 64]
+  }
+}

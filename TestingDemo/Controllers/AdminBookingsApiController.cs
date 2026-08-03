@@ -98,6 +98,38 @@ public sealed class AdminBookingsApiController : ControllerBase
         return Ok(booking);
     }
 
+    [HttpPost("notifications/read-all")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> MarkAllRead(CancellationToken cancellationToken)
+    {
+        await _bookingService.MarkAllAsReadAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    [HttpPost("process-auto-checkout")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ProcessAutoCheckout(CancellationToken cancellationToken)
+    {
+        var warnings = await _bookingService.ProcessCheckoutWarningsAsync(cancellationToken);
+        var autoCheckouts = await _bookingService.AutoCheckoutExpiredBookingsAsync(cancellationToken);
+
+        foreach (var booking in warnings)
+        {
+            await _hub.Clients.All.BookingUpdated(ToNotification(booking));
+        }
+
+        foreach (var booking in autoCheckouts)
+        {
+            await _hub.Clients.All.BookingUpdated(ToNotification(booking));
+        }
+
+        return Ok(new
+        {
+            warningsSent = warnings.Count,
+            autoCheckedOut = autoCheckouts.Count
+        });
+    }
+
     [HttpGet("{id:int}/assignable-rooms")]
     public async Task<ActionResult<IReadOnlyList<AssignableRoomsByTypeDto>>> GetAssignableRooms(
         int id,

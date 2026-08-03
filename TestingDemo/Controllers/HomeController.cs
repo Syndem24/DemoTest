@@ -24,6 +24,15 @@ namespace TestingDemo.Controllers
             return View();
         }
 
+        [Route("Home/NotFoundPage")]
+        [Route("NotFound")]
+        [Route("404")]
+        public IActionResult NotFoundPage()
+        {
+            Response.StatusCode = 404;
+            return View("NotFound");
+        }
+
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error()
         {

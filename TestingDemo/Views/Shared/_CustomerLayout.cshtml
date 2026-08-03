@@ -6,7 +6,12 @@
     var isAccommodations = string.Equals(controller, "Booking", StringComparison.OrdinalIgnoreCase)
         && string.Equals(action, "Accommodations", StringComparison.OrdinalIgnoreCase);
     var immersive = ViewData["GuestImmersive"] as bool? == true;
-    var shellClass = immersive ? "guest-shell guest-shell--immersive" : "guest-shell";
+    var isDarkPage = ViewData["GuestDarkPage"] as bool? == true
+        || string.Equals(action, "NotFoundPage", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(action, "NotFound", StringComparison.OrdinalIgnoreCase);
+    var shellClass = isDarkPage
+        ? "guest-shell guest-shell--dark-page guest-shell--full-bleed"
+        : (immersive ? "guest-shell guest-shell--immersive" : "guest-shell");
 }
 <!DOCTYPE html>
 <html lang="en">

@@ -31,6 +31,7 @@ public static class DatabaseBootstrap
             }
 
             db.Database.Migrate();
+            EnsureAutoCheckoutColumns(db);
         }
         catch (Exception ex) when (IsSqlConnectivityFailure(ex))
         {
@@ -217,5 +218,49 @@ public static class DatabaseBootstrap
         }
 
         return false;
+    }
+
+    private static void EnsureAutoCheckoutColumns(HotelBookingDbContext db)
+    {
+        try
+        {
+            var connection = db.Database.GetDbConnection();
+            var shouldClose = connection.State != System.Data.ConnectionState.Open;
+            if (shouldClose)
+            {
+                connection.Open();
+            }
+
+            try
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText =
+                    """
+                    IF OBJECT_ID(N'[dbo].[Booking]', N'U') IS NOT NULL
+                    BEGIN
+                        IF COL_LENGTH(N'dbo.Booking', N'CheckOutTime') IS NULL
+                            ALTER TABLE [dbo].[Booking] ADD [CheckOutTime] time NULL;
+
+                        IF COL_LENGTH(N'dbo.Booking', N'CheckoutWarningSentAtUtc') IS NULL
+                            ALTER TABLE [dbo].[Booking] ADD [CheckoutWarningSentAtUtc] datetime2 NULL;
+
+                        IF COL_LENGTH(N'dbo.Booking', N'AutoCheckedOutAtUtc') IS NULL
+                            ALTER TABLE [dbo].[Booking] ADD [AutoCheckedOutAtUtc] datetime2 NULL;
+                    END
+                    """;
+                command.ExecuteNonQuery();
+            }
+            finally
+            {
+                if (shouldClose)
+                {
+                    connection.Close();
+                }
+            }
+        }
+        catch
+        {
+            // Ignore if columns exist or transient schema check
+        }
     }
 }

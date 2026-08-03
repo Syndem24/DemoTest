@@ -343,12 +343,36 @@ public sealed class BookingService : IBookingService
         CancellationToken cancellationToken = default)
     {
         limit = Math.Clamp(limit, 1, 50);
-        return await _db.Bookings
+        var bookings = await _db.Bookings
             .AsNoTracking()
-            .Where(booking => !booking.IsArchived)
-            .OrderByDescending(booking => booking.CreatedAtUtc)
+            .Include(b => b.Items)
+                .ThenInclude(i => i.AssignedRooms)
+                    .ThenInclude(a => a.Room)
+            .Where(booking => !booking.IsArchived && booking.AdminReadAtUtc == null)
+            .OrderByDescending(booking => booking.UpdatedAtUtc)
             .Take(limit)
-            .Select(booking => new BookingNotificationDto(
+            .ToListAsync(cancellationToken);
+
+        return bookings.Select(booking =>
+        {
+            string? message = null;
+            var roomNumbers = booking.Items
+                .SelectMany(i => i.AssignedRooms)
+                .Select(a => a.Room?.RoomNumber)
+                .Where(num => !string.IsNullOrWhiteSpace(num))
+                .ToList();
+            var roomStr = roomNumbers.Count > 0 ? $" (Room {string.Join(", ", roomNumbers)})" : "";
+
+            if (booking.CheckoutWarningSentAtUtc != null && booking.Status == BookingStatus.Confirmed)
+            {
+                message = $"Checkout Warning: 10 mins remaining for stay{roomStr}";
+            }
+            else if (booking.AutoCheckedOutAtUtc != null && booking.Status == BookingStatus.CheckedOut)
+            {
+                message = $"Auto-Checkout: Client duration done{roomStr}";
+            }
+
+            return new BookingNotificationDto(
                 booking.Id,
                 booking.Reference,
                 booking.GuestName,
@@ -356,8 +380,87 @@ public sealed class BookingService : IBookingService
                 booking.Status,
                 booking.CheckIn,
                 booking.CreatedAtUtc,
-                booking.AdminReadAtUtc != null))
+                booking.AdminReadAtUtc != null,
+                message);
+        }).ToList();
+    }
+
+    public async Task<IReadOnlyList<BookingDto>> AutoCheckoutExpiredBookingsAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.Now;
+        var activeConfirmedBookings = await _db.Bookings
+            .Include(item => item.Items)
+                .ThenInclude(line => line.AssignedRooms)
+                    .ThenInclude(assignment => assignment.Room)
+            .Where(b => !b.IsArchived && b.Status == BookingStatus.Confirmed)
             .ToListAsync(cancellationToken);
+
+        var autoCheckedOutBookings = new List<BookingDto>();
+
+        foreach (var booking in activeConfirmedBookings)
+        {
+            var checkOutDateTime = GetCheckOutDateTime(booking);
+            if (now >= checkOutDateTime)
+            {
+                booking.Status = BookingStatus.CheckedOut;
+                booking.IsArchived = true;
+                booking.ArchivedAtUtc = DateTime.UtcNow;
+                booking.AutoCheckedOutAtUtc = DateTime.UtcNow;
+                booking.AdminReadAtUtc = null;
+                booking.UpdatedAtUtc = DateTime.UtcNow;
+
+                ReleaseAssignedRooms(booking);
+                autoCheckedOutBookings.Add(MapBooking(booking));
+            }
+        }
+
+        if (autoCheckedOutBookings.Count > 0)
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        return autoCheckedOutBookings;
+    }
+
+    public async Task<IReadOnlyList<BookingDto>> ProcessCheckoutWarningsAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.Now;
+        var activeConfirmedBookings = await _db.Bookings
+            .Include(item => item.Items)
+                .ThenInclude(line => line.AssignedRooms)
+                    .ThenInclude(assignment => assignment.Room)
+            .Where(b => !b.IsArchived && b.Status == BookingStatus.Confirmed && b.CheckoutWarningSentAtUtc == null)
+            .ToListAsync(cancellationToken);
+
+        var warnedBookings = new List<BookingDto>();
+
+        foreach (var booking in activeConfirmedBookings)
+        {
+            var checkOutDateTime = GetCheckOutDateTime(booking);
+            var warningTime = checkOutDateTime.AddMinutes(-10);
+
+            if (now >= warningTime && now < checkOutDateTime)
+            {
+                booking.CheckoutWarningSentAtUtc = DateTime.UtcNow;
+                booking.AdminReadAtUtc = null;
+                booking.UpdatedAtUtc = DateTime.UtcNow;
+
+                warnedBookings.Add(MapBooking(booking));
+            }
+        }
+
+        if (warnedBookings.Count > 0)
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        return warnedBookings;
+    }
+
+    private static DateTime GetCheckOutDateTime(Booking booking)
+    {
+        var time = booking.CheckOutTime ?? new TimeOnly(12, 0);
+        return booking.CheckOut.ToDateTime(time);
     }
 
     public Task<int> GetUnreadCountAsync(CancellationToken cancellationToken = default)
@@ -389,6 +492,25 @@ public sealed class BookingService : IBookingService
         }
 
         return MapBooking(booking);
+    }
+
+    public async Task MarkAllAsReadAsync(CancellationToken cancellationToken = default)
+    {
+        var unreadBookings = await _db.Bookings
+            .Where(b => !b.IsArchived && b.AdminReadAtUtc == null)
+            .ToListAsync(cancellationToken);
+
+        if (unreadBookings.Count > 0)
+        {
+            var now = DateTime.UtcNow;
+            foreach (var booking in unreadBookings)
+            {
+                booking.AdminReadAtUtc = now;
+                booking.UpdatedAtUtc = now;
+            }
+
+            await _db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     public async Task<IReadOnlyList<AssignableRoomsByTypeDto>> GetAssignableRoomsAsync(
