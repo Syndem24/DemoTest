@@ -1,0 +1,189 @@
+@* Guest-side booking modal UI recycled for admin walk-in *@
+<div class="guest-modal" id="walkInGuestsModal" data-walkin-guests-modal hidden>
+    <div class="guest-modal-backdrop" data-walkin-close></div>
+    <div class="guest-modal-dialog guest-modal-dialog-guests" role="dialog" aria-modal="true" aria-labelledby="walkInGuestsTitle">
+        <button type="button" class="guest-modal-close" data-walkin-close aria-label="Close">&times;</button>
+        <header class="guest-guests-head">
+            <h2 id="walkInGuestsTitle">Walk-in guests</h2>
+            <p class="guest-guests-rule">Each room holds up to 2 guests. Children under 12 must stay with an adult.</p>
+        </header>
+        <div class="guest-guests-list" id="walkInGuestsRoomList" aria-live="polite"></div>
+        <p class="guest-capacity-banner" id="walkInGuestsCapacityBanner" role="status" hidden></p>
+        <p class="guest-guests-hint" id="walkInGuestsHint" hidden></p>
+        <footer class="guest-guests-footer">
+            <button type="button" class="guest-btn guest-btn-ghost" id="walkInGuestsAddRoomBtn">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                Add room
+            </button>
+            <button type="button" class="guest-btn guest-btn-primary" id="walkInGuestsSubmitBtn">Continue</button>
+        </footer>
+    </div>
+</div>
+
+<div class="guest-modal" id="walkInBookModal" data-walkin-book-modal hidden>
+    <div class="guest-modal-backdrop" data-walkin-close></div>
+    <div class="guest-modal-dialog guest-modal-dialog-lg guest-modal-dialog-book" role="dialog" aria-modal="true" aria-labelledby="walkInBookTitle">
+        <button type="button" class="guest-modal-close" data-walkin-close aria-label="Close">&times;</button>
+
+        <header class="guest-book-modal-head">
+            <p class="guest-eyebrow">Front desk</p>
+            <h2 id="walkInBookTitle">Walk-in check-in</h2>
+            <p class="guest-modal-lede">
+                Same guest booking steps — then assign room numbers and confirm.
+            </p>
+            <p class="guest-book-party" id="walkInBookPartySummary"></p>
+            <ol class="guest-book-steps" id="walkInBookStepList" aria-label="Walk-in steps">
+                <li class="is-guest is-current" data-walkin-step-tab="guest" aria-current="step">
+                    <span class="guest-book-step-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    </span>
+                    <span>Guest</span>
+                </li>
+                <li class="is-dates" data-walkin-step-tab="dates">
+                    <span class="guest-book-step-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                    </span>
+                    <span>Dates</span>
+                </li>
+                <li class="is-rooms" data-walkin-step-tab="rooms">
+                    <span class="guest-book-step-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-6h6v6"/></svg>
+                    </span>
+                    <span>Rooms</span>
+                </li>
+                <li class="is-payment" data-walkin-step-tab="confirm">
+                    <span class="guest-book-step-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+                    </span>
+                    <span>Confirm</span>
+                </li>
+            </ol>
+        </header>
+
+        <form class="guest-form guest-book-modal-form is-wizard" id="walkInBookForm" novalidate data-walkin-step="guest">
+            @Html.AntiForgeryToken()
+
+            <section class="guest-book-section is-guest is-wizard-panel" data-walkin-step-panel="guest">
+                <div class="guest-book-section-head">
+                    <span class="guest-book-section-num">1</span>
+                    <div>
+                        <h3>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            Guest details
+                        </h3>
+                        <p>Lead guest contact for this walk-in.</p>
+                    </div>
+                </div>
+                <div class="guest-form-grid">
+                    <label>
+                        <span>Full name</span>
+                        <input type="text" name="guestName" id="walkInGuestName" placeholder="Guest full name" required maxlength="120" autocomplete="name" />
+                    </label>
+                    <label>
+                        <span>Email</span>
+                        <input type="email" name="guestEmail" id="walkInGuestEmail" placeholder="name@email.com" required maxlength="254" autocomplete="email" />
+                    </label>
+                    <label>
+                        <span>Phone</span>
+                        <input type="tel" name="guestPhone" id="walkInGuestPhone" placeholder="+63 9XX XXX XXXX" required maxlength="40" autocomplete="tel" />
+                    </label>
+                </div>
+            </section>
+
+            <section class="guest-book-section is-dates is-wizard-panel" data-walkin-step-panel="dates" hidden>
+                <div class="guest-book-section-head">
+                    <span class="guest-book-section-num">2</span>
+                    <div>
+                        <h3>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                            Stay dates
+                        </h3>
+                        <p>Philippines time. Early check-in and late check-out fees apply per room.</p>
+                    </div>
+                </div>
+                <div class="guest-form-grid guest-form-grid-2">
+                    <label>
+                        <span>Check-in date</span>
+                        <input type="date" name="modalCheckIn" id="walkInCheckInDate" required class="guest-date-picker" />
+                    </label>
+                    <label>
+                        <span>Check-out date</span>
+                        <input type="date" name="modalCheckOut" id="walkInCheckOutDate" required class="guest-date-picker" />
+                    </label>
+                </div>
+                <div class="guest-form-grid guest-form-grid-2 guest-time-grid">
+                    <label>
+                        <span>Check-in time</span>
+                        <select name="modalCheckInTime" id="walkInCheckInTime" class="guest-time-select"></select>
+                    </label>
+                    <label>
+                        <span>Check-out time</span>
+                        <select name="modalCheckOutTime" id="walkInCheckOutTime" class="guest-time-select"></select>
+                    </label>
+                </div>
+                <p class="guest-time-fees" id="walkInTimeFeesHint" hidden></p>
+                <label class="admin-walkin-extra-person" id="walkInExtraPersonWrap" hidden>
+                    <input type="checkbox" id="walkInExtraPerson" />
+                    <span>Extra person on single room · ₱200 / night (max 1)</span>
+                </label>
+            </section>
+
+            <section class="guest-book-section is-rooms is-wizard-panel" data-walkin-step-panel="rooms" hidden>
+                <div class="guest-book-section-head">
+                    <span class="guest-book-section-num">3</span>
+                    <div>
+                        <h3>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-6h6v6"/></svg>
+                            Assign rooms
+                        </h3>
+                        <p id="walkInRoomsIntro">Pick an available room number for each room in the party.</p>
+                    </div>
+                </div>
+                <p class="guest-room-capacity-msg" id="walkInCapacityWarn" hidden></p>
+                <div class="admin-walkin-assign-list" id="walkInRoomSlots"></div>
+            </section>
+
+            <section class="guest-book-section is-payment is-wizard-panel" data-walkin-step-panel="confirm" hidden>
+                <div class="guest-book-section-head">
+                    <span class="guest-book-section-num">4</span>
+                    <div>
+                        <h3>Confirm walk-in</h3>
+                        <p>Creates a confirmed booking and assigns the selected rooms.</p>
+                    </div>
+                </div>
+                <div class="guest-booking-cart" aria-live="polite">
+                    <div class="guest-cart-summary" id="walkInConfirmSummary">
+                        <span id="walkInConfirmLabel">—</span>
+                        <strong id="walkInConfirmTotal">₱0.00</strong>
+                    </div>
+                    <div class="admin-walkin-fees" id="walkInFeeBreakdown"></div>
+                </div>
+            </section>
+
+            <p class="guest-form-message" id="walkInFormMessage" hidden></p>
+
+            <div class="guest-modal-actions guest-book-modal-actions guest-book-wizard-actions">
+                <button type="button" class="guest-btn guest-btn-ghost" id="walkInWizardBackBtn">Back</button>
+                <button type="button" class="guest-btn guest-btn-primary" id="walkInWizardNextBtn">Next</button>
+                <button type="submit" class="guest-btn guest-btn-primary guest-btn-lg" id="walkInSubmitBtn" hidden>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                    Confirm walk-in
+                </button>
+                <button type="button" class="guest-btn guest-btn-ghost" data-walkin-close>Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="guest-modal" id="walkInSuccessModal" data-walkin-success-modal hidden>
+    <div class="guest-modal-backdrop" data-walkin-close></div>
+    <div class="guest-modal-dialog guest-modal-dialog-sm" role="dialog" aria-modal="true" aria-labelledby="walkInSuccessTitle">
+        <button type="button" class="guest-modal-close" data-walkin-close aria-label="Close">&times;</button>
+        <p class="guest-eyebrow">Walk-in</p>
+        <h2 id="walkInSuccessTitle">Walk-in confirmed</h2>
+        <p class="guest-modal-lede" id="walkInSuccessMessage">The stay is confirmed and rooms are assigned.</p>
+        <div class="guest-modal-actions">
+            <button type="button" class="guest-btn guest-btn-primary" id="walkInSuccessDoneBtn">Done</button>
+        </div>
+    </div>
+</div>

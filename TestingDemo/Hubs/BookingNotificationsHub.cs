@@ -8,6 +8,7 @@ public interface IBookingNotificationsClient
     Task BookingCreated(BookingNotificationDto notification);
     Task BookingUpdated(BookingNotificationDto notification);
     Task BookingArchived(int bookingId);
+    Task PaymentChanged(int bookingId);
 }
 
 public sealed class BookingNotificationsHub : Hub<IBookingNotificationsClient>

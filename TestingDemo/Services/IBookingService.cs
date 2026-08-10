@@ -6,12 +6,16 @@ namespace TestingDemo.Services;
 public interface IBookingService
 {
     Task<IReadOnlyList<RoomAvailabilityDto>> GetAvailabilityAsync(
-        DateOnly checkIn,
-        DateOnly checkOut,
+        DateTime checkInAtUtc,
+        DateTime checkoutTimeUtc,
         CancellationToken cancellationToken = default);
 
     Task<BookingDto> CreateAsync(
         CreateBookingRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<BookingDto> CreateWalkInAsync(
+        CreateWalkInRequest request,
         CancellationToken cancellationToken = default);
 
     Task<PagedBookingsDto> GetPagedAsync(
@@ -30,8 +34,8 @@ public interface IBookingService
         IEnumerable<int> roomIds,
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ReservationCalendarEventDto>> GetReservationCalendarAsync(
-        DateOnly start,
-        DateOnly end,
+        DateTime start,
+        DateTime end,
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BookingNotificationDto>> GetRecentNotificationsAsync(
         int limit,
@@ -41,26 +45,54 @@ public interface IBookingService
     Task MarkAllAsReadAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BookingDto>> AutoCheckoutExpiredBookingsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BookingDto>> ProcessCheckoutWarningsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BookingDto>> ProcessArrivalWarningsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BookingDto>> ProcessPendingCallWarningsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BookingDto>> GetArrivingSoonAsync(
+        int windowMinutes = 20,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BookingDto>> GetPendingCallsSoonAsync(
+        int windowMinutes = 20,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BookingDto>> GetCheckoutsSoonAsync(
+        int windowMinutes = 20,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BookingDto>> AutoCancelExpiredPendingAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AssignableRoomsByTypeDto>> GetAssignableRoomsAsync(
         int bookingId,
         CancellationToken cancellationToken = default);
     Task<BookingDto> UpdateStatusAsync(
         int id,
         BookingStatus status,
-        string rowVersion,
         IReadOnlyList<ConfirmRoomAssignmentRequest>? assignments = null,
+        CancellationToken cancellationToken = default);
+    Task<BookingDto> AssignRoomsAsync(
+        int id,
+        IReadOnlyList<ConfirmRoomAssignmentRequest> assignments,
         CancellationToken cancellationToken = default);
     Task<BookingDto> UpdateAsync(
         int id,
         UpdateBookingRequest request,
         CancellationToken cancellationToken = default);
+    Task<BookingDto> UpdateChargesAsync(
+        int id,
+        UpdateBookingChargesRequest request,
+        CancellationToken cancellationToken = default);
     Task<BookingDto> CancelAsync(
         int id,
-        string rowVersion,
         CancellationToken cancellationToken = default);
     Task<BookingDto> CheckoutAsync(
         int id,
-        string rowVersion,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Exports all archived history to a branded PDF, hard-deletes those bookings,
+    /// and keeps only a flush audit log entry.
+    /// </summary>
+    Task<FlushBookingHistoryResult> FlushHistoryAsync(
+        string performedBy,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<BookingHistoryFlushLogDto>> GetHistoryFlushLogsAsync(
         CancellationToken cancellationToken = default);
 }
 

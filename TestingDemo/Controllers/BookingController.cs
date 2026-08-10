@@ -33,12 +33,12 @@ public class BookingController : Controller
             .Where(r => r.Status == RoomStatus.Available)
             .ToList();
 
+        // Show every room type (including fully booked) so guests can still browse Details.
+        // AvailableCount drives whether Book is enabled in the UI.
         var model = new BookingPageViewModel
         {
             AvailableRooms = available,
-            RoomTypes = RoomIndexViewModel.FromRooms(available).RoomTypes
-                .Where(t => t.AvailableCount > 0)
-                .ToList()
+            RoomTypes = RoomIndexViewModel.FromRooms(rooms).RoomTypes.ToList()
         };
 
         return model;

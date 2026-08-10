@@ -32,6 +32,9 @@ public static class DatabaseBootstrap
 
             db.Database.Migrate();
             EnsureAutoCheckoutColumns(db);
+            EnsureHistoryFlushLogTable(db);
+            EnsurePaymentRecordTable(db);
+            EnsureBookingChargeTable(db);
         }
         catch (Exception ex) when (IsSqlConnectivityFailure(ex))
         {
@@ -238,14 +241,93 @@ public static class DatabaseBootstrap
                     """
                     IF OBJECT_ID(N'[dbo].[Booking]', N'U') IS NOT NULL
                     BEGIN
-                        IF COL_LENGTH(N'dbo.Booking', N'CheckOutTime') IS NULL
-                            ALTER TABLE [dbo].[Booking] ADD [CheckOutTime] time NULL;
+                        IF COL_LENGTH(N'dbo.Booking', N'CheckInAtUtc') IS NULL
+                            ALTER TABLE [dbo].[Booking] ADD [CheckInAtUtc] datetime2 NULL;
+
+                        IF COL_LENGTH(N'dbo.Booking', N'CheckoutTimeUtc') IS NULL
+                            ALTER TABLE [dbo].[Booking] ADD [CheckoutTimeUtc] datetime2 NULL;
+
+                        IF COL_LENGTH(N'dbo.Booking', N'CheckIn') IS NOT NULL
+                            EXEC(N'UPDATE [dbo].[Booking] SET [CheckInAtUtc] = CAST([CheckIn] AS datetime2) WHERE [CheckInAtUtc] IS NULL AND [CheckIn] IS NOT NULL;');
+
+                        IF COL_LENGTH(N'dbo.Booking', N'CheckOut') IS NOT NULL
+                            EXEC(N'UPDATE [dbo].[Booking] SET [CheckoutTimeUtc] = CAST([CheckOut] AS datetime2) WHERE [CheckoutTimeUtc] IS NULL AND [CheckOut] IS NOT NULL;');
+
+                        UPDATE [dbo].[Booking] SET [CheckInAtUtc] = SYSUTCDATETIME() WHERE [CheckInAtUtc] IS NULL;
+                        UPDATE [dbo].[Booking] SET [CheckoutTimeUtc] = DATEADD(day, 1, SYSUTCDATETIME()) WHERE [CheckoutTimeUtc] IS NULL;
+
+                        IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Booking_IsArchived_Status_CheckIn_CheckOut' AND object_id = OBJECT_ID('dbo.Booking'))
+                            DROP INDEX [IX_Booking_IsArchived_Status_CheckIn_CheckOut] ON [dbo].[Booking];
+
+                        IF COL_LENGTH(N'dbo.Booking', N'CheckIn') IS NOT NULL
+                            ALTER TABLE [dbo].[Booking] DROP COLUMN [CheckIn];
+
+                        IF COL_LENGTH(N'dbo.Booking', N'CheckOut') IS NOT NULL
+                            ALTER TABLE [dbo].[Booking] DROP COLUMN [CheckOut];
+
+                        IF COL_LENGTH(N'dbo.Booking', N'CheckOutTime') IS NOT NULL
+                            ALTER TABLE [dbo].[Booking] DROP COLUMN [CheckOutTime];
+
+                        IF COL_LENGTH(N'dbo.Booking', N'AdminReadAtUtc') IS NOT NULL
+                            ALTER TABLE [dbo].[Booking] DROP COLUMN [AdminReadAtUtc];
 
                         IF COL_LENGTH(N'dbo.Booking', N'CheckoutWarningSentAtUtc') IS NULL
                             ALTER TABLE [dbo].[Booking] ADD [CheckoutWarningSentAtUtc] datetime2 NULL;
 
-                        IF COL_LENGTH(N'dbo.Booking', N'AutoCheckedOutAtUtc') IS NULL
-                            ALTER TABLE [dbo].[Booking] ADD [AutoCheckedOutAtUtc] datetime2 NULL;
+                        IF COL_LENGTH(N'dbo.Booking', N'AutoCheckedOutAtUtc') IS NOT NULL
+                            ALTER TABLE [dbo].[Booking] DROP COLUMN [AutoCheckedOutAtUtc];
+
+                        IF COL_LENGTH(N'dbo.Booking', N'RowVersion') IS NOT NULL
+                            ALTER TABLE [dbo].[Booking] DROP COLUMN [RowVersion];
+
+                        IF COL_LENGTH(N'dbo.Booking', N'IsNotificationCleared') IS NULL
+                            ALTER TABLE [dbo].[Booking] ADD [IsNotificationCleared] bit NOT NULL CONSTRAINT [DF_Booking_IsNotificationCleared] DEFAULT (0);
+
+                        IF COL_LENGTH(N'dbo.Booking', N'ArrivalWarningSentAtUtc') IS NULL
+                            ALTER TABLE [dbo].[Booking] ADD [ArrivalWarningSentAtUtc] datetime2 NULL;
+
+                        IF COL_LENGTH(N'dbo.Booking', N'PendingCallWarningSentAtUtc') IS NULL
+                            ALTER TABLE [dbo].[Booking] ADD [PendingCallWarningSentAtUtc] datetime2 NULL;
+                    END
+
+                    IF OBJECT_ID(N'[dbo].[LegacyBooking]', N'U') IS NOT NULL
+                        DROP TABLE [dbo].[LegacyBooking];
+
+                    IF OBJECT_ID(N'[dbo].[RoomType]', N'U') IS NOT NULL
+                    BEGIN
+                        IF COL_LENGTH(N'dbo.RoomType', N'PricePerNight') IS NULL
+                            ALTER TABLE [dbo].[RoomType] ADD [PricePerNight] decimal(18,2) NOT NULL DEFAULT 1500.00;
+
+                        IF COL_LENGTH(N'dbo.RoomType', N'MaxOccupancy') IS NULL
+                            ALTER TABLE [dbo].[RoomType] ADD [MaxOccupancy] int NOT NULL DEFAULT 2;
+
+                        IF COL_LENGTH(N'dbo.RoomType', N'BedCount') IS NULL
+                            ALTER TABLE [dbo].[RoomType] ADD [BedCount] int NOT NULL DEFAULT 1;
+
+                        IF OBJECT_ID(N'[dbo].[Room]', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.Room', N'PricePerNight') IS NOT NULL
+                        BEGIN
+                            EXEC(N'
+                                UPDATE rt
+                                SET rt.PricePerNight = ISNULL(r.PricePerNight, 1500.00),
+                                    rt.MaxOccupancy = ISNULL(r.MaxOccupancy, 2),
+                                    rt.BedCount = ISNULL(r.BedCount, 1)
+                                FROM [dbo].[RoomType] rt
+                                OUTER APPLY (
+                                    SELECT TOP 1 PricePerNight, MaxOccupancy, BedCount
+                                    FROM [dbo].[Room] r
+                                    WHERE r.RoomTypeID = rt.RoomTypeID
+                                ) r;
+                            ');
+
+                            IF COL_LENGTH(N'dbo.Room', N'PricePerNight') IS NOT NULL
+                                ALTER TABLE [dbo].[Room] DROP COLUMN [PricePerNight];
+
+                            IF COL_LENGTH(N'dbo.Room', N'MaxOccupancy') IS NOT NULL
+                                ALTER TABLE [dbo].[Room] DROP COLUMN [MaxOccupancy];
+
+                            IF COL_LENGTH(N'dbo.Room', N'BedCount') IS NOT NULL
+                                ALTER TABLE [dbo].[Room] DROP COLUMN [BedCount];
+                        END
                     END
                     """;
                 command.ExecuteNonQuery();
@@ -261,6 +343,113 @@ public static class DatabaseBootstrap
         catch
         {
             // Ignore if columns exist or transient schema check
+        }
+    }
+
+    private static void EnsureHistoryFlushLogTable(HotelBookingDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(
+                """
+                IF OBJECT_ID(N'[dbo].[BookingHistoryFlushLog]', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[BookingHistoryFlushLog] (
+                        [Id] int NOT NULL IDENTITY,
+                        [FlushedAtUtc] datetime2 NOT NULL,
+                        [PerformedBy] nvarchar(120) NOT NULL,
+                        [RecordCount] int NOT NULL,
+                        [FileName] nvarchar(200) NOT NULL,
+                        [Summary] nvarchar(2000) NOT NULL,
+                        CONSTRAINT [PK_BookingHistoryFlushLog] PRIMARY KEY ([Id])
+                    );
+                    CREATE INDEX [IX_BookingHistoryFlushLog_FlushedAtUtc]
+                        ON [dbo].[BookingHistoryFlushLog] ([FlushedAtUtc]);
+                END
+                """);
+        }
+        catch
+        {
+            // Ignore if table exists or transient schema check
+        }
+    }
+
+    private static void EnsurePaymentRecordTable(HotelBookingDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(
+                """
+                IF OBJECT_ID(N'[dbo].[PaymentRecord]', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[PaymentRecord] (
+                        [Id] int NOT NULL IDENTITY,
+                        [BookingId] int NOT NULL,
+                        [ReceiptNumber] nvarchar(40) NOT NULL,
+                        [EventType] nvarchar(30) NOT NULL,
+                        [Method] nvarchar(30) NOT NULL,
+                        [Amount] decimal(18,2) NOT NULL,
+                        [StayTotalAtPosting] decimal(18,2) NOT NULL,
+                        [BalanceAfter] decimal(18,2) NOT NULL,
+                        [PaidAtUtc] datetime2 NOT NULL,
+                        [ReceivedBy] nvarchar(120) NOT NULL,
+                        [Notes] nvarchar(1000) NULL,
+                        [Status] nvarchar(20) NOT NULL,
+                        [ExternalReference] nvarchar(120) NULL,
+                        [BankTransferReference] nvarchar(120) NULL,
+                        [ReceiptImagePath] nvarchar(500) NULL,
+                        [VoidedAtUtc] datetime2 NULL,
+                        [VoidReason] nvarchar(500) NULL,
+                        [VoidedBy] nvarchar(120) NULL,
+                        CONSTRAINT [PK_PaymentRecord] PRIMARY KEY ([Id]),
+                        CONSTRAINT [FK_PaymentRecord_Booking_BookingId]
+                            FOREIGN KEY ([BookingId]) REFERENCES [dbo].[Booking] ([Id]) ON DELETE CASCADE
+                    );
+                    CREATE UNIQUE INDEX [IX_PaymentRecord_ReceiptNumber]
+                        ON [dbo].[PaymentRecord] ([ReceiptNumber]);
+                    CREATE INDEX [IX_PaymentRecord_PaidAtUtc]
+                        ON [dbo].[PaymentRecord] ([PaidAtUtc]);
+                    CREATE INDEX [IX_PaymentRecord_BookingId_PaidAtUtc]
+                        ON [dbo].[PaymentRecord] ([BookingId], [PaidAtUtc]);
+                END
+                """);
+        }
+        catch
+        {
+            // Ignore if table exists or transient schema check
+        }
+    }
+
+    private static void EnsureBookingChargeTable(HotelBookingDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(
+                """
+                IF OBJECT_ID(N'[dbo].[BookingCharge]', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[BookingCharge] (
+                        [Id] int NOT NULL IDENTITY,
+                        [BookingId] int NOT NULL,
+                        [ChargeType] nvarchar(30) NOT NULL,
+                        [Label] nvarchar(200) NOT NULL,
+                        [Quantity] int NOT NULL,
+                        [Nights] int NOT NULL,
+                        [UnitAmount] decimal(18,2) NOT NULL,
+                        [Amount] decimal(18,2) NOT NULL,
+                        [CreatedAtUtc] datetime2 NOT NULL,
+                        CONSTRAINT [PK_BookingCharge] PRIMARY KEY ([Id]),
+                        CONSTRAINT [FK_BookingCharge_Booking_BookingId]
+                            FOREIGN KEY ([BookingId]) REFERENCES [dbo].[Booking] ([Id]) ON DELETE CASCADE
+                    );
+                    CREATE INDEX [IX_BookingCharge_BookingId_ChargeType]
+                        ON [dbo].[BookingCharge] ([BookingId], [ChargeType]);
+                END
+                """);
+        }
+        catch
+        {
+            // Ignore if table exists or transient schema check
         }
     }
 }

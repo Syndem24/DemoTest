@@ -22,19 +22,70 @@
   const calendarPanel = bookingsRoot?.querySelector('[data-booking-calendar-panel]');
   const calendarElement = bookingsRoot?.querySelector('[data-reservation-calendar]');
   const calendarFallback = bookingsRoot?.querySelector('[data-calendar-fallback]');
+  const paymentViewModal = document.querySelector('[data-payment-view-modal]');
+  const paymentAddModal = document.querySelector('[data-payment-add-modal]');
+  const paymentViewList = paymentViewModal?.querySelector('[data-payment-view-list]');
+  const paymentViewSummary = paymentViewModal?.querySelector('[data-payment-view-summary]');
+  const paymentViewAddBtn = paymentViewModal?.querySelector('[data-payment-view-add]');
+  const arrivalsPanel = bookingsRoot?.querySelector('[data-arrivals-panel]');
+  const arrivalsList = bookingsRoot?.querySelector('[data-arrivals-list]');
+  const pendingCallsPanel = bookingsRoot?.querySelector('[data-pending-calls-panel]');
+  const pendingCallsList = bookingsRoot?.querySelector('[data-pending-calls-list]');
+  const checkoutsPanel = bookingsRoot?.querySelector('[data-checkouts-panel]');
+  const checkoutsList = bookingsRoot?.querySelector('[data-checkouts-list]');
   const detailModal = document.querySelector('[data-booking-modal]');
   const detailBody = detailModal?.querySelector('[data-booking-detail]');
   const detailActions = detailModal?.querySelector('[data-booking-detail-actions]');
+  const flushButton = bookingsRoot?.querySelector('[data-history-flush]');
+  const flushLogPanel = bookingsRoot?.querySelector('[data-history-flush-log]');
+  const flushLogList = bookingsRoot?.querySelector('[data-history-flush-log-list]');
+  const flushLogToggle = bookingsRoot?.querySelector('[data-history-flush-toggle]');
+  const flushLogBody = bookingsRoot?.querySelector('[data-history-flush-body]');
+  const flushLogCount = bookingsRoot?.querySelector('[data-history-flush-count]');
+  const flushModal = document.querySelector('[data-history-flush-modal]');
+  const flushByInput = flushModal?.querySelector('[data-history-flush-by]');
+  const flushConfirmButton = flushModal?.querySelector('[data-history-flush-confirm]');
+  const flushDetailModal = document.querySelector('[data-history-flush-detail-modal]');
+  const flushDetailBody = flushDetailModal?.querySelector('[data-flush-detail-body]');
+  const flushDetailFile = flushDetailModal?.querySelector('[data-flush-detail-file]');
+  const walkInOpenButton = bookingsRoot?.querySelector('[data-walkin-open]');
+  let flushLogsCache = [];
 
   let filter = '';
   let search = '';
   let history = false;
   let page = 1;
   let totalPages = 1;
+  let paymentBookingContext = null;
+  let paymentPriceContext = {
+    stayTotal: 0,
+    amountPaid: 0,
+    balanceDue: 0,
+    amountDueNow: 0,
+  };
+  let paymentOcrObjectUrl = null;
+  let paymentOcrBusy = false;
+  let paymentOcrNeedsApply = false;
+  let paymentCameraStream = null;
+  let paymentCameraFacingMode = 'environment';
+  const paymentCameraModal = document.querySelector('[data-payment-camera-modal]');
+  const paymentCameraVideo = paymentCameraModal?.querySelector('[data-payment-camera-video]');
+  const paymentCameraCanvas = paymentCameraModal?.querySelector('[data-payment-camera-canvas]');
+  let paymentCameraAutoTimer = 0;
+  let paymentCameraScanBusy = false;
+  let paymentCameraAutoCaptureLock = false;
+  let paymentCameraScanWorker = null;
+  let paymentCameraGoodHits = 0;
+  let paymentCameraLastGoodRef = '';
+  const paymentCameraGuideFrame = paymentCameraModal?.querySelector('[data-payment-camera-guide-frame]');
+  const paymentCameraGuideLabel = paymentCameraModal?.querySelector('[data-payment-camera-guide-label]');
   let reservationCalendar = null;
   let selectedBooking = null;
   let searchTimer = null;
   let selectedFromUrlHandled = false;
+  let arrivalsFromUrlHandled = false;
+  let pendingCallsFromUrlHandled = false;
+  let checkoutsFromUrlHandled = false;
   let pollTimer = null;
   let reconnectTimer = null;
   let audioContext = null;
@@ -87,11 +138,27 @@
   });
 
   clearButton?.addEventListener('click', async () => {
+    if (clearButton.disabled) return;
+    clearButton.disabled = true;
+    const previousLabel = clearButton.textContent;
+    clearButton.textContent = 'Clearing…';
     try {
       await apiFetch('/api/admin/bookings/notifications/read-all', { method: 'POST' });
-      await refreshNotifications();
+      setBadge(0);
+      if (notificationItems) {
+        notificationItems.replaceChildren();
+        const empty = document.createElement('p');
+        empty.className = 'admin-notification-empty';
+        empty.textContent = 'No new notifications.';
+        notificationItems.append(empty);
+      }
     } catch (error) {
       console.error('Failed to clear notifications:', error);
+      window.alert(error instanceof Error ? error.message : 'Could not clear notifications.');
+      await refreshNotifications();
+    } finally {
+      clearButton.disabled = false;
+      clearButton.textContent = previousLabel || 'Clear all';
     }
   });
 
@@ -126,26 +193,1942 @@
     return payload;
   }
 
+  async function apiFetchBlob(url, options = {}) {
+    const headers = {
+      ...(options.headers || {}),
+    };
+    if (options.method && options.method !== 'GET') {
+      headers.RequestVerificationToken = token;
+    }
+    if (!headers.Accept) headers.Accept = 'application/pdf';
+    const response = await fetch(url, { credentials: 'same-origin', ...options, headers });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      const validationMessage = payload.errors
+        ? Object.values(payload.errors).flat().join(' ')
+        : '';
+      throw new Error(payload.message || validationMessage || `Request failed (${response.status}).`);
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(disposition);
+    const fileName = match
+      ? decodeURIComponent(match[1].replace(/"/g, '').trim())
+      : 'Mori-History-Flush.pdf';
+    const recordCount = Number(response.headers.get('X-Flush-Record-Count') || 0);
+    return { blob, fileName, recordCount };
+  }
+
+  function downloadBlob(blob, fileName) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  function setHistoryChrome(isHistory) {
+    if (flushButton) flushButton.hidden = !isHistory;
+    if (flushLogPanel) flushLogPanel.hidden = !isHistory;
+    if (walkInOpenButton) walkInOpenButton.hidden = isHistory;
+    if (!isHistory) {
+      setFlushLogExpanded(false);
+    }
+  }
+
+  function isCashPaymentMethod(method) {
+    return method === 'Cash';
+  }
+
+  function isDigitalPaymentMethod(method) {
+    return method === 'EWallet' || method === 'BankTransfer';
+  }
+
+  function formatPaymentEvent(value) {
+    const map = {
+      Deposit: 'Deposit',
+      ArrivalPayment: 'Arrival',
+      BalanceSettlement: 'Balance',
+      Refund: 'Refund',
+      Adjustment: 'Adjustment',
+    };
+    return map[value] || String(value || '');
+  }
+
+  function formatPaymentMethod(value) {
+    if (value === 'BankTransfer') return 'Bank transfer (InstaPay)';
+    if (value === 'EWallet' || value === 'GCash' || value === 'Maya') return 'E-wallet';
+    if (value === 'Card') return 'Card (legacy)';
+    return String(value || '');
+  }
+
+  function enablePaymentOcrPhotoZoom(image) {
+    if (!(image instanceof HTMLElement) || !image.getAttribute('src')) return;
+    image.setAttribute('data-photo-zoom', '');
+    image.setAttribute('data-photo-zoom-src', image.getAttribute('src') || '');
+    image.setAttribute('data-photo-zoom-alt', image.getAttribute('alt') || 'E-wallet receipt');
+    image.setAttribute('title', 'Click to zoom · Esc to exit');
+    if (typeof window.initPhotoZoom === 'function') {
+      window.initPhotoZoom(image.parentElement || paymentAddModal || document);
+    }
+  }
+
+  function isPhotoZoomOpen() {
+    return Boolean(document.body.classList.contains('hotel-photo-zoom-open'));
+  }
+
+  function setPaymentOcrStatus(message, isError) {
+    const status = paymentAddModal?.querySelector('[data-payment-ocr-status]');
+    if (!status) return;
+    if (!message) {
+      status.hidden = true;
+      status.textContent = '';
+      status.classList.remove('is-error');
+      return;
+    }
+    status.hidden = false;
+    status.textContent = message;
+    status.classList.toggle('is-error', Boolean(isError));
+  }
+
+  function setPaymentAddBanner(message, isError = true) {
+    const banner = paymentAddModal?.querySelector('[data-payment-add-banner]');
+    if (!banner) return;
+    if (!message) {
+      banner.hidden = true;
+      banner.textContent = '';
+      return;
+    }
+    banner.hidden = false;
+    banner.textContent = message;
+    banner.classList.toggle('is-error', Boolean(isError));
+  }
+
+  function closePaymentAddPopup() {
+    const popup = paymentAddModal?.querySelector('[data-payment-add-popup]');
+    if (popup) popup.hidden = true;
+  }
+
+  function showPaymentAddPopup(message, title = 'Apply receipt first') {
+    const popup = paymentAddModal?.querySelector('[data-payment-add-popup]');
+    const text = paymentAddModal?.querySelector('[data-payment-add-popup-text]');
+    const heading = paymentAddModal?.querySelector('#paymentAddPopupTitle');
+    if (!popup || !text) {
+      window.alert(message);
+      return;
+    }
+    if (heading) heading.textContent = title;
+    text.textContent = message;
+    popup.hidden = false;
+    setPaymentAddBanner(message, true);
+    setPaymentOcrStatus(message, true);
+    paymentAddModal.querySelector('[data-payment-add-popup-ok]')?.focus();
+  }
+
+  function isPaymentOcrAwaitingApply() {
+    if (paymentOcrNeedsApply) return true;
+    const compare = paymentAddModal?.querySelector('[data-payment-ocr-compare]');
+    if (!compare || compare.hidden) return false;
+    const ocrRef = (paymentAddModal.querySelector('[data-payment-ocr-ref]')?.value || '').trim();
+    const ocrRaw = (paymentAddModal.querySelector('[data-payment-ocr-raw]')?.value || '').trim();
+    const ext = (paymentAddModal.querySelector('[data-payment-external-ref]')?.value || '').trim();
+    const bank = (paymentAddModal.querySelector('[data-payment-bank-ref]')?.value || '').trim();
+    const hasScan = Boolean(
+      paymentAddModal.querySelector('[data-payment-ocr-image]')?.getAttribute('src')
+      || ocrRef
+      || ocrRaw
+    );
+    if (!hasScan) return false;
+    // Scan panel is open and payment refs were never filled from Apply.
+    if (!ext && !bank) return true;
+    if (ocrRef && ocrRef !== ext && ocrRef !== bank) return true;
+    return false;
+  }
+
+  function resetPaymentOcrUi() {
+    if (paymentOcrObjectUrl) {
+      URL.revokeObjectURL(paymentOcrObjectUrl);
+      paymentOcrObjectUrl = null;
+    }
+    paymentOcrBusy = false;
+    paymentOcrNeedsApply = false;
+    if (!paymentAddModal) return;
+    const fileInput = paymentAddModal.querySelector('[data-payment-receipt-upload]');
+    const captureInput = paymentAddModal.querySelector('[data-payment-receipt-capture]');
+    const compare = paymentAddModal.querySelector('[data-payment-ocr-compare]');
+    const image = paymentAddModal.querySelector('[data-payment-ocr-image]');
+    const pathInput = paymentAddModal.querySelector('[data-payment-receipt-path]');
+    const raw = paymentAddModal.querySelector('[data-payment-ocr-raw]');
+    const ref = paymentAddModal.querySelector('[data-payment-ocr-ref]');
+    const amount = paymentAddModal.querySelector('[data-payment-ocr-amount]');
+    const from = paymentAddModal.querySelector('[data-payment-ocr-from]');
+    const to = paymentAddModal.querySelector('[data-payment-ocr-to]');
+    const wallet = paymentAddModal.querySelector('[data-payment-ocr-wallet]');
+    const dialog = paymentAddModal.querySelector('.admin-payment-modal-dialog');
+    if (fileInput) fileInput.value = '';
+    if (captureInput) captureInput.value = '';
+    if (compare) compare.hidden = true;
+    if (image) {
+      image.removeAttribute('src');
+      image.removeAttribute('data-photo-zoom-src');
+      image.alt = 'Uploaded e-wallet receipt';
+    }
+    if (pathInput) pathInput.value = '';
+    if (raw) raw.value = '';
+    if (ref) ref.value = '';
+    if (amount) amount.value = '';
+    if (from) from.value = '';
+    if (to) to.value = '';
+    if (wallet) wallet.value = 'GCash';
+    const channelHidden = paymentAddModal.querySelector('[data-payment-ocr-channel]');
+    if (channelHidden) channelHidden.value = '';
+    if (dialog) dialog.classList.remove('is-wide');
+    setPaymentOcrStatus('');
+  }
+
+  function cleanOcrParty(value) {
+    return String(value || '')
+      .replace(/\s+/g, ' ')
+      .replace(/^[:\-–—.|]+/, '')
+      .replace(/\b(SENT VIA|VIA GCASH|VIA MAYA|SUCCESS(?:FUL)?|EXPRESS SEND|TRANSACTION DETAILS)\b/gi, '')
+      .replace(/\bto\b$/i, '')
+      .replace(/^from\b/i, '')
+      .trim()
+      .slice(0, 160);
+  }
+
+  function parseMoneyToken(token) {
+    if (!token) return null;
+    const normalized = String(token).replace(/,/g, '').replace(/[^\d.]/g, '');
+    const amount = Number(normalized);
+    if (!(amount > 0) || !Number.isFinite(amount)) return null;
+    if (amount > 5_000_000) return null;
+    return Math.round(amount * 100) / 100;
+  }
+
+  function normalizePhMobile(value) {
+    const digits = String(value || '').replace(/\D/g, '');
+    if (!digits) return '';
+    if (/^09\d{9}$/.test(digits)) return digits;
+    if (/^9\d{9}$/.test(digits)) return '0' + digits;
+    if (/^639\d{9}$/.test(digits)) return '0' + digits.slice(2);
+    if (/^63\d{10}$/.test(digits) && digits[2] === '9') return '0' + digits.slice(2);
+    return '';
+  }
+
+  function formatPhMobileDisplay(rawValue) {
+    const normalized = normalizePhMobile(rawValue);
+    if (normalized) return normalized;
+    return String(rawValue || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function extractPhoneCandidates(text) {
+    const matches = String(text || '').match(
+      /(?:\+?\s*63\s*)?0?9(?:[\s\-]?\d){9}/g
+    ) || [];
+    const seen = new Set();
+    const result = [];
+    matches.forEach((match) => {
+      const display = formatPhMobileDisplay(match);
+      const key = normalizePhMobile(match) || display;
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      result.push(display);
+    });
+    return result;
+  }
+
+  function isDateNoiseToken(token) {
+    const cleaned = String(token || '').replace(/[^A-Za-z0-9:]/g, '');
+    return /^(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|SEPT|OCT|NOV|DEC|AM|PM|MON|TUE|WED|THU|FRI|SAT|SUN|\d{1,2}:\d{2})$/i.test(
+      cleaned
+    );
+  }
+
+  function isYearToken(token) {
+    return /^(19|20)\d{2}$/.test(String(token || '').replace(/\D/g, ''));
+  }
+
+  function isDayOrMonthNumberToken(token) {
+    const digits = String(token || '').replace(/\D/g, '');
+    if (!/^\d{1,2}$/.test(digits)) return false;
+    const value = Number(digits);
+    return value >= 1 && value <= 31;
+  }
+
+  function isUsableRefDigitChunk(chunk, joinedSoFar) {
+    const digits = String(chunk || '').replace(/\D/g, '');
+    if (!digits) return false;
+    if (isYearToken(digits)) return false;
+    // After the common GCash 4+3 prefix, ignore day numbers (01-31) from the date line.
+    if (joinedSoFar.length >= 7 && isDayOrMonthNumberToken(digits)) return false;
+    // Prefer the trailing 6-digit Ref segment; skip tiny leftovers.
+    if (joinedSoFar.length >= 7 && digits.length < 4) return false;
+    return true;
+  }
+
+  function extractClassicGcashRef(text) {
+    // Express Send layout: "3035 300 966946" (4 + 3 + 6), sometimes split across lines.
+    const compactNearby = String(text || '').replace(/[^\d\s]/g, ' ');
+    const sameLine = compactNearby.match(/\b(\d{4})\s+(\d{3})\s+(\d{6})\b/);
+    if (sameLine) return `${sameLine[1]}${sameLine[2]}${sameLine[3]}`;
+
+    const loose = compactNearby.match(/\b(\d{4})\s+(\d{3})\s+(\d{5,7})\b/);
+    if (loose) {
+      const joined = `${loose[1]}${loose[2]}${loose[3]}`;
+      if (joined.length >= 13) return joined.slice(0, 13);
+    }
+
+    // Split lines: 3035 300 \n 966946
+    const acrossLines = String(text || '').match(
+      /\b(\d{4})\s+(\d{3})\s*(?:\n+\s*|\s+)(\d{6})\b/
+    );
+    if (acrossLines) return `${acrossLines[1]}${acrossLines[2]}${acrossLines[3]}`;
+
+    return '';
+  }
+
+  function looksLikeRefMergedWithDate(reference) {
+    const digits = String(reference || '').replace(/\D/g, '');
+    // e.g. 3035300 + 02 + 2025 => 3035300022025
+    return /^\d{7}(0?[1-9]|[12]\d|3[01])(19|20)\d{2}$/.test(digits);
+  }
+
+  function collectGcashReferenceAfterLabel(lines) {
+    const labelIndex = lines.findIndex((line) =>
+      /(?:REF(?:ERENCE)?\.?\s*(?:NO\.?|NUMBER)?|REFERENCE NUMBER)\b/i.test(line)
+    );
+    if (labelIndex < 0) return '';
+
+    const nearbyText = lines
+      .slice(labelIndex, Math.min(lines.length, labelIndex + 5))
+      .join('\n');
+    const classic = extractClassicGcashRef(nearbyText);
+    if (classic) return classic;
+
+    const chunks = [];
+    const pushChunk = (part) => {
+      const digits = String(part || '').replace(/\D/g, '');
+      if (!isUsableRefDigitChunk(digits, chunks.join(''))) return;
+      chunks.push(digits);
+    };
+
+    const labelLine = lines[labelIndex];
+    const sameLine = labelLine.match(
+      /(?:REF(?:ERENCE)?\.?\s*(?:NO\.?|NUMBER)?|REFERENCE NUMBER)\s*[:#.\-]?\s*(.*)$/i
+    );
+    if (sameLine?.[1]) {
+      const sameDigits = sameLine[1].match(/\d+/g) || [];
+      sameDigits.forEach(pushChunk);
+    }
+
+    for (let i = labelIndex + 1; i < Math.min(lines.length, labelIndex + 5); i += 1) {
+      const line = lines[i];
+      if (/amount|total|transfer|sent via|download|share|help|carbon|footprint/i.test(line)) break;
+      if (/\b(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/i.test(line)) break;
+      if (isDateNoiseToken(line.split(/\s+/)[0])) break;
+      if (isYearToken(line.replace(/\D/g, '')) && chunks.join('').length >= 7) break;
+
+      const digitParts = line.match(/\d+/g) || [];
+      if (!digitParts.length) {
+        if (chunks.length) break;
+        continue;
+      }
+
+      // Date line like "02, 2025 7:56" — stop once prefix exists.
+      if (
+        chunks.join('').length >= 7 &&
+        digitParts.some((part) => isYearToken(part) || isDayOrMonthNumberToken(part))
+      ) {
+        const sixDigit = digitParts.find((part) => part.replace(/\D/g, '').length === 6);
+        if (sixDigit) pushChunk(sixDigit);
+        break;
+      }
+
+      digitParts.forEach(pushChunk);
+      if (chunks.join('').length >= 13) break;
+    }
+
+    let joined = chunks.join('');
+    if (joined.length === 7) {
+      for (let i = labelIndex + 1; i < Math.min(lines.length, labelIndex + 6); i += 1) {
+        const line = lines[i];
+        if (/\b(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\b/i.test(line)) {
+          // Still allow a 6-digit ref on/after a date line only if present as its own token
+          // before year — but prefer earlier non-date lines.
+          continue;
+        }
+        const six = (line.match(/\b(\d{6})\b/g) || []).find((part) => !isYearToken(part));
+        if (six) {
+          joined += six;
+          break;
+        }
+      }
+    }
+    if (joined.length === 7) {
+      // Last resort: any 6-digit token after the Ref label that is not a year.
+      const after = lines.slice(labelIndex, labelIndex + 6).join(' ');
+      const six = (after.match(/\b(\d{6})\b/g) || []).find((part) => !isYearToken(part));
+      if (six) joined += six;
+    }
+    if (looksLikeRefMergedWithDate(joined)) {
+      joined = joined.slice(0, 7);
+    }
+    if (joined.length >= 13) return joined.slice(0, 13);
+    if (joined.length >= 11 && joined.length <= 16) return joined;
+    return '';
+  }
+
+  function parseTransferFromTo(text, lines) {
+    const phoneBit = '(?:\\+?\\s*63\\s*)?0?9(?:[\\s\\-]?\\d){9}';
+    const inlineRe = new RegExp(
+      'transfer\\s+from\\s+(' + phoneBit + ')\\s+to\\s+(' + phoneBit + ')',
+      'i'
+    );
+    const inline = String(text || '').match(inlineRe);
+    if (inline) {
+      return {
+        transferFrom: formatPhMobileDisplay(inline[1]),
+        transferTo: formatPhMobileDisplay(inline[2]),
+      };
+    }
+
+    for (let i = 0; i < lines.length; i += 1) {
+      if (!/transfer\s+from/i.test(lines[i])) continue;
+      const windowText = [lines[i], lines[i + 1], lines[i + 2], lines[i + 3]]
+        .filter(Boolean)
+        .join(' ');
+      const match = windowText.match(inlineRe);
+      if (match) {
+        return {
+          transferFrom: formatPhMobileDisplay(match[1]),
+          transferTo: formatPhMobileDisplay(match[2]),
+        };
+      }
+
+      const phones = extractPhoneCandidates(windowText);
+      if (phones.length >= 2) {
+        return { transferFrom: phones[0], transferTo: phones[1] };
+      }
+    }
+
+    return { transferFrom: '', transferTo: '' };
+  }
+
+  function detectEwalletLayout(upper, compact) {
+    const isGcashHistory =
+      /TRANSACTION\s*DETAILS/.test(upper) ||
+      /TRANSFER\s+FROM[\s\S]{0,80}\bTO\b/.test(upper) ||
+      /REFERENCE\s*NUMBER/.test(upper);
+    const isGcashReceipt =
+      /EXPRESS\s*SEND/.test(upper) ||
+      /SENT\s*VIA\s*GCASH/.test(upper) ||
+      /TOTAL\s*AMOUNT\s*SENT/.test(upper) ||
+      compact.includes('GCASH') ||
+      /\bG\s*CASH\b/.test(upper);
+    const isInstaPay = /INSTAPAY|INSTA\s*PAY/.test(upper) || compact.includes('INSTAPAY');
+    const isPayPal = /PAYPAL/.test(compact);
+
+    if (isPayPal) return { wallet: 'PayPal', layout: 'paypal' };
+    if (isInstaPay && !isGcashReceipt && !isGcashHistory) {
+      return { wallet: 'InstaPay', layout: 'instapay' };
+    }
+    if (/MAYA|PAYMAYA/.test(compact) && !isGcashHistory && !isGcashReceipt) {
+      return { wallet: 'Maya', layout: 'maya' };
+    }
+    if (isGcashHistory) return { wallet: 'GCash', layout: 'gcash-history' };
+    if (isGcashReceipt) return { wallet: 'GCash', layout: 'gcash-receipt' };
+    if (compact.includes('GCASH') || /\bG\s*CASH\b/.test(upper)) {
+      return { wallet: 'GCash', layout: 'gcash-receipt' };
+    }
+    return { wallet: 'Other', layout: 'unknown' };
+  }
+
+  function parseEwalletOcrText(text) {
+    const raw = String(text || '')
+      .replace(/\r/g, '')
+      .replace(/[|]/g, 'I')
+      .replace(/[₱]/g, 'PHP ')
+      .replace(/[—–]/g, '-')
+      .trim();
+    const lines = raw
+      .split(/\n+/)
+      .map((line) => line.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    const upper = raw.toUpperCase();
+    const compact = upper.replace(/[^A-Z0-9]/g, '');
+    const detected = detectEwalletLayout(upper, compact);
+    let wallet = detected.wallet;
+    const layout = detected.layout;
+
+    let reference = extractClassicGcashRef(raw) || collectGcashReferenceAfterLabel(lines);
+
+    if (!reference) {
+      const labeledRef = raw.match(
+        /(?:INSTAPAY\s*)?(?:REF(?:ERENCE)?\.?\s*(?:NO\.?|NUMBER|#)?|REFERENCE\s*NUMBER|TXN(?:\s*ID)?|TRANSACTION\s*(?:ID|NO\.?)?)\s*[:#.\-]?\s*([0-9][0-9 ]{8,24})/i
+      );
+      if (labeledRef?.[1] && !/(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)/i.test(labeledRef[1])) {
+        const digitsOnly = labeledRef[1].replace(/\D/g, '');
+        if (digitsOnly.length >= 11 && digitsOnly.length <= 16 && !looksLikeRefMergedWithDate(digitsOnly)) {
+          reference = digitsOnly.length >= 13 ? digitsOnly.slice(0, 13) : digitsOnly;
+        }
+      }
+    }
+
+    if ((!reference || reference.length < 13) && /REF/i.test(upper)) {
+      const refBlocks = [...upper.matchAll(/REF(?:ERENCE)?\.?\s*(?:NO\.?|NUMBER)?\s*[:#.\-]?\s*([\s\S]{0,80})/g)];
+      for (const block of refBlocks) {
+        const nearby = String(block[1] || '');
+        const classic = extractClassicGcashRef(nearby);
+        if (classic) {
+          reference = classic;
+          break;
+        }
+        const stop = nearby.split(
+          /\b(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|AMOUNT|TOTAL|DOWNLOAD|SHARE|(?:19|20)\d{2})\b/i
+        )[0];
+        const parts = stop.match(/\d+/g) || [];
+        const filtered = [];
+        parts.forEach((part) => {
+          if (isUsableRefDigitChunk(part, filtered.join(''))) filtered.push(part.replace(/\D/g, ''));
+        });
+        const digits = filtered.join('');
+        if (digits.length >= 13 && !looksLikeRefMergedWithDate(digits)) {
+          reference = digits.slice(0, 13);
+          break;
+        }
+        if (digits.length >= 11 && digits.length <= 16 && !reference && !looksLikeRefMergedWithDate(digits)) {
+          reference = digits;
+        }
+      }
+    }
+
+    if (!reference) {
+      const spacedDigits = upper.match(/\b(\d{3,5}(?:[\s\-]+\d{2,5}){1,5})\b/g) || [];
+      for (const candidate of spacedDigits) {
+        if (/(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)/i.test(candidate)) continue;
+        const digits = candidate.replace(/\D/g, '');
+        if (digits.length === 13 && !looksLikeRefMergedWithDate(digits)) {
+          reference = digits;
+          break;
+        }
+      }
+    }
+
+    if (!reference) {
+      const digitGroups = [...upper.matchAll(/\b(\d{11,16})\b/g)]
+        .map((m) => m[1])
+        .filter((digits) => !normalizePhMobile(digits) && !looksLikeRefMergedWithDate(digits));
+      reference =
+        digitGroups.find((d) => d.length === 13) ||
+        digitGroups.find((d) => d.length === 12) ||
+        digitGroups[0] ||
+        '';
+    }
+
+    if (looksLikeRefMergedWithDate(reference)) {
+      // Prefer classic pattern elsewhere in text instead of date-merged junk.
+      reference = extractClassicGcashRef(raw) || '';
+    }
+
+    if (/[A-Za-z]/.test(reference) || /Dec|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov/i.test(reference)) {
+      reference = reference.replace(/[A-Za-z].*$/, '').replace(/\D/g, '');
+      if (!(reference.length >= 11 && reference.length <= 16) || looksLikeRefMergedWithDate(reference)) {
+        reference = '';
+      }
+    }
+
+    let amount = null;
+    const amountPatterns = [
+      /(?:TOTAL\s*(?:AMOUNT\s*)?(?:SENT|PAID|TRANSFER(?:RED)?)?|AMOUNT\s*(?:SENT|PAID|TRANSFER(?:RED)?)?|YOU\s*SENT|TRANSFER\s*AMOUNT|AMOUNT)\s*[:\-]?\s*-?\s*(?:PHP|P)?\s*-?\s*([\d,]+(?:\.\d{1,2})?)/i,
+      /-\s*([\d,]+(?:\.\d{2}))/,
+      /(?:PHP|P)\s*-?\s*([\d,]+(?:\.\d{1,2})?)/i,
+      /([\d,]+\.\d{2})/,
+    ];
+    for (const pattern of amountPatterns) {
+      const match = raw.match(pattern);
+      const parsed = parseMoneyToken(match?.[1]);
+      if (parsed != null) {
+        amount = parsed;
+        break;
+      }
+    }
+
+    let transferFrom = '';
+    let transferTo = '';
+
+    if (layout === 'gcash-history') {
+      const parties = parseTransferFromTo(raw, lines);
+      transferFrom = parties.transferFrom;
+      transferTo = parties.transferTo;
+    } else {
+      const viaIndex = lines.findIndex((line) => /SENT VIA|VIA GCASH|VIA MAYA/i.test(line));
+      if (viaIndex > 0) {
+        const maybePhone = cleanOcrParty(lines[viaIndex - 1]);
+        const maybeName = cleanOcrParty(lines[viaIndex - 2] || '');
+        const phone = formatPhMobileDisplay(maybePhone);
+        if (normalizePhMobile(maybePhone) || /\+?\s*63/.test(maybePhone)) {
+          transferTo = [maybeName, phone].filter(Boolean).join(' · ');
+        }
+      }
+
+      if (!transferTo) {
+        const phones = extractPhoneCandidates(raw);
+        if (phones[0]) transferTo = phones[0];
+      }
+
+      const parties = parseTransferFromTo(raw, lines);
+      if (parties.transferFrom) transferFrom = parties.transferFrom;
+      if (parties.transferTo) transferTo = parties.transferTo;
+
+      if (!transferFrom) {
+        const fromLabeled = lines.find((line) => /^FROM\s*[:\-]/.test(line));
+        if (fromLabeled) transferFrom = cleanOcrParty(fromLabeled.replace(/^FROM\s*[:\-]?\s*/i, ''));
+      }
+    }
+
+    if ((!transferFrom || !transferTo) && /transfer\s+from/i.test(raw)) {
+      const parties = parseTransferFromTo(raw, lines);
+      if (!transferFrom) transferFrom = parties.transferFrom;
+      if (!transferTo) transferTo = parties.transferTo;
+    }
+
+    transferFrom = cleanOcrParty(transferFrom);
+    transferTo = cleanOcrParty(transferTo);
+
+    if (transferFrom && transferTo && transferFrom === transferTo) {
+      transferFrom = '';
+    }
+
+    if (wallet === 'Other' && (/EXPRESS\s*SEND|REF\s*NO|TOTAL\s*AMOUNT\s*SENT|TRANSACTION\s*DETAILS|INSTAPAY|PAYPAL/i.test(upper))) {
+      if (/PAYPAL/i.test(upper)) wallet = 'PayPal';
+      else if (/INSTAPAY|INSTA\s*PAY/i.test(upper)) wallet = 'InstaPay';
+      else wallet = 'GCash';
+    }
+
+    return {
+      wallet,
+      layout,
+      reference,
+      amount,
+      transferFrom,
+      transferTo,
+      raw,
+    };
+  }
+
+
+  async function preprocessReceiptForOcr(file) {
+    try {
+      const bitmap = await createImageBitmap(file);
+      const canvas = document.createElement('canvas');
+      const maxSide = 1800;
+      const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return file;
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = image.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+        // Boost contrast for light UI screenshots (GCash/Maya).
+        const boosted = gray < 140 ? gray * 0.72 : Math.min(255, gray * 1.18 + 18);
+        const value = boosted > 170 ? 255 : boosted < 95 ? 0 : boosted;
+        data[i] = data[i + 1] = data[i + 2] = value;
+      }
+      ctx.putImageData(image, 0, 0);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      bitmap.close?.();
+      return blob || file;
+    } catch {
+      return file;
+    }
+  }
+
+  async function uploadPaymentReceiptFile(file) {
+    if (!paymentBookingContext?.id) {
+      throw new Error('Open a booking before uploading a receipt.');
+    }
+    const form = new FormData();
+    form.append('bookingId', String(paymentBookingContext.id));
+    form.append('file', file, file.name || 'receipt.jpg');
+    return apiFetch('/api/admin/payments/receipt-upload', {
+      method: 'POST',
+      body: form,
+    });
+  }
+
+  async function runPaymentReceiptOcr(file) {
+    if (!paymentAddModal || !file) return;
+    if (typeof Tesseract === 'undefined') {
+      setPaymentOcrStatus('OCR library failed to load. Enter details manually.', true);
+      return;
+    }
+
+    paymentOcrBusy = true;
+    paymentOcrNeedsApply = true;
+    const compare = paymentAddModal.querySelector('[data-payment-ocr-compare]');
+    const image = paymentAddModal.querySelector('[data-payment-ocr-image]');
+    const raw = paymentAddModal.querySelector('[data-payment-ocr-raw]');
+    const ref = paymentAddModal.querySelector('[data-payment-ocr-ref]');
+    const amountInput = paymentAddModal.querySelector('[data-payment-ocr-amount]');
+    const fromInput = paymentAddModal.querySelector('[data-payment-ocr-from]');
+    const toInput = paymentAddModal.querySelector('[data-payment-ocr-to]');
+    const wallet = paymentAddModal.querySelector('[data-payment-ocr-wallet]');
+    const pathInput = paymentAddModal.querySelector('[data-payment-receipt-path]');
+    const dialog = paymentAddModal.querySelector('.admin-payment-modal-dialog');
+
+    if (paymentOcrObjectUrl) URL.revokeObjectURL(paymentOcrObjectUrl);
+    paymentOcrObjectUrl = URL.createObjectURL(file);
+    if (image) {
+      image.src = paymentOcrObjectUrl;
+      image.alt = file.name || 'Uploaded e-wallet receipt';
+      enablePaymentOcrPhotoZoom(image);
+    }
+    if (compare) compare.hidden = false;
+    if (dialog) dialog.classList.add('is-wide');
+    setPaymentOcrStatus('Reading receipt…');
+
+    let uploadedPath = '';
+    const uploadPromise = uploadPaymentReceiptFile(file)
+      .then((result) => {
+        uploadedPath = result?.path || '';
+        if (pathInput) pathInput.value = uploadedPath;
+      })
+      .catch((error) => {
+        setPaymentOcrStatus(
+          error instanceof Error ? error.message : 'Receipt upload failed.',
+          true
+        );
+      });
+
+    try {
+      const ocrSource = await preprocessReceiptForOcr(file);
+      let recognizedText = '';
+      if (typeof Tesseract.createWorker === 'function') {
+        const worker = await Tesseract.createWorker('eng', 1, {
+          logger: (message) => {
+            if (message?.status === 'recognizing text' && typeof message.progress === 'number') {
+              const pct = Math.round(message.progress * 100);
+              setPaymentOcrStatus(`Reading receipt… ${pct}%`);
+            }
+          },
+        });
+        try {
+          await worker.setParameters({
+            tessedit_pageseg_mode: '6',
+            preserve_interword_spaces: '1',
+          });
+          const result = await worker.recognize(ocrSource);
+          recognizedText = result?.data?.text || '';
+        } finally {
+          await worker.terminate();
+        }
+      } else {
+        const result = await Tesseract.recognize(ocrSource, 'eng', {
+          logger: (message) => {
+            if (message?.status === 'recognizing text' && typeof message.progress === 'number') {
+              const pct = Math.round(message.progress * 100);
+              setPaymentOcrStatus(`Reading receipt… ${pct}%`);
+            }
+          },
+        });
+        recognizedText = result?.data?.text || '';
+      }
+      const parsed = parseEwalletOcrText(recognizedText);
+      if (raw) raw.value = parsed.raw || '(no text detected)';
+      if (ref) ref.value = parsed.reference || '';
+      if (amountInput) amountInput.value = parsed.amount != null ? parsed.amount.toFixed(2) : '';
+      if (fromInput) fromInput.value = parsed.transferFrom || '';
+      if (toInput) toInput.value = parsed.transferTo || '';
+      if (wallet) {
+        const allowed = ['GCash', 'Maya', 'PayPal', 'InstaPay', 'Other'];
+        wallet.value = allowed.includes(parsed.wallet) ? parsed.wallet : 'Other';
+      }
+      await uploadPromise;
+
+      const layoutLabel =
+        parsed.layout === 'gcash-history'
+          ? 'GCash history'
+          : parsed.layout === 'gcash-receipt'
+            ? 'GCash receipt'
+            : parsed.layout === 'instapay'
+              ? 'InstaPay'
+              : parsed.wallet;
+      const missing = [];
+      if (!parsed.reference) missing.push('reference');
+      if (parsed.amount == null) missing.push('amount');
+      if (!parsed.transferFrom && !parsed.transferTo) missing.push('from/to');
+      if (missing.length) {
+        setPaymentOcrStatus(
+          `${layoutLabel}: could not fully read ${missing.join(', ')}. Fix from the photo, then Apply.`,
+          true
+        );
+      } else {
+        setPaymentOcrStatus(`${layoutLabel} detected — compare fields, then Apply.`);
+      }
+    } catch (error) {
+      setPaymentOcrStatus(
+        error instanceof Error ? error.message : 'Unable to read receipt.',
+        true
+      );
+      if (raw) raw.value = '';
+    } finally {
+      paymentOcrBusy = false;
+    }
+  }
+
+  function applyPaymentOcrResult() {
+    if (!paymentAddModal) return;
+    const channel = paymentAddModal.querySelector('[data-payment-ocr-wallet]')?.value || 'Other';
+    const reference = (paymentAddModal.querySelector('[data-payment-ocr-ref]')?.value || '').trim();
+    const amountValue = Number(paymentAddModal.querySelector('[data-payment-ocr-amount]')?.value || 0);
+    const transferFrom = (paymentAddModal.querySelector('[data-payment-ocr-from]')?.value || '').trim();
+    const transferTo = (paymentAddModal.querySelector('[data-payment-ocr-to]')?.value || '').trim();
+    const methodSelect = paymentAddModal.querySelector('[data-payment-method]');
+    const ext = paymentAddModal.querySelector('[data-payment-external-ref]');
+    const bank = paymentAddModal.querySelector('[data-payment-bank-ref]');
+    const channelHidden = paymentAddModal.querySelector('[data-payment-ocr-channel]');
+    const epayAmount = paymentAddModal.querySelector('[data-payment-epay-amount]');
+    const notes = paymentAddModal.querySelector('[data-payment-notes]');
+
+    if (!reference) {
+      setPaymentOcrStatus('Enter or correct the reference before applying.', true);
+      return;
+    }
+
+    const currentMethod = methodSelect?.value || 'EWallet';
+    if (methodSelect && !isDigitalPaymentMethod(currentMethod)) {
+      // InstaPay channel from OCR prefers bank transfer; wallets stay on E-wallet.
+      methodSelect.value = channel === 'InstaPay' ? 'BankTransfer' : 'EWallet';
+    } else if (methodSelect && currentMethod === 'EWallet' && channel === 'InstaPay') {
+      methodSelect.value = 'BankTransfer';
+    }
+    if (ext) ext.value = reference;
+    if (channelHidden) channelHidden.value = channel;
+    if (bank && (methodSelect?.value === 'BankTransfer') && !bank.value.trim()) {
+      bank.value = reference;
+    }
+
+    const balanceDue = Math.max(0, Number(paymentPriceContext.balanceDue) || 0);
+    let appliedAmount = amountValue;
+    let capped = false;
+    if (amountValue > 0 && balanceDue > 0 && amountValue > balanceDue + 0.009) {
+      appliedAmount = Math.round(balanceDue * 100) / 100;
+      capped = true;
+    }
+
+    if (appliedAmount > 0 && epayAmount) {
+      epayAmount.value = appliedAmount.toFixed(2);
+      updateCashChangeUi();
+    }
+
+    const partyBits = [];
+    partyBits.push(`Channel: ${channel}`);
+    if (transferFrom) partyBits.push(`From: ${transferFrom}`);
+    if (transferTo) partyBits.push(`To: ${transferTo}`);
+    if (amountValue > 0) {
+      partyBits.push(
+        capped
+          ? `Receipt amount: ${money(amountValue)} · Will apply ${money(appliedAmount)} (excess not posted)`
+          : `Receipt amount: ${money(amountValue)}`
+      );
+    }
+    if (partyBits.length && notes) {
+      const stamp = `Digital OCR · ${partyBits.join(' · ')}`;
+      const existing = (notes.value || '').trim();
+      notes.value = existing.includes('Digital OCR ·') || existing.includes('E-wallet OCR ·')
+        ? existing.replace(/(?:Digital|E-wallet) OCR ·[^\n]*/i, stamp)
+        : existing
+          ? `${existing}\n${stamp}`
+          : stamp;
+    }
+
+    syncPaymentMethodPanels();
+    paymentOcrNeedsApply = false;
+    closePaymentAddPopup();
+    setPaymentAddBanner('');
+    if (capped) {
+      setPaymentOcrStatus(
+        `Applied ${channel} · ${reference}. Receipt ${money(amountValue)} exceeds balance — will post ${money(appliedAmount)} only.`
+      );
+    } else {
+      const amountNote = amountValue > 0 ? ` · ${money(amountValue)}` : '';
+      setPaymentOcrStatus(`Applied ${channel} · ${reference}${amountNote}. Save payment when ready.`);
+    }
+  }
+
+  function discardPaymentOcrResult() {
+    resetPaymentOcrUi();
+    setPaymentOcrStatus('Scan discarded. You can upload again or type the reference.');
+  }
+
+  function setPaymentCameraStatus(message, isError) {
+    const status = paymentCameraModal?.querySelector('[data-payment-camera-status]');
+    if (!status) return;
+    if (!message) {
+      status.hidden = true;
+      status.textContent = '';
+      status.classList.remove('is-error');
+      return;
+    }
+    status.hidden = false;
+    status.textContent = message;
+    status.classList.toggle('is-error', Boolean(isError));
+  }
+
+  function setPaymentCameraGuideState(state, label) {
+    if (paymentCameraGuideFrame) {
+      paymentCameraGuideFrame.classList.toggle('is-scanning', state === 'scanning');
+      paymentCameraGuideFrame.classList.toggle('is-ready', state === 'ready');
+    }
+    if (paymentCameraGuideLabel && label) {
+      paymentCameraGuideLabel.textContent = label;
+    }
+  }
+
+  function stopPaymentCameraAutoScan() {
+    if (paymentCameraAutoTimer) {
+      window.clearTimeout(paymentCameraAutoTimer);
+      paymentCameraAutoTimer = 0;
+    }
+    paymentCameraScanBusy = false;
+    paymentCameraGoodHits = 0;
+    paymentCameraLastGoodRef = '';
+    setPaymentCameraGuideState('', 'Place receipt here');
+  }
+
+  async function disposePaymentCameraScanWorker() {
+    if (!paymentCameraScanWorker) return;
+    const worker = paymentCameraScanWorker;
+    paymentCameraScanWorker = null;
+    try {
+      await worker.terminate();
+    } catch {
+      // ignore terminate errors
+    }
+  }
+
+  async function ensurePaymentCameraScanWorker() {
+    if (paymentCameraScanWorker) return paymentCameraScanWorker;
+    if (typeof Tesseract === 'undefined' || typeof Tesseract.createWorker !== 'function') {
+      return null;
+    }
+    const worker = await Tesseract.createWorker('eng', 1);
+    await worker.setParameters({
+      tessedit_pageseg_mode: '6',
+      preserve_interword_spaces: '1',
+    });
+    paymentCameraScanWorker = worker;
+    return worker;
+  }
+
+  function stopPaymentCamera() {
+    stopPaymentCameraAutoScan();
+    disposePaymentCameraScanWorker();
+    if (paymentCameraStream) {
+      paymentCameraStream.getTracks().forEach((track) => track.stop());
+      paymentCameraStream = null;
+    }
+    if (paymentCameraVideo) {
+      paymentCameraVideo.srcObject = null;
+    }
+  }
+
+  function closePaymentCameraModal() {
+    paymentCameraAutoCaptureLock = false;
+    stopPaymentCamera();
+    setPaymentCameraStatus('');
+    if (paymentCameraModal) paymentCameraModal.hidden = true;
+  }
+
+  function grabPaymentCameraGuideSample() {
+    if (!paymentCameraVideo || !paymentCameraCanvas) return null;
+    const width = paymentCameraVideo.videoWidth || 0;
+    const height = paymentCameraVideo.videoHeight || 0;
+    if (!(width > 40 && height > 40)) return null;
+
+    // Approximate the centered 9:16 guide (~68% stage width) on object-fit:cover video.
+    const cropW = Math.round(width * 0.62);
+    const cropH = Math.round(Math.min(height * 0.86, cropW * (16 / 9)));
+    const sx = Math.max(0, Math.round((width - cropW) / 2));
+    const sy = Math.max(0, Math.round((height - cropH) / 2));
+    const sw = Math.min(cropW, width - sx);
+    const sh = Math.min(cropH, height - sy);
+
+    paymentCameraCanvas.width = sw;
+    paymentCameraCanvas.height = sh;
+    const ctx = paymentCameraCanvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(paymentCameraVideo, sx, sy, sw, sh, 0, 0, sw, sh);
+    const image = ctx.getImageData(0, 0, sw, sh);
+    return { width: sw, height: sh, image, canvas: paymentCameraCanvas };
+  }
+
+  function measureFrameSharpness(imageData) {
+    const { data, width, height } = imageData;
+    if (width < 8 || height < 8) return 0;
+    // Downsample for speed.
+    const stepX = Math.max(1, Math.floor(width / 120));
+    const stepY = Math.max(1, Math.floor(height / 160));
+    let sum = 0;
+    let sumSq = 0;
+    let count = 0;
+    let edge = 0;
+    for (let y = stepY; y < height - stepY; y += stepY) {
+      for (let x = stepX; x < width - stepX; x += stepX) {
+        const i = (y * width + x) * 4;
+        const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+        const right = data[i + stepX * 4] * 0.299
+          + data[i + stepX * 4 + 1] * 0.587
+          + data[i + stepX * 4 + 2] * 0.114;
+        const below = data[((y + stepY) * width + x) * 4] * 0.299
+          + data[((y + stepY) * width + x) * 4 + 1] * 0.587
+          + data[((y + stepY) * width + x) * 4 + 2] * 0.114;
+        const lap = Math.abs(right - gray) + Math.abs(below - gray);
+        edge += lap;
+        sum += gray;
+        sumSq += gray * gray;
+        count += 1;
+      }
+    }
+    if (!count) return 0;
+    const mean = sum / count;
+    const variance = Math.max(0, sumSq / count - mean * mean);
+    const contrast = Math.sqrt(variance);
+    const sharpness = edge / count;
+    // Prefer frames that are both sharp and reasonably contrasted (not blank/dark).
+    if (contrast < 18) return sharpness * 0.35;
+    return sharpness;
+  }
+
+  function receiptDetailsLookClear(parsed, text) {
+    if (!parsed) return false;
+    const reference = String(parsed.reference || '').replace(/\s+/g, '');
+    const hasRef = reference.length >= 6;
+    const hasAmount = parsed.amount != null && Number(parsed.amount) > 0;
+    const hasWallet = Boolean(parsed.wallet && parsed.wallet !== 'Other');
+    const hasKeywords = /GCASH|MAYA|INSTAPAY|PAYPAL|REF\s*NO|AMOUNT|TRANSACTION|EXPRESS\s*SEND/i.test(
+      String(text || '')
+    );
+    return (hasRef && hasAmount) || (hasRef && hasWallet && hasKeywords);
+  }
+
+  function schedulePaymentCameraAutoScan(delayMs = 700) {
+    if (paymentCameraAutoTimer) window.clearTimeout(paymentCameraAutoTimer);
+    paymentCameraAutoTimer = window.setTimeout(() => {
+      paymentCameraAutoTimer = 0;
+      runPaymentCameraAutoScanTick();
+    }, delayMs);
+  }
+
+  async function runPaymentCameraAutoScanTick() {
+    if (
+      !paymentCameraModal
+      || paymentCameraModal.hidden
+      || paymentCameraAutoCaptureLock
+      || !paymentCameraStream
+    ) {
+      return;
+    }
+    if (paymentCameraScanBusy) {
+      schedulePaymentCameraAutoScan(500);
+      return;
+    }
+
+    const sample = grabPaymentCameraGuideSample();
+    if (!sample) {
+      setPaymentCameraStatus('Waiting for camera preview…');
+      setPaymentCameraGuideState('scanning', 'Place receipt here');
+      schedulePaymentCameraAutoScan(600);
+      return;
+    }
+
+    const sharpness = measureFrameSharpness(sample.image);
+    if (sharpness < 14) {
+      paymentCameraGoodHits = 0;
+      paymentCameraLastGoodRef = '';
+      setPaymentCameraGuideState('scanning', 'Hold receipt in frame');
+      setPaymentCameraStatus('Move closer and hold steady — waiting for a clear receipt…');
+      schedulePaymentCameraAutoScan(650);
+      return;
+    }
+
+    if (typeof Tesseract === 'undefined') {
+      setPaymentCameraGuideState('ready', 'Looking clear — tap Capture');
+      setPaymentCameraStatus('Image looks clear. OCR unavailable — tap Capture photo.');
+      schedulePaymentCameraAutoScan(1200);
+      return;
+    }
+
+    paymentCameraScanBusy = true;
+    setPaymentCameraGuideState('scanning', 'Reading details…');
+    setPaymentCameraStatus('Clear image — checking receipt details…');
+    try {
+      const worker = await ensurePaymentCameraScanWorker();
+      let text = '';
+      if (worker) {
+        // Smaller JPEG for live scan speed.
+        const blob = await new Promise((resolve) => {
+          sample.canvas.toBlob((result) => resolve(result), 'image/jpeg', 0.72);
+        });
+        if (blob) {
+          const result = await worker.recognize(blob);
+          text = result?.data?.text || '';
+        }
+      } else {
+        const result = await Tesseract.recognize(sample.canvas, 'eng');
+        text = result?.data?.text || '';
+      }
+
+      if (paymentCameraModal.hidden || paymentCameraAutoCaptureLock) return;
+
+      const parsed = parseEwalletOcrText(text);
+      const clear = receiptDetailsLookClear(parsed, text);
+      if (clear) {
+        const refKey = String(parsed.reference || '').replace(/\s+/g, '').toUpperCase();
+        if (refKey && refKey === paymentCameraLastGoodRef) {
+          paymentCameraGoodHits += 1;
+        } else {
+          paymentCameraLastGoodRef = refKey;
+          paymentCameraGoodHits = 1;
+        }
+
+        setPaymentCameraGuideState('ready', 'Details clear');
+        if (paymentCameraGoodHits >= 2 || (paymentCameraGoodHits >= 1 && sharpness >= 22)) {
+          setPaymentCameraStatus('Details clear — capturing…');
+          paymentCameraAutoCaptureLock = true;
+          stopPaymentCameraAutoScan();
+          await capturePaymentCameraPhoto({ auto: true });
+          return;
+        }
+        setPaymentCameraStatus('Details found — hold steady…');
+      } else {
+        paymentCameraGoodHits = 0;
+        paymentCameraLastGoodRef = '';
+        setPaymentCameraGuideState('scanning', 'Need clearer details');
+        setPaymentCameraStatus('Receipt visible, but ref/amount not clear yet — adjust and hold…');
+      }
+    } catch {
+      setPaymentCameraStatus('Still scanning… keep the receipt centered.');
+    } finally {
+      paymentCameraScanBusy = false;
+      if (!paymentCameraAutoCaptureLock && paymentCameraModal && !paymentCameraModal.hidden) {
+        schedulePaymentCameraAutoScan(900);
+      }
+    }
+  }
+
+  async function startPaymentCameraStream() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Camera API is not available in this browser.');
+    }
+    stopPaymentCameraAutoScan();
+    if (paymentCameraStream) {
+      paymentCameraStream.getTracks().forEach((track) => track.stop());
+      paymentCameraStream = null;
+    }
+    if (paymentCameraVideo) paymentCameraVideo.srcObject = null;
+
+    const constraints = {
+      audio: false,
+      video: {
+        facingMode: { ideal: paymentCameraFacingMode },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+    };
+    paymentCameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (paymentCameraVideo) {
+      paymentCameraVideo.srcObject = paymentCameraStream;
+      await paymentCameraVideo.play().catch(() => {});
+    }
+  }
+
+  function openNativeReceiptCapture() {
+    const captureInput = paymentAddModal?.querySelector('[data-payment-receipt-capture]');
+    if (captureInput) {
+      captureInput.value = '';
+      captureInput.click();
+      return;
+    }
+    paymentAddModal?.querySelector('[data-payment-receipt-upload]')?.click();
+  }
+
+  async function openPaymentCamera() {
+    if (!paymentAddModal || paymentAddModal.hidden) return;
+    if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+      setPaymentOcrStatus('Camera needs HTTPS (or localhost). Opening device capture…', true);
+      openNativeReceiptCapture();
+      return;
+    }
+
+    if (!paymentCameraModal || !paymentCameraVideo) {
+      openNativeReceiptCapture();
+      return;
+    }
+
+    paymentCameraFacingMode = 'environment';
+    paymentCameraAutoCaptureLock = false;
+    paymentCameraModal.hidden = false;
+    setPaymentCameraStatus('Starting camera…');
+    setPaymentCameraGuideState('scanning', 'Place receipt here');
+    try {
+      await startPaymentCameraStream();
+      setPaymentCameraStatus('Auto-scan on — hold a clear receipt in the frame.');
+      schedulePaymentCameraAutoScan(900);
+    } catch (error) {
+      closePaymentCameraModal();
+      const message = error instanceof Error ? error.message : 'Unable to open camera.';
+      setPaymentOcrStatus(`${message} Opening device camera instead…`, true);
+      openNativeReceiptCapture();
+    }
+  }
+
+  async function switchPaymentCamera() {
+    paymentCameraFacingMode = paymentCameraFacingMode === 'environment' ? 'user' : 'environment';
+    paymentCameraAutoCaptureLock = false;
+    stopPaymentCameraAutoScan();
+    setPaymentCameraStatus('Switching camera…');
+    try {
+      await startPaymentCameraStream();
+      setPaymentCameraStatus(
+        paymentCameraFacingMode === 'environment'
+          ? 'Rear camera — auto-scan on.'
+          : 'Front camera — auto-scan on.'
+      );
+      schedulePaymentCameraAutoScan(800);
+    } catch {
+      paymentCameraFacingMode = paymentCameraFacingMode === 'environment' ? 'user' : 'environment';
+      setPaymentCameraStatus('Could not switch camera on this device.', true);
+      try {
+        await startPaymentCameraStream();
+        schedulePaymentCameraAutoScan(800);
+      } catch {
+        closePaymentCameraModal();
+        openNativeReceiptCapture();
+      }
+    }
+  }
+
+  async function capturePaymentCameraPhoto(options = {}) {
+    if (!paymentCameraVideo || !paymentCameraCanvas || !paymentCameraStream) {
+      setPaymentCameraStatus('Camera is not ready yet.', true);
+      paymentCameraAutoCaptureLock = false;
+      return;
+    }
+    const width = paymentCameraVideo.videoWidth || 1280;
+    const height = paymentCameraVideo.videoHeight || 720;
+    if (!(width > 0 && height > 0)) {
+      setPaymentCameraStatus('Wait for the camera preview, then try again.', true);
+      paymentCameraAutoCaptureLock = false;
+      if (!options.auto) schedulePaymentCameraAutoScan(700);
+      return;
+    }
+
+    stopPaymentCameraAutoScan();
+    paymentCameraAutoCaptureLock = true;
+    setPaymentCameraStatus(options.auto ? 'Auto-capturing clear receipt…' : 'Capturing…');
+
+    paymentCameraCanvas.width = width;
+    paymentCameraCanvas.height = height;
+    const ctx = paymentCameraCanvas.getContext('2d');
+    if (!ctx) {
+      setPaymentCameraStatus('Unable to capture this frame.', true);
+      paymentCameraAutoCaptureLock = false;
+      schedulePaymentCameraAutoScan(700);
+      return;
+    }
+    ctx.drawImage(paymentCameraVideo, 0, 0, width, height);
+
+    const blob = await new Promise((resolve) => {
+      paymentCameraCanvas.toBlob((result) => resolve(result), 'image/jpeg', 0.92);
+    });
+    if (!blob) {
+      setPaymentCameraStatus('Could not create the photo. Try again.', true);
+      paymentCameraAutoCaptureLock = false;
+      schedulePaymentCameraAutoScan(700);
+      return;
+    }
+
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const file = new File([blob], `receipt-camera-${stamp}.jpg`, { type: 'image/jpeg' });
+    closePaymentCameraModal();
+    await runPaymentReceiptOcr(file);
+  }
+
+  function handleReceiptFileSelected(file, input) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setPaymentOcrStatus('Choose an image file (JPG / PNG / WEBP).', true);
+      if (input) input.value = '';
+      return;
+    }
+    if (file.size > 8_000_000) {
+      setPaymentOcrStatus('Receipt image must be under 8 MB.', true);
+      if (input) input.value = '';
+      return;
+    }
+    runPaymentReceiptOcr(file);
+  }
+
+  function setPaymentPricesExpanded(expanded) {
+    const toggle = paymentAddModal?.querySelector('[data-payment-prices-toggle]');
+    const body = paymentAddModal?.querySelector('[data-payment-prices-body]');
+    if (!toggle || !body) return;
+    toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    toggle.classList.toggle('is-open', expanded);
+    body.hidden = !expanded;
+  }
+
+  function updatePaymentPricesUi() {
+    if (!paymentAddModal) return;
+    const setText = (sel, value) => {
+      const el = paymentAddModal.querySelector(sel);
+      if (el) el.textContent = money(value);
+    };
+    setText('[data-price-stay]', paymentPriceContext.stayTotal);
+    setText('[data-price-paid]', paymentPriceContext.amountPaid);
+    const bal = Number(paymentPriceContext.balanceDue) || 0;
+    const balanceEl = paymentAddModal.querySelector('[data-price-balance]');
+    if (balanceEl) {
+      balanceEl.textContent = money(bal < -0.009 ? Math.abs(bal) : Math.max(0, bal));
+    }
+    const preview = paymentAddModal.querySelector('[data-payment-prices-preview]');
+    if (preview) {
+      const label = bal < -0.009 ? 'Overpaid' : bal <= 0.009 ? 'Fully paid' : 'Balance due';
+      preview.textContent = `${label} ${money(bal < -0.009 ? Math.abs(bal) : Math.max(0, bal))} · closed by default`;
+    }
+  }
+
+  function syncPaymentMethodPanels() {
+    if (!paymentAddModal) return;
+    const method = paymentAddModal.querySelector('[data-payment-method]')?.value || 'Cash';
+    const cash = isCashPaymentMethod(method);
+    const digital = isDigitalPaymentMethod(method);
+    const cashPanel = paymentAddModal.querySelector('[data-payment-cash-panel]');
+    const epayPanel = paymentAddModal.querySelector('[data-payment-epay-panel]');
+    const bankWrap = paymentAddModal.querySelector('[data-payment-bank-ref-wrap]');
+    const hint = paymentAddModal.querySelector('[data-payment-epay-hint]');
+    if (cashPanel) cashPanel.hidden = !cash;
+    if (epayPanel) epayPanel.hidden = !digital;
+    if (bankWrap) bankWrap.hidden = method !== 'BankTransfer';
+    if (hint) {
+      hint.textContent =
+        method === 'BankTransfer'
+          ? 'Guest scans the hotel InstaPay QR. Then scan their receipt (or type the reference) and correct OCR if needed.'
+          : 'Guest pays by e-wallet (GCash, Maya, PayPal, etc.). Scan their receipt (or type the reference) and correct OCR if needed.';
+    }
+    updateCashChangeUi();
+  }
+
+  function updateCashChangeUi() {
+    if (!paymentAddModal) return;
+    const due = Number(paymentAddModal.querySelector('[data-payment-cash-due]')?.value || 0);
+    const tendered = Number(paymentAddModal.querySelector('[data-payment-cash-tendered]')?.value || 0);
+    const change = Math.max(0, Math.round((tendered - due) * 100) / 100);
+    const changeEl = paymentAddModal.querySelector('[data-payment-cash-change]');
+    const formula = paymentAddModal.querySelector('[data-payment-cash-formula]');
+    const box = paymentAddModal.querySelector('[data-payment-change-box]');
+    if (changeEl) changeEl.textContent = money(change);
+    if (formula) {
+      formula.textContent = `${money(tendered)} − ${money(due)} = ${money(change)} change`;
+    }
+    if (box) {
+      box.classList.toggle('is-short', tendered > 0 && tendered < due);
+      box.classList.toggle('is-ready', tendered >= due && due > 0);
+    }
+  }
+
+  function applyPaymentPricePick(key) {
+    const value = Number(paymentPriceContext[key] || 0);
+    if (!(value >= 0)) return;
+    const cashDue = paymentAddModal?.querySelector('[data-payment-cash-due]');
+    const epayAmount = paymentAddModal?.querySelector('[data-payment-epay-amount]');
+    if (cashDue) cashDue.value = value.toFixed(2);
+    if (epayAmount) epayAmount.value = value.toFixed(2);
+    updateCashChangeUi();
+  }
+
+  function fillPaymentSummaryFields(booking, summary) {
+    paymentPriceContext = {
+      stayTotal: Number(summary?.stayTotal ?? booking.totalAmount ?? 0),
+      amountPaid: Number(summary?.amountPaid ?? 0),
+      balanceDue: Number(
+        summary?.balanceDue ?? booking.totalAmount ?? 0
+      ),
+      amountDueNow: Number(booking.amountDueNow ?? summary?.balanceDue ?? booking.totalAmount ?? 0),
+    };
+  }
+
+  async function loadBookingPaymentSummary(booking) {
+    fillPaymentSummaryFields(booking, null);
+    try {
+      return await apiFetch(`/api/admin/payments/booking/${booking.id}`);
+    } catch {
+      return null;
+    }
+  }
+
+  async function openPaymentViewModal(booking) {
+    if (!paymentViewModal || !booking) return;
+    paymentBookingContext = booking;
+    const ref = paymentViewModal.querySelector('[data-payment-view-ref]');
+    const guest = paymentViewModal.querySelector('[data-payment-view-guest]');
+    if (ref) ref.textContent = booking.reference;
+    if (guest) guest.textContent = booking.guestName || 'Guest';
+    if (paymentViewList) {
+      paymentViewList.innerHTML =
+        '<tr><td colspan="6" class="admin-bookings-loading">Loading…</td></tr>';
+    }
+    if (paymentViewSummary) paymentViewSummary.replaceChildren();
+
+    const summary = await loadBookingPaymentSummary(booking);
+    if (summary) fillPaymentSummaryFields(booking, summary);
+
+    if (paymentViewSummary) {
+      [
+        ['Stay total', money(paymentPriceContext.stayTotal)],
+        ['Already paid', money(paymentPriceContext.amountPaid)],
+        ['Balance due', money(paymentPriceContext.balanceDue)],
+      ].forEach(([label, value]) => {
+        const dt = document.createElement('dt');
+        dt.textContent = label;
+        const dd = document.createElement('dd');
+        dd.textContent = value;
+        paymentViewSummary.append(dt, dd);
+      });
+    }
+
+    if (paymentViewList) {
+      paymentViewList.replaceChildren();
+      const payments = (summary?.payments || []).filter((p) => p.status !== 'Voided');
+      if (!payments.length) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 6;
+        cell.className = 'admin-bookings-loading';
+        cell.textContent = 'No payments posted yet.';
+        row.appendChild(cell);
+        paymentViewList.appendChild(row);
+      } else {
+        payments.forEach((payment) => {
+          const row = document.createElement('tr');
+          const methodLabel = formatPaymentMethod(payment.method);
+          const methodWithRef = payment.externalReference
+            ? `${methodLabel}\n${payment.externalReference}`
+            : methodLabel;
+          [
+            formatDateTime(payment.paidAtUtc),
+            payment.receiptNumber,
+            formatPaymentEvent(payment.eventType),
+            methodWithRef,
+            money(payment.amount),
+            payment.receivedBy,
+          ].forEach((text, index) => {
+            const td = document.createElement('td');
+            td.textContent = text;
+            if (index === 3) td.className = 'admin-payment-method-cell';
+            row.appendChild(td);
+          });
+          if (payment.receiptImagePath) {
+            const last = row.lastElementChild;
+            if (last) {
+              const link = document.createElement('a');
+              link.href = payment.receiptImagePath;
+              link.target = '_blank';
+              link.rel = 'noopener noreferrer';
+              link.className = 'admin-payment-receipt-link';
+              link.textContent = 'Receipt';
+              last.appendChild(document.createElement('br'));
+              last.appendChild(link);
+            }
+          }
+          paymentViewList.appendChild(row);
+        });
+      }
+    }
+
+    const canAdd = !booking.isArchived && paymentPriceContext.balanceDue > 0.009;
+    if (paymentViewAddBtn) {
+      paymentViewAddBtn.hidden = !canAdd;
+    }
+    paymentViewModal.hidden = false;
+  }
+
+  async function refreshOpenBookingDetails(bookingId) {
+    if (!detailModal || detailModal.hidden) return;
+    const id = Number(bookingId || selectedBooking?.id || 0);
+    if (!id) return;
+    if (selectedBooking && selectedBooking.id !== id) return;
+    try {
+      const booking = await apiFetch(`/api/admin/bookings/${id}`);
+      selectedBooking = booking;
+      if (paymentBookingContext?.id === id) {
+        paymentBookingContext = booking;
+      }
+      await renderBookingDetails(booking);
+    } catch {
+      // Keep the open modal; list refresh still runs separately.
+    }
+  }
+
+  function closePaymentViewModal() {
+    if (paymentViewModal) paymentViewModal.hidden = true;
+    const id = paymentBookingContext?.id || selectedBooking?.id;
+    if (id) {
+      refreshOpenBookingDetails(id);
+    }
+  }
+
+  async function openAddPaymentModal(booking) {
+    if (!paymentAddModal || !booking) return;
+    if (booking.isArchived) {
+      showBookingMessage('Archived bookings cannot take new payments.', true);
+      return;
+    }
+    paymentBookingContext = booking;
+    const summary = await loadBookingPaymentSummary(booking);
+    if (summary) fillPaymentSummaryFields(booking, summary);
+
+    if (paymentPriceContext.balanceDue <= 0.009) {
+      showBookingMessage('This booking is already fully paid.', true);
+      await openPaymentViewModal(booking);
+      return;
+    }
+
+    closePaymentViewModal();
+
+    const defaultAmount = paymentPriceContext.balanceDue;
+    const ref = paymentAddModal.querySelector('[data-payment-add-ref]');
+    const guestLine = paymentAddModal.querySelector('[data-payment-add-guest]');
+    if (ref) ref.textContent = booking.reference;
+    if (guestLine) guestLine.textContent = booking.guestName || 'Guest';
+
+    const cashDue = paymentAddModal.querySelector('[data-payment-cash-due]');
+    const epayAmount = paymentAddModal.querySelector('[data-payment-epay-amount]');
+    const tendered = paymentAddModal.querySelector('[data-payment-cash-tendered]');
+    if (cashDue) cashDue.value = defaultAmount.toFixed(2);
+    if (epayAmount) epayAmount.value = defaultAmount.toFixed(2);
+    if (tendered) tendered.value = '';
+
+    const by = paymentAddModal.querySelector('[data-payment-received-by]');
+    if (by) by.value = localStorage.getItem('moriPaymentReceivedBy') || '';
+    const methodSelect = paymentAddModal.querySelector('[data-payment-method]');
+    if (methodSelect) methodSelect.value = 'Cash';
+    const ext = paymentAddModal.querySelector('[data-payment-external-ref]');
+    const bank = paymentAddModal.querySelector('[data-payment-bank-ref]');
+    const notes = paymentAddModal.querySelector('[data-payment-notes]');
+    if (ext) ext.value = '';
+    if (bank) bank.value = '';
+    if (notes) notes.value = '';
+    resetPaymentOcrUi();
+
+    updatePaymentPricesUi();
+    setPaymentPricesExpanded(false);
+    syncPaymentMethodPanels();
+    paymentAddModal.hidden = false;
+  }
+
+  function closeAddPaymentModal() {
+    closePaymentCameraModal();
+    closePaymentAddPopup();
+    setPaymentAddBanner('');
+    resetPaymentOcrUi();
+    if (paymentAddModal) paymentAddModal.hidden = true;
+  }
+
+  async function saveRecordedPayment() {
+    if (!paymentBookingContext || !paymentAddModal) return;
+    const receivedBy = (paymentAddModal.querySelector('[data-payment-received-by]')?.value || '').trim();
+    const eventType = 'ArrivalPayment';
+    const method = paymentAddModal.querySelector('[data-payment-method]')?.value || 'Cash';
+    const saveBtn = paymentAddModal.querySelector('[data-payment-add-save]');
+    const cash = isCashPaymentMethod(method);
+
+    let amount = cash
+      ? Number(paymentAddModal.querySelector('[data-payment-cash-due]')?.value || 0)
+      : Number(paymentAddModal.querySelector('[data-payment-epay-amount]')?.value || 0);
+
+    let notes = (paymentAddModal.querySelector('[data-payment-notes]')?.value || '').trim();
+    let externalReference = paymentAddModal.querySelector('[data-payment-external-ref]')?.value || null;
+    let bankTransferReference = paymentAddModal.querySelector('[data-payment-bank-ref]')?.value || null;
+    let digitalCapMessage = '';
+
+    if (!cash && (paymentOcrBusy || isPaymentOcrAwaitingApply())) {
+      if (paymentOcrBusy) {
+        showPaymentAddPopup('Wait for receipt OCR to finish before saving.', 'Still reading receipt');
+      } else {
+        showPaymentAddPopup(
+          'Click “Apply to payment” first to copy the scanned receipt into this payment, or click Discard scan.',
+          'Apply receipt first'
+        );
+        paymentAddModal
+          .querySelector('[data-payment-ocr-compare]')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+      return;
+    }
+
+    if (receivedBy.length < 2) {
+      showPaymentAddPopup('Enter the staff name who received payment.', 'Missing staff name');
+      return;
+    }
+    if (!(amount > 0) && eventType !== 'Refund') {
+      showPaymentAddPopup('Select an amount from Price details.', 'Missing amount');
+      return;
+    }
+
+    if (cash && eventType !== 'Refund') {
+      const tendered = Number(paymentAddModal.querySelector('[data-payment-cash-tendered]')?.value || 0);
+      if (!(tendered > 0)) {
+        showBookingMessage('Enter cash received from the guest.', true);
+        return;
+      }
+      if (tendered + 0.001 < amount) {
+        showBookingMessage('Cash from guest is less than the amount due.', true);
+        return;
+      }
+      const change = Math.round((tendered - amount) * 100) / 100;
+      const cashNote = `Cash tendered ${money(tendered)} · Change ${money(change)}`;
+      notes = notes ? `${notes}\n${cashNote}` : cashNote;
+      externalReference = null;
+      bankTransferReference = null;
+    } else if (!cash) {
+      if (!(externalReference || '').trim() && !(bankTransferReference || '').trim()) {
+        showPaymentAddPopup(
+          'Enter the payment reference, or upload a receipt and click Apply to payment.',
+          'Missing payment reference'
+        );
+        return;
+      }
+      if (method === 'BankTransfer' && !(bankTransferReference || '').trim() && (externalReference || '').trim()) {
+        bankTransferReference = externalReference;
+      }
+
+      // Option C: e-wallet / bank transfer — post only balance due; note excess on the receipt.
+      const balanceDue = Math.max(0, Number(paymentPriceContext.balanceDue) || 0);
+      if (eventType !== 'Refund' && amount > balanceDue + 0.009) {
+        if (!(balanceDue > 0.009)) {
+          showPaymentAddPopup('This booking is already fully paid.', 'Already paid');
+          return;
+        }
+        const receiptAmount = Math.round(amount * 100) / 100;
+        const applied = Math.round(balanceDue * 100) / 100;
+        const excess = Math.round((receiptAmount - applied) * 100) / 100;
+        amount = applied;
+        const epayAmount = paymentAddModal.querySelector('[data-payment-epay-amount]');
+        if (epayAmount) epayAmount.value = applied.toFixed(2);
+        const capNote =
+          `Receipt/transfer ${money(receiptAmount)} · Applied ${money(applied)} (excess ${money(excess)} not posted)`;
+        if (!/Receipt\/transfer .* · Applied /i.test(notes)) {
+          notes = notes ? `${notes}\n${capNote}` : capNote;
+        }
+        const notesField = paymentAddModal.querySelector('[data-payment-notes]');
+        if (notesField) notesField.value = notes;
+        digitalCapMessage =
+          `Posted ${money(applied)} of ${money(receiptAmount)} receipt (excess ${money(excess)} not posted).`;
+      }
+    }
+
+    const receiptImagePath = cash
+      ? null
+      : (paymentAddModal.querySelector('[data-payment-receipt-path]')?.value || '').trim() || null;
+
+    if (saveBtn) saveBtn.disabled = true;
+    try {
+      await apiFetch('/api/admin/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookingId: paymentBookingContext.id,
+          eventType,
+          method,
+          amount: eventType === 'Refund' ? -Math.abs(amount) : amount,
+          receivedBy,
+          externalReference: cash ? null : externalReference,
+          bankTransferReference: cash || method !== 'BankTransfer' ? null : bankTransferReference,
+          notes: notes || null,
+          receiptImagePath,
+        }),
+      });
+      localStorage.setItem('moriPaymentReceivedBy', receivedBy);
+      const bookingId = paymentBookingContext.id;
+      closeAddPaymentModal();
+      showBookingMessage(
+        digitalCapMessage
+          ? `Payment saved. ${digitalCapMessage}`
+          : 'Payment saved. Posted records cannot be edited.'
+      );
+      await Promise.all([refreshBookings(), refreshOpenBookingDetails(bookingId)]);
+      if (paymentBookingContext) {
+        await openPaymentViewModal(paymentBookingContext);
+      } else if (selectedBooking?.id === bookingId) {
+        await openPaymentViewModal(selectedBooking);
+      }
+    } catch (error) {
+      showBookingMessage(error instanceof Error ? error.message : 'Unable to record payment.', true);
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
+    }
+  }
+
+  function setFlushLogExpanded(expanded) {
+    if (!flushLogToggle || !flushLogBody) return;
+    flushLogToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    flushLogBody.hidden = !expanded;
+    flushLogToggle.classList.toggle('is-open', expanded);
+    updateFlushLogCountLabel(flushLogsCache.length, expanded);
+  }
+
+  function updateFlushLogCountLabel(count, expanded) {
+    if (!flushLogCount) return;
+    const state = expanded ? 'Open' : 'Closed';
+    if (!count) {
+      flushLogCount.textContent = `${state} · no flush actions yet`;
+      return;
+    }
+    flushLogCount.textContent = `${state} · ${count} flush action${count === 1 ? '' : 's'}`;
+  }
+
+  function openFlushDetail(log) {
+    if (!flushDetailModal || !flushDetailBody) return;
+    if (flushDetailFile) flushDetailFile.textContent = log.fileName || 'Flush record';
+    const lines = String(log.summary || '')
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const fields = [
+      ['When (PH)', formatDateTime(log.flushedAtUtc)],
+      ['Performed by', log.performedBy || '—'],
+      ['Records deleted', String(log.recordCount ?? 0)],
+      ['PDF softcopy', log.fileName || '—'],
+    ];
+    flushDetailBody.replaceChildren();
+    const grid = document.createElement('dl');
+    grid.className = 'admin-flush-detail-grid';
+    fields.forEach(([label, value]) => {
+      const dt = document.createElement('dt');
+      dt.textContent = label;
+      const dd = document.createElement('dd');
+      dd.textContent = value;
+      grid.append(dt, dd);
+    });
+    flushDetailBody.appendChild(grid);
+    if (lines.length) {
+      const title = document.createElement('h3');
+      title.className = 'admin-flush-detail-subtitle';
+      title.textContent = 'Important details';
+      flushDetailBody.appendChild(title);
+      const list = document.createElement('ul');
+      list.className = 'admin-flush-detail-points';
+      lines.forEach((line) => {
+        const item = document.createElement('li');
+        item.textContent = line;
+        list.appendChild(item);
+      });
+      flushDetailBody.appendChild(list);
+    } else {
+      const empty = document.createElement('p');
+      empty.textContent = 'No extra summary was stored for this flush.';
+      flushDetailBody.appendChild(empty);
+    }
+    flushDetailModal.hidden = false;
+  }
+
+  function closeFlushDetail() {
+    if (flushDetailModal) flushDetailModal.hidden = true;
+  }
+
+  async function refreshFlushLogs() {
+    if (!flushLogList || !history) return;
+    flushLogList.innerHTML =
+      '<tr><td colspan="5" class="admin-bookings-loading">Loading flush log…</td></tr>';
+    try {
+      const logs = await apiFetch('/api/admin/bookings/history/flush-logs');
+      flushLogsCache = Array.isArray(logs) ? logs : [];
+      const isOpen = flushLogToggle?.getAttribute('aria-expanded') === 'true';
+      updateFlushLogCountLabel(flushLogsCache.length, isOpen);
+      flushLogList.replaceChildren();
+      if (!flushLogsCache.length) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 5;
+        cell.className = 'admin-bookings-loading';
+        cell.textContent = 'No flush actions yet.';
+        row.appendChild(cell);
+        flushLogList.appendChild(row);
+        return;
+      }
+      flushLogsCache.forEach((log) => {
+        const row = document.createElement('tr');
+        const cells = [
+          formatDateTime(log.flushedAtUtc),
+          log.performedBy || '—',
+          String(log.recordCount ?? 0),
+          log.fileName || '—',
+        ];
+        cells.forEach((text) => {
+          const td = document.createElement('td');
+          td.textContent = text;
+          row.appendChild(td);
+        });
+        const action = document.createElement('td');
+        action.className = 'admin-booking-table-actions';
+        const view = document.createElement('button');
+        view.type = 'button';
+        view.textContent = 'View';
+        view.addEventListener('click', () => openFlushDetail(log));
+        action.appendChild(view);
+        row.appendChild(action);
+        flushLogList.appendChild(row);
+      });
+    } catch (error) {
+      flushLogsCache = [];
+      updateFlushLogCountLabel(0, flushLogToggle?.getAttribute('aria-expanded') === 'true');
+      flushLogList.innerHTML = '';
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 5;
+      cell.className = 'admin-bookings-loading';
+      cell.textContent = error instanceof Error ? error.message : 'Unable to load flush log.';
+      row.appendChild(cell);
+      flushLogList.appendChild(row);
+    }
+  }
+
+  function openFlushModal() {
+    if (!flushModal) return;
+    if (flushByInput) {
+      flushByInput.value = localStorage.getItem('moriHistoryFlushBy') || '';
+      flushByInput.focus();
+    }
+    flushModal.hidden = false;
+  }
+
+  function closeFlushModal() {
+    if (flushModal) flushModal.hidden = true;
+  }
+
+  async function confirmFlushHistory() {
+    const performedBy = (flushByInput?.value || '').trim();
+    if (performedBy.length < 2) {
+      showBookingMessage('Enter the staff name who is flushing history.', true);
+      flushByInput?.focus();
+      return;
+    }
+    if (
+      !window.confirm(
+        'Export all history to a branded PDF, save it to this device, then permanently delete those history records?'
+      )
+    ) {
+      return;
+    }
+
+    if (flushConfirmButton) flushConfirmButton.disabled = true;
+    try {
+      const result = await apiFetchBlob('/api/admin/bookings/history/flush', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/pdf, application/json' },
+        body: JSON.stringify({ performedBy }),
+      });
+      localStorage.setItem('moriHistoryFlushBy', performedBy);
+      downloadBlob(result.blob, result.fileName);
+      closeFlushModal();
+      page = 1;
+      await Promise.all([refreshBookings(), refreshFlushLogs()]);
+      showBookingMessage(
+        `History flushed (${result.recordCount || 'all'} records). PDF saved as ${result.fileName}.`
+      );
+    } catch (error) {
+      showBookingMessage(error instanceof Error ? error.message : 'Unable to flush history.', true);
+    } finally {
+      if (flushConfirmButton) flushConfirmButton.disabled = false;
+    }
+  }
+
   function displayEnum(value) {
     if (value === 'CheckedOut') return 'Checked out';
     if (typeof value === 'string') return value;
     return String(value ?? '');
   }
 
+  const PH_TZ = 'Asia/Manila';
+  const PH_LOCALE = 'en-PH';
+
+  /** API DateTimes are UTC; EF often omits `Z`, so browsers would misread them as local. */
+  function parseUtc(value) {
+    if (!value) return null;
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? null : value;
+    }
+    const raw = String(value).trim();
+    if (!raw) return null;
+    const hasZone = /(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(raw);
+    const iso = hasZone || !/T/.test(raw) ? raw : `${raw}Z`;
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function manilaParts(value) {
+    const date = parseUtc(value);
+    if (!date) return null;
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: PH_TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(date);
+    const get = (type) => parts.find((p) => p.type === type)?.value || '';
+    return {
+      date: `${get('year')}-${get('month')}-${get('day')}`,
+      time: `${get('hour')}:${get('minute')}`,
+    };
+  }
+
   function formatDate(value) {
     if (!value) return '—';
-    const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
-    return Number.isNaN(date.getTime())
-      ? String(value)
-      : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const date = parseUtc(value);
+    return date
+      ? date.toLocaleDateString(PH_LOCALE, {
+          timeZone: PH_TZ,
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        })
+      : String(value);
   }
 
   function formatDateTime(value) {
     if (!value) return '';
-    const date = new Date(value);
-    return Number.isNaN(date.getTime())
-      ? ''
-      : date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const date = parseUtc(value);
+    return date
+      ? date.toLocaleString(PH_LOCALE, {
+          timeZone: PH_TZ,
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        })
+      : '';
+  }
+
+  function formatStayRange(checkIn, checkOut) {
+    return `${formatDateTime(checkIn) || formatDate(checkIn)} → ${formatDateTime(checkOut) || formatDate(checkOut)}`;
+  }
+
+  function toManilaDateTimeIso(dateStr, timeStr) {
+    const date = String(dateStr || '').slice(0, 10);
+    const time = String(timeStr || '00:00').slice(0, 5);
+    return `${date}T${time}:00+08:00`;
   }
 
   function money(value) {
@@ -153,6 +2136,15 @@
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   function setBadge(unread) {
@@ -177,14 +2169,15 @@
     const title = document.createElement('strong');
     title.textContent = `${item.reference} · ${item.guestName}`;
     const meta = document.createElement('span');
-    meta.textContent = `${displayEnum(item.kind)} · ${formatDate(item.checkIn)}`;
+    meta.textContent = `${displayEnum(item.kind)} · ${formatDateTime(item.checkInAtUtc || item.checkIn) || formatDate(item.checkInAtUtc || item.checkIn)}`;
     const time = document.createElement('small');
     time.textContent = formatDateTime(item.createdAtUtc);
     contentBtn.append(title, meta, time);
 
     if (item.message) {
       const msg = document.createElement('div');
-      msg.className = `admin-notification-msg ${item.message.includes('Warning') ? 'is-warning' : 'is-info'}`;
+      const isAlert = /warning|arrival|call guest|checkout|auto-cancelled/i.test(item.message);
+      msg.className = `admin-notification-msg ${isAlert ? 'is-warning' : 'is-info'}`;
       msg.textContent = item.message;
       contentBtn.append(msg);
     }
@@ -193,7 +2186,16 @@
       try {
         await apiFetch(`/api/admin/bookings/${item.id}/read`, { method: 'POST' });
       } finally {
-        window.location.assign(`/AdminBookings?booking=${item.id}`);
+        const message = String(item.message || '');
+        if (/call guest: checkout|checkout in 20/i.test(message)) {
+          window.location.assign('/AdminBookings?checkouts=soon');
+        } else if (/call guest/i.test(message)) {
+          window.location.assign('/AdminBookings?pendingCalls=soon');
+        } else if (/arrival/i.test(message)) {
+          window.location.assign('/AdminBookings?arrivals=soon');
+        } else {
+          window.location.assign(`/AdminBookings?booking=${item.id}`);
+        }
       }
     });
 
@@ -204,12 +2206,29 @@
     dismissBtn.title = 'Clear notification';
     dismissBtn.innerHTML = '&times;';
     dismissBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
       e.stopPropagation();
+      dismissBtn.disabled = true;
       try {
         await apiFetch(`/api/admin/bookings/${item.id}/read`, { method: 'POST' });
-        await refreshNotifications();
+        itemContainer.remove();
+        if (notificationItems && !notificationItems.querySelector('.admin-notification-item')) {
+          notificationItems.replaceChildren();
+          const empty = document.createElement('p');
+          empty.className = 'admin-notification-empty';
+          empty.textContent = 'No new notifications.';
+          notificationItems.append(empty);
+          setBadge(0);
+        } else {
+          const remaining = notificationItems?.querySelectorAll('.admin-notification-item.is-unread').length
+            ?? notificationItems?.querySelectorAll('.admin-notification-item').length
+            ?? 0;
+          setBadge(remaining);
+        }
       } catch (error) {
+        dismissBtn.disabled = false;
         console.error('Failed to clear notification:', error);
+        window.alert(error instanceof Error ? error.message : 'Could not clear this notification.');
       }
     });
 
@@ -245,52 +2264,376 @@
     bookingMessage.classList.toggle('is-error', isError);
   }
 
+  function setArrivalsMode(active) {
+    if (!arrivalsPanel) return;
+    if (active) {
+      if (pendingCallsPanel) pendingCallsPanel.hidden = true;
+      if (checkoutsPanel) checkoutsPanel.hidden = true;
+    }
+    arrivalsPanel.hidden = !active;
+    syncListChromeHidden();
+  }
+
+  function setPendingCallsMode(active) {
+    if (!pendingCallsPanel) return;
+    if (active) {
+      if (arrivalsPanel) arrivalsPanel.hidden = true;
+      if (checkoutsPanel) checkoutsPanel.hidden = true;
+    }
+    pendingCallsPanel.hidden = !active;
+    syncListChromeHidden();
+  }
+
+  function setCheckoutsMode(active) {
+    if (!checkoutsPanel) return;
+    if (active) {
+      if (arrivalsPanel) arrivalsPanel.hidden = true;
+      if (pendingCallsPanel) pendingCallsPanel.hidden = true;
+    }
+    checkoutsPanel.hidden = !active;
+    syncListChromeHidden();
+  }
+
+  function syncListChromeHidden() {
+    const specialOpen = (arrivalsPanel && !arrivalsPanel.hidden)
+      || (pendingCallsPanel && !pendingCallsPanel.hidden)
+      || (checkoutsPanel && !checkoutsPanel.hidden);
+    bookingsRoot?.querySelector('.admin-bookings-toolbar')?.toggleAttribute('hidden', specialOpen);
+    bookingsRoot?.querySelector('.admin-bookings-table-wrap')?.toggleAttribute('hidden', specialOpen);
+    bookingsRoot?.querySelector('.admin-bookings-pagination')?.toggleAttribute('hidden', specialOpen);
+  }
+
+  function arrivalCard(booking) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'admin-arrival-card';
+    const rooms = (booking.items || [])
+      .flatMap((line) => {
+        const assigned = (line.assignedRooms || []).map((room) => room.roomNumber).filter(Boolean);
+        return assigned.length
+          ? assigned
+          : [`${line.quantity}× ${line.roomTypeName}`];
+      })
+      .join(', ');
+    const title = document.createElement('strong');
+    title.textContent = `${booking.reference} · ${booking.guestName}`;
+    const meta = document.createElement('span');
+    meta.textContent = rooms || 'Rooms pending assignment';
+    const time = document.createElement('small');
+    time.textContent = `Check-in ${formatDateTime(booking.checkInAtUtc || booking.checkIn)}`;
+    button.append(title, meta, time);
+    button.addEventListener('click', () => openBookingDetails(booking.id, booking));
+    return button;
+  }
+
+  function pendingCallCard(booking) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'admin-arrival-card';
+    const rooms = (booking.items || [])
+      .map((line) => `${line.quantity}× ${line.roomTypeName}`)
+      .join(', ');
+    const title = document.createElement('strong');
+    title.textContent = `${booking.reference} · ${booking.guestName}`;
+    const phone = document.createElement('span');
+    phone.textContent = booking.guestPhone ? `Call ${booking.guestPhone}` : 'No phone on file';
+    const meta = document.createElement('span');
+    meta.textContent = rooms || 'No rooms';
+    const time = document.createElement('small');
+    time.textContent = `Check-in ${formatDateTime(booking.checkInAtUtc || booking.checkIn)}`;
+    button.append(title, phone, meta, time);
+    button.addEventListener('click', () => openBookingDetails(booking.id, booking));
+    return button;
+  }
+
+  function checkoutCallCard(booking) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'admin-arrival-card';
+    const rooms = (booking.items || [])
+      .flatMap((line) => {
+        const assigned = (line.assignedRooms || []).map((room) => room.roomNumber).filter(Boolean);
+        return assigned.length
+          ? assigned
+          : [`${line.quantity}× ${line.roomTypeName}`];
+      })
+      .join(', ');
+    const title = document.createElement('strong');
+    title.textContent = `${booking.reference} · ${booking.guestName}`;
+    const phone = document.createElement('span');
+    phone.textContent = booking.guestPhone
+      ? `Call ${booking.guestPhone} — ask about late checkout`
+      : 'No phone on file — ask about late checkout';
+    const meta = document.createElement('span');
+    meta.textContent = rooms || 'Rooms pending assignment';
+    const time = document.createElement('small');
+    time.textContent = `Checkout ${formatDateTime(booking.checkoutTimeUtc || booking.checkOut)}`;
+    button.append(title, phone, meta, time);
+    button.addEventListener('click', () => openBookingDetails(booking.id, booking));
+    return button;
+  }
+
+  async function refreshArrivals() {
+    if (!arrivalsList) return;
+    arrivalsList.innerHTML = '<p class="admin-bookings-loading">Loading arrivals…</p>';
+    try {
+      const items = await apiFetch('/api/admin/bookings/arrivals?windowMinutes=20');
+      arrivalsList.replaceChildren();
+      if (!items?.length) {
+        const empty = document.createElement('p');
+        empty.className = 'admin-bookings-empty';
+        empty.textContent = 'No confirmed guests arriving in the next 20 minutes.';
+        arrivalsList.append(empty);
+        return;
+      }
+      items.forEach((booking) => arrivalsList.append(arrivalCard(booking)));
+    } catch (error) {
+      arrivalsList.textContent = error instanceof Error ? error.message : 'Unable to load arrivals.';
+    }
+  }
+
+  async function refreshPendingCalls() {
+    if (!pendingCallsList) return;
+    pendingCallsList.innerHTML = '<p class="admin-bookings-loading">Loading pending calls…</p>';
+    try {
+      const items = await apiFetch('/api/admin/bookings/pending-calls?windowMinutes=20');
+      pendingCallsList.replaceChildren();
+      if (!items?.length) {
+        const empty = document.createElement('p');
+        empty.className = 'admin-bookings-empty';
+        empty.textContent = 'No pending guests to call in the next 20 minutes.';
+        pendingCallsList.append(empty);
+        return;
+      }
+      items.forEach((booking) => pendingCallsList.append(pendingCallCard(booking)));
+    } catch (error) {
+      pendingCallsList.textContent = error instanceof Error ? error.message : 'Unable to load pending calls.';
+    }
+  }
+
+  async function refreshCheckouts() {
+    if (!checkoutsList) return;
+    checkoutsList.innerHTML = '<p class="admin-bookings-loading">Loading checkouts…</p>';
+    try {
+      const items = await apiFetch('/api/admin/bookings/checkouts?windowMinutes=20');
+      checkoutsList.replaceChildren();
+      if (!items?.length) {
+        const empty = document.createElement('p');
+        empty.className = 'admin-bookings-empty';
+        empty.textContent = 'No confirmed stays checking out in the next 20 minutes.';
+        checkoutsList.append(empty);
+        return;
+      }
+      items.forEach((booking) => checkoutsList.append(checkoutCallCard(booking)));
+    } catch (error) {
+      checkoutsList.textContent = error instanceof Error ? error.message : 'Unable to load checkouts.';
+    }
+  }
+
+  async function openArrivalsSoon() {
+    setArrivalsMode(true);
+    await refreshArrivals();
+  }
+
+  async function openPendingCallsSoon() {
+    setPendingCallsMode(true);
+    await refreshPendingCalls();
+  }
+
+  async function openCheckoutsSoon() {
+    setCheckoutsMode(true);
+    await refreshCheckouts();
+  }
+
+  function closeArrivalsSoon() {
+    setArrivalsMode(false);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('arrivals')) {
+      url.searchParams.delete('arrivals');
+      window.history.replaceState({}, '', url.pathname + (url.search || ''));
+    }
+  }
+
+  function closePendingCallsSoon() {
+    setPendingCallsMode(false);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('pendingCalls')) {
+      url.searchParams.delete('pendingCalls');
+      window.history.replaceState({}, '', url.pathname + (url.search || ''));
+    }
+  }
+
+  function closeCheckoutsSoon() {
+    setCheckoutsMode(false);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('checkouts')) {
+      url.searchParams.delete('checkouts');
+      window.history.replaceState({}, '', url.pathname + (url.search || ''));
+    }
+  }
+
+  async function processAutoCheckout() {
+    try {
+      await apiFetch('/api/admin/bookings/process-auto-checkout', { method: 'POST' });
+    } catch {
+      // Background service also processes; poll helper is best-effort.
+    }
+  }
+
+  function bookingNeedsRooms(booking) {
+    const status = displayEnum(booking.status);
+    if (status !== 'Confirmed') return false;
+    const items = booking.items || [];
+    if (!items.length) return true;
+    const needed = items.reduce((sum, line) => sum + Number(line.quantity || 0), 0);
+    const assigned = items.reduce(
+      (sum, line) => sum + (line.assignedRooms || []).length,
+      0
+    );
+    return assigned < needed;
+  }
+
+  /**
+   * Confirmed + rooms assigned + in-house window (PH calendar).
+   * Starts on the Manila arrival date once rooms are assigned (not only after 2:00 PM),
+   * and ends at checkout time.
+   */
+  function isGuestOccupying(booking) {
+    if (displayEnum(booking.status) !== 'Confirmed') return false;
+    if (bookingNeedsRooms(booking)) return false;
+    const checkOut = parseUtc(booking.checkoutTimeUtc || booking.checkOut);
+    if (!checkOut) return false;
+    if (Date.now() >= checkOut.getTime()) return false;
+    const arrivalDate = manilaParts(booking.checkInAtUtc || booking.checkIn)?.date;
+    if (!arrivalDate) return false;
+    return manilaTodayIso() >= arrivalDate;
+  }
+
+  function bookingStatusPill(booking) {
+    if (isGuestOccupying(booking)) {
+      return {
+        label: 'Occupying',
+        className: 'is-occupying',
+        title: 'Guest is currently in-house',
+      };
+    }
+    const status = displayEnum(booking.status);
+    const raw = String(booking.status || status).toLowerCase().replace(/\s+/g, '');
+    return {
+      label: status,
+      className: `is-${raw}`,
+      title: '',
+    };
+  }
+
+  function manilaTodayIso() {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: PH_TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date());
+    const get = (type) => parts.find((p) => p.type === type)?.value || '';
+    return `${get('year')}-${get('month')}-${get('day')}`;
+  }
+
+  /** Rooms may be assigned from the Manila arrival date onward — not earlier. */
+  function canAssignRoomsToday(booking) {
+    const arrival = manilaParts(booking.checkInAtUtc || booking.checkIn)?.date;
+    if (!arrival) return false;
+    return manilaTodayIso() >= arrival;
+  }
+
+  function arrivalAssignMessage(booking) {
+    const arrival = formatDate(booking.checkInAtUtc || booking.checkIn);
+    return `Rooms can be assigned starting on the arrival date (${arrival}), and only after the stay is fully paid.`;
+  }
+
+  function isBookingFullyPaid(booking, summary = null) {
+    if (summary) {
+      fillPaymentSummaryFields(booking, summary);
+    }
+    return Number(paymentPriceContext.balanceDue) <= 0.009;
+  }
+
+  function formatBookingRooms(booking) {
+    const items = booking.items || [];
+    if (!items.length) return 'No rooms';
+
+    const parts = items.map((line) => {
+      const assigned = (line.assignedRooms || [])
+        .map((room) => room.roomNumber)
+        .filter(Boolean);
+      const qty = Number(line.quantity || 0);
+      const typeName = line.roomTypeName || 'Room';
+      if (assigned.length) {
+        return assigned.length === 1
+          ? `${typeName} ${assigned[0]}`
+          : `${typeName}: ${assigned.join(', ')}`;
+      }
+      return `${qty}× ${typeName}`;
+    });
+
+    let label = parts.join(' · ');
+    if (bookingNeedsRooms(booking)) {
+      label += ' · not assigned';
+    }
+    return label;
+  }
+
   function bookingRow(booking) {
     const row = document.createElement('tr');
     const status = displayEnum(booking.status);
+    const needsRooms = bookingNeedsRooms(booking);
+    const occupying = isGuestOccupying(booking);
+    const statusPill = bookingStatusPill(booking);
     row.dataset.bookingId = String(booking.id);
-    row.className = `is-${status.toLowerCase()}`;
+    row.className = `is-${status.toLowerCase()}${needsRooms ? ' is-needs-rooms' : ''}${occupying ? ' is-occupying' : ''}`;
 
-    const roomTotal = (booking.items || []).reduce(
-      (sum, line) => sum + Number(line.quantity || 0),
-      0
-    );
-    const roomLabel = booking.items?.length
-      ? `${roomTotal} room${roomTotal === 1 ? '' : 's'} · ${booking.items[0].roomTypeName}`
-      : 'No rooms';
+    const roomLabel = formatBookingRooms(booking);
 
     [
       ['Reference', booking.reference],
       ['Guest', booking.guestName],
-      ['Stay', `${formatDate(booking.checkIn)} → ${formatDate(booking.checkOut)}`],
+      ['Stay', formatStayRange(booking.checkInAtUtc || booking.checkIn, booking.checkoutTimeUtc || booking.checkOut)],
       ['Rooms', roomLabel],
       ['Type', displayEnum(booking.kind)],
-      [
-        'Payment',
-        booking.paymentOption === 'Half' || booking.paymentOption === 1
-          ? 'Half'
-          : 'Full',
-      ],
+      ['Total', money(booking.totalAmount)],
     ].forEach(([label, value], index) => {
       const cell = document.createElement('td');
       cell.dataset.label = label;
       cell.textContent = value;
       if (index === 0) cell.className = 'admin-booking-reference';
+      if (label === 'Rooms' && needsRooms) {
+        cell.classList.add('is-needs-rooms-cell');
+      }
       row.append(cell);
     });
 
     const statusCell = document.createElement('td');
     statusCell.dataset.label = 'Status';
+    statusCell.className = 'admin-booking-status-cell';
     const pill = document.createElement('span');
-    pill.className = `admin-booking-status is-${String(booking.status || status).toLowerCase()}`;
-    pill.textContent = status;
+    pill.className = `admin-booking-status ${statusPill.className}`;
+    pill.textContent = statusPill.label;
+    if (statusPill.title) pill.title = statusPill.title;
     statusCell.append(pill);
+    if (needsRooms) {
+      const flag = document.createElement('span');
+      flag.className = 'admin-booking-status is-needs-rooms';
+      flag.textContent = canAssignRoomsToday(booking) ? 'Needs rooms' : 'Assign on arrival';
+      flag.title = canAssignRoomsToday(booking)
+        ? 'Confirmed — assign rooms after the guest is fully paid'
+        : arrivalAssignMessage(booking);
+      statusCell.append(flag);
+    }
 
     const actionCell = document.createElement('td');
     actionCell.className = 'admin-booking-table-actions';
     const viewButton = document.createElement('button');
     viewButton.type = 'button';
-    viewButton.textContent = 'View details';
+    viewButton.textContent =
+      needsRooms && canAssignRoomsToday(booking) ? 'Assign rooms' : 'View details';
     viewButton.addEventListener('click', () => openBookingDetails(booking.id, booking));
     actionCell.append(viewButton);
 
@@ -315,7 +2658,31 @@
     return wrapper;
   }
 
-  function renderBookingDetails(booking) {
+  function actionIconButton({ label, icon, onClick, className = '' }) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `admin-booking-action-icon ${className}`.trim();
+    button.setAttribute('aria-label', label);
+    button.title = label;
+    button.innerHTML = `
+      <span class="admin-booking-action-glyph" aria-hidden="true">${icon}</span>
+      <span class="admin-booking-action-tip">${label}</span>
+    `;
+    button.addEventListener('click', onClick);
+    return button;
+  }
+
+  const ACTION_ICONS = {
+    edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l10.5-10.5-4-4L4 16v4zm12.7-13.3 1.8-1.8a1 1 0 0 1 1.4 0l1.2 1.2a1 1 0 0 1 0 1.4l-1.8 1.8-2.6-2.6z" fill="currentColor"/></svg>',
+    payments: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v3H3V7zm0 5h18v7H3v-7zm3 2.5h6v2H6v-2z" fill="currentColor"/></svg>',
+    addPay: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+    cancel: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 9.5h17M8 3.5v4M16 3.5v4M9.2 13.2l5.6 5.6M14.8 13.2l-5.6 5.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    confirm: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5 9.5 17 19 7.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+    assign: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h16v9H4v-9zm2-4h12l1 4H5l1-4zm4 8h6v2h-6v-2z" fill="currentColor"/></svg>',
+    checkout: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v14h-5M10 12H3m0 0 3-3M3 12l3 3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
+  };
+
+  async function renderBookingDetails(booking) {
     if (!detailModal || !detailBody || !detailActions) return;
     selectedBooking = booking;
     detailModal.querySelector('[data-detail-reference]').textContent = booking.reference;
@@ -323,34 +2690,305 @@
     detailBody.replaceChildren();
     detailActions.replaceChildren();
 
+    const paymentSummary = await loadBookingPaymentSummary(booking);
+    if (paymentSummary) fillPaymentSummaryFields(booking, paymentSummary);
+    else fillPaymentSummaryFields(booking, null);
+
+    const stayTotal = paymentPriceContext.stayTotal;
+    const amountPaid = paymentPriceContext.amountPaid;
+    const balanceDue = paymentPriceContext.balanceDue;
+    const payments = (paymentSummary?.payments || []).filter((p) => p.status !== 'Voided');
+
     const status = displayEnum(booking.status);
+    const needsRooms = bookingNeedsRooms(booking);
+    const statusPill = bookingStatusPill(booking);
     const summary = document.createElement('div');
     summary.className = 'admin-booking-detail-summary';
+    const statusGroup = document.createElement('div');
+    statusGroup.className = 'admin-booking-status-cell';
     const pill = document.createElement('span');
-    pill.className = `admin-booking-status is-${String(booking.status || status).toLowerCase()}`;
-    pill.textContent = status;
-    const total = document.createElement('strong');
-    total.textContent = money(booking.totalAmount);
-    summary.append(pill, total);
+    pill.className = `admin-booking-status ${statusPill.className}`;
+    pill.textContent = statusPill.label;
+    if (statusPill.title) pill.title = statusPill.title;
+    statusGroup.append(pill);
+    if (needsRooms) {
+      const flag = document.createElement('span');
+      flag.className = 'admin-booking-status is-needs-rooms';
+      flag.textContent = canAssignRoomsToday(booking) ? 'Needs rooms' : 'Assign on arrival';
+      flag.title = canAssignRoomsToday(booking)
+        ? 'Confirmed — assign rooms after the guest is fully paid'
+        : arrivalAssignMessage(booking);
+      statusGroup.append(flag);
+    }
+
+    const balanceBlock = document.createElement('div');
+    balanceBlock.className = 'admin-booking-balance-due';
+    const balanceLabel = document.createElement('span');
+    balanceLabel.textContent = 'Balance due';
+    const balanceValue = document.createElement('strong');
+    if (balanceDue < -0.009) {
+      balanceBlock.classList.add('is-paid');
+      balanceLabel.textContent = 'Overpaid';
+      balanceValue.textContent = money(Math.abs(balanceDue));
+    } else if (balanceDue <= 0.009) {
+      balanceBlock.classList.add('is-paid');
+      balanceLabel.textContent = 'Fully paid';
+      balanceValue.textContent = money(0);
+    } else {
+      balanceValue.textContent = money(balanceDue);
+    }
+    balanceBlock.append(balanceLabel, balanceValue);
+    summary.append(statusGroup, balanceBlock);
+
+    const nights = Math.max(
+      1,
+      (() => {
+        const inDate = manilaParts(booking.checkInAtUtc || booking.checkIn)?.date;
+        const outDate = manilaParts(booking.checkoutTimeUtc || booking.checkOut)?.date;
+        if (!inDate || !outDate) return 1;
+        const start = new Date(`${inDate}T12:00:00`);
+        const end = new Date(`${outDate}T12:00:00`);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return 1;
+        return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+      })()
+    );
+    const charges = booking.charges || [];
+    const feesTotal = charges.reduce((sum, charge) => sum + Number(charge.amount || 0), 0);
+    const roomStayTotal = Math.max(0, Number(stayTotal) - feesTotal);
+    const hasEarly = charges.some((c) => String(c.chargeType) === 'EarlyCheckIn');
+    const lateCharge = charges.find((c) => String(c.chargeType) === 'LateCheckout');
+    const lateHours = lateCharge ? Number(lateCharge.quantity || 0) : 0;
+    const extraCharge = charges.find((c) => String(c.chargeType) === 'ExtraPerson');
+    const extraPersons = extraCharge ? Number(extraCharge.quantity || 0) : 0;
+    const allowsExtraPerson = (booking.items || []).some((line) => {
+      const max = Number(line.maxOccupancy || 0);
+      const name = String(line.roomTypeName || '');
+      return max === 1 || /single/i.test(name);
+    });
+
+    const stayLabel = document.createElement('div');
+    stayLabel.className = 'admin-booking-stay-label';
+    const stayText = document.createElement('span');
+    stayText.textContent = formatStayRange(
+      booking.checkInAtUtc || booking.checkIn,
+      booking.checkoutTimeUtc || booking.checkOut
+    );
+    stayLabel.append(stayText);
+    if (hasEarly) {
+      const badge = document.createElement('span');
+      badge.className = 'admin-booking-extended-badge';
+      badge.textContent = 'Early 11:30 AM';
+      stayLabel.append(badge);
+    }
+    if (lateHours > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'admin-booking-extended-badge is-late';
+      badge.textContent = `Late +${lateHours}h`;
+      stayLabel.append(badge);
+    }
 
     const fields = document.createElement('dl');
     fields.className = 'admin-booking-detail-grid';
+    const stayField = detailField('Stay', '');
+    stayField.querySelector('dd')?.replaceChildren(stayLabel);
     fields.append(
-      detailField('Stay', `${formatDate(booking.checkIn)} → ${formatDate(booking.checkOut)}`),
+      stayField,
       detailField('Request type', displayEnum(booking.kind)),
-      detailField(
-        'Payment option',
-        booking.paymentOption === 'Half' || booking.paymentOption === 1
-          ? 'Half payment'
-          : 'Full payment (advance booking)'
-      ),
-      detailField('Amount due now', money(booking.amountDueNow ?? booking.totalAmount)),
-      detailField('Stay total', money(booking.totalAmount)),
+      detailField('Stay total', money(stayTotal)),
       detailField('Email', booking.guestEmail),
       detailField('Phone', booking.guestPhone),
       detailField('Submitted', formatDateTime(booking.createdAtUtc))
     );
 
+    const feesPanel = document.createElement('section');
+    feesPanel.className = 'admin-booking-fees-panel';
+    feesPanel.innerHTML = `
+      <h3>Stay fees</h3>
+      <p class="admin-booking-fees-lede">Reception can add fees when the guest requests them. Times update with an extended-stay indicator.</p>
+      <div class="admin-booking-fees-grid">
+        <label class="admin-booking-fee-option">
+          <input type="checkbox" data-fee-early ${hasEarly ? 'checked' : ''} ${booking.isArchived ? 'disabled' : ''} />
+          <span>Early check-in <strong>11:30 AM</strong> · ₱500 / room</span>
+        </label>
+        <label class="admin-booking-fee-option">
+          <span>Late check-out</span>
+          <select data-fee-late ${booking.isArchived ? 'disabled' : ''}>
+            <option value="0">12:00 PM — no fee</option>
+            <option value="1">+1 hour · ₱100 / room</option>
+            <option value="2">+2 hours · ₱200 / room</option>
+            <option value="3">+3 hours · ₱300 / room</option>
+          </select>
+        </label>
+        <label class="admin-booking-fee-option ${allowsExtraPerson ? '' : 'is-disabled'}">
+          <input type="checkbox" data-fee-extra ${extraPersons > 0 ? 'checked' : ''} ${booking.isArchived || !allowsExtraPerson ? 'disabled' : ''} />
+          <span>Extra person · ₱200 / night${allowsExtraPerson ? ' (max 1 on single room)' : ' (single rooms only)'}</span>
+        </label>
+      </div>
+      <p class="admin-booking-fees-msg" data-fee-msg hidden></p>
+    `;
+    const lateSelect = feesPanel.querySelector('[data-fee-late]');
+    if (lateSelect) lateSelect.value = String(Math.min(3, Math.max(0, lateHours)));
+    if (!booking.isArchived) {
+      const saveFeesBtn = document.createElement('button');
+      saveFeesBtn.type = 'button';
+      saveFeesBtn.className = 'admin-booking-fees-save';
+      saveFeesBtn.textContent = 'Save stay fees';
+      saveFeesBtn.addEventListener('click', async () => {
+        const msg = feesPanel.querySelector('[data-fee-msg]');
+        saveFeesBtn.disabled = true;
+        try {
+          const updated = await apiFetch(`/api/admin/bookings/${booking.id}/charges`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              earlyCheckIn: Boolean(feesPanel.querySelector('[data-fee-early]')?.checked),
+              lateCheckoutHours: Number(feesPanel.querySelector('[data-fee-late]')?.value || 0),
+              extraPersons: Boolean(feesPanel.querySelector('[data-fee-extra]')?.checked) ? 1 : 0,
+            }),
+          });
+          await openBookingDetails(updated.id, updated);
+        } catch (error) {
+          if (msg) {
+            msg.hidden = false;
+            msg.textContent = error instanceof Error ? error.message : 'Unable to save stay fees.';
+          }
+          saveFeesBtn.disabled = false;
+        }
+      });
+      feesPanel.append(saveFeesBtn);
+    }
+
+    const roomCount = (booking.items || []).reduce((sum, line) => sum + Number(line.quantity || 0), 0);
+    let itemLinesHtml = '';
+    (booking.items || []).forEach((line) => {
+      const qty = Number(line.quantity || 0);
+      const rate = Number(line.pricePerNight || 0);
+      const lineTotal = qty * rate * nights;
+      itemLinesHtml += `
+        <div class="admin-breakdown-row">
+          <span>${qty}× ${escapeHtml(line.roomTypeName || 'Room')} <small>(${money(rate)}/night × ${nights} night${nights === 1 ? '' : 's'})</small></span>
+          <strong>${money(lineTotal)}</strong>
+        </div>
+      `;
+    });
+
+    let feeLinesHtml = '';
+    if (!charges.length) {
+      feeLinesHtml = `
+        <div class="admin-breakdown-row is-sub">
+          <span>No stay fees</span>
+          <strong>${money(0)}</strong>
+        </div>
+      `;
+    } else {
+      charges.forEach((charge) => {
+        feeLinesHtml += `
+          <div class="admin-breakdown-row is-sub">
+            <span>${escapeHtml(charge.label || charge.chargeType || 'Fee')}</span>
+            <strong>${money(charge.amount)}</strong>
+          </div>
+        `;
+      });
+    }
+
+    let paymentLinesHtml = '';
+    if (!payments.length) {
+      paymentLinesHtml = `
+        <div class="admin-breakdown-row is-sub">
+          <span>No payments posted yet</span>
+          <strong>${money(0)}</strong>
+        </div>
+      `;
+    } else {
+      payments.forEach((payment) => {
+        paymentLinesHtml += `
+          <div class="admin-breakdown-row is-sub">
+            <span>${escapeHtml(formatDateTime(payment.paidAtUtc))} · ${escapeHtml(formatPaymentMethod(payment.method))} <small>${escapeHtml(payment.receiptNumber || '')}</small></span>
+            <strong>${money(payment.amount)}</strong>
+          </div>
+        `;
+      });
+    }
+
+    const breakdownPanel = document.createElement('section');
+    breakdownPanel.className = 'admin-booking-breakdown';
+    breakdownPanel.setAttribute('data-price-breakdown', '1');
+
+    const breakdownToggle = document.createElement('button');
+    breakdownToggle.type = 'button';
+    breakdownToggle.className = 'admin-breakdown-toggle';
+    breakdownToggle.setAttribute('data-breakdown-toggle', '1');
+    breakdownToggle.setAttribute('aria-expanded', 'false');
+
+    const toggleLabel = document.createElement('span');
+    toggleLabel.className = 'admin-breakdown-toggle-label';
+    toggleLabel.textContent = `Price & payments (${nights} night${nights === 1 ? '' : 's'})`;
+
+    const toggleMeta = document.createElement('span');
+    toggleMeta.className = 'admin-breakdown-toggle-meta';
+    const toggleTotal = document.createElement('strong');
+    toggleTotal.textContent = money(stayTotal);
+    const toggleIcon = document.createElement('span');
+    toggleIcon.className = 'admin-breakdown-icon';
+    toggleIcon.setAttribute('aria-hidden', 'true');
+    toggleIcon.textContent = '▾';
+    toggleMeta.append(toggleTotal, toggleIcon);
+    breakdownToggle.append(toggleLabel, toggleMeta);
+
+    const breakdownBody = document.createElement('div');
+    breakdownBody.className = 'admin-breakdown-card';
+    breakdownBody.setAttribute('data-breakdown-body', '1');
+    breakdownBody.innerHTML = `
+      <p class="admin-breakdown-section-title">Room stay</p>
+      <div class="admin-breakdown-lines">
+        ${itemLinesHtml || `<div class="admin-breakdown-row"><span>Stay</span><strong>${money(roomStayTotal)}</strong></div>`}
+      </div>
+      <div class="admin-breakdown-row is-sub">
+        <span>Room subtotal${roomCount ? ` · ${roomCount} room${roomCount === 1 ? '' : 's'}` : ''}</span>
+        <strong>${money(roomStayTotal)}</strong>
+      </div>
+      <div class="admin-breakdown-divider"></div>
+      <p class="admin-breakdown-section-title">Stay fees</p>
+      <div class="admin-breakdown-lines">
+        ${feeLinesHtml}
+      </div>
+      <div class="admin-breakdown-divider"></div>
+      <div class="admin-breakdown-row is-total">
+        <span>Stay total</span>
+        <strong>${money(stayTotal)}</strong>
+      </div>
+      <div class="admin-breakdown-divider"></div>
+      <p class="admin-breakdown-section-title">Payment history</p>
+      <div class="admin-breakdown-lines">
+        ${paymentLinesHtml}
+      </div>
+      <div class="admin-breakdown-row is-sub">
+        <span>Already paid</span>
+        <strong>${money(amountPaid)}</strong>
+      </div>
+      <div class="admin-breakdown-divider"></div>
+      <div class="admin-breakdown-row is-total is-balance">
+        <span>${
+          balanceDue < -0.009 ? 'Overpaid' : balanceDue <= 0.009 ? 'Fully paid' : 'Balance due'
+        }</span>
+        <strong>${money(balanceDue < -0.009 ? Math.abs(balanceDue) : Math.max(0, balanceDue))}</strong>
+      </div>
+    `;
+
+    breakdownToggle.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const open = !breakdownPanel.classList.contains('is-open');
+      breakdownPanel.classList.toggle('is-open', open);
+      breakdownToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      breakdownBody.hidden = !open;
+    });
+    breakdownBody.hidden = true;
+
+    breakdownPanel.append(breakdownToggle, breakdownBody);
+
+    const roomsBlock = document.createElement('section');
+    roomsBlock.className = 'admin-booking-rooms-block';
     const heading = document.createElement('h3');
     heading.textContent = 'Rooms';
     const lines = document.createElement('ul');
@@ -363,65 +3001,211 @@
         .filter(Boolean);
       name.textContent = assigned.length
         ? `${line.quantity}× ${line.roomTypeName} → ${assigned.join(', ')}`
-        : `${line.quantity}× ${line.roomTypeName}`;
+        : `${line.quantity}× ${line.roomTypeName}${status === 'Confirmed' ? ' · rooms not assigned yet' : ''}`;
       const rate = document.createElement('strong');
       rate.textContent = `${money(line.pricePerNight)} / night`;
       item.append(name, rate);
       lines.append(item);
     });
-    detailBody.append(summary, fields, heading, lines);
+    roomsBlock.append(heading, lines);
+
+    detailBody.replaceChildren();
+    detailBody.append(summary, fields, feesPanel, breakdownPanel, roomsBlock);
 
     if (!booking.isArchived && status !== 'Confirmed') {
-      const editButton = document.createElement('button');
-      editButton.type = 'button';
-      editButton.textContent = 'Edit booking';
-      editButton.addEventListener('click', () => renderBookingEdit(booking));
-      detailActions.append(editButton);
+      detailActions.append(
+        actionIconButton({
+          label: 'Edit booking',
+          icon: ACTION_ICONS.edit,
+          onClick: () => renderBookingEdit(booking),
+        })
+      );
     }
 
     if (!booking.isArchived && status === 'Confirmed') {
-      const checkoutButton = document.createElement('button');
-      checkoutButton.type = 'button';
-      checkoutButton.className = 'admin-booking-confirm';
-      checkoutButton.textContent = 'Check out';
-      checkoutButton.addEventListener('click', () => checkoutBooking(booking, checkoutButton));
-      detailActions.append(checkoutButton);
+      const hasAssignedRooms = (booking.items || []).some(
+        (line) => (line.assignedRooms || []).length > 0
+      );
+      if (!hasAssignedRooms) {
+        if (canAssignRoomsToday(booking) && balanceDue <= 0.009) {
+          detailActions.append(
+            actionIconButton({
+              label: 'Assign rooms',
+              icon: ACTION_ICONS.assign,
+              className: 'admin-booking-confirm',
+              onClick: () => renderConfirmAssign(booking, { assignOnly: true }),
+            })
+          );
+        } else {
+          const note = document.createElement('p');
+          note.className = 'admin-booking-assign-tip';
+          if (balanceDue > 0.009) {
+            note.textContent = `Record full payment before assigning rooms. Balance due: ${money(balanceDue)}.`;
+          } else {
+            note.textContent = arrivalAssignMessage(booking);
+          }
+          detailBody.append(note);
+        }
+      } else {
+        detailActions.append(
+          actionIconButton({
+            label: 'Check out guest',
+            icon: ACTION_ICONS.checkout,
+            className: 'admin-booking-confirm',
+            onClick: (event) => checkoutBooking(booking, event.currentTarget),
+          })
+        );
+      }
     }
 
+    detailActions.append(
+      actionIconButton({
+        label:
+          balanceDue > 0.009 && !booking.isArchived
+            ? 'Payments — view & record'
+            : 'Payments — view record',
+        icon: ACTION_ICONS.payments,
+        className: balanceDue > 0.009 && !booking.isArchived ? 'admin-booking-confirm' : '',
+        onClick: () => openPaymentViewModal(booking),
+      })
+    );
+
     if (!booking.isArchived) {
-      const cancelButton = document.createElement('button');
-      cancelButton.type = 'button';
-      cancelButton.className = 'admin-booking-delete';
-      cancelButton.textContent = 'Cancel to history';
-      cancelButton.addEventListener('click', () => cancelBooking(booking, cancelButton));
-      detailActions.append(cancelButton);
+      detailActions.append(
+        actionIconButton({
+          label: 'Cancel booking',
+          icon: ACTION_ICONS.cancel,
+          className: 'admin-booking-delete',
+          onClick: (event) => cancelBooking(booking, event.currentTarget),
+        })
+      );
     }
 
     if (!booking.isArchived && status === 'Pending') {
-      const confirmButton = document.createElement('button');
-      confirmButton.type = 'button';
-      confirmButton.className = 'admin-booking-confirm';
-      confirmButton.textContent = 'Confirm & assign rooms';
-      confirmButton.addEventListener('click', () => renderConfirmAssign(booking));
-      detailActions.append(confirmButton);
+      detailActions.append(
+        actionIconButton({
+          label: 'Confirm booking',
+          icon: ACTION_ICONS.confirm,
+          className: 'admin-booking-confirm',
+          onClick: () => renderConfirmAssign(booking),
+        })
+      );
     }
   }
 
-  async function renderConfirmAssign(booking) {
+  async function renderConfirmAssign(booking, options = {}) {
     if (!detailBody || !detailActions) return;
+    const assignOnly = Boolean(options.assignOnly);
+    const canAssign = canAssignRoomsToday(booking);
     detailBody.replaceChildren();
     detailActions.replaceChildren();
 
-    const intro = document.createElement('p');
-    intro.className = 'admin-booking-assign-intro';
-    intro.textContent =
-      'Choose a free room number for each booked room. Multiple rooms of the same type need one pick each.';
-    detailBody.append(intro);
+    const paymentSummary = await loadBookingPaymentSummary(booking);
+    if (paymentSummary) fillPaymentSummaryFields(booking, paymentSummary);
+    else fillPaymentSummaryFields(booking, null);
+    const fullyPaid = isBookingFullyPaid(booking, paymentSummary);
+
+    // Pending confirm: confirm the booking only — rooms come after full payment.
+    if (!assignOnly) {
+      const intro = document.createElement('p');
+      intro.className = 'admin-booking-assign-intro';
+      intro.textContent = fullyPaid && canAssign
+        ? 'Guest is fully paid. Confirm and assign room numbers now.'
+        : 'Confirm this booking now. Assign room numbers only after the guest is fully paid'
+          + (canAssign ? '.' : ` (and from arrival date ${formatDate(booking.checkInAtUtc || booking.checkIn)}).`);
+      detailBody.append(intro);
+
+      if (!fullyPaid) {
+        const tip = document.createElement('p');
+        tip.className = 'admin-booking-assign-tip';
+        tip.textContent = `Balance due ${money(paymentPriceContext.balanceDue)}. Rooms unlock after full payment.`;
+        detailBody.append(tip);
+      }
+
+      const backButton = document.createElement('button');
+      backButton.type = 'button';
+      backButton.textContent = 'Back';
+      backButton.addEventListener('click', () => renderBookingDetails(booking));
+
+      if (!(fullyPaid && canAssign)) {
+        const confirmButton = document.createElement('button');
+        confirmButton.type = 'button';
+        confirmButton.className = 'admin-booking-confirm';
+        confirmButton.textContent = 'Confirm booking';
+        confirmButton.addEventListener('click', async () => {
+          confirmButton.disabled = true;
+          try {
+            await updateStatus(booking, 'Confirmed', confirmButton, [], { stayOnBookings: true });
+          } catch (error) {
+            showBookingMessage(error instanceof Error ? error.message : 'Unable to confirm booking.', true);
+            confirmButton.disabled = false;
+          }
+        });
+        detailActions.append(backButton, confirmButton);
+        return;
+      }
+      // Fully paid + can assign today: fall through to required room picker below.
+    }
+
+    if (assignOnly && !canAssign) {
+      const blocked = document.createElement('p');
+      blocked.className = 'admin-booking-assign-error';
+      blocked.setAttribute('role', 'alert');
+      blocked.textContent = arrivalAssignMessage(booking);
+      const backEarly = document.createElement('button');
+      backEarly.type = 'button';
+      backEarly.textContent = 'Back';
+      backEarly.addEventListener('click', () => renderBookingDetails(booking));
+      detailBody.append(blocked);
+      detailActions.append(backEarly);
+      return;
+    }
+
+    if (assignOnly && !fullyPaid) {
+      const blocked = document.createElement('p');
+      blocked.className = 'admin-booking-assign-error';
+      blocked.setAttribute('role', 'alert');
+      blocked.textContent = `Guest must be fully paid before assigning rooms. Balance due: ${money(paymentPriceContext.balanceDue)}.`;
+      const backEarly = document.createElement('button');
+      backEarly.type = 'button';
+      backEarly.textContent = 'Back';
+      backEarly.addEventListener('click', () => renderBookingDetails(booking));
+      const payButton = document.createElement('button');
+      payButton.type = 'button';
+      payButton.className = 'admin-booking-confirm';
+      payButton.textContent = 'Record payment';
+      payButton.addEventListener('click', () => openAddPaymentModal(booking));
+      detailBody.append(blocked);
+      detailActions.append(backEarly, payButton);
+      return;
+    }
+
+    if (assignOnly) {
+      const intro = document.createElement('p');
+      intro.className = 'admin-booking-assign-intro';
+      intro.textContent = 'Pick room numbers for this fully paid stay.';
+      detailBody.append(intro);
+    } else if (!detailBody.querySelector('.admin-booking-assign-intro')) {
+      const intro = document.createElement('p');
+      intro.className = 'admin-booking-assign-intro';
+      intro.textContent = 'Pick room numbers, then confirm.';
+      detailBody.append(intro);
+    }
 
     const form = document.createElement('form');
     form.className = 'admin-booking-assign-form';
+    form.setAttribute('novalidate', '');
     const groups = document.createElement('div');
     groups.className = 'admin-booking-assign-groups';
+    const localError = document.createElement('p');
+    localError.className = 'admin-booking-assign-error';
+    localError.hidden = true;
+    localError.setAttribute('role', 'alert');
+
+    function setAssignError(message) {
+      localError.hidden = !message;
+      localError.textContent = message || '';
+    }
 
     try {
       const assignable = await apiFetch(`/api/admin/bookings/${booking.id}/assignable-rooms`);
@@ -440,7 +3224,7 @@
           if (!group.rooms?.length) {
             const empty = document.createElement('p');
             empty.className = 'admin-booking-assign-empty';
-            empty.textContent = `No available ${group.roomTypeName} rooms right now.`;
+            empty.textContent = `No free ${group.roomTypeName} rooms for these dates (held by overlapping bookings or already occupied).`;
             section.append(empty);
           } else {
             for (let index = 0; index < group.quantityNeeded; index += 1) {
@@ -462,7 +3246,11 @@
                 option.textContent = room.roomNumber;
                 select.append(option);
               });
-              select.addEventListener('change', () => syncAssignOptions(groups));
+              select.addEventListener('change', () => {
+                select.classList.remove('is-invalid');
+                setAssignError('');
+                syncAssignOptions(groups);
+              });
               field.append(caption, select);
               section.append(field);
             }
@@ -476,30 +3264,29 @@
     }
 
     form.append(groups);
-    detailBody.append(form);
+    detailBody.append(form, localError);
 
     const backButton = document.createElement('button');
     backButton.type = 'button';
     backButton.textContent = 'Back';
     backButton.addEventListener('click', () => renderBookingDetails(booking));
 
-    const confirmButton = document.createElement('button');
-    confirmButton.type = 'button';
-    confirmButton.className = 'admin-booking-confirm';
-    confirmButton.textContent = 'Confirm booking';
-    confirmButton.addEventListener('click', async () => {
+    function collectAssignments(requireComplete) {
       const payloadAssignments = [];
       const used = new Set();
       let valid = true;
 
       groups.querySelectorAll('.admin-booking-assign-group').forEach((section) => {
         const roomTypeId = Number(section.dataset.roomTypeId);
+        const selects = Array.from(section.querySelectorAll('select'));
         const roomIds = [];
-        section.querySelectorAll('select').forEach((select) => {
+        selects.forEach((select) => {
           const value = Number(select.value);
           if (!value) {
-            valid = false;
-            select.classList.add('is-invalid');
+            if (requireComplete) {
+              valid = false;
+              select.classList.add('is-invalid');
+            }
             return;
           }
           select.classList.remove('is-invalid');
@@ -511,20 +3298,49 @@
           used.add(value);
           roomIds.push(value);
         });
+        if (requireComplete && roomIds.length !== selects.length) {
+          valid = false;
+        }
         if (roomIds.length) {
           payloadAssignments.push({ roomTypeId, roomIds });
         }
       });
 
-      if (!valid) {
-        showBookingMessage('Select a unique available room for each booking quantity.', true);
-        return;
-      }
+      return { payloadAssignments, valid };
+    }
 
-      await updateStatus(booking, 'Confirmed', confirmButton, payloadAssignments);
-    });
+    if (assignOnly) {
+      const assignButton = document.createElement('button');
+      assignButton.type = 'button';
+      assignButton.className = 'admin-booking-confirm';
+      assignButton.textContent = 'Assign rooms';
+      assignButton.addEventListener('click', async () => {
+        const { payloadAssignments, valid } = collectAssignments(true);
+        if (!valid || !payloadAssignments.length) {
+          setAssignError('Select a unique available room for each booking quantity.');
+          return;
+        }
+        setAssignError('');
+        await assignRoomsToBooking(booking, assignButton, payloadAssignments);
+      });
+      detailActions.append(backButton, assignButton);
+    } else {
+      const confirmButton = document.createElement('button');
+      confirmButton.type = 'button';
+      confirmButton.className = 'admin-booking-confirm';
+      confirmButton.textContent = 'Confirm & assign rooms';
+      confirmButton.addEventListener('click', async () => {
+        const { payloadAssignments, valid } = collectAssignments(true);
+        if (!valid || !payloadAssignments.length) {
+          setAssignError('Select a room for each line before confirming.');
+          return;
+        }
+        setAssignError('');
+        await updateStatus(booking, 'Confirmed', confirmButton, payloadAssignments);
+      });
+      detailActions.append(backButton, confirmButton);
+    }
 
-    detailActions.append(backButton, confirmButton);
     syncAssignOptions(groups);
   }
 
@@ -567,12 +3383,16 @@
     form.className = 'admin-booking-edit-form';
     const fields = document.createElement('div');
     fields.className = 'admin-booking-edit-grid';
+    const checkInParts = manilaParts(booking.checkInAtUtc || booking.checkIn) || { date: '', time: '14:00' };
+    const checkOutParts = manilaParts(booking.checkoutTimeUtc || booking.checkOut) || { date: '', time: '12:00' };
     fields.append(
       editField('Guest name', 'guestName', 'text', booking.guestName),
       editField('Email', 'guestEmail', 'email', booking.guestEmail),
       editField('Phone', 'guestPhone', 'tel', booking.guestPhone),
-      editField('Check-in', 'checkIn', 'date', String(booking.checkIn).slice(0, 10)),
-      editField('Check-out', 'checkOut', 'date', String(booking.checkOut).slice(0, 10))
+      editField('Check-in date', 'checkIn', 'date', checkInParts.date),
+      editField('Check-in time', 'checkInTime', 'time', checkInParts.time),
+      editField('Check-out date', 'checkOut', 'date', checkOutParts.date),
+      editField('Check-out time', 'checkOutTime', 'time', checkOutParts.time)
     );
 
     const roomHeading = document.createElement('h3');
@@ -629,9 +3449,14 @@
           guestName: String(data.get('guestName') || ''),
           guestEmail: String(data.get('guestEmail') || ''),
           guestPhone: String(data.get('guestPhone') || ''),
-          checkIn: String(data.get('checkIn') || ''),
-          checkOut: String(data.get('checkOut') || ''),
-          rowVersion: booking.rowVersion,
+          checkInAtUtc: toManilaDateTimeIso(
+            String(data.get('checkIn') || ''),
+            String(data.get('checkInTime') || '14:00')
+          ),
+          checkoutTimeUtc: toManilaDateTimeIso(
+            String(data.get('checkOut') || ''),
+            String(data.get('checkOutTime') || '12:00')
+          ),
           items,
         }),
       });
@@ -651,26 +3476,22 @@
     detailModal.hidden = false;
     document.body.classList.add('admin-booking-modal-open');
     detailBody.innerHTML = '<p>Loading details…</p>';
-    if (cachedBooking) renderBookingDetails(cachedBooking);
+    if (detailActions) detailActions.replaceChildren();
+    if (cachedBooking) await renderBookingDetails(cachedBooking);
 
     try {
       const booking = await apiFetch(`/api/admin/bookings/${id}`);
-      renderBookingDetails(booking);
-      if (!booking.adminReadAtUtc) {
-        apiFetch(`/api/admin/bookings/${id}/read`, { method: 'POST' })
-          .then(refreshNotifications)
-          .catch(() => {});
-      }
+      await renderBookingDetails(booking);
     } catch (error) {
       detailBody.textContent = error instanceof Error ? error.message : 'Unable to load details.';
     }
   }
 
-  async function updateStatus(booking, status, button, assignments) {
+  async function updateStatus(booking, status, button, assignments, options = {}) {
     button.disabled = true;
     showBookingMessage('');
     try {
-      const body = { status, rowVersion: booking.rowVersion };
+      const body = { status };
       if (status === 'Confirmed') {
         body.assignments = assignments || [];
       }
@@ -679,18 +3500,39 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (status === 'Confirmed') {
+      const assignedNow = Array.isArray(assignments) && assignments.length > 0;
+      if (status === 'Confirmed' && assignedNow && !options.stayOnBookings) {
         window.location.href = '/Rooms?view=list';
         return;
       }
       closeBookingDetails();
       await Promise.all([refreshBookings(), refreshNotifications()]);
       reservationCalendar?.refetchEvents();
-      showBookingMessage('Booking updated.');
+      showBookingMessage(
+        status === 'Confirmed' && !assignedNow
+          ? 'Booking confirmed. Assign rooms after full payment (from arrival date).'
+          : 'Booking updated.'
+      );
     } catch (error) {
       showBookingMessage(error instanceof Error ? error.message : 'Unable to update booking.', true);
       await refreshBookings();
     } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function assignRoomsToBooking(booking, button, assignments) {
+    button.disabled = true;
+    showBookingMessage('');
+    try {
+      await apiFetch(`/api/admin/bookings/${booking.id}/assign-rooms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignments }),
+      });
+      window.location.href = '/Rooms?view=list';
+    } catch (error) {
+      showBookingMessage(error instanceof Error ? error.message : 'Unable to assign rooms.', true);
       button.disabled = false;
     }
   }
@@ -713,7 +3555,7 @@
       await apiFetch(`/api/admin/bookings/${booking.id}/checkout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rowVersion: booking.rowVersion }),
+        body: JSON.stringify({}),
       });
       window.location.href = '/Rooms?view=list';
     } catch (error) {
@@ -729,7 +3571,7 @@
       await apiFetch(`/api/admin/bookings/${booking.id}/cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rowVersion: booking.rowVersion }),
+        body: JSON.stringify({}),
       });
       closeBookingDetails();
       await Promise.all([refreshBookings(), refreshNotifications()]);
@@ -823,17 +3665,10 @@
           });
           const items = await apiFetch(`/api/admin/bookings/calendar?${query}`);
           success(items.map((item) => {
-            const isHalf = item.paymentOption === 'Half' || item.paymentOption === 1;
-            const confirmed = item.status === 'Confirmed';
-            let backgroundColor = '#0b1f3a';
-            let borderColor = '#0b1f3a';
-            if (isHalf) {
-              backgroundColor = confirmed ? '#147f7f' : '#1aa6a6';
-              borderColor = '#0f6e6e';
-            } else if (confirmed) {
-              backgroundColor = '#1aa6a6';
-              borderColor = '#1aa6a6';
-            }
+            const isReservation = item.kind === 'Reservation' || item.kind === 1;
+            // Booking: mid blue (not navy/black). Reservation: brand teal.
+            const backgroundColor = isReservation ? '#1aa6a6' : '#3d7ea6';
+            const borderColor = isReservation ? '#0f6e6e' : '#2f6488';
             return {
               id: String(item.id),
               title: item.title,
@@ -842,7 +3677,7 @@
               allDay: true,
               backgroundColor,
               borderColor,
-              classNames: [isHalf ? 'is-half-payment' : 'is-full-payment'],
+              classNames: [isReservation ? 'is-reservation' : 'is-booking'],
               extendedProps: item,
             };
           }));
@@ -861,7 +3696,7 @@
     button.addEventListener('click', closeBookingDetails);
   });
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && detailModal && !detailModal.hidden) {
+    if (event.key === 'Escape' && !isPhotoZoomOpen() && detailModal && !detailModal.hidden) {
       closeBookingDetails();
     }
   });
@@ -875,6 +3710,7 @@
       if (calendarPanel) calendarPanel.hidden = !showCalendar;
       const filterGroup = bookingsRoot.querySelector('.admin-booking-filters');
       if (filterGroup) filterGroup.hidden = history;
+      setHistoryChrome(history);
       bookingsRoot.querySelectorAll('[data-booking-view]').forEach((item) => {
         const active = item === button;
         item.classList.toggle('is-active', active);
@@ -889,11 +3725,136 @@
           bookingsRoot.querySelectorAll('[data-booking-filter]').forEach(
             (item) => item.classList.toggle('is-active', !item.dataset.bookingFilter)
           );
+          refreshFlushLogs();
         }
         page = 1;
         refreshBookings();
       }
     });
+  });
+
+  flushButton?.addEventListener('click', openFlushModal);
+  flushLogToggle?.addEventListener('click', () => {
+    const open = flushLogToggle.getAttribute('aria-expanded') === 'true';
+    setFlushLogExpanded(!open);
+  });
+  flushModal?.querySelectorAll('[data-history-flush-close]').forEach((button) => {
+    button.addEventListener('click', closeFlushModal);
+  });
+  flushDetailModal?.querySelectorAll('[data-history-flush-detail-close]').forEach((button) => {
+    button.addEventListener('click', closeFlushDetail);
+  });
+  flushConfirmButton?.addEventListener('click', confirmFlushHistory);
+  paymentViewModal?.querySelectorAll('[data-payment-view-close]').forEach((button) => {
+    button.addEventListener('click', closePaymentViewModal);
+  });
+  paymentViewAddBtn?.addEventListener('click', () => {
+    if (paymentBookingContext) openAddPaymentModal(paymentBookingContext);
+  });
+  paymentAddModal?.querySelectorAll('[data-payment-add-close]').forEach((button) => {
+    button.addEventListener('click', closeAddPaymentModal);
+  });
+  paymentAddModal?.querySelector('[data-payment-add-popup-ok]')?.addEventListener('click', () => {
+    closePaymentAddPopup();
+    paymentAddModal?.querySelector('[data-payment-ocr-apply]')?.focus();
+  });
+  paymentAddModal?.querySelector('[data-payment-add-save]')?.addEventListener('click', saveRecordedPayment);
+  paymentAddModal?.querySelector('[data-payment-method]')?.addEventListener('change', syncPaymentMethodPanels);
+  paymentAddModal?.querySelector('[data-payment-cash-tendered]')?.addEventListener('input', (event) => {
+    const input = event.target;
+    if (input instanceof HTMLInputElement) {
+      // Keep typing-only money entry (no scroll/spinner side effects).
+      input.value = input.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
+    }
+    updateCashChangeUi();
+  });
+  paymentAddModal?.querySelector('[data-payment-ocr-amount]')?.addEventListener('input', (event) => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) return;
+    input.value = input.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
+  });
+  paymentAddModal?.querySelectorAll('input[inputmode="decimal"]').forEach((input) => {
+    input.addEventListener(
+      'wheel',
+      (event) => {
+        event.preventDefault();
+      },
+      { passive: false }
+    );
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        event.preventDefault();
+      }
+    });
+  });
+  paymentAddModal?.querySelector('[data-payment-prices-toggle]')?.addEventListener('click', () => {
+    const open = paymentAddModal.querySelector('[data-payment-prices-toggle]')?.getAttribute('aria-expanded') === 'true';
+    setPaymentPricesExpanded(!open);
+  });
+  paymentAddModal?.querySelectorAll('[data-payment-price-pick]').forEach((button) => {
+    button.addEventListener('click', () => {
+      applyPaymentPricePick(button.getAttribute('data-payment-price-pick') || 'balanceDue');
+    });
+  });
+  paymentAddModal?.querySelector('[data-payment-receipt-upload]')?.addEventListener('change', (event) => {
+    const input = event.target;
+    handleReceiptFileSelected(input?.files?.[0], input);
+  });
+  paymentAddModal?.querySelector('[data-payment-receipt-capture]')?.addEventListener('change', (event) => {
+    const input = event.target;
+    handleReceiptFileSelected(input?.files?.[0], input);
+  });
+  paymentAddModal?.querySelector('[data-payment-open-camera]')?.addEventListener('click', () => {
+    openPaymentCamera();
+  });
+  paymentAddModal?.querySelector('[data-payment-choose-photo]')?.addEventListener('click', () => {
+    const input = paymentAddModal.querySelector('[data-payment-receipt-upload]');
+    if (!input) return;
+    input.value = '';
+    input.click();
+  });
+  paymentCameraModal?.querySelectorAll('[data-payment-camera-close]').forEach((button) => {
+    button.addEventListener('click', closePaymentCameraModal);
+  });
+  paymentCameraModal?.querySelector('[data-payment-camera-capture]')?.addEventListener('click', () => {
+    capturePaymentCameraPhoto();
+  });
+  paymentCameraModal?.querySelector('[data-payment-camera-switch]')?.addEventListener('click', () => {
+    switchPaymentCamera();
+  });
+  paymentAddModal?.querySelector('[data-payment-ocr-apply]')?.addEventListener('click', applyPaymentOcrResult);
+  paymentAddModal?.querySelector('[data-payment-ocr-discard]')?.addEventListener('click', discardPaymentOcrResult);
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (isPhotoZoomOpen()) return;
+    if (paymentCameraModal && !paymentCameraModal.hidden) {
+      closePaymentCameraModal();
+      return;
+    }
+    if (paymentAddModal && !paymentAddModal.hidden) {
+      closeAddPaymentModal();
+      return;
+    }
+    if (paymentViewModal && !paymentViewModal.hidden) {
+      closePaymentViewModal();
+    }
+  });
+  flushByInput?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      confirmFlushHistory();
+    }
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (isPhotoZoomOpen()) return;
+    if (flushDetailModal && !flushDetailModal.hidden) {
+      closeFlushDetail();
+      return;
+    }
+    if (flushModal && !flushModal.hidden) {
+      closeFlushModal();
+    }
   });
 
   searchInput?.addEventListener('input', () => {
@@ -915,7 +3876,24 @@
       refreshBookings();
     });
   });
-  bookingsRoot?.querySelector('[data-booking-refresh]')?.addEventListener('click', refreshBookings);
+  bookingsRoot?.querySelector('[data-booking-refresh]')?.addEventListener('click', () => {
+    if (!arrivalsPanel?.hidden) {
+      refreshArrivals();
+      return;
+    }
+    if (!pendingCallsPanel?.hidden) {
+      refreshPendingCalls();
+      return;
+    }
+    if (!checkoutsPanel?.hidden) {
+      refreshCheckouts();
+      return;
+    }
+    refreshBookings();
+  });
+  bookingsRoot?.querySelector('[data-arrivals-close]')?.addEventListener('click', closeArrivalsSoon);
+  bookingsRoot?.querySelector('[data-pending-calls-close]')?.addEventListener('click', closePendingCallsSoon);
+  bookingsRoot?.querySelector('[data-checkouts-close]')?.addEventListener('click', closeCheckoutsSoon);
   prevButton?.addEventListener('click', () => {
     if (page > 1) {
       page -= 1;
@@ -931,9 +3909,18 @@
 
   function beginPolling() {
     if (pollTimer) return;
-    pollTimer = window.setInterval(() => {
-      refreshNotifications();
-      refreshBookings();
+    pollTimer = window.setInterval(async () => {
+      await processAutoCheckout();
+      await refreshNotifications();
+      if (!arrivalsPanel?.hidden) {
+        await refreshArrivals();
+      } else if (!pendingCallsPanel?.hidden) {
+        await refreshPendingCalls();
+      } else if (!checkoutsPanel?.hidden) {
+        await refreshCheckouts();
+      } else {
+        await refreshBookings();
+      }
       reservationCalendar?.refetchEvents();
     }, 30000);
   }
@@ -962,12 +3949,32 @@
       reservationCalendar?.refetchEvents();
     });
     connection.on('BookingUpdated', async () => {
-      await Promise.all([refreshNotifications(), refreshBookings()]);
+      const listRefresh = !arrivalsPanel?.hidden
+        ? refreshArrivals()
+        : !pendingCallsPanel?.hidden
+          ? refreshPendingCalls()
+          : !checkoutsPanel?.hidden
+            ? refreshCheckouts()
+            : refreshBookings();
+      await Promise.all([refreshNotifications(), listRefresh]);
       reservationCalendar?.refetchEvents();
     });
     connection.on('BookingArchived', async () => {
       closeBookingDetails();
       await Promise.all([refreshNotifications(), refreshBookings()]);
+      reservationCalendar?.refetchEvents();
+    });
+    connection.on('PaymentChanged', async (bookingId) => {
+      await refreshBookings();
+      await refreshOpenBookingDetails(bookingId);
+      if (
+        paymentViewModal &&
+        !paymentViewModal.hidden &&
+        paymentBookingContext &&
+        Number(paymentBookingContext.id) === Number(bookingId)
+      ) {
+        await openPaymentViewModal(paymentBookingContext);
+      }
       reservationCalendar?.refetchEvents();
     });
     connection.onreconnecting(beginPolling);
@@ -1002,5 +4009,16 @@
 
   refreshNotifications();
   refreshBookings();
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('pendingCalls') === 'soon' && !pendingCallsFromUrlHandled) {
+    pendingCallsFromUrlHandled = true;
+    openPendingCallsSoon();
+  } else if (params.get('arrivals') === 'soon' && !arrivalsFromUrlHandled) {
+    arrivalsFromUrlHandled = true;
+    openArrivalsSoon();
+  } else if (params.get('checkouts') === 'soon' && !checkoutsFromUrlHandled) {
+    checkoutsFromUrlHandled = true;
+    openCheckoutsSoon();
+  }
   startSignalR();
 })();

@@ -54,9 +54,6 @@ namespace TestingDemo.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime?>("AdminReadAtUtc")
-                        .HasColumnType("datetime2");
-
                     b.Property<decimal>("AmountDueNow")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
@@ -64,11 +61,17 @@ namespace TestingDemo.Data.Migrations
                     b.Property<DateTime?>("ArchivedAtUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<DateOnly>("CheckIn")
-                        .HasColumnType("date");
+                    b.Property<DateTime?>("ArrivalWarningSentAtUtc")
+                        .HasColumnType("datetime2");
 
-                    b.Property<DateOnly>("CheckOut")
-                        .HasColumnType("date");
+                    b.Property<DateTime>("CheckInAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CheckoutTimeUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("CheckoutWarningSentAtUtc")
+                        .HasColumnType("datetime2");
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
@@ -88,16 +91,10 @@ namespace TestingDemo.Data.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("nvarchar(40)");
 
-                    b.Property<DateTime?>("AutoCheckedOutAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<TimeOnly?>("CheckOutTime")
-                        .HasColumnType("time");
-
-                    b.Property<DateTime?>("CheckoutWarningSentAtUtc")
-                        .HasColumnType("datetime2");
-
                     b.Property<bool>("IsArchived")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsNotificationCleared")
                         .HasColumnType("bit");
 
                     b.Property<string>("Kind")
@@ -110,16 +107,13 @@ namespace TestingDemo.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<DateTime?>("PendingCallWarningSentAtUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("Reference")
                         .IsRequired()
                         .HasMaxLength(24)
                         .HasColumnType("nvarchar(24)");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("rowversion");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -140,9 +134,135 @@ namespace TestingDemo.Data.Migrations
                     b.HasIndex("Reference")
                         .IsUnique();
 
-                    b.HasIndex("IsArchived", "Status", "CheckIn", "CheckOut");
+                    b.HasIndex("IsArchived", "Status", "CheckInAtUtc", "CheckoutTimeUtc");
 
                     b.ToTable("Booking", (string)null);
+                });
+
+            modelBuilder.Entity("TestingDemo.Models.BookingHistoryFlushLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("FlushedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PerformedBy")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<int>("RecordCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FlushedAtUtc");
+
+                    b.ToTable("BookingHistoryFlushLog", (string)null);
+                });
+
+            modelBuilder.Entity("TestingDemo.Models.PaymentRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("BalanceAfter")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("BankTransferReference")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<int>("BookingId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("ExternalReference")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime>("PaidAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ReceiptImagePath")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ReceiptNumber")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<string>("ReceivedBy")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<decimal>("StayTotalAtPosting")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("VoidReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("VoidedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("VoidedBy")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PaidAtUtc");
+
+                    b.HasIndex("ReceiptNumber")
+                        .IsUnique();
+
+                    b.HasIndex("BookingId", "PaidAtUtc");
+
+                    b.ToTable("PaymentRecord", (string)null);
                 });
 
             modelBuilder.Entity("TestingDemo.Models.BookingItem", b =>
@@ -163,7 +283,7 @@ namespace TestingDemo.Data.Migrations
                     b.Property<int>("Quantity")
                         .HasColumnType("int");
 
-                    b.Property<int>("RoomTypeId")
+                    b.Property<int?>("RoomTypeId")
                         .HasColumnType("int");
 
                     b.Property<string>("RoomTypeName")
@@ -176,7 +296,8 @@ namespace TestingDemo.Data.Migrations
                     b.HasIndex("RoomTypeId");
 
                     b.HasIndex("BookingId", "RoomTypeId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[RoomTypeId] IS NOT NULL");
 
                     b.ToTable("BookingItem", (string)null);
                 });
@@ -188,16 +309,6 @@ namespace TestingDemo.Data.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("BedCount")
-                        .HasColumnType("int");
-
-                    b.Property<int>("MaxOccupancy")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("PricePerNight")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("RoomNumber")
                         .IsRequired()
@@ -232,6 +343,9 @@ namespace TestingDemo.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("RoomTypeId"));
 
+                    b.Property<int>("BedCount")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -247,10 +361,17 @@ namespace TestingDemo.Data.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int>("MaxOccupancy")
+                        .HasColumnType("int");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<decimal>("PricePerNight")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.HasKey("RoomTypeId");
 
@@ -327,12 +448,22 @@ namespace TestingDemo.Data.Migrations
                     b.HasOne("TestingDemo.Models.RoomType", "RoomType")
                         .WithMany()
                         .HasForeignKey("RoomTypeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Booking");
 
                     b.Navigation("RoomType");
+                });
+
+            modelBuilder.Entity("TestingDemo.Models.PaymentRecord", b =>
+                {
+                    b.HasOne("TestingDemo.Models.Booking", "Booking")
+                        .WithMany("PaymentRecords")
+                        .HasForeignKey("BookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Booking");
                 });
 
             modelBuilder.Entity("TestingDemo.Models.Room", b =>
@@ -349,6 +480,8 @@ namespace TestingDemo.Data.Migrations
             modelBuilder.Entity("TestingDemo.Models.Booking", b =>
                 {
                     b.Navigation("Items");
+
+                    b.Navigation("PaymentRecords");
                 });
 
             modelBuilder.Entity("TestingDemo.Models.BookingItem", b =>

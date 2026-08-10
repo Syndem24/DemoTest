@@ -64,9 +64,6 @@ public class RoomService : IRoomService
         {
             RoomTypeId = roomType.RoomTypeId,
             RoomNumber = dto.RoomNumber.Trim(),
-            PricePerNight = dto.PricePerNight,
-            MaxOccupancy = dto.MaxOccupancy,
-            BedCount = dto.BedCount,
             Status = RoomStatus.Available
         };
 
@@ -107,6 +104,9 @@ public class RoomService : IRoomService
         {
             Name = typeName,
             Description = dto.Description?.Trim(),
+            PricePerNight = dto.PricePerNight,
+            MaxOccupancy = dto.MaxOccupancy,
+            BedCount = dto.BedCount,
             CreatedAt = DateTime.UtcNow,
             Inclusions = inclusions.ToList(),
             Images = images.ToList()
@@ -121,9 +121,6 @@ public class RoomService : IRoomService
             {
                 RoomTypeId = roomType.RoomTypeId,
                 RoomNumber = roomNumber,
-                PricePerNight = dto.PricePerNight,
-                MaxOccupancy = dto.MaxOccupancy,
-                BedCount = dto.BedCount,
                 Status = RoomStatus.Available
             });
         }
@@ -184,13 +181,13 @@ public class RoomService : IRoomService
 
         roomType.Name = dto.Name.Trim();
         roomType.Description = dto.Description?.Trim();
+        roomType.PricePerNight = dto.PricePerNight;
+        roomType.MaxOccupancy = dto.MaxOccupancy;
+        roomType.BedCount = dto.BedCount;
         roomType.Inclusions = RoomMappings.NormalizeInclusions(dto.Inclusions);
         _db.Entry(roomType).Property(t => t.Inclusions).IsModified = true;
 
         room.RoomNumber = dto.RoomNumber.Trim();
-        room.PricePerNight = dto.PricePerNight;
-        room.MaxOccupancy = dto.MaxOccupancy;
-        room.BedCount = dto.BedCount;
         room.Status = RoomStatus.Available;
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -220,6 +217,9 @@ public class RoomService : IRoomService
 
         roomType.Name = dto.Name.Trim();
         roomType.Description = dto.Description?.Trim();
+        roomType.PricePerNight = dto.PricePerNight;
+        roomType.MaxOccupancy = dto.MaxOccupancy;
+        roomType.BedCount = dto.BedCount;
         roomType.Inclusions = RoomMappings.NormalizeInclusions(dto.Inclusions);
         roomType.Images = RoomMappings.NormalizeImages(dto.Images);
         _db.Entry(roomType).Property(t => t.Inclusions).IsModified = true;
@@ -230,6 +230,16 @@ public class RoomService : IRoomService
             .Where(r => r.RoomTypeId == dto.RoomTypeId)
             .OrderBy(r => r.RoomNumber)
             .ToListAsync(cancellationToken);
+
+        var keptIds = dto.RoomNumbers
+            .Where(item => item.RoomId > 0)
+            .Select(item => item.RoomId)
+            .ToHashSet();
+        var removingIds = existingRooms
+            .Where(room => !keptIds.Contains(room.Id))
+            .Select(room => room.Id)
+            .ToList();
+        await PrepareRoomsForDeletionAsync(removingIds, cancellationToken);
 
         var rooms = SyncRoomsForType(dto.RoomTypeId, existingRooms, dto.RoomNumbers);
 
@@ -249,9 +259,6 @@ public class RoomService : IRoomService
 
         foreach (var room in rooms)
         {
-            room.PricePerNight = dto.PricePerNight;
-            room.MaxOccupancy = dto.MaxOccupancy;
-            room.BedCount = dto.BedCount;
             room.Status = RoomStatus.Available;
         }
 
@@ -323,21 +330,28 @@ public class RoomService : IRoomService
             return false;
         }
 
-        var roomTypeId = room.RoomTypeId;
-        _db.Rooms.Remove(room);
-        await _db.SaveChangesAsync(cancellationToken);
+        await PrepareRoomsForDeletionAsync([room.Id], cancellationToken);
 
-        var remaining = await _db.Rooms.CountAsync(r => r.RoomTypeId == roomTypeId, cancellationToken);
-        if (remaining == 0)
+        var roomTypeId = room.RoomTypeId;
+        var remainingOthers = await _db.Rooms.CountAsync(
+            r => r.RoomTypeId == roomTypeId && r.Id != id,
+            cancellationToken);
+
+        _db.Rooms.Remove(room);
+
+        if (remainingOthers == 0)
         {
-            var roomType = await _db.RoomTypes.FirstOrDefaultAsync(t => t.RoomTypeId == roomTypeId, cancellationToken);
+            await PrepareRoomTypeForDeletionAsync(roomTypeId, cancellationToken);
+            var roomType = await _db.RoomTypes.FirstOrDefaultAsync(
+                t => t.RoomTypeId == roomTypeId,
+                cancellationToken);
             if (roomType is not null)
             {
                 _db.RoomTypes.Remove(roomType);
-                await _db.SaveChangesAsync(cancellationToken);
             }
         }
 
+        await _db.SaveChangesAsync(cancellationToken);
         return true;
     }
 
@@ -354,10 +368,89 @@ public class RoomService : IRoomService
         }
 
         var rooms = roomType.Rooms.ToList();
+        await PrepareRoomsForDeletionAsync(rooms.Select(r => r.Id).ToList(), cancellationToken);
+        await PrepareRoomTypeForDeletionAsync(roomTypeId, cancellationToken);
+
         _db.Rooms.RemoveRange(rooms);
         _db.RoomTypes.Remove(roomType);
         await _db.SaveChangesAsync(cancellationToken);
         return rooms.Count;
+    }
+
+    /// <summary>
+    /// Blocks delete when a room is occupied or on a confirmed booking.
+    /// Removes leftover AssignedRoom rows from finished/cancelled bookings so the FK does not block.
+    /// </summary>
+    private async Task PrepareRoomsForDeletionAsync(
+        IReadOnlyCollection<int> roomIds,
+        CancellationToken cancellationToken)
+    {
+        if (roomIds.Count == 0)
+        {
+            return;
+        }
+
+        var occupiedNumbers = await _db.Rooms
+            .AsNoTracking()
+            .Where(r => roomIds.Contains(r.Id) && r.Status == RoomStatus.Occupied)
+            .Select(r => r.RoomNumber)
+            .OrderBy(n => n)
+            .ToListAsync(cancellationToken);
+
+        if (occupiedNumbers.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Cannot delete room(s) {string.Join(", ", occupiedNumbers)} while occupied. Check the guest out first.");
+        }
+
+        var blockingNumbers = await _db.AssignedRooms
+            .AsNoTracking()
+            .Where(a => roomIds.Contains(a.RoomId)
+                        && !a.BookingItem.Booking.IsArchived
+                        && a.BookingItem.Booking.Status == BookingStatus.Confirmed)
+            .Select(a => a.Room.RoomNumber)
+            .Distinct()
+            .OrderBy(n => n)
+            .ToListAsync(cancellationToken);
+
+        if (blockingNumbers.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Cannot delete room(s) {string.Join(", ", blockingNumbers)} while assigned to a confirmed booking. Cancel or check out that stay first.");
+        }
+
+        var leftoverAssignments = await _db.AssignedRooms
+            .Where(a => roomIds.Contains(a.RoomId))
+            .ToListAsync(cancellationToken);
+
+        if (leftoverAssignments.Count > 0)
+        {
+            _db.AssignedRooms.RemoveRange(leftoverAssignments);
+        }
+    }
+
+    /// <summary>
+    /// Blocks delete when pending/confirmed bookings still use the type.
+    /// Finished booking lines keep RoomTypeName; FK is cleared via SetNull on delete.
+    /// </summary>
+    private async Task PrepareRoomTypeForDeletionAsync(
+        int roomTypeId,
+        CancellationToken cancellationToken)
+    {
+        var activeStatuses = new[] { BookingStatus.Pending, BookingStatus.Confirmed };
+        var activeCount = await _db.BookingItems
+            .AsNoTracking()
+            .CountAsync(
+                line => line.RoomTypeId == roomTypeId
+                        && !line.Booking.IsArchived
+                        && activeStatuses.Contains(line.Booking.Status),
+                cancellationToken);
+
+        if (activeCount > 0)
+        {
+            throw new InvalidOperationException(
+                "Cannot delete this room type while pending or confirmed bookings still use it. Cancel or check those stays out first.");
+        }
     }
 
     private async Task<Room?> GetByIdWithDetailsAsync(int id, CancellationToken cancellationToken)

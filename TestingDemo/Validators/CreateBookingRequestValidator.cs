@@ -1,5 +1,6 @@
 using FluentValidation;
 using TestingDemo.DTOs;
+using TestingDemo.Services;
 
 namespace TestingDemo.Validators;
 
@@ -22,21 +23,21 @@ public sealed class CreateBookingRequestValidator : AbstractValidator<CreateBook
             .Matches(@"^[+\d][\d\s\-().]*$")
             .WithMessage("Enter a valid phone number.");
 
-        RuleFor(x => x.CheckIn)
-            .Must(date => date >= DateOnly.FromDateTime(DateTime.Today))
+        RuleFor(x => x.CheckInAtUtc)
+            .Must(date => PhilippinesTime.ToUtc(date) >= PhilippinesTime.StartOfTodayUtc())
             .WithMessage("Check-in cannot be in the past.");
 
-        RuleFor(x => x.CheckOut)
-            .GreaterThan(x => x.CheckIn)
+        RuleFor(x => x.CheckoutTimeUtc)
+            .Must((request, checkout) => PhilippinesTime.ToUtc(checkout) > PhilippinesTime.ToUtc(request.CheckInAtUtc))
             .WithMessage("Check-out must be after check-in.");
-
-        RuleFor(x => x.PaymentOption)
-            .IsInEnum()
-            .WithMessage("Choose full payment or half payment.");
 
         RuleFor(x => x.AcceptTerms)
             .Equal(true)
             .WithMessage("You must read and accept the Terms of Stay.");
+
+        RuleFor(x => x.ExtraPersons)
+            .InclusiveBetween(0, 1)
+            .WithMessage("Extra person is limited to one on a single room.");
 
         RuleFor(x => x.Items)
             .NotEmpty()

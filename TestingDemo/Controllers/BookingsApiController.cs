@@ -28,15 +28,15 @@ public sealed class BookingsApiController : ControllerBase
 
     [HttpGet("availability")]
     public async Task<ActionResult<IReadOnlyList<RoomAvailabilityDto>>> GetAvailability(
-        [FromQuery] DateOnly checkIn,
-        [FromQuery] DateOnly checkOut,
+        [FromQuery] DateTime checkInAtUtc,
+        [FromQuery] DateTime checkoutTimeUtc,
         CancellationToken cancellationToken)
     {
         try
         {
             var availability = await _bookingService.GetAvailabilityAsync(
-                checkIn,
-                checkOut,
+                checkInAtUtc,
+                checkoutTimeUtc,
                 cancellationToken);
             return Ok(availability);
         }
@@ -73,7 +73,7 @@ public sealed class BookingsApiController : ControllerBase
                 booking.GuestName,
                 booking.Kind,
                 booking.Status,
-                booking.CheckIn,
+                booking.CheckInAtUtc,
                 booking.CreatedAtUtc,
                 false);
 

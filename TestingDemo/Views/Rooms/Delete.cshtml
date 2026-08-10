@@ -16,6 +16,11 @@
     </div>
 </section>
 
+@if (TempData["Error"] is string deleteError)
+{
+    <div class="alert alert-danger" role="alert">@deleteError</div>
+}
+
 <div class="row">
     <div class="col-lg-7">
         <div class="hotel-panel">

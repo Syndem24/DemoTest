@@ -1,0 +1,95 @@
+@{
+    ViewData["Title"] = "Payments";
+}
+
+<section class="hotel-page-hero">
+    <div>
+        <p class="hero-eyebrow">Company records</p>
+        <h1>Payments</h1>
+        <p>Review posted payments for bookings and walk-ins. Record new payments from a booking’s details.</p>
+    </div>
+</section>
+
+<section class="hotel-panel admin-bookings-panel admin-payments-page" data-admin-payments>
+    @Html.AntiForgeryToken()
+
+    <div class="admin-payments-panel">
+        <div class="admin-payments-toolbar">
+            <div class="admin-payments-summary" data-payments-summary>
+                <span>Collected: ₱0.00</span>
+                <span>Refunded: ₱0.00</span>
+            </div>
+            <label class="admin-booking-search">
+                <span class="visually-hidden">Search payments</span>
+                <input type="search" placeholder="Search receipt, booking, guest…" data-payments-search />
+            </label>
+            <label class="admin-payments-method-filter">
+                <span class="visually-hidden">Payment method</span>
+                <select data-payments-method>
+                    <option value="">All methods</option>
+                    <option value="Cash">Cash</option>
+                    <option value="EWallet">E-wallet</option>
+                    <option value="BankTransfer">Bank transfer (InstaPay)</option>
+                    <option value="Card">Card (legacy)</option>
+                    <option value="Maya">Maya (legacy)</option>
+                    <option value="Other">Other (legacy)</option>
+                </select>
+            </label>
+            <button type="button" class="admin-booking-refresh" data-payments-refresh>Refresh</button>
+        </div>
+        <p class="admin-bookings-message" data-payments-message role="status" hidden></p>
+        <div class="admin-bookings-table-wrap admin-payments-table-wrap">
+            <table class="admin-bookings-table admin-payments-table">
+                <thead>
+                    <tr>
+                        <th>When (PH)</th>
+                        <th>Receipt</th>
+                        <th>Booking</th>
+                        <th>Guest</th>
+                        <th>Event</th>
+                        <th>Method</th>
+                        <th>Amount</th>
+                        <th>Balance</th>
+                        <th>Staff</th>
+                        <th><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody data-payments-list>
+                    <tr><td colspan="10" class="admin-bookings-loading">Loading payments…</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <nav class="admin-bookings-pagination" aria-label="Payment pages">
+            <button type="button" data-payments-prev disabled>Previous</button>
+            <span data-payments-page>Page 1</span>
+            <button type="button" data-payments-next disabled>Next</button>
+        </nav>
+        <p class="admin-payments-future-note">
+            Coming soon: bank-transfer verification workflow and online receipt image upload.
+        </p>
+    </div>
+</section>
+
+<div class="admin-booking-modal" data-payment-detail-modal hidden>
+    <button type="button" class="admin-booking-modal-backdrop" data-payment-detail-close aria-label="Close payment details"></button>
+    <section class="admin-booking-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentDetailTitle">
+        <header>
+            <div>
+                <span class="admin-booking-reference" data-payment-detail-receipt></span>
+                <h2 id="paymentDetailTitle">Payment details</h2>
+            </div>
+            <button type="button" class="admin-booking-modal-close" data-payment-detail-close aria-label="Close">&times;</button>
+        </header>
+        <div class="admin-booking-detail-body" data-payment-detail-body>
+            <p>Loading…</p>
+        </div>
+        <footer class="admin-booking-detail-actions">
+            <button type="button" data-payment-detail-close>Close</button>
+            <button type="button" class="admin-booking-delete" data-payment-void hidden>Void payment</button>
+        </footer>
+    </section>
+</div>
+
+@section Scripts {
+    <script src="~/js/admin-payments.js" asp-append-version="true"></script>
+}

@@ -12,6 +12,9 @@
     var adminBookingsActive = string.Equals(controller, "AdminBookings", StringComparison.OrdinalIgnoreCase)
         ? "is-active"
         : string.Empty;
+    var adminPaymentsActive = string.Equals(controller, "AdminPayments", StringComparison.OrdinalIgnoreCase)
+        ? "is-active"
+        : string.Empty;
     var createActive = string.Equals(controller, "Rooms", StringComparison.OrdinalIgnoreCase)
         && string.Equals(action, "Create", StringComparison.OrdinalIgnoreCase)
         ? "is-active"
@@ -31,6 +34,13 @@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/TestingDemo.styles.css" asp-append-version="true" />
+    @if (!string.IsNullOrEmpty(adminBookingsActive))
+    {
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+        <link rel="stylesheet" href="~/css/booking.css" asp-append-version="true" />
+    }
 </head>
 <body class="hotel-shell">
     <div class="hotel-sidebar-backdrop" id="sidebarBackdrop" hidden></div>
@@ -58,6 +68,15 @@
                     <path d="M7 3h10a2 2 0 0 1 2 2v16l-7-3-7 3V5a2 2 0 0 1 2-2zm2 4v2h6V7H9zm0 4v2h6v-2H9z"/>
                 </svg>
                 <span>Bookings</span>
+            </a>
+            <a class="hotel-sidebar-link @adminPaymentsActive"
+               asp-controller="AdminPayments"
+               asp-action="Index"
+               title="Payment records">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M3 6h18v12H3V6zm2 2v8h14V8H5zm2 2h4v2H7v-2zm6 0h4v2h-4v-2zm-6 3h10v2H7v-2z"/>
+                </svg>
+                <span>Payments</span>
             </a>
             <a class="hotel-sidebar-link @bookingActive"
                asp-controller="Booking"
@@ -147,6 +166,7 @@
         <script src="~/lib/fullcalendar/core.min.js"></script>
         <script src="~/lib/fullcalendar/daygrid.min.js"></script>
         <script src="~/lib/fullcalendar/list.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     }
     <div id="adminAntiForgery" hidden>@Html.AntiForgeryToken()</div>
     <script src="~/js/admin-bookings.js" asp-append-version="true"></script>

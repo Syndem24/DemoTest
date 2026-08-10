@@ -161,7 +161,7 @@
                                 </div>
                                 <div class="hotel-summary-row">
                                     <dt>Stay</dt>
-                                    <dd>@stay.CheckIn.ToString("MMM d, yyyy") → @stay.CheckOut.ToString("MMM d, yyyy")</dd>
+                                    <dd>@stay.CheckInAtUtc.ToString("MMM d, yyyy") → @stay.CheckoutTimeUtc.ToString("MMM d, yyyy")</dd>
                                 </div>
                                 <div class="hotel-summary-row">
                                     <dt>Type</dt>
@@ -188,7 +188,6 @@
                                   class="hotel-guest-stay-actions"
                                   onsubmit="return confirm(@System.Text.Json.JsonSerializer.Serialize(checkoutConfirm));">
                                 @Html.AntiForgeryToken()
-                                <input type="hidden" name="rowVersion" value="@stay.RowVersion" />
                                 <button type="submit" class="btn btn-primary">Check out guest</button>
                             </form>
                         }

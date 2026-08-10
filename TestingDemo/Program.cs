@@ -6,6 +6,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using QuestPDF.Infrastructure;
 using TestingDemo.Data;
 using TestingDemo.Hubs;
 using TestingDemo.Services;
@@ -13,6 +14,8 @@ using TestingDemo.Validators;
 
 try
 {
+    QuestPDF.Settings.License = LicenseType.Community;
+
     var builder = WebApplication.CreateBuilder(args);
 
     var pesoCulture = CreatePesoCulture();
@@ -31,6 +34,8 @@ try
         {
             options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
             options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+            options.JsonSerializerOptions.Converters.Add(new UtcDateTimeJsonConverter());
+            options.JsonSerializerOptions.Converters.Add(new UtcNullableDateTimeJsonConverter());
         });
 
     builder.Services.AddSignalR()
@@ -39,6 +44,8 @@ try
             options.PayloadSerializerOptions.PropertyNamingPolicy =
                 System.Text.Json.JsonNamingPolicy.CamelCase;
             options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+            options.PayloadSerializerOptions.Converters.Add(new UtcDateTimeJsonConverter());
+            options.PayloadSerializerOptions.Converters.Add(new UtcNullableDateTimeJsonConverter());
         });
 
     builder.Services.AddAntiforgery(options => options.HeaderName = "RequestVerificationToken");
@@ -70,6 +77,8 @@ try
     builder.Services.AddValidatorsFromAssemblyContaining<CreateRoomDtoValidator>();
     builder.Services.AddScoped<IRoomService, RoomService>();
     builder.Services.AddScoped<IBookingService, BookingService>();
+    builder.Services.AddScoped<IPaymentService, PaymentService>();
+    builder.Services.AddSingleton<IPaymentReceiptStorage, LocalPaymentReceiptStorage>();
     builder.Services.AddHostedService<AutomaticCheckoutBackgroundService>();
 
     var app = builder.Build();

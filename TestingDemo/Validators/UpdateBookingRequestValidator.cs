@@ -1,5 +1,6 @@
 using FluentValidation;
 using TestingDemo.DTOs;
+using TestingDemo.Services;
 
 namespace TestingDemo.Validators;
 
@@ -14,18 +15,16 @@ public sealed class UpdateBookingRequestValidator : AbstractValidator<UpdateBook
             .MaximumLength(40)
             .Matches(@"^[+\d][\d\s\-().]*$")
             .WithMessage("Enter a valid phone number.");
-        RuleFor(x => x.CheckIn)
-            .Must(date => date >= DateOnly.FromDateTime(DateTime.Today))
+        RuleFor(x => x.CheckInAtUtc)
+            .Must(date => PhilippinesTime.ToUtc(date) >= PhilippinesTime.StartOfTodayUtc())
             .WithMessage("Check-in cannot be in the past.");
-        RuleFor(x => x.CheckOut)
-            .GreaterThan(x => x.CheckIn)
+        RuleFor(x => x.CheckoutTimeUtc)
+            .Must((request, checkout) => PhilippinesTime.ToUtc(checkout) > PhilippinesTime.ToUtc(request.CheckInAtUtc))
             .WithMessage("Check-out must be after check-in.");
         RuleFor(x => x.PaymentOption)
             .IsInEnum()
             .When(x => x.PaymentOption.HasValue)
             .WithMessage("Choose full payment or half payment.");
-
-        RuleFor(x => x.RowVersion).NotEmpty();
         RuleFor(x => x.Items)
             .NotEmpty()
             .Must(items => items.Any(item => item.Quantity > 0))
@@ -33,7 +32,6 @@ public sealed class UpdateBookingRequestValidator : AbstractValidator<UpdateBook
         RuleForEach(x => x.Items).SetValidator(new UpdateBookingItemValidator());
     }
 }
-
 public sealed class UpdateBookingItemValidator : AbstractValidator<CreateBookingItemRequest>
 {
     public UpdateBookingItemValidator()

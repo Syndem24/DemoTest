@@ -14,13 +14,15 @@ public class HotelBookingDbContext : DbContext
         : base(options)
     {
     }
-
     public DbSet<Room> Rooms => Set<Room>();
     public DbSet<RoomType> RoomTypes => Set<RoomType>();
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<BookingItem> BookingItems => Set<BookingItem>();
+    public DbSet<BookingCharge> BookingCharges => Set<BookingCharge>();
     public DbSet<AssignedRoom> AssignedRooms => Set<AssignedRoom>();
     public DbSet<StaffUser> StaffUsers => Set<StaffUser>();
+    public DbSet<BookingHistoryFlushLog> BookingHistoryFlushLogs => Set<BookingHistoryFlushLog>();
+    public DbSet<PaymentRecord> PaymentRecords => Set<PaymentRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -36,6 +38,7 @@ public class HotelBookingDbContext : DbContext
             entity.Property(e => e.Description).HasMaxLength(5000);
             ConfigureStringList(entity.Property(e => e.Inclusions));
             ConfigureStringList(entity.Property(e => e.Images));
+            entity.Property(e => e.PricePerNight).HasPrecision(18, 2);
         });
 
         modelBuilder.Entity<Room>(entity =>
@@ -44,7 +47,6 @@ public class HotelBookingDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.RoomNumber).HasMaxLength(20).IsRequired();
             entity.HasIndex(e => e.RoomNumber).IsUnique();
-            entity.Property(e => e.PricePerNight).HasPrecision(18, 2);
             entity.Property(e => e.RoomTypeId).HasColumnName("RoomTypeID");
             entity.Property(e => e.Status)
                 .HasConversion<string>()
@@ -66,8 +68,8 @@ public class HotelBookingDbContext : DbContext
             entity.Property(e => e.GuestName).HasMaxLength(120).IsRequired();
             entity.Property(e => e.GuestEmail).HasMaxLength(254).IsRequired();
             entity.Property(e => e.GuestPhone).HasMaxLength(40).IsRequired();
-            entity.Property(e => e.CheckIn).HasColumnType("date");
-            entity.Property(e => e.CheckOut).HasColumnType("date");
+            entity.Property(e => e.CheckInAtUtc).HasColumnType("datetime2");
+            entity.Property(e => e.CheckoutTimeUtc).HasColumnType("datetime2");
             entity.Property(e => e.Kind)
                 .HasConversion<string>()
                 .HasMaxLength(20)
@@ -82,8 +84,7 @@ public class HotelBookingDbContext : DbContext
                 .IsRequired();
             entity.Property(e => e.TotalAmount).HasPrecision(18, 2);
             entity.Property(e => e.AmountDueNow).HasPrecision(18, 2);
-            entity.Property(e => e.RowVersion).IsRowVersion();
-            entity.HasIndex(e => new { e.IsArchived, e.Status, e.CheckIn, e.CheckOut });
+            entity.HasIndex(e => new { e.IsArchived, e.Status, e.CheckInAtUtc, e.CheckoutTimeUtc });
             entity.HasIndex(e => e.CreatedAtUtc);
         });
 
@@ -101,7 +102,8 @@ public class HotelBookingDbContext : DbContext
             entity.HasOne(e => e.RoomType)
                 .WithMany()
                 .HasForeignKey(e => e.RoomTypeId)
-                .OnDelete(DeleteBehavior.Restrict);
+                .OnDelete(DeleteBehavior.SetNull)
+                .IsRequired(false);
         });
 
         modelBuilder.Entity<AssignedRoom>(entity =>
@@ -120,6 +122,24 @@ public class HotelBookingDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<BookingCharge>(entity =>
+        {
+            entity.ToTable("BookingCharge");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ChargeType)
+                .HasConversion<string>()
+                .HasMaxLength(30)
+                .IsRequired();
+            entity.Property(e => e.Label).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.UnitAmount).HasPrecision(18, 2);
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.HasIndex(e => new { e.BookingId, e.ChargeType });
+            entity.HasOne(e => e.Booking)
+                .WithMany(b => b.Charges)
+                .HasForeignKey(e => e.BookingId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<StaffUser>(entity =>
         {
             entity.ToTable("StaffUser");
@@ -128,6 +148,43 @@ public class HotelBookingDbContext : DbContext
             entity.HasIndex(e => e.Username).IsUnique();
             entity.Property(e => e.DisplayName).HasMaxLength(120).IsRequired();
             entity.Property(e => e.PasswordHash).HasMaxLength(500).IsRequired();
+        });
+
+        modelBuilder.Entity<BookingHistoryFlushLog>(entity =>
+        {
+            entity.ToTable("BookingHistoryFlushLog");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.PerformedBy).HasMaxLength(120).IsRequired();
+            entity.Property(e => e.FileName).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Summary).HasMaxLength(2000).IsRequired();
+            entity.HasIndex(e => e.FlushedAtUtc);
+        });
+
+        modelBuilder.Entity<PaymentRecord>(entity =>
+        {
+            entity.ToTable("PaymentRecord");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ReceiptNumber).HasMaxLength(40).IsRequired();
+            entity.HasIndex(e => e.ReceiptNumber).IsUnique();
+            entity.Property(e => e.EventType).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(e => e.Method).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.StayTotalAtPosting).HasPrecision(18, 2);
+            entity.Property(e => e.BalanceAfter).HasPrecision(18, 2);
+            entity.Property(e => e.ReceivedBy).HasMaxLength(120).IsRequired();
+            entity.Property(e => e.ExternalReference).HasMaxLength(120);
+            entity.Property(e => e.BankTransferReference).HasMaxLength(120);
+            entity.Property(e => e.ReceiptImagePath).HasMaxLength(500);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.VoidReason).HasMaxLength(500);
+            entity.Property(e => e.VoidedBy).HasMaxLength(120);
+            entity.HasIndex(e => e.PaidAtUtc);
+            entity.HasIndex(e => new { e.BookingId, e.PaidAtUtc });
+            entity.HasOne(e => e.Booking)
+                .WithMany(b => b.PaymentRecords)
+                .HasForeignKey(e => e.BookingId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 

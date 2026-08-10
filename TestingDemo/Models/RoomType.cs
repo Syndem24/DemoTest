@@ -17,5 +17,9 @@ public class RoomType
     /// </summary>
     public List<string> Images { get; set; } = new();
 
+    public decimal PricePerNight { get; set; }
+    public int MaxOccupancy { get; set; }
+    public int BedCount { get; set; }
+
     public ICollection<Room> Rooms { get; set; } = new List<Room>();
 }

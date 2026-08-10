@@ -161,17 +161,25 @@ public class RoomsController : Controller
             .ToList();
 
         var typeName = rooms.FirstOrDefault(r => r.RoomTypeId == id)?.Name ?? "Room type";
-        var deletedCount = await _roomService.DeleteRoomTypeAsync(id, cancellationToken);
-        if (deletedCount == 0)
+        try
         {
-            return NotFound();
+            var deletedCount = await _roomService.DeleteRoomTypeAsync(id, cancellationToken);
+            if (deletedCount == 0)
+            {
+                return NotFound();
+            }
+
+            RoomImageStorage.DeleteFiles(_environment, images);
+
+            TempData["Success"] =
+                $"Room type '{typeName}' and {deletedCount} room(s) were deleted successfully.";
+            return RedirectToAction(nameof(Index));
         }
-
-        RoomImageStorage.DeleteFiles(_environment, images);
-
-        TempData["Success"] =
-            $"Room type '{typeName}' and {deletedCount} room(s) were deleted successfully.";
-        return RedirectToAction(nameof(Index));
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(DeleteType), new { id });
+        }
     }
 
     public async Task<IActionResult> Details(int id, CancellationToken cancellationToken)
@@ -197,7 +205,6 @@ public class RoomsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Checkout(
         int id,
-        string rowVersion,
         CancellationToken cancellationToken)
     {
         var stay = await _bookingService.GetActiveStayByRoomIdAsync(id, cancellationToken);
@@ -211,7 +218,6 @@ public class RoomsController : Controller
         {
             var booking = await _bookingService.CheckoutAsync(
                 stay.Id,
-                rowVersion,
                 cancellationToken);
             await _hub.Clients.All.BookingArchived(booking.Id);
             TempData["Success"] =
@@ -373,14 +379,22 @@ public class RoomsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteConfirmed(int id, CancellationToken cancellationToken)
     {
-        var deleted = await _roomService.DeleteAsync(id, cancellationToken);
-        if (!deleted)
+        try
         {
-            return NotFound();
-        }
+            var deleted = await _roomService.DeleteAsync(id, cancellationToken);
+            if (!deleted)
+            {
+                return NotFound();
+            }
 
-        TempData["Success"] = "Room deleted successfully.";
-        return RedirectToAction(nameof(List));
+            TempData["Success"] = "Room deleted successfully.";
+            return RedirectToAction(nameof(List));
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Delete), new { id });
+        }
     }
 
     private List<IFormFile> CollectUploadedImages(IEnumerable<IFormFile>? boundFiles)

@@ -12,6 +12,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="QuestPDF" Version="2025.7.1" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -35,9 +36,7 @@
   </ItemGroup>
 
   <!-- Rebuild React only when output is missing or ForceSpaBuild=true. MSBuild often lacks npm on PATH (exit 9009). -->
-  <Target Name="BuildRoomManagementApp"
-          BeforeTargets="Build"
-          Condition="Exists('$(SpaRoot)package.json') And '$(DesignTimeBuild)' != 'true' And '$(SkipSpaBuild)' != 'true' And ('$(ForceSpaBuild)' == 'true' Or !Exists('$(RoomAppJs)'))">
+  <Target Name="BuildRoomManagementApp" BeforeTargets="Build" Condition="Exists('$(SpaRoot)package.json') And '$(DesignTimeBuild)' != 'true' And '$(SkipSpaBuild)' != 'true' And ('$(ForceSpaBuild)' == 'true' Or !Exists('$(RoomAppJs)'))">
     <Exec WorkingDirectory="$(SpaRoot)" Command="$(NpmCmd) ci" Condition="Exists('$(SpaRoot)package-lock.json') And !Exists('$(SpaRoot)node_modules')" />
     <Exec WorkingDirectory="$(SpaRoot)" Command="$(NpmCmd) install" Condition="!Exists('$(SpaRoot)node_modules')" />
     <Exec WorkingDirectory="$(SpaRoot)" Command="$(NpmCmd) run build" />

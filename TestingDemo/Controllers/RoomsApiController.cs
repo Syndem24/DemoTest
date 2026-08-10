@@ -110,7 +110,6 @@ public class RoomsApiController : ControllerBase
         {
             var booking = await _bookingService.CheckoutAsync(
                 stay.Id,
-                request.RowVersion,
                 cancellationToken);
             await _hub.Clients.All.BookingArchived(booking.Id);
             return Ok(booking);

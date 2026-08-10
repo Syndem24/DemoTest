@@ -2,16 +2,39 @@ using TestingDemo.Models;
 
 namespace TestingDemo.DTOs;
 
+public sealed class CreateWalkInRequest
+{
+    public string GuestName { get; set; } = string.Empty;
+    public string GuestEmail { get; set; } = string.Empty;
+    public string GuestPhone { get; set; } = string.Empty;
+    public DateTime CheckInAtUtc { get; set; }
+    public DateTime CheckoutTimeUtc { get; set; }
+    /// <summary>0 or 1; only allowed when a single room is assigned.</summary>
+    public int ExtraPersons { get; set; }
+    public List<ConfirmRoomAssignmentRequest> Assignments { get; set; } = new();
+}
+
 public sealed class CreateBookingRequest
 {
     public string GuestName { get; set; } = string.Empty;
     public string GuestEmail { get; set; } = string.Empty;
     public string GuestPhone { get; set; } = string.Empty;
-    public DateOnly CheckIn { get; set; }
-    public DateOnly CheckOut { get; set; }
+    public DateTime CheckInAtUtc { get; set; }
+    public DateTime CheckoutTimeUtc { get; set; }
     public PaymentOption PaymentOption { get; set; }
     public bool AcceptTerms { get; set; }
+    /// <summary>0 or 1; only allowed when a single room type is booked.</summary>
+    public int ExtraPersons { get; set; }
     public List<CreateBookingItemRequest> Items { get; set; } = new();
+}
+
+public sealed class UpdateBookingChargesRequest
+{
+    public bool EarlyCheckIn { get; set; }
+    /// <summary>0–3 hours past noon checkout.</summary>
+    public int LateCheckoutHours { get; set; }
+    /// <summary>0 or 1; single rooms only.</summary>
+    public int ExtraPersons { get; set; }
 }
 
 public sealed class CreateBookingItemRequest
@@ -32,7 +55,17 @@ public sealed record BookingItemDto(
     string RoomTypeName,
     int Quantity,
     decimal PricePerNight,
+    int MaxOccupancy,
     IReadOnlyList<AssignedRoomDto> AssignedRooms);
+
+public sealed record BookingChargeDto(
+    int Id,
+    BookingChargeType ChargeType,
+    string Label,
+    int Quantity,
+    int Nights,
+    decimal UnitAmount,
+    decimal Amount);
 
 public sealed record AssignedRoomDto(
     int RoomId,
@@ -44,8 +77,8 @@ public sealed record BookingDto(
     string GuestName,
     string GuestEmail,
     string GuestPhone,
-    DateOnly CheckIn,
-    DateOnly CheckOut,
+    DateTime CheckInAtUtc,
+    DateTime CheckoutTimeUtc,
     BookingKind Kind,
     PaymentOption PaymentOption,
     BookingStatus Status,
@@ -53,11 +86,10 @@ public sealed record BookingDto(
     decimal AmountDueNow,
     DateTime CreatedAtUtc,
     DateTime UpdatedAtUtc,
-    DateTime? AdminReadAtUtc,
     bool IsArchived,
     DateTime? ArchivedAtUtc,
-    string RowVersion,
-    IReadOnlyList<BookingItemDto> Items);
+    IReadOnlyList<BookingItemDto> Items,
+    IReadOnlyList<BookingChargeDto> Charges);
 
 public sealed record CreateBookingResponse(
     string Reference,
@@ -71,7 +103,6 @@ public sealed record CreateBookingResponse(
 public sealed class UpdateBookingStatusRequest
 {
     public BookingStatus Status { get; set; }
-    public string RowVersion { get; set; } = string.Empty;
     public List<ConfirmRoomAssignmentRequest> Assignments { get; set; } = new();
 }
 
@@ -95,7 +126,6 @@ public sealed record AssignableRoomsByTypeDto(
 
 public sealed class BookingVersionRequest
 {
-    public string RowVersion { get; set; } = string.Empty;
 }
 
 public sealed class UpdateBookingRequest
@@ -103,18 +133,17 @@ public sealed class UpdateBookingRequest
     public string GuestName { get; set; } = string.Empty;
     public string GuestEmail { get; set; } = string.Empty;
     public string GuestPhone { get; set; } = string.Empty;
-    public DateOnly CheckIn { get; set; }
-    public DateOnly CheckOut { get; set; }
+    public DateTime CheckInAtUtc { get; set; }
+    public DateTime CheckoutTimeUtc { get; set; }
     public PaymentOption? PaymentOption { get; set; }
-    public string RowVersion { get; set; } = string.Empty;
     public List<CreateBookingItemRequest> Items { get; set; } = new();
 }
 
 public sealed record ReservationCalendarEventDto(
     int Id,
     string Title,
-    DateOnly Start,
-    DateOnly End,
+    DateTime Start,
+    DateTime End,
     string Reference,
     string GuestName,
     BookingKind Kind,
@@ -130,7 +159,7 @@ public sealed record BookingNotificationDto(
     string GuestName,
     BookingKind Kind,
     BookingStatus Status,
-    DateOnly CheckIn,
+    DateTime CheckInAtUtc,
     DateTime CreatedAtUtc,
     bool IsRead,
     string? Message = null);

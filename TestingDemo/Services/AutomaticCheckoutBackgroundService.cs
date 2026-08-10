@@ -32,19 +32,60 @@ public sealed class AutomaticCheckoutBackgroundService : BackgroundService
                 using var scope = _scopeFactory.CreateScope();
                 var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
 
-                // 1. Process 10-minute advance checkout warnings
+                // 0. Pending call-guest warnings (check-in − 20m)
+                var pendingCalls = await bookingService.ProcessPendingCallWarningsAsync(stoppingToken);
+                foreach (var booking in pendingCalls)
+                {
+                    _logger.LogInformation(
+                        "Sent pending call warning for booking {Reference} (Guest: {GuestName})",
+                        booking.Reference,
+                        booking.GuestName);
+
+                    await _hubContext.Clients.All.BookingUpdated(
+                        ToNotification(booking, "Call guest: verify pending booking (20 mins)"));
+                }
+
+                // 1. Process 20-minute advance arrival warnings (Confirmed)
+                var arrivingBookings = await bookingService.ProcessArrivalWarningsAsync(stoppingToken);
+                foreach (var booking in arrivingBookings)
+                {
+                    _logger.LogInformation(
+                        "Sent 20-minute arrival warning for booking {Reference} (Guest: {GuestName})",
+                        booking.Reference,
+                        booking.GuestName);
+
+                    await _hubContext.Clients.All.BookingUpdated(
+                        ToNotification(booking, "Arrival in 20 mins: guest checking in soon"));
+                }
+
+                // 2. Process 20-minute checkout call warnings (Confirmed, in-house)
                 var warnedBookings = await bookingService.ProcessCheckoutWarningsAsync(stoppingToken);
                 foreach (var booking in warnedBookings)
                 {
                     _logger.LogInformation(
-                        "Sent 10-minute checkout warning for booking {Reference} (Guest: {GuestName})",
+                        "Sent 20-minute checkout call warning for booking {Reference} (Guest: {GuestName})",
                         booking.Reference,
                         booking.GuestName);
 
-                    await _hubContext.Clients.All.BookingUpdated(ToNotification(booking, "Checkout Warning: 10 mins remaining for stay"));
+                    await _hubContext.Clients.All.BookingUpdated(
+                        ToNotification(booking, "Call guest: checkout in 20 mins — ask about late checkout"));
                 }
 
-                // 2. Process automatic checkouts for expired stay durations
+                // 3. Auto-cancel unverified Pending after 4-hour grace past check-in
+                var autoCancelled = await bookingService.AutoCancelExpiredPendingAsync(stoppingToken);
+                foreach (var booking in autoCancelled)
+                {
+                    _logger.LogInformation(
+                        "Auto-cancelled pending booking {Reference} (Guest: {GuestName}) after 4-hour unverified grace.",
+                        booking.Reference,
+                        booking.GuestName);
+
+                    await _hubContext.Clients.All.BookingUpdated(
+                        ToNotification(booking, "Pending booking auto-cancelled (unverified after 4-hour grace)"));
+                    await _hubContext.Clients.All.BookingArchived(booking.Id);
+                }
+
+                // 4. Process automatic checkouts for expired stay durations
                 var autoCheckedOutBookings = await bookingService.AutoCheckoutExpiredBookingsAsync(stoppingToken);
                 foreach (var booking in autoCheckedOutBookings)
                 {
@@ -71,7 +112,7 @@ public sealed class AutomaticCheckoutBackgroundService : BackgroundService
             booking.GuestName,
             booking.Kind,
             booking.Status,
-            booking.CheckIn,
+            booking.CheckInAtUtc,
             booking.CreatedAtUtc,
             false,
             message);

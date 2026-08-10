@@ -26,6 +26,45 @@
     </div>
 
     <div data-booking-table-panel>
+        <div class="admin-arrivals-panel" data-arrivals-panel hidden>
+            <div class="admin-arrivals-head">
+                <div>
+                    <strong>Arriving soon</strong>
+                    <p>Confirmed guests with check-in in the next 20 minutes (Philippines time).</p>
+                </div>
+                <button type="button" class="admin-booking-refresh" data-arrivals-close>Back to bookings</button>
+            </div>
+            <div class="admin-arrivals-list" data-arrivals-list>
+                <p class="admin-bookings-loading">Loading arrivals…</p>
+            </div>
+        </div>
+
+        <div class="admin-arrivals-panel" data-pending-calls-panel hidden>
+            <div class="admin-arrivals-head">
+                <div>
+                    <strong>Call guests soon</strong>
+                    <p>Pending bookings with check-in in the next 20 minutes — call to verify, then Confirm &amp; assign rooms.</p>
+                </div>
+                <button type="button" class="admin-booking-refresh" data-pending-calls-close>Back to bookings</button>
+            </div>
+            <div class="admin-arrivals-list" data-pending-calls-list>
+                <p class="admin-bookings-loading">Loading pending calls…</p>
+            </div>
+        </div>
+
+        <div class="admin-arrivals-panel" data-checkouts-panel hidden>
+            <div class="admin-arrivals-head">
+                <div>
+                    <strong>Checkout soon</strong>
+                    <p>Confirmed stays with checkout in the next 20 minutes — call to ask if they will extend for late checkout.</p>
+                </div>
+                <button type="button" class="admin-booking-refresh" data-checkouts-close>Back to bookings</button>
+            </div>
+            <div class="admin-arrivals-list" data-checkouts-list>
+                <p class="admin-bookings-loading">Loading checkouts…</p>
+            </div>
+        </div>
+
         <div class="admin-bookings-toolbar">
             <div class="admin-booking-filters" role="group" aria-label="Filter bookings">
                 <button type="button" class="admin-booking-filter is-active" data-booking-filter="">All</button>
@@ -36,7 +75,49 @@
                 <span class="visually-hidden">Search bookings</span>
                 <input type="search" placeholder="Search reference or guest…" data-booking-search />
             </label>
+            <button type="button" class="guest-btn guest-btn-primary admin-walkin-open-btn" data-walkin-open>
+                Walk-in
+            </button>
+            <button type="button" class="admin-booking-refresh admin-history-flush-btn" data-history-flush hidden>
+                Flush history to PDF
+            </button>
             <button type="button" class="admin-booking-refresh" data-booking-refresh>Refresh</button>
+        </div>
+
+        <div class="admin-history-flush-log" data-history-flush-log hidden>
+            <button
+                type="button"
+                class="admin-history-flush-toggle"
+                data-history-flush-toggle
+                aria-expanded="false"
+                aria-controls="historyFlushLogPanel">
+                <span class="admin-history-flush-toggle-label">
+                    <strong>History flush log</strong>
+                    <span data-history-flush-count>Closed · audit of PDF exports &amp; deletes</span>
+                </span>
+                <span class="admin-history-flush-chevron" aria-hidden="true"></span>
+            </button>
+            <div id="historyFlushLogPanel" class="admin-history-flush-log-body" data-history-flush-body hidden>
+                <p class="admin-history-flush-log-hint">
+                    Archived bookings are hard-deleted after export. Only these flush actions remain.
+                </p>
+                <div class="admin-history-flush-table-wrap">
+                    <table class="admin-bookings-table admin-history-flush-table">
+                        <thead>
+                            <tr>
+                                <th>When (PH)</th>
+                                <th>Staff</th>
+                                <th>Records</th>
+                                <th>PDF file</th>
+                                <th><span class="visually-hidden">Actions</span></th>
+                            </tr>
+                        </thead>
+                        <tbody data-history-flush-log-list>
+                            <tr><td colspan="5" class="admin-bookings-loading">No flush actions yet.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
         <p class="admin-bookings-message" data-bookings-message role="status" hidden></p>
@@ -50,7 +131,7 @@
                         <th>Stay</th>
                         <th>Rooms</th>
                         <th>Type</th>
-                        <th>Payment</th>
+                        <th>Total</th>
                         <th>Status</th>
                         <th><span class="visually-hidden">Actions</span></th>
                     </tr>
@@ -72,11 +153,11 @@
         <div class="admin-calendar-intro">
             <div>
                 <strong>Booking calendar</strong>
-                <p>Shows advance bookings (full payment) and half-payment reservations for the visible range.</p>
+                <p>Shows pending and confirmed stays for the visible range.</p>
             </div>
-            <div class="admin-calendar-legend" aria-label="Payment legend">
-                <span class="is-full">Advance booking · full</span>
-                <span class="is-half">Reservation · half</span>
+            <div class="admin-calendar-legend" aria-label="Status legend">
+                <span class="is-full">Booking</span>
+                <span class="is-half">Reservation</span>
             </div>
         </div>
         <div class="admin-reservation-calendar" data-reservation-calendar></div>
@@ -102,3 +183,311 @@
         <footer class="admin-booking-detail-actions" data-booking-detail-actions></footer>
     </section>
 </div>
+
+<div class="admin-booking-modal" data-history-flush-detail-modal hidden>
+    <button type="button" class="admin-booking-modal-backdrop" data-history-flush-detail-close aria-label="Close flush details"></button>
+    <section class="admin-booking-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="historyFlushDetailTitle">
+        <header>
+            <div>
+                <span class="admin-booking-reference" data-flush-detail-file></span>
+                <h2 id="historyFlushDetailTitle">Flush details</h2>
+            </div>
+            <button type="button" class="admin-booking-modal-close" data-history-flush-detail-close aria-label="Close">&times;</button>
+        </header>
+        <div class="admin-booking-detail-body" data-flush-detail-body>
+            <p>Select a flush log row to view details.</p>
+        </div>
+        <footer class="admin-booking-detail-actions">
+            <button type="button" data-history-flush-detail-close>Close</button>
+        </footer>
+    </section>
+</div>
+
+<div class="admin-booking-modal" data-payment-view-modal hidden>
+    <button type="button" class="admin-booking-modal-backdrop" data-payment-view-close aria-label="Close payment record"></button>
+    <section class="admin-booking-modal-dialog admin-payment-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentViewTitle">
+        <header>
+            <div>
+                <span class="admin-booking-reference" data-payment-view-ref></span>
+                <h2 id="paymentViewTitle">Payment record</h2>
+            </div>
+            <button type="button" class="admin-booking-modal-close" data-payment-view-close aria-label="Close">&times;</button>
+        </header>
+        <div class="admin-booking-detail-body admin-payment-modal-body">
+            <p class="admin-payment-guest-line" data-payment-view-guest>Guest</p>
+            <dl class="admin-flush-detail-grid" data-payment-view-summary></dl>
+            <h3 class="admin-payment-panel-title">Posted payments</h3>
+            <div class="admin-payment-view-list-wrap">
+                <table class="admin-bookings-table admin-payment-view-table">
+                    <thead>
+                        <tr>
+                            <th>When</th>
+                            <th>Receipt</th>
+                            <th>Event</th>
+                            <th>Method</th>
+                            <th>Amount</th>
+                            <th>Staff</th>
+                        </tr>
+                    </thead>
+                    <tbody data-payment-view-list>
+                        <tr><td colspan="6" class="admin-bookings-loading">Loading…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="admin-payments-future-note">Posted payments cannot be edited. Use Payments → View to void if needed.</p>
+        </div>
+        <footer class="admin-booking-detail-actions">
+            <button type="button" data-payment-view-close>Close</button>
+            <button type="button" class="admin-booking-confirm" data-payment-view-add hidden>Record payment</button>
+        </footer>
+    </section>
+</div>
+
+<div class="admin-booking-modal" data-payment-add-modal hidden>
+    <button type="button" class="admin-booking-modal-backdrop" data-payment-add-close aria-label="Close add payment"></button>
+    <section class="admin-booking-modal-dialog admin-payment-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="addPaymentTitle">
+        <header>
+            <div>
+                <span class="admin-booking-reference" data-payment-add-ref></span>
+                <h2 id="addPaymentTitle">Add payment</h2>
+            </div>
+            <button type="button" class="admin-booking-modal-close" data-payment-add-close aria-label="Close">&times;</button>
+        </header>
+        <div class="admin-booking-detail-body admin-payment-modal-body">
+            <p class="admin-payment-add-banner is-error" data-payment-add-banner hidden role="alert"></p>
+            <p class="admin-payment-guest-line" data-payment-add-guest>Guest</p>
+
+            <div class="admin-payment-prices">
+                <button
+                    type="button"
+                    class="admin-payment-prices-toggle"
+                    data-payment-prices-toggle
+                    aria-expanded="false"
+                    aria-controls="paymentPricesPanel">
+                    <span>
+                        <strong>Price details</strong>
+                        <span data-payment-prices-preview>Balance due shown here</span>
+                    </span>
+                    <span class="admin-payment-prices-chevron" aria-hidden="true"></span>
+                </button>
+                <div id="paymentPricesPanel" class="admin-payment-prices-body" data-payment-prices-body hidden>
+                    <ul class="admin-payment-prices-list" data-payment-prices-list>
+                        <li><button type="button" data-payment-price-pick="stayTotal">Stay total <strong data-price-stay>₱0.00</strong></button></li>
+                        <li><button type="button" data-payment-price-pick="amountPaid">Already paid <strong data-price-paid>₱0.00</strong></button></li>
+                        <li><button type="button" data-payment-price-pick="balanceDue">Balance due <strong data-price-balance>₱0.00</strong></button></li>
+                    </ul>
+                    <p class="admin-payment-prices-hint">Pick a row to set the locked amount (not typed).</p>
+                </div>
+            </div>
+
+            <div class="admin-payment-form">
+                <label>
+                    <span>Method</span>
+                    <select data-payment-method>
+                        <option value="Cash">Cash</option>
+                        <option value="EWallet">E-wallet</option>
+                        <option value="BankTransfer">Bank transfer (InstaPay QR)</option>
+                    </select>
+                </label>
+
+                <label>
+                    <span>Received by (staff) *</span>
+                    <input type="text" maxlength="120" autocomplete="name" data-payment-received-by placeholder="e.g. Ana Reyes" />
+                </label>
+
+                <div class="admin-payment-cash-panel" data-payment-cash-panel>
+                    <p class="admin-payment-panel-title">Cash tender</p>
+                    <label>
+                        <span>Amount due (₱) <em>locked</em></span>
+                        <input type="text" inputmode="decimal" data-payment-cash-due readonly tabindex="-1" />
+                    </label>
+                    <label>
+                        <span>Cash from guest (₱)</span>
+                        <input type="text" inputmode="decimal" data-payment-cash-tendered placeholder="0.00" autocomplete="off" />
+                    </label>
+                    <div class="admin-payment-change" data-payment-change-box>
+                        <span>Change</span>
+                        <strong data-payment-cash-change>₱0.00</strong>
+                    </div>
+                    <p class="admin-payment-cash-formula" data-payment-cash-formula>
+                        Guest cash − amount due = change
+                    </p>
+                </div>
+
+                <div class="admin-payment-epay-panel" data-payment-epay-panel hidden>
+                    <p class="admin-payment-panel-title">Digital payment proof</p>
+                    <p class="admin-payment-prices-hint" data-payment-epay-hint>
+                        Guest pays via hotel InstaPay QR or e-wallet. Scan their receipt (or type the reference) and correct OCR if needed.
+                    </p>
+                    <label>
+                        <span>Amount paid (₱) <em>locked</em></span>
+                        <input type="text" inputmode="decimal" data-payment-epay-amount readonly tabindex="-1" />
+                    </label>
+                    <div class="admin-payment-receipt-actions">
+                        <span class="admin-payment-receipt-label">Receipt photo</span>
+                        <div class="admin-payment-receipt-buttons">
+                            <button type="button" class="admin-booking-confirm" data-payment-open-camera>Open camera</button>
+                            <button type="button" data-payment-choose-photo>Choose photo</button>
+                        </div>
+                        <input type="file" accept="image/*" data-payment-receipt-upload hidden />
+                        <input type="file" accept="image/*" capture="environment" data-payment-receipt-capture hidden />
+                    </div>
+                    <p class="admin-payment-ocr-status" data-payment-ocr-status hidden role="status"></p>
+
+                    <div class="admin-payment-ocr-compare" data-payment-ocr-compare hidden>
+                        <p class="admin-payment-panel-title">Compare OCR result</p>
+                        <div class="admin-payment-ocr-grid">
+                            <figure class="admin-payment-ocr-photo">
+                                <img
+                                    alt="Uploaded payment receipt"
+                                    data-payment-ocr-image
+                                    data-photo-zoom
+                                    data-photo-zoom-alt="Payment receipt"
+                                    title="Click to zoom · Esc to exit" />
+                                <figcaption>Uploaded receipt · click to zoom · Esc to exit</figcaption>
+                            </figure>
+                            <div class="admin-payment-ocr-fields">
+                                <label>
+                                    <span>Detected channel</span>
+                                    <select data-payment-ocr-wallet>
+                                        <option value="GCash">GCash</option>
+                                        <option value="Maya">Maya</option>
+                                        <option value="PayPal">PayPal</option>
+                                        <option value="InstaPay">InstaPay</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </label>
+                                <label>
+                                    <span>Detected reference</span>
+                                    <input type="text" maxlength="120" data-payment-ocr-ref placeholder="Ref No. / transaction id" />
+                                </label>
+                                <label>
+                                    <span>Detected amount (₱)</span>
+                                    <input type="text" inputmode="decimal" data-payment-ocr-amount placeholder="0.00" autocomplete="off" />
+                                </label>
+                                <label>
+                                    <span>Transfer from / sender</span>
+                                    <input type="text" maxlength="160" data-payment-ocr-from placeholder="Sender name or number" />
+                                </label>
+                                <label>
+                                    <span>Transfer to / recipient</span>
+                                    <input type="text" maxlength="160" data-payment-ocr-to placeholder="Recipient name or number" />
+                                </label>
+                                <label>
+                                    <span>OCR text (for checking)</span>
+                                    <textarea rows="6" readonly data-payment-ocr-raw></textarea>
+                                </label>
+                                <p class="admin-payment-prices-hint">
+                                    Scan or upload the guest receipt, fix OCR mistakes, then Apply.
+                                </p>
+                                <div class="admin-payment-ocr-actions">
+                                    <button type="button" data-payment-ocr-discard>Discard scan</button>
+                                    <button type="button" class="admin-booking-confirm" data-payment-ocr-apply>Apply to payment</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <label>
+                        <span>Payment reference <em>from OCR or manual</em></span>
+                        <input type="text" maxlength="120" data-payment-external-ref placeholder="Reference / transaction id" />
+                    </label>
+                    <label data-payment-bank-ref-wrap hidden>
+                        <span>InstaPay / bank reference</span>
+                        <input type="text" maxlength="120" data-payment-bank-ref placeholder="Clearing / transfer code if shown" />
+                    </label>
+                    <input type="hidden" data-payment-receipt-path value="" />
+                    <input type="hidden" data-payment-ocr-channel value="" />
+                </div>
+
+                <label>
+                    <span>Notes (optional)</span>
+                    <textarea rows="2" maxlength="1000" data-payment-notes></textarea>
+                </label>
+            </div>
+        </div>
+        <footer class="admin-booking-detail-actions">
+            <button type="button" data-payment-add-close>Cancel</button>
+            <button type="button" class="admin-booking-confirm" data-payment-add-save>Save payment</button>
+        </footer>
+        <div class="admin-payment-add-popup" data-payment-add-popup hidden>
+            <div class="admin-payment-add-popup-card" role="alertdialog" aria-modal="true" aria-labelledby="paymentAddPopupTitle">
+                <h3 id="paymentAddPopupTitle">Apply receipt first</h3>
+                <p data-payment-add-popup-text></p>
+                <button type="button" class="admin-booking-confirm" data-payment-add-popup-ok>OK</button>
+            </div>
+        </div>
+    </section>
+</div>
+
+<div class="admin-booking-modal" data-payment-camera-modal hidden>
+    <button type="button" class="admin-booking-modal-backdrop" data-payment-camera-close aria-label="Close camera"></button>
+    <section class="admin-booking-modal-dialog admin-payment-camera-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentCameraTitle">
+        <header>
+            <div>
+                <span class="admin-booking-reference">E-payment</span>
+                <h2 id="paymentCameraTitle">Scan receipt</h2>
+            </div>
+            <button type="button" class="admin-booking-modal-close" data-payment-camera-close aria-label="Close">&times;</button>
+        </header>
+        <div class="admin-booking-detail-body admin-payment-camera-body">
+            <p class="admin-payment-prices-hint">
+                Align the full receipt inside the guide frame. Capture happens automatically when the photo is clear and details are readable — or tap Capture anytime.
+            </p>
+            <div class="admin-payment-camera-stage">
+                <video data-payment-camera-video playsinline autoplay muted></video>
+                <canvas data-payment-camera-canvas hidden></canvas>
+                <div class="admin-payment-camera-guide" aria-hidden="true">
+                    <div class="admin-payment-camera-guide-frame" data-payment-camera-guide-frame>
+                        <span class="admin-payment-camera-guide-corner is-tl"></span>
+                        <span class="admin-payment-camera-guide-corner is-tr"></span>
+                        <span class="admin-payment-camera-guide-corner is-bl"></span>
+                        <span class="admin-payment-camera-guide-corner is-br"></span>
+                        <p class="admin-payment-camera-guide-label" data-payment-camera-guide-label>Place receipt here</p>
+                    </div>
+                </div>
+            </div>
+            <p class="admin-payment-ocr-status" data-payment-camera-status hidden role="status"></p>
+        </div>
+        <footer class="admin-booking-detail-actions">
+            <button type="button" data-payment-camera-close>Cancel</button>
+            <button type="button" data-payment-camera-switch>Flip camera</button>
+            <button type="button" class="admin-booking-confirm" data-payment-camera-capture>Capture photo</button>
+        </footer>
+    </section>
+</div>
+
+<div class="admin-booking-modal" data-history-flush-modal hidden>
+    <button type="button" class="admin-booking-modal-backdrop" data-history-flush-close aria-label="Close flush dialog"></button>
+    <section class="admin-booking-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="historyFlushTitle">
+        <header>
+            <div>
+                <span class="admin-booking-reference">Permanent delete</span>
+                <h2 id="historyFlushTitle">Flush history to PDF</h2>
+            </div>
+            <button type="button" class="admin-booking-modal-close" data-history-flush-close aria-label="Close">&times;</button>
+        </header>
+        <div class="admin-booking-detail-body">
+            <p>
+                This exports every history record (guest, stay, rooms, amounts) into a branded Mori International Hotel PDF
+                softcopy with logo and trademark, saves it to this device, then <strong>permanently deletes</strong> those
+                history rows. Only a flush log (who / when / count) will remain.
+            </p>
+            <label class="admin-history-flush-name">
+                <span>Staff name performing this flush</span>
+                <input type="text" maxlength="120" autocomplete="name" data-history-flush-by placeholder="e.g. Ana Reyes" />
+            </label>
+            <p class="admin-history-flush-warn" role="status">This cannot be undone.</p>
+        </div>
+        <footer class="admin-booking-detail-actions">
+            <button type="button" data-history-flush-close>Cancel</button>
+            <button type="button" class="admin-booking-confirm" data-history-flush-confirm>Export PDF &amp; delete history</button>
+        </footer>
+    </section>
+</div>
+
+<partial name="_AdminWalkInModals" />
+
+@section Scripts {
+    <script src="~/js/walk-in.js" asp-append-version="true"></script>
+}
