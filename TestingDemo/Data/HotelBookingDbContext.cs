@@ -22,6 +22,7 @@ public class HotelBookingDbContext : DbContext
     public DbSet<AssignedRoom> AssignedRooms => Set<AssignedRoom>();
     public DbSet<StaffUser> StaffUsers => Set<StaffUser>();
     public DbSet<BookingHistoryFlushLog> BookingHistoryFlushLogs => Set<BookingHistoryFlushLog>();
+    public DbSet<PaymentFlushLog> PaymentFlushLogs => Set<PaymentFlushLog>();
     public DbSet<PaymentRecord> PaymentRecords => Set<PaymentRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -153,6 +154,16 @@ public class HotelBookingDbContext : DbContext
         modelBuilder.Entity<BookingHistoryFlushLog>(entity =>
         {
             entity.ToTable("BookingHistoryFlushLog");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.PerformedBy).HasMaxLength(120).IsRequired();
+            entity.Property(e => e.FileName).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Summary).HasMaxLength(2000).IsRequired();
+            entity.HasIndex(e => e.FlushedAtUtc);
+        });
+
+        modelBuilder.Entity<PaymentFlushLog>(entity =>
+        {
+            entity.ToTable("PaymentFlushLog");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.PerformedBy).HasMaxLength(120).IsRequired();
             entity.Property(e => e.FileName).HasMaxLength(200).IsRequired();

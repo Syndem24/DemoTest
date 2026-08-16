@@ -19,6 +19,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - Mori International Hotel</title>
+    <link rel="icon" type="image/png" href="~/Images/Logo.png" asp-append-version="true" />
+    <link rel="apple-touch-icon" href="~/Images/Logo.png" asp-append-version="true" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -32,38 +34,45 @@
         <div class="guest-nav-inner">
             <a class="guest-brand" asp-controller="Booking" asp-action="Index" title="Mori International Hotel">
                 <img src="~/Images/Logo.png" asp-append-version="true" alt="" class="guest-brand-logo" />
-                <span class="guest-brand-name">Mori International Hotel</span>
+                <span class="guest-brand-name" data-i18n="nav.brand">Mori International Hotel</span>
             </a>
 
             <nav class="guest-nav-links" id="guestNavLinks" aria-label="Guest navigation">
                 @if (isBookingHome)
                 {
-                    <a href="#about">About</a>
-                    <a asp-controller="Booking" asp-action="Accommodations">Rooms</a>
-                    <a href="#contact">Contact</a>
+                    <a href="#about" data-i18n="nav.about">About</a>
+                    <a asp-controller="Booking" asp-action="Accommodations" data-i18n="nav.rooms">Rooms</a>
+                    <a href="#contact" data-i18n="nav.contact">Contact</a>
                 }
                 else
                 {
-                    <a asp-controller="Booking" asp-action="Index" asp-fragment="about">About</a>
+                    <a asp-controller="Booking" asp-action="Index" asp-fragment="about" data-i18n="nav.about">About</a>
                     <a class="@(isAccommodations ? "is-active" : null)"
                        asp-controller="Booking"
-                       asp-action="Accommodations">Rooms</a>
-                    <a asp-controller="Booking" asp-action="Index" asp-fragment="contact">Contact</a>
+                       asp-action="Accommodations"
+                       data-i18n="nav.rooms">Rooms</a>
+                    <a asp-controller="Booking" asp-action="Index" asp-fragment="contact" data-i18n="nav.contact">Contact</a>
                 }
-                <a class="guest-nav-staff" asp-controller="Staff" asp-action="Index">Staff</a>
+                <a class="guest-nav-staff" asp-controller="Staff" asp-action="Index" data-i18n="nav.staff">Staff</a>
             </nav>
+
+            <div class="guest-lang-nav" data-guest-lang-nav></div>
 
             <a class="guest-nav-cta"
                asp-controller="Booking"
                asp-action="Accommodations"
-               asp-fragment="rooms">Book a stay</a>
+               asp-fragment="rooms"
+               data-i18n="nav.bookStay">Book a stay</a>
 
             <button type="button"
                     class="guest-nav-toggle"
                     id="guestNavToggle"
                     aria-controls="guestNavLinks"
                     aria-expanded="false"
-                    aria-label="Open menu">
+                    aria-label="Open menu"
+                    data-i18n="lang.openMenu"
+                    data-i18n-attr="aria-label"
+                    data-i18n-attr-only>
                 <span></span>
                 <span></span>
                 <span></span>
@@ -77,7 +86,7 @@
 
     <footer class="guest-footer">
         <div class="guest-footer-inner">
-            <p class="guest-footer-copy">
+            <p class="guest-footer-copy" data-i18n="footer.copy">
                 © Mori International Hotel, Mandaue City, Cebu · 2026, Official site
             </p>
         </div>
@@ -85,8 +94,20 @@
 
     <div class="guest-toast" id="guestToast" hidden role="status" aria-live="polite"></div>
 
+    <div class="guest-lang-popup" data-guest-lang-popup hidden>
+        <div class="guest-lang-popup-card" role="dialog" aria-modal="true" aria-labelledby="guestLangTitle">
+            <h2 id="guestLangTitle" data-i18n="lang.title">Choose your language</h2>
+            <p data-i18n="lang.lede">You can change this anytime from the top menu.</p>
+            <div class="guest-lang-options" data-guest-lang-options></div>
+            <div class="guest-lang-popup-actions">
+                <button type="button" class="guest-btn guest-btn-primary" data-guest-lang-continue data-i18n="lang.continue">Continue</button>
+            </div>
+        </div>
+    </div>
+
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/guest-i18n.js" asp-append-version="true"></script>
     <script src="~/js/photo-zoom.js" asp-append-version="true"></script>
     <script src="~/js/booking-ui.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)

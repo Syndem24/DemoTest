@@ -1,10 +1,10 @@
 namespace TestingDemo.Models;
 
 /// <summary>
-/// Audit trail for hard-deleting archived booking history after PDF export.
-/// Booking rows themselves are removed; export logs are retained for 7 days, then purged.
+/// Audit trail for hard-deleting payment records after PDF export.
+/// Payment rows are removed; flush logs are retained for 7 days, then purged.
 /// </summary>
-public class BookingHistoryFlushLog
+public class PaymentFlushLog
 {
     public int Id { get; set; }
     public DateTime FlushedAtUtc { get; set; } = DateTime.UtcNow;

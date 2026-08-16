@@ -1,6 +1,8 @@
 (() => {
   const root = document.querySelector('[data-admin-notification]');
-  if (!root) return;
+  const bookingsRoot = document.querySelector('[data-admin-bookings]');
+  // Bookings page owns the full module; other admin pages use admin-notifications.js.
+  if (!bookingsRoot || !root) return;
 
   const token = document.querySelector(
     '#adminAntiForgery input[name="__RequestVerificationToken"]'
@@ -11,46 +13,98 @@
   const notificationItems = root.querySelector('[data-notification-items]');
   const soundButton = root.querySelector('[data-notification-sound]');
   const clearButton = root.querySelector('[data-notification-clear]');
-  const bookingsRoot = document.querySelector('[data-admin-bookings]');
-  const bookingList = bookingsRoot?.querySelector('[data-bookings-list]');
-  const bookingMessage = bookingsRoot?.querySelector('[data-bookings-message]');
-  const pageLabel = bookingsRoot?.querySelector('[data-bookings-page]');
-  const prevButton = bookingsRoot?.querySelector('[data-bookings-prev]');
-  const nextButton = bookingsRoot?.querySelector('[data-bookings-next]');
-  const searchInput = bookingsRoot?.querySelector('[data-booking-search]');
-  const tablePanel = bookingsRoot?.querySelector('[data-booking-table-panel]');
-  const calendarPanel = bookingsRoot?.querySelector('[data-booking-calendar-panel]');
-  const calendarElement = bookingsRoot?.querySelector('[data-reservation-calendar]');
-  const calendarFallback = bookingsRoot?.querySelector('[data-calendar-fallback]');
+  const bookingList = bookingsRoot.querySelector('[data-bookings-list]');
+  const bookingMessage = bookingsRoot.querySelector('[data-bookings-message]');
+  const pageLabel = bookingsRoot.querySelector('[data-bookings-page]');
+  const prevButton = bookingsRoot.querySelector('[data-bookings-prev]');
+  const nextButton = bookingsRoot.querySelector('[data-bookings-next]');
+  const searchInput = bookingsRoot.querySelector('[data-booking-search]');
+  const tablePanel = bookingsRoot.querySelector('[data-booking-table-panel]');
+  const calendarPanel = bookingsRoot.querySelector('[data-booking-calendar-panel]');
+  const calendarElement = bookingsRoot.querySelector('[data-reservation-calendar]');
+  const calendarFallback = bookingsRoot.querySelector('[data-calendar-fallback]');
   const paymentViewModal = document.querySelector('[data-payment-view-modal]');
   const paymentAddModal = document.querySelector('[data-payment-add-modal]');
   const paymentViewList = paymentViewModal?.querySelector('[data-payment-view-list]');
   const paymentViewSummary = paymentViewModal?.querySelector('[data-payment-view-summary]');
   const paymentViewAddBtn = paymentViewModal?.querySelector('[data-payment-view-add]');
-  const arrivalsPanel = bookingsRoot?.querySelector('[data-arrivals-panel]');
-  const arrivalsList = bookingsRoot?.querySelector('[data-arrivals-list]');
-  const pendingCallsPanel = bookingsRoot?.querySelector('[data-pending-calls-panel]');
-  const pendingCallsList = bookingsRoot?.querySelector('[data-pending-calls-list]');
-  const checkoutsPanel = bookingsRoot?.querySelector('[data-checkouts-panel]');
-  const checkoutsList = bookingsRoot?.querySelector('[data-checkouts-list]');
+  const arrivalsPanel = bookingsRoot.querySelector('[data-arrivals-panel]');
+  const arrivalsList = bookingsRoot.querySelector('[data-arrivals-list]');
+  const pendingCallsPanel = bookingsRoot.querySelector('[data-pending-calls-panel]');
+  const pendingCallsList = bookingsRoot.querySelector('[data-pending-calls-list]');
+  const checkoutsPanel = bookingsRoot.querySelector('[data-checkouts-panel]');
+  const checkoutsList = bookingsRoot.querySelector('[data-checkouts-list]');
   const detailModal = document.querySelector('[data-booking-modal]');
   const detailBody = detailModal?.querySelector('[data-booking-detail]');
   const detailActions = detailModal?.querySelector('[data-booking-detail-actions]');
-  const flushButton = bookingsRoot?.querySelector('[data-history-flush]');
-  const flushLogPanel = bookingsRoot?.querySelector('[data-history-flush-log]');
-  const flushLogList = bookingsRoot?.querySelector('[data-history-flush-log-list]');
-  const flushLogToggle = bookingsRoot?.querySelector('[data-history-flush-toggle]');
-  const flushLogBody = bookingsRoot?.querySelector('[data-history-flush-body]');
-  const flushLogCount = bookingsRoot?.querySelector('[data-history-flush-count]');
+  const flushButton = bookingsRoot.querySelector('[data-history-flush]');
+  const flushLogPanel = bookingsRoot.querySelector('[data-history-flush-log]');
+  const flushLogList = bookingsRoot.querySelector('[data-history-flush-log-list]');
+  const flushLogToggle = bookingsRoot.querySelector('[data-history-flush-toggle]');
+  const flushLogBody = bookingsRoot.querySelector('[data-history-flush-body]');
+  const flushLogCount = bookingsRoot.querySelector('[data-history-flush-count]');
   const flushModal = document.querySelector('[data-history-flush-modal]');
   const flushByInput = flushModal?.querySelector('[data-history-flush-by]');
   const flushConfirmButton = flushModal?.querySelector('[data-history-flush-confirm]');
   const flushDetailModal = document.querySelector('[data-history-flush-detail-modal]');
   const flushDetailBody = flushDetailModal?.querySelector('[data-flush-detail-body]');
   const flushDetailFile = flushDetailModal?.querySelector('[data-flush-detail-file]');
-  const walkInOpenButton = bookingsRoot?.querySelector('[data-walkin-open]');
+  const walkInOpenButton = bookingsRoot.querySelector('[data-walkin-open]');
   let flushLogsCache = [];
 
+  const scriptLoadPromises = new Map();
+
+  function loadScriptOnce(src) {
+    if (!src) return Promise.reject(new Error('Missing script src'));
+    if (scriptLoadPromises.has(src)) return scriptLoadPromises.get(src);
+    const promise = new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[data-lazy-src="${src}"]`);
+      if (existing) {
+        if (existing.dataset.loaded === '1') {
+          resolve();
+          return;
+        }
+        existing.addEventListener('load', () => resolve(), { once: true });
+        existing.addEventListener('error', () => reject(new Error(`Failed to load ${src}`)), { once: true });
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = true;
+      script.dataset.lazySrc = src;
+      script.onload = () => {
+        script.dataset.loaded = '1';
+        resolve();
+      };
+      script.onerror = () => reject(new Error(`Failed to load ${src}`));
+      document.head.appendChild(script);
+    });
+    scriptLoadPromises.set(src, promise);
+    return promise;
+  }
+
+  async function ensureFullCalendarLoaded() {
+    if (window.FullCalendar?.Calendar) return true;
+    const assets = window.__adminBookingsAssets?.fullCalendar || [
+      '/lib/fullcalendar/core.min.js',
+      '/lib/fullcalendar/daygrid.min.js',
+      '/lib/fullcalendar/list.min.js',
+    ];
+    for (const src of assets) {
+      await loadScriptOnce(src);
+    }
+    return Boolean(window.FullCalendar?.Calendar);
+  }
+
+  async function ensureTesseractLoaded() {
+    if (typeof Tesseract !== 'undefined') return;
+    const src = window.__adminBookingsAssets?.tesseract
+      || 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    await loadScriptOnce(src);
+    if (typeof Tesseract === 'undefined') {
+      throw new Error('Local OCR library failed to load. Enter details manually.');
+    }
+  }
   let filter = '';
   let search = '';
   let history = false;
@@ -66,6 +120,12 @@
   let paymentOcrObjectUrl = null;
   let paymentOcrBusy = false;
   let paymentOcrNeedsApply = false;
+  let paymentOcrOriginalFile = null;
+  let paymentOcrScannerFilterEnabled = false;
+  /** When true, re-run OCR after the current pass finishes (scanner filter toggled mid-run). */
+  let paymentOcrRerunAfterBusy = false;
+  /** null = unknown, true/false after first Azure OCR probe. */
+  let azureOcrConfigured = null;
   let paymentCameraStream = null;
   let paymentCameraFacingMode = 'environment';
   const paymentCameraModal = document.querySelector('[data-payment-camera-modal]');
@@ -77,12 +137,14 @@
   let paymentCameraScanWorker = null;
   let paymentCameraGoodHits = 0;
   let paymentCameraLastGoodRef = '';
+  let paymentCameraOcrCanvas = null;
   const paymentCameraGuideFrame = paymentCameraModal?.querySelector('[data-payment-camera-guide-frame]');
   const paymentCameraGuideLabel = paymentCameraModal?.querySelector('[data-payment-camera-guide-label]');
   let reservationCalendar = null;
   let selectedBooking = null;
   let searchTimer = null;
   let selectedFromUrlHandled = false;
+  let pendingScrollBookingId = null;
   let arrivalsFromUrlHandled = false;
   let pendingCallsFromUrlHandled = false;
   let checkoutsFromUrlHandled = false;
@@ -214,7 +276,7 @@
     const match = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(disposition);
     const fileName = match
       ? decodeURIComponent(match[1].replace(/"/g, '').trim())
-      : 'Mori-History-Flush.pdf';
+      : 'Mori-History-Export.pdf';
     const recordCount = Number(response.headers.get('X-Flush-Record-Count') || 0);
     return { blob, fileName, recordCount };
   }
@@ -355,6 +417,9 @@
     }
     paymentOcrBusy = false;
     paymentOcrNeedsApply = false;
+    paymentOcrOriginalFile = null;
+    paymentOcrScannerFilterEnabled = false;
+    paymentOcrRerunAfterBusy = false;
     if (!paymentAddModal) return;
     const fileInput = paymentAddModal.querySelector('[data-payment-receipt-upload]');
     const captureInput = paymentAddModal.querySelector('[data-payment-receipt-capture]');
@@ -366,7 +431,8 @@
     const amount = paymentAddModal.querySelector('[data-payment-ocr-amount]');
     const from = paymentAddModal.querySelector('[data-payment-ocr-from]');
     const to = paymentAddModal.querySelector('[data-payment-ocr-to]');
-    const wallet = paymentAddModal.querySelector('[data-payment-ocr-wallet]');
+    const filterToggle = paymentAddModal.querySelector('[data-payment-ocr-scanner-filter]');
+    const caption = paymentAddModal.querySelector('[data-payment-ocr-caption]');
     const dialog = paymentAddModal.querySelector('.admin-payment-modal-dialog');
     if (fileInput) fileInput.value = '';
     if (captureInput) captureInput.value = '';
@@ -382,7 +448,8 @@
     if (amount) amount.value = '';
     if (from) from.value = '';
     if (to) to.value = '';
-    if (wallet) wallet.value = 'GCash';
+    if (filterToggle) filterToggle.checked = false;
+    if (caption) caption.textContent = 'Receipt photo · click to zoom · Esc to exit';
     const channelHidden = paymentAddModal.querySelector('[data-payment-ocr-channel]');
     if (channelHidden) channelHidden.value = '';
     if (dialog) dialog.classList.remove('is-wide');
@@ -821,33 +888,148 @@
   }
 
 
-  async function preprocessReceiptForOcr(file) {
+  /**
+   * Document-scanner look: grayscale, auto-contrast, mild sharpen.
+   * Used for preview, upload, Azure, and local OCR.
+   */
+  async function applyReceiptScannerFilter(source, options = {}) {
+    const maxSide = options.maxSide ?? 1800;
+    const mime = options.mime ?? 'image/jpeg';
+    const quality = options.quality ?? 0.88;
+    const fileName = options.fileName || (source && source.name) || 'receipt-scan.jpg';
     try {
-      const bitmap = await createImageBitmap(file);
+      const bitmap = await createImageBitmap(source);
       const canvas = document.createElement('canvas');
-      const maxSide = 1800;
       const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
-      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      canvas.width = width;
+      canvas.height = height;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (!ctx) return file;
-      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      if (!ctx) {
+        bitmap.close?.();
+        return source;
+      }
+      ctx.drawImage(bitmap, 0, 0, width, height);
+      bitmap.close?.();
+
+      const image = ctx.getImageData(0, 0, width, height);
       const data = image.data;
-      for (let i = 0; i < data.length; i += 4) {
-        const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-        // Boost contrast for light UI screenshots (GCash/Maya).
-        const boosted = gray < 140 ? gray * 0.72 : Math.min(255, gray * 1.18 + 18);
-        const value = boosted > 170 ? 255 : boosted < 95 ? 0 : boosted;
-        data[i] = data[i + 1] = data[i + 2] = value;
+      const gray = new Float32Array(width * height);
+
+      // 1) Grayscale + collect histogram for auto levels
+      const hist = new Uint32Array(256);
+      for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
+        const g = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+        gray[p] = g;
+        hist[Math.max(0, Math.min(255, Math.round(g)))] += 1;
+      }
+
+      const total = width * height;
+      const lowCut = Math.max(1, Math.floor(total * 0.02));
+      const highCut = Math.max(1, Math.floor(total * 0.02));
+      let cum = 0;
+      let lo = 0;
+      let hi = 255;
+      for (let v = 0; v < 256; v += 1) {
+        cum += hist[v];
+        if (cum >= lowCut) {
+          lo = v;
+          break;
+        }
+      }
+      cum = 0;
+      for (let v = 255; v >= 0; v -= 1) {
+        cum += hist[v];
+        if (cum >= highCut) {
+          hi = v;
+          break;
+        }
+      }
+      if (hi <= lo + 8) {
+        lo = 20;
+        hi = 235;
+      }
+      const range = hi - lo;
+
+      // 2) Contrast stretch + slight paper white bias
+      const stretched = new Float32Array(total);
+      for (let p = 0; p < total; p += 1) {
+        let value = ((gray[p] - lo) / range) * 255;
+        value = Math.max(0, Math.min(255, value));
+        // Soft curve: darken text slightly, brighten paper
+        if (value < 128) {
+          value = value * 0.92;
+        } else {
+          value = 128 + (value - 128) * 1.08;
+        }
+        stretched[p] = Math.max(0, Math.min(255, value));
+      }
+
+      // 3) Mild unsharp mask for text edges (scanner crispness)
+      const out = new Uint8ClampedArray(total);
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const p = y * width + x;
+          if (x === 0 || y === 0 || x === width - 1 || y === height - 1) {
+            out[p] = stretched[p];
+            continue;
+          }
+          const blur =
+            (stretched[p - width - 1]
+              + stretched[p - width]
+              + stretched[p - width + 1]
+              + stretched[p - 1]
+              + stretched[p] * 2
+              + stretched[p + 1]
+              + stretched[p + width - 1]
+              + stretched[p + width]
+              + stretched[p + width + 1])
+            / 10;
+          const sharp = stretched[p] + (stretched[p] - blur) * 1.15;
+          out[p] = Math.max(0, Math.min(255, Math.round(sharp)));
+        }
+      }
+
+      for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
+        const v = out[p];
+        // Cool document-scanner paper tint (subtle)
+        data[i] = Math.min(255, v + 2);
+        data[i + 1] = Math.min(255, v + 1);
+        data[i + 2] = Math.min(255, v + 4);
+        data[i + 3] = 255;
       }
       ctx.putImageData(image, 0, 0);
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-      bitmap.close?.();
-      return blob || file;
+
+      const blob = await new Promise((resolve) => {
+        canvas.toBlob((result) => resolve(result), mime, quality);
+      });
+      if (!blob) return source;
+      const base = String(fileName).replace(/\.[^.]+$/, '') || 'receipt-scan';
+      const ext = mime.includes('png') ? 'png' : 'jpg';
+      return new File([blob], `${base}-scanned.${ext}`, { type: mime });
     } catch {
-      return file;
+      return source;
     }
+  }
+
+  async function preprocessReceiptForOcr(file) {
+    return applyReceiptScannerFilter(file, {
+      maxSide: 1800,
+      mime: 'image/png',
+      quality: 0.92,
+      fileName: file?.name || 'receipt.png',
+    });
+  }
+
+  /** Compress for Azure F0 (max 4 MB) — scanned + small JPEG. */
+  async function prepareReceiptForAzureOcr(file) {
+    return applyReceiptScannerFilter(file, {
+      maxSide: 1600,
+      mime: 'image/jpeg',
+      quality: 0.78,
+      fileName: file?.name || 'receipt.jpg',
+    });
   }
 
   async function uploadPaymentReceiptFile(file) {
@@ -863,42 +1045,205 @@
     });
   }
 
+  async function resizeReceiptImage(source, options = {}) {
+    const maxSide = options.maxSide ?? 1600;
+    const mime = options.mime ?? 'image/jpeg';
+    const quality = options.quality ?? 0.78;
+    const fileName = options.fileName || (source && source.name) || 'receipt.jpg';
+    try {
+      const bitmap = await createImageBitmap(source);
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        bitmap.close?.();
+        return source;
+      }
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close?.();
+      const blob = await new Promise((resolve) => canvas.toBlob((result) => resolve(result), mime, quality));
+      if (!blob) return source;
+      return new File([blob], fileName, { type: mime });
+    } catch {
+      return source;
+    }
+  }
+
+  async function requestAzureReceiptOcr(file) {
+    if (!paymentBookingContext?.id) {
+      throw new Error('Open a booking before scanning a receipt.');
+    }
+    const azureFile = paymentOcrScannerFilterEnabled
+      ? await resizeReceiptImage(file, {
+          maxSide: 1600,
+          mime: 'image/jpeg',
+          quality: 0.78,
+          fileName: file.name || 'receipt-scanned.jpg',
+        })
+      : await resizeReceiptImage(file, {
+          maxSide: 1600,
+          mime: 'image/jpeg',
+          quality: 0.82,
+          fileName: (file && file.name) || 'receipt.jpg',
+        });
+    const form = new FormData();
+    form.append('bookingId', String(paymentBookingContext.id));
+    form.append('file', azureFile, azureFile.name || 'receipt.jpg');
+    return apiFetch('/api/admin/payments/receipt-ocr', {
+      method: 'POST',
+      body: form,
+    });
+  }
+
+  async function runTesseractReceiptOcr(file, statusPrefix) {
+    await ensureTesseractLoaded();
+    if (typeof Tesseract === 'undefined') {
+      throw new Error('Local OCR library failed to load. Enter details manually.');
+    }
+    // File is usually already scanner-filtered; recognize directly for speed.
+    const ocrSource = file;
+    if (typeof Tesseract.createWorker === 'function') {
+      const worker = await Tesseract.createWorker('eng', 1, {
+        logger: (message) => {
+          if (message?.status === 'recognizing text' && typeof message.progress === 'number') {
+            const pct = Math.round(message.progress * 100);
+            setPaymentOcrStatus(`${statusPrefix}${pct}%`);
+          }
+        },
+      });
+      try {
+        await worker.setParameters({
+          tessedit_pageseg_mode: '6',
+          preserve_interword_spaces: '1',
+        });
+        const result = await worker.recognize(ocrSource);
+        return result?.data?.text || '';
+      } finally {
+        await worker.terminate();
+      }
+    }
+    const result = await Tesseract.recognize(ocrSource, 'eng', {
+      logger: (message) => {
+        if (message?.status === 'recognizing text' && typeof message.progress === 'number') {
+          const pct = Math.round(message.progress * 100);
+          setPaymentOcrStatus(`${statusPrefix}${pct}%`);
+        }
+      },
+    });
+    return result?.data?.text || '';
+  }
+
+  function applyParsedReceiptOcrToUi(parsed, engineLabel) {
+    const raw = paymentAddModal?.querySelector('[data-payment-ocr-raw]');
+    const ref = paymentAddModal?.querySelector('[data-payment-ocr-ref]');
+    const amountInput = paymentAddModal?.querySelector('[data-payment-ocr-amount]');
+    const fromInput = paymentAddModal?.querySelector('[data-payment-ocr-from]');
+    const toInput = paymentAddModal?.querySelector('[data-payment-ocr-to]');
+    const channelHidden = paymentAddModal?.querySelector('[data-payment-ocr-channel]');
+
+    if (raw) raw.value = parsed.raw || '(no text detected)';
+    if (ref) ref.value = parsed.reference || '';
+    if (amountInput) amountInput.value = parsed.amount != null ? parsed.amount.toFixed(2) : '';
+    if (fromInput) fromInput.value = parsed.transferFrom || '';
+    if (toInput) toInput.value = parsed.transferTo || '';
+    if (channelHidden) {
+      const allowed = ['GCash', 'Maya', 'PayPal', 'InstaPay', 'Other'];
+      channelHidden.value = allowed.includes(parsed.wallet) ? parsed.wallet : 'Other';
+    }
+
+    const layoutLabel =
+      parsed.layout === 'gcash-history'
+        ? 'GCash history'
+        : parsed.layout === 'gcash-receipt'
+          ? 'GCash receipt'
+          : parsed.layout === 'instapay'
+            ? 'InstaPay'
+            : parsed.wallet;
+    const missing = [];
+    if (!parsed.reference) missing.push('reference');
+    if (parsed.amount == null) missing.push('amount');
+    if (!parsed.transferFrom && !parsed.transferTo) missing.push('from/to');
+    const engineNote = engineLabel ? ` · ${engineLabel}` : '';
+    if (missing.length) {
+      setPaymentOcrStatus(
+        `${layoutLabel}${engineNote}: could not fully read ${missing.join(', ')}. Fix from the photo, then Apply.`,
+        true
+      );
+    } else {
+      setPaymentOcrStatus(`${layoutLabel} detected${engineNote} — compare fields, then Apply.`);
+    }
+  }
+
+  async function previewPaymentReceiptFilter(file, useScannerFilter) {
+    if (!paymentAddModal || !file) return file;
+    const image = paymentAddModal.querySelector('[data-payment-ocr-image]');
+    const compare = paymentAddModal.querySelector('[data-payment-ocr-compare]');
+    const caption = paymentAddModal.querySelector('[data-payment-ocr-caption]');
+    const dialog = paymentAddModal.querySelector('.admin-payment-modal-dialog');
+    let workingFile = file;
+    if (useScannerFilter) {
+      try {
+        workingFile = await applyReceiptScannerFilter(file, {
+          maxSide: 1800,
+          mime: 'image/jpeg',
+          quality: 0.9,
+          fileName: file.name || 'receipt.jpg',
+        });
+      } catch {
+        workingFile = file;
+      }
+    }
+    if (paymentOcrObjectUrl) URL.revokeObjectURL(paymentOcrObjectUrl);
+    paymentOcrObjectUrl = URL.createObjectURL(workingFile);
+    if (compare) compare.hidden = false;
+    if (dialog) dialog.classList.add('is-wide');
+    if (image) {
+      image.src = paymentOcrObjectUrl;
+      image.alt = useScannerFilter ? 'Scanned receipt' : (file.name || 'Uploaded receipt');
+      enablePaymentOcrPhotoZoom(image);
+    }
+    if (caption) {
+      caption.textContent = useScannerFilter
+        ? 'Scanned receipt · click to zoom · Esc to exit'
+        : 'Receipt photo · click to zoom · Esc to exit';
+    }
+    return workingFile;
+  }
+
   async function runPaymentReceiptOcr(file) {
     if (!paymentAddModal || !file) return;
-    if (typeof Tesseract === 'undefined') {
-      setPaymentOcrStatus('OCR library failed to load. Enter details manually.', true);
-      return;
-    }
 
     paymentOcrBusy = true;
     paymentOcrNeedsApply = true;
-    const compare = paymentAddModal.querySelector('[data-payment-ocr-compare]');
-    const image = paymentAddModal.querySelector('[data-payment-ocr-image]');
+    paymentOcrOriginalFile = file;
     const raw = paymentAddModal.querySelector('[data-payment-ocr-raw]');
-    const ref = paymentAddModal.querySelector('[data-payment-ocr-ref]');
-    const amountInput = paymentAddModal.querySelector('[data-payment-ocr-amount]');
-    const fromInput = paymentAddModal.querySelector('[data-payment-ocr-from]');
-    const toInput = paymentAddModal.querySelector('[data-payment-ocr-to]');
-    const wallet = paymentAddModal.querySelector('[data-payment-ocr-wallet]');
     const pathInput = paymentAddModal.querySelector('[data-payment-receipt-path]');
-    const dialog = paymentAddModal.querySelector('.admin-payment-modal-dialog');
+    const filterToggle = paymentAddModal.querySelector('[data-payment-ocr-scanner-filter]');
 
-    if (paymentOcrObjectUrl) URL.revokeObjectURL(paymentOcrObjectUrl);
-    paymentOcrObjectUrl = URL.createObjectURL(file);
-    if (image) {
-      image.src = paymentOcrObjectUrl;
-      image.alt = file.name || 'Uploaded e-wallet receipt';
-      enablePaymentOcrPhotoZoom(image);
+    // Keep switch state; default remains false until user turns it on.
+    paymentOcrScannerFilterEnabled = Boolean(filterToggle?.checked);
+    if (filterToggle) filterToggle.checked = paymentOcrScannerFilterEnabled;
+
+    let workingFile = file;
+    if (paymentOcrScannerFilterEnabled) {
+      setPaymentOcrStatus('Applying scanner filter…');
+    } else {
+      setPaymentOcrStatus(
+        azureOcrConfigured === false ? 'Reading receipt with local OCR…' : 'Reading receipt…'
+      );
     }
-    if (compare) compare.hidden = false;
-    if (dialog) dialog.classList.add('is-wide');
-    setPaymentOcrStatus('Reading receipt…');
 
-    let uploadedPath = '';
-    const uploadPromise = uploadPaymentReceiptFile(file)
+    try {
+      workingFile = await previewPaymentReceiptFilter(file, paymentOcrScannerFilterEnabled);
+    } catch {
+      workingFile = file;
+    }
+
+    const uploadPromise = uploadPaymentReceiptFile(workingFile)
       .then((result) => {
-        uploadedPath = result?.path || '';
-        if (pathInput) pathInput.value = uploadedPath;
+        if (pathInput) pathInput.value = result?.path || '';
       })
       .catch((error) => {
         setPaymentOcrStatus(
@@ -908,70 +1253,67 @@
       });
 
     try {
-      const ocrSource = await preprocessReceiptForOcr(file);
       let recognizedText = '';
-      if (typeof Tesseract.createWorker === 'function') {
-        const worker = await Tesseract.createWorker('eng', 1, {
-          logger: (message) => {
-            if (message?.status === 'recognizing text' && typeof message.progress === 'number') {
-              const pct = Math.round(message.progress * 100);
-              setPaymentOcrStatus(`Reading receipt… ${pct}%`);
-            }
-          },
-        });
+      let engineLabel = '';
+      let usedAzure = false;
+
+      if (azureOcrConfigured !== false) {
+        setPaymentOcrStatus(
+          paymentOcrScannerFilterEnabled
+            ? 'Reading scanned receipt with Azure…'
+            : 'Reading receipt with Azure…'
+        );
         try {
-          await worker.setParameters({
-            tessedit_pageseg_mode: '6',
-            preserve_interword_spaces: '1',
-          });
-          const result = await worker.recognize(ocrSource);
-          recognizedText = result?.data?.text || '';
-        } finally {
-          await worker.terminate();
+          const azureResult = await requestAzureReceiptOcr(workingFile);
+          const engine = String(azureResult?.engine || '');
+          if (engine === 'Azure' && String(azureResult?.text || '').trim()) {
+            recognizedText = String(azureResult.text);
+            usedAzure = true;
+            azureOcrConfigured = true;
+            const used = azureResult.pagesUsedThisMonth;
+            const budget = azureResult.monthlyBudget;
+            engineLabel =
+              used != null && budget != null
+                ? `Azure OCR ${used}/${budget}`
+                : 'Azure OCR';
+          } else {
+            if (engine === 'Unavailable') azureOcrConfigured = false;
+            const reason = azureResult?.fallbackReason
+              || (engine === 'QuotaExceeded'
+                ? 'Azure free quota unavailable'
+                : engine === 'Unavailable'
+                  ? 'Azure not configured'
+                  : 'Azure unavailable');
+            setPaymentOcrStatus(`Using local OCR (${reason})…`);
+          }
+        } catch (azureError) {
+          setPaymentOcrStatus(
+            `Using local OCR (${azureError instanceof Error ? azureError.message : 'Azure request failed'})…`
+          );
         }
       } else {
-        const result = await Tesseract.recognize(ocrSource, 'eng', {
-          logger: (message) => {
-            if (message?.status === 'recognizing text' && typeof message.progress === 'number') {
-              const pct = Math.round(message.progress * 100);
-              setPaymentOcrStatus(`Reading receipt… ${pct}%`);
-            }
-          },
-        });
-        recognizedText = result?.data?.text || '';
-      }
-      const parsed = parseEwalletOcrText(recognizedText);
-      if (raw) raw.value = parsed.raw || '(no text detected)';
-      if (ref) ref.value = parsed.reference || '';
-      if (amountInput) amountInput.value = parsed.amount != null ? parsed.amount.toFixed(2) : '';
-      if (fromInput) fromInput.value = parsed.transferFrom || '';
-      if (toInput) toInput.value = parsed.transferTo || '';
-      if (wallet) {
-        const allowed = ['GCash', 'Maya', 'PayPal', 'InstaPay', 'Other'];
-        wallet.value = allowed.includes(parsed.wallet) ? parsed.wallet : 'Other';
-      }
-      await uploadPromise;
-
-      const layoutLabel =
-        parsed.layout === 'gcash-history'
-          ? 'GCash history'
-          : parsed.layout === 'gcash-receipt'
-            ? 'GCash receipt'
-            : parsed.layout === 'instapay'
-              ? 'InstaPay'
-              : parsed.wallet;
-      const missing = [];
-      if (!parsed.reference) missing.push('reference');
-      if (parsed.amount == null) missing.push('amount');
-      if (!parsed.transferFrom && !parsed.transferTo) missing.push('from/to');
-      if (missing.length) {
         setPaymentOcrStatus(
-          `${layoutLabel}: could not fully read ${missing.join(', ')}. Fix from the photo, then Apply.`,
-          true
+          paymentOcrScannerFilterEnabled
+            ? 'Reading scanned receipt with local OCR…'
+            : 'Reading receipt with local OCR…'
         );
-      } else {
-        setPaymentOcrStatus(`${layoutLabel} detected — compare fields, then Apply.`);
       }
+
+      if (!usedAzure) {
+        if (typeof Tesseract === 'undefined') {
+          throw new Error(
+            'Azure OCR unavailable and local OCR library failed to load. Enter details manually.'
+          );
+        }
+        recognizedText = await runTesseractReceiptOcr(workingFile, 'Local OCR… ');
+        engineLabel = azureOcrConfigured === false
+          ? 'local OCR (Azure not configured)'
+          : 'local OCR';
+      }
+
+      const parsed = parseEwalletOcrText(recognizedText);
+      applyParsedReceiptOcrToUi(parsed, engineLabel);
+      await uploadPromise;
     } catch (error) {
       setPaymentOcrStatus(
         error instanceof Error ? error.message : 'Unable to read receipt.',
@@ -980,12 +1322,74 @@
       if (raw) raw.value = '';
     } finally {
       paymentOcrBusy = false;
+      if (paymentOcrRerunAfterBusy && paymentOcrOriginalFile) {
+        paymentOcrRerunAfterBusy = false;
+        void runPaymentReceiptOcr(paymentOcrOriginalFile);
+      }
+    }
+  }
+
+  function hasPaymentOcrReading() {
+    if (!paymentAddModal) return false;
+    const raw = (paymentAddModal.querySelector('[data-payment-ocr-raw]')?.value || '').trim();
+    const ref = (paymentAddModal.querySelector('[data-payment-ocr-ref]')?.value || '').trim();
+    const amount = (paymentAddModal.querySelector('[data-payment-ocr-amount]')?.value || '').trim();
+    const from = (paymentAddModal.querySelector('[data-payment-ocr-from]')?.value || '').trim();
+    const to = (paymentAddModal.querySelector('[data-payment-ocr-to]')?.value || '').trim();
+    if (ref || amount || from || to) return true;
+    return Boolean(raw && raw !== '(no text detected)');
+  }
+
+  async function onPaymentOcrScannerFilterToggle(event) {
+    const enabled = Boolean(event?.target?.checked);
+    paymentOcrScannerFilterEnabled = enabled;
+    if (!paymentOcrOriginalFile) return;
+
+    const body = paymentAddModal?.querySelector('.admin-payment-modal-body');
+    const scrollTop = body?.scrollTop ?? 0;
+    const keepReading = hasPaymentOcrReading();
+
+    // Always update the preview immediately — do not block on OCR.
+    setPaymentOcrStatus(
+      enabled ? 'Applying scanner filter…' : 'Showing original receipt…'
+    );
+    try {
+      await previewPaymentReceiptFilter(paymentOcrOriginalFile, enabled);
+    } catch {
+      /* keep previous preview */
+    }
+
+    if (!enabled) {
+      // Preview-only: never re-OCR when turning filter off after a successful read.
+      paymentOcrRerunAfterBusy = false;
+      if (keepReading) {
+        setPaymentOcrStatus(
+          'Showing original receipt — OCR fields kept. Turn filter on again to re-read.'
+        );
+      } else {
+        setPaymentOcrStatus('Showing original receipt…');
+      }
+    } else if (paymentOcrBusy) {
+      paymentOcrRerunAfterBusy = true;
+      setPaymentOcrStatus(
+        'Scanner filter on — OCR will re-read when the current pass finishes.'
+      );
+    } else {
+      await runPaymentReceiptOcr(paymentOcrOriginalFile);
+    }
+
+    if (body) {
+      body.scrollTop = scrollTop;
+      requestAnimationFrame(() => {
+        body.scrollTop = scrollTop;
+      });
     }
   }
 
   function applyPaymentOcrResult() {
     if (!paymentAddModal) return;
-    const channel = paymentAddModal.querySelector('[data-payment-ocr-wallet]')?.value || 'Other';
+    const channelHidden = paymentAddModal.querySelector('[data-payment-ocr-channel]');
+    const channel = (channelHidden?.value || '').trim() || 'Other';
     const reference = (paymentAddModal.querySelector('[data-payment-ocr-ref]')?.value || '').trim();
     const amountValue = Number(paymentAddModal.querySelector('[data-payment-ocr-amount]')?.value || 0);
     const transferFrom = (paymentAddModal.querySelector('[data-payment-ocr-from]')?.value || '').trim();
@@ -993,7 +1397,6 @@
     const methodSelect = paymentAddModal.querySelector('[data-payment-method]');
     const ext = paymentAddModal.querySelector('[data-payment-external-ref]');
     const bank = paymentAddModal.querySelector('[data-payment-bank-ref]');
-    const channelHidden = paymentAddModal.querySelector('[data-payment-ocr-channel]');
     const epayAmount = paymentAddModal.querySelector('[data-payment-epay-amount]');
     const notes = paymentAddModal.querySelector('[data-payment-notes]');
 
@@ -1100,7 +1503,7 @@
     paymentCameraScanBusy = false;
     paymentCameraGoodHits = 0;
     paymentCameraLastGoodRef = '';
-    setPaymentCameraGuideState('', 'Place receipt here');
+    setPaymentCameraGuideState('', 'Mobile receipt');
   }
 
   async function disposePaymentCameraScanWorker() {
@@ -1116,12 +1519,18 @@
 
   async function ensurePaymentCameraScanWorker() {
     if (paymentCameraScanWorker) return paymentCameraScanWorker;
+    try {
+      await ensureTesseractLoaded();
+    } catch {
+      return null;
+    }
     if (typeof Tesseract === 'undefined' || typeof Tesseract.createWorker !== 'function') {
       return null;
     }
     const worker = await Tesseract.createWorker('eng', 1);
     await worker.setParameters({
-      tessedit_pageseg_mode: '6',
+      // Sparse text is faster for phone receipt screenshots.
+      tessedit_pageseg_mode: '11',
       preserve_interword_spaces: '1',
     });
     paymentCameraScanWorker = worker;
@@ -1147,15 +1556,24 @@
     if (paymentCameraModal) paymentCameraModal.hidden = true;
   }
 
+  function getPaymentCameraOcrCanvas() {
+    if (!paymentCameraOcrCanvas) paymentCameraOcrCanvas = document.createElement('canvas');
+    return paymentCameraOcrCanvas;
+  }
+
   function grabPaymentCameraGuideSample() {
     if (!paymentCameraVideo || !paymentCameraCanvas) return null;
     const width = paymentCameraVideo.videoWidth || 0;
     const height = paymentCameraVideo.videoHeight || 0;
     if (!(width > 40 && height > 40)) return null;
 
-    // Approximate the centered 9:16 guide (~68% stage width) on object-fit:cover video.
-    const cropW = Math.round(width * 0.62);
-    const cropH = Math.round(Math.min(height * 0.86, cropW * (16 / 9)));
+    // Match the tall portrait phone frame (~86% width, 9:19.5) on object-fit:cover video.
+    const frameAspect = 9 / 19.5;
+    const cropW = Math.round(width * 0.82);
+    let cropH = Math.round(cropW / frameAspect);
+    if (cropH > height * 0.94) {
+      cropH = Math.round(height * 0.94);
+    }
     const sx = Math.max(0, Math.round((width - cropW) / 2));
     const sy = Math.max(0, Math.round((height - cropH) / 2));
     const sw = Math.min(cropW, width - sx);
@@ -1170,12 +1588,29 @@
     return { width: sw, height: sh, image, canvas: paymentCameraCanvas };
   }
 
+  function buildLiveOcrBlob(sample) {
+    const maxW = 420;
+    const src = sample.canvas;
+    const scale = Math.min(1, maxW / Math.max(1, src.width));
+    const w = Math.max(1, Math.round(src.width * scale));
+    const h = Math.max(1, Math.round(src.height * scale));
+    const ocrCanvas = getPaymentCameraOcrCanvas();
+    ocrCanvas.width = w;
+    ocrCanvas.height = h;
+    const ctx = ocrCanvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(src, 0, 0, w, h);
+    return new Promise((resolve) => {
+      ocrCanvas.toBlob((result) => resolve(result), 'image/jpeg', 0.52);
+    });
+  }
+
   function measureFrameSharpness(imageData) {
     const { data, width, height } = imageData;
     if (width < 8 || height < 8) return 0;
-    // Downsample for speed.
-    const stepX = Math.max(1, Math.floor(width / 120));
-    const stepY = Math.max(1, Math.floor(height / 160));
+    // Coarser downsample for faster live checks.
+    const stepX = Math.max(1, Math.floor(width / 90));
+    const stepY = Math.max(1, Math.floor(height / 120));
     let sum = 0;
     let sumSq = 0;
     let count = 0;
@@ -1202,8 +1637,7 @@
     const variance = Math.max(0, sumSq / count - mean * mean);
     const contrast = Math.sqrt(variance);
     const sharpness = edge / count;
-    // Prefer frames that are both sharp and reasonably contrasted (not blank/dark).
-    if (contrast < 18) return sharpness * 0.35;
+    if (contrast < 16) return sharpness * 0.35;
     return sharpness;
   }
 
@@ -1219,7 +1653,7 @@
     return (hasRef && hasAmount) || (hasRef && hasWallet && hasKeywords);
   }
 
-  function schedulePaymentCameraAutoScan(delayMs = 700) {
+  function schedulePaymentCameraAutoScan(delayMs = 320) {
     if (paymentCameraAutoTimer) window.clearTimeout(paymentCameraAutoTimer);
     paymentCameraAutoTimer = window.setTimeout(() => {
       paymentCameraAutoTimer = 0;
@@ -1237,51 +1671,53 @@
       return;
     }
     if (paymentCameraScanBusy) {
-      schedulePaymentCameraAutoScan(500);
+      schedulePaymentCameraAutoScan(220);
       return;
     }
 
     const sample = grabPaymentCameraGuideSample();
     if (!sample) {
       setPaymentCameraStatus('Waiting for camera preview…');
-      setPaymentCameraGuideState('scanning', 'Place receipt here');
-      schedulePaymentCameraAutoScan(600);
+      setPaymentCameraGuideState('scanning', 'Mobile receipt');
+      schedulePaymentCameraAutoScan(280);
       return;
     }
 
     const sharpness = measureFrameSharpness(sample.image);
-    if (sharpness < 14) {
+    if (sharpness < 12) {
       paymentCameraGoodHits = 0;
       paymentCameraLastGoodRef = '';
-      setPaymentCameraGuideState('scanning', 'Hold receipt in frame');
-      setPaymentCameraStatus('Move closer and hold steady — waiting for a clear receipt…');
-      schedulePaymentCameraAutoScan(650);
+      setPaymentCameraGuideState('scanning', 'Hold phone upright');
+      setPaymentCameraStatus('Center the upright mobile receipt in the portrait frame…');
+      schedulePaymentCameraAutoScan(280);
       return;
     }
 
     if (typeof Tesseract === 'undefined') {
-      setPaymentCameraGuideState('ready', 'Looking clear — tap Capture');
-      setPaymentCameraStatus('Image looks clear. OCR unavailable — tap Capture photo.');
-      schedulePaymentCameraAutoScan(1200);
-      return;
+      try {
+        await ensureTesseractLoaded();
+      } catch {
+        setPaymentCameraGuideState('ready', 'Looking clear — tap Capture');
+        setPaymentCameraStatus('Image looks clear. OCR unavailable — tap Capture photo.');
+        schedulePaymentCameraAutoScan(900);
+        return;
+      }
     }
 
     paymentCameraScanBusy = true;
-    setPaymentCameraGuideState('scanning', 'Reading details…');
+    setPaymentCameraGuideState('scanning', 'Reading…');
     setPaymentCameraStatus('Clear image — checking receipt details…');
     try {
-      const worker = await ensurePaymentCameraScanWorker();
+      // Warm worker in parallel with downscale when possible.
+      const [worker, blob] = await Promise.all([
+        ensurePaymentCameraScanWorker(),
+        buildLiveOcrBlob(sample),
+      ]);
       let text = '';
-      if (worker) {
-        // Smaller JPEG for live scan speed.
-        const blob = await new Promise((resolve) => {
-          sample.canvas.toBlob((result) => resolve(result), 'image/jpeg', 0.72);
-        });
-        if (blob) {
-          const result = await worker.recognize(blob);
-          text = result?.data?.text || '';
-        }
-      } else {
+      if (worker && blob) {
+        const result = await worker.recognize(blob);
+        text = result?.data?.text || '';
+      } else if (sample.canvas) {
         const result = await Tesseract.recognize(sample.canvas, 'eng');
         text = result?.data?.text || '';
       }
@@ -1300,7 +1736,8 @@
         }
 
         setPaymentCameraGuideState('ready', 'Details clear');
-        if (paymentCameraGoodHits >= 2 || (paymentCameraGoodHits >= 1 && sharpness >= 22)) {
+        // Capture sooner: one strong read, or two matching reads.
+        if (paymentCameraGoodHits >= 2 || (paymentCameraGoodHits >= 1 && sharpness >= 16)) {
           setPaymentCameraStatus('Details clear — capturing…');
           paymentCameraAutoCaptureLock = true;
           stopPaymentCameraAutoScan();
@@ -1312,14 +1749,14 @@
         paymentCameraGoodHits = 0;
         paymentCameraLastGoodRef = '';
         setPaymentCameraGuideState('scanning', 'Need clearer details');
-        setPaymentCameraStatus('Receipt visible, but ref/amount not clear yet — adjust and hold…');
+        setPaymentCameraStatus('Receipt in frame — move closer until ref/amount are sharp…');
       }
     } catch {
-      setPaymentCameraStatus('Still scanning… keep the receipt centered.');
+      setPaymentCameraStatus('Still scanning… keep the receipt inside the frame.');
     } finally {
       paymentCameraScanBusy = false;
       if (!paymentCameraAutoCaptureLock && paymentCameraModal && !paymentCameraModal.hidden) {
-        schedulePaymentCameraAutoScan(900);
+        schedulePaymentCameraAutoScan(360);
       }
     }
   }
@@ -1339,8 +1776,10 @@
       audio: false,
       video: {
         facingMode: { ideal: paymentCameraFacingMode },
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
+        // Prefer portrait for mobile payment receipts (GCash / Maya).
+        aspectRatio: { ideal: 9 / 16 },
+        width: { ideal: 720 },
+        height: { ideal: 1280 },
       },
     };
     paymentCameraStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -1377,11 +1816,13 @@
     paymentCameraAutoCaptureLock = false;
     paymentCameraModal.hidden = false;
     setPaymentCameraStatus('Starting camera…');
-    setPaymentCameraGuideState('scanning', 'Place receipt here');
+    setPaymentCameraGuideState('scanning', 'Mobile receipt');
+    // Pre-warm OCR worker while the camera stream starts.
+    ensurePaymentCameraScanWorker().catch(() => {});
     try {
       await startPaymentCameraStream();
-      setPaymentCameraStatus('Auto-scan on — hold a clear receipt in the frame.');
-      schedulePaymentCameraAutoScan(900);
+      setPaymentCameraStatus('Portrait scan on — hold the phone upright in the frame.');
+      schedulePaymentCameraAutoScan(450);
     } catch (error) {
       closePaymentCameraModal();
       const message = error instanceof Error ? error.message : 'Unable to open camera.';
@@ -1402,13 +1843,13 @@
           ? 'Rear camera — auto-scan on.'
           : 'Front camera — auto-scan on.'
       );
-      schedulePaymentCameraAutoScan(800);
+      schedulePaymentCameraAutoScan(400);
     } catch {
       paymentCameraFacingMode = paymentCameraFacingMode === 'environment' ? 'user' : 'environment';
       setPaymentCameraStatus('Could not switch camera on this device.', true);
       try {
         await startPaymentCameraStream();
-        schedulePaymentCameraAutoScan(800);
+        schedulePaymentCameraAutoScan(400);
       } catch {
         closePaymentCameraModal();
         openNativeReceiptCapture();
@@ -1427,7 +1868,7 @@
     if (!(width > 0 && height > 0)) {
       setPaymentCameraStatus('Wait for the camera preview, then try again.', true);
       paymentCameraAutoCaptureLock = false;
-      if (!options.auto) schedulePaymentCameraAutoScan(700);
+      if (!options.auto) schedulePaymentCameraAutoScan(320);
       return;
     }
 
@@ -1441,7 +1882,7 @@
     if (!ctx) {
       setPaymentCameraStatus('Unable to capture this frame.', true);
       paymentCameraAutoCaptureLock = false;
-      schedulePaymentCameraAutoScan(700);
+      schedulePaymentCameraAutoScan(320);
       return;
     }
     ctx.drawImage(paymentCameraVideo, 0, 0, width, height);
@@ -1452,7 +1893,7 @@
     if (!blob) {
       setPaymentCameraStatus('Could not create the photo. Try again.', true);
       paymentCameraAutoCaptureLock = false;
-      schedulePaymentCameraAutoScan(700);
+      schedulePaymentCameraAutoScan(320);
       return;
     }
 
@@ -1720,13 +2161,23 @@
     const by = paymentAddModal.querySelector('[data-payment-received-by]');
     if (by) by.value = localStorage.getItem('moriPaymentReceivedBy') || '';
     const methodSelect = paymentAddModal.querySelector('[data-payment-method]');
+    const hasIncidental = (booking.charges || []).some(
+      (c) => String(c.chargeType) === 'Incidental' && Number(c.amount || 0) > 0
+    );
     if (methodSelect) methodSelect.value = 'Cash';
+    if (hasIncidental && methodSelect) {
+      methodSelect.value = 'Cash';
+    }
     const ext = paymentAddModal.querySelector('[data-payment-external-ref]');
     const bank = paymentAddModal.querySelector('[data-payment-bank-ref]');
     const notes = paymentAddModal.querySelector('[data-payment-notes]');
     if (ext) ext.value = '';
     if (bank) bank.value = '';
-    if (notes) notes.value = '';
+    if (notes) {
+      notes.value = hasIncidental
+        ? 'Incidental (damage) on booking — collect in cash.'
+        : '';
+    }
     resetPaymentOcrUi();
 
     updatePaymentPricesUi();
@@ -1890,15 +2341,15 @@
     if (!flushLogCount) return;
     const state = expanded ? 'Open' : 'Closed';
     if (!count) {
-      flushLogCount.textContent = `${state} · no flush actions yet`;
+      flushLogCount.textContent = `${state} · no export actions yet · kept 7 days`;
       return;
     }
-    flushLogCount.textContent = `${state} · ${count} flush action${count === 1 ? '' : 's'}`;
+    flushLogCount.textContent = `${state} · ${count} export action${count === 1 ? '' : 's'} · kept 7 days`;
   }
 
   function openFlushDetail(log) {
     if (!flushDetailModal || !flushDetailBody) return;
-    if (flushDetailFile) flushDetailFile.textContent = log.fileName || 'Flush record';
+    if (flushDetailFile) flushDetailFile.textContent = log.fileName || 'Export record';
     const lines = String(log.summary || '')
       .split(/\n+/)
       .map((line) => line.trim())
@@ -1908,6 +2359,7 @@
       ['Performed by', log.performedBy || '—'],
       ['Records deleted', String(log.recordCount ?? 0)],
       ['PDF softcopy', log.fileName || '—'],
+      ['Expires (PH)', formatDateTime(log.expiresAtUtc)],
     ];
     flushDetailBody.replaceChildren();
     const grid = document.createElement('dl');
@@ -1935,7 +2387,7 @@
       flushDetailBody.appendChild(list);
     } else {
       const empty = document.createElement('p');
-      empty.textContent = 'No extra summary was stored for this flush.';
+      empty.textContent = 'No extra summary was stored for this data export.';
       flushDetailBody.appendChild(empty);
     }
     flushDetailModal.hidden = false;
@@ -1948,7 +2400,7 @@
   async function refreshFlushLogs() {
     if (!flushLogList || !history) return;
     flushLogList.innerHTML =
-      '<tr><td colspan="5" class="admin-bookings-loading">Loading flush log…</td></tr>';
+      '<tr><td colspan="6" class="admin-bookings-loading">Loading export log…</td></tr>';
     try {
       const logs = await apiFetch('/api/admin/bookings/history/flush-logs');
       flushLogsCache = Array.isArray(logs) ? logs : [];
@@ -1958,9 +2410,9 @@
       if (!flushLogsCache.length) {
         const row = document.createElement('tr');
         const cell = document.createElement('td');
-        cell.colSpan = 5;
+        cell.colSpan = 6;
         cell.className = 'admin-bookings-loading';
-        cell.textContent = 'No flush actions yet.';
+        cell.textContent = 'No export actions yet.';
         row.appendChild(cell);
         flushLogList.appendChild(row);
         return;
@@ -1972,10 +2424,19 @@
           log.performedBy || '—',
           String(log.recordCount ?? 0),
           log.fileName || '—',
+          formatDateTime(log.expiresAtUtc),
         ];
-        cells.forEach((text) => {
+        cells.forEach((text, index) => {
           const td = document.createElement('td');
-          td.textContent = text;
+          if (index === 3) {
+            td.className = 'admin-export-file-cell';
+            const file = document.createElement('span');
+            file.className = 'admin-export-file-name';
+            file.textContent = text;
+            td.appendChild(file);
+          } else {
+            td.textContent = text;
+          }
           row.appendChild(td);
         });
         const action = document.createElement('td');
@@ -1994,9 +2455,9 @@
       flushLogList.innerHTML = '';
       const row = document.createElement('tr');
       const cell = document.createElement('td');
-      cell.colSpan = 5;
+      cell.colSpan = 6;
       cell.className = 'admin-bookings-loading';
-      cell.textContent = error instanceof Error ? error.message : 'Unable to load flush log.';
+      cell.textContent = error instanceof Error ? error.message : 'Unable to load export log.';
       row.appendChild(cell);
       flushLogList.appendChild(row);
     }
@@ -2018,7 +2479,7 @@
   async function confirmFlushHistory() {
     const performedBy = (flushByInput?.value || '').trim();
     if (performedBy.length < 2) {
-      showBookingMessage('Enter the staff name who is flushing history.', true);
+      showBookingMessage('Enter the staff name who is exporting history.', true);
       flushByInput?.focus();
       return;
     }
@@ -2030,7 +2491,15 @@
       return;
     }
 
-    if (flushConfirmButton) flushConfirmButton.disabled = true;
+    if (flushConfirmButton) {
+      flushConfirmButton.disabled = true;
+      flushConfirmButton.dataset.exportLabel = flushConfirmButton.textContent || '';
+      flushConfirmButton.textContent = 'Exporting…';
+    }
+    window.setAdminExportLoading?.(true, {
+      title: 'Exporting history…',
+      detail: 'Building branded PDF softcopy and deleting archived history. Please wait.',
+    });
     try {
       const result = await apiFetchBlob('/api/admin/bookings/history/flush', {
         method: 'POST',
@@ -2043,12 +2512,18 @@
       page = 1;
       await Promise.all([refreshBookings(), refreshFlushLogs()]);
       showBookingMessage(
-        `History flushed (${result.recordCount || 'all'} records). PDF saved as ${result.fileName}.`
+        `History exported (${result.recordCount || 'all'} records). PDF saved as ${result.fileName}.`
       );
     } catch (error) {
-      showBookingMessage(error instanceof Error ? error.message : 'Unable to flush history.', true);
+      showBookingMessage(error instanceof Error ? error.message : 'Unable to export history.', true);
     } finally {
-      if (flushConfirmButton) flushConfirmButton.disabled = false;
+      window.setAdminExportLoading?.(false);
+      if (flushConfirmButton) {
+        flushConfirmButton.disabled = false;
+        flushConfirmButton.textContent =
+          flushConfirmButton.dataset.exportLabel || 'Export PDF & delete history';
+        delete flushConfirmButton.dataset.exportLabel;
+      }
     }
   }
 
@@ -2182,21 +2657,8 @@
       contentBtn.append(msg);
     }
 
-    contentBtn.addEventListener('click', async () => {
-      try {
-        await apiFetch(`/api/admin/bookings/${item.id}/read`, { method: 'POST' });
-      } finally {
-        const message = String(item.message || '');
-        if (/call guest: checkout|checkout in 20/i.test(message)) {
-          window.location.assign('/AdminBookings?checkouts=soon');
-        } else if (/call guest/i.test(message)) {
-          window.location.assign('/AdminBookings?pendingCalls=soon');
-        } else if (/arrival/i.test(message)) {
-          window.location.assign('/AdminBookings?arrivals=soon');
-        } else {
-          window.location.assign(`/AdminBookings?booking=${item.id}`);
-        }
-      }
+    contentBtn.addEventListener('click', () => {
+      void openBookingFromNotification(item);
     });
 
     const dismissBtn = document.createElement('button');
@@ -2237,6 +2699,9 @@
   }
 
   async function refreshNotifications() {
+    if (notificationItems && !notificationItems.querySelector('.admin-notification-item')) {
+      renderNotificationsSkeleton();
+    }
     try {
       const payload = await apiFetch('/api/admin/bookings/notifications?limit=10');
       setBadge(payload.unread);
@@ -2546,7 +3011,7 @@
 
   function arrivalAssignMessage(booking) {
     const arrival = formatDate(booking.checkInAtUtc || booking.checkIn);
-    return `Rooms can be assigned starting on the arrival date (${arrival}), and only after the stay is fully paid.`;
+    return `Finish booking setup from the arrival date (${arrival}), after the stay is fully paid.`;
   }
 
   function isBookingFullyPaid(booking, summary = null) {
@@ -2621,9 +3086,9 @@
     if (needsRooms) {
       const flag = document.createElement('span');
       flag.className = 'admin-booking-status is-needs-rooms';
-      flag.textContent = canAssignRoomsToday(booking) ? 'Needs rooms' : 'Assign on arrival';
+      flag.textContent = canAssignRoomsToday(booking) ? 'Needs attention' : 'Ready on arrival';
       flag.title = canAssignRoomsToday(booking)
-        ? 'Confirmed — assign rooms after the guest is fully paid'
+        ? 'Confirmed — open booking to finish payment check, rooms, and check-in'
         : arrivalAssignMessage(booking);
       statusCell.append(flag);
     }
@@ -2633,7 +3098,7 @@
     const viewButton = document.createElement('button');
     viewButton.type = 'button';
     viewButton.textContent =
-      needsRooms && canAssignRoomsToday(booking) ? 'Assign rooms' : 'View details';
+      needsRooms && canAssignRoomsToday(booking) ? 'Manage booking' : 'View details';
     viewButton.addEventListener('click', () => openBookingDetails(booking.id, booking));
     actionCell.append(viewButton);
 
@@ -2682,7 +3147,94 @@
     checkout: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v14h-5M10 12H3m0 0 3-3M3 12l3 3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   };
 
-  async function renderBookingDetails(booking) {
+  function skel(className = '') {
+    const el = document.createElement('span');
+    el.className = `admin-skel ${className}`.trim();
+    el.setAttribute('aria-hidden', 'true');
+    return el;
+  }
+
+  function renderBookingsTableSkeleton(rows = 6) {
+    if (!bookingList) return;
+    bookingList.replaceChildren();
+    for (let i = 0; i < rows; i += 1) {
+      const row = document.createElement('tr');
+      row.className = 'admin-skel-table-row';
+      row.setAttribute('aria-hidden', 'true');
+      for (let c = 0; c < 8; c += 1) {
+        const cell = document.createElement('td');
+        cell.append(skel(`admin-skel-line${c === 0 || c === 7 ? ' is-short' : ''}`));
+        row.append(cell);
+      }
+      bookingList.append(row);
+    }
+  }
+
+  function renderNotificationsSkeleton(count = 4) {
+    if (!notificationItems) return;
+    notificationItems.replaceChildren();
+    for (let i = 0; i < count; i += 1) {
+      const item = document.createElement('div');
+      item.className = 'admin-skel-notification';
+      item.setAttribute('aria-hidden', 'true');
+      item.append(
+        skel('admin-skel-line is-lg'),
+        skel('admin-skel-line is-meta'),
+        skel('admin-skel-line is-time is-sm')
+      );
+      notificationItems.append(item);
+    }
+  }
+
+  function showBookingDetailsSkeleton(hint = null) {
+    if (!detailModal || !detailBody) return;
+    detailModal.hidden = false;
+    document.body.classList.add('admin-booking-modal-open');
+    const refEl = detailModal.querySelector('[data-detail-reference]');
+    const guestEl = detailModal.querySelector('[data-detail-guest]');
+    if (refEl) refEl.textContent = hint?.reference || 'Loading…';
+    if (guestEl) guestEl.textContent = hint?.guestName || 'Guest details';
+
+    const rootEl = document.createElement('div');
+    rootEl.className = 'admin-skel-detail';
+    rootEl.setAttribute('role', 'status');
+    rootEl.setAttribute('aria-live', 'polite');
+    rootEl.setAttribute('aria-label', 'Loading booking details');
+
+    const summary = document.createElement('div');
+    summary.className = 'admin-skel-detail-summary';
+    summary.append(skel('admin-skel-pill'), skel('admin-skel-line is-lg'));
+    summary.lastChild.style.width = '6rem';
+
+    const grid = document.createElement('div');
+    grid.className = 'admin-skel-detail-grid';
+    for (let i = 0; i < 6; i += 1) {
+      const field = document.createElement('div');
+      field.className = 'admin-skel-field';
+      field.append(skel('admin-skel-line is-sm'), skel('admin-skel-line'));
+      grid.append(field);
+    }
+
+    const fees = document.createElement('div');
+    fees.className = 'admin-skel-fees';
+    const chips = document.createElement('div');
+    chips.className = 'admin-skel-fee-chips';
+    for (let i = 0; i < 6; i += 1) chips.append(skel('admin-skel-fee-chip'));
+    fees.append(skel('admin-skel-line is-lg'), skel('admin-skel-line is-sm'), chips, skel('admin-skel-panel'));
+
+    rootEl.append(summary, grid, fees, skel('admin-skel-panel'));
+    detailBody.replaceChildren(rootEl);
+
+    if (detailActions) {
+      const actions = document.createElement('div');
+      actions.className = 'admin-skel-actions';
+      actions.setAttribute('aria-hidden', 'true');
+      for (let i = 0; i < 4; i += 1) actions.append(skel('admin-skel-icon'));
+      detailActions.replaceChildren(actions);
+    }
+  }
+
+  async function renderBookingDetails(booking, options = {}) {
     if (!detailModal || !detailBody || !detailActions) return;
     selectedBooking = booking;
     detailModal.querySelector('[data-detail-reference]').textContent = booking.reference;
@@ -2690,7 +3242,10 @@
     detailBody.replaceChildren();
     detailActions.replaceChildren();
 
-    const paymentSummary = await loadBookingPaymentSummary(booking);
+    const paymentSummary =
+      options.paymentSummary !== undefined
+        ? options.paymentSummary
+        : await loadBookingPaymentSummary(booking);
     if (paymentSummary) fillPaymentSummaryFields(booking, paymentSummary);
     else fillPaymentSummaryFields(booking, null);
 
@@ -2714,9 +3269,9 @@
     if (needsRooms) {
       const flag = document.createElement('span');
       flag.className = 'admin-booking-status is-needs-rooms';
-      flag.textContent = canAssignRoomsToday(booking) ? 'Needs rooms' : 'Assign on arrival';
+      flag.textContent = canAssignRoomsToday(booking) ? 'Needs attention' : 'Ready on arrival';
       flag.title = canAssignRoomsToday(booking)
-        ? 'Confirmed — assign rooms after the guest is fully paid'
+        ? 'Confirmed — open booking to finish payment check, rooms, and check-in'
         : arrivalAssignMessage(booking);
       statusGroup.append(flag);
     }
@@ -2753,18 +3308,44 @@
       })()
     );
     const charges = booking.charges || [];
-    const feesTotal = charges.reduce((sum, charge) => sum + Number(charge.amount || 0), 0);
+    const billableCharges = charges.filter((c) => String(c.chargeType) !== 'StayExtension');
+    const feesTotal = billableCharges.reduce((sum, charge) => sum + Number(charge.amount || 0), 0);
     const roomStayTotal = Math.max(0, Number(stayTotal) - feesTotal);
     const hasEarly = charges.some((c) => String(c.chargeType) === 'EarlyCheckIn');
     const lateCharge = charges.find((c) => String(c.chargeType) === 'LateCheckout');
     const lateHours = lateCharge ? Number(lateCharge.quantity || 0) : 0;
     const extraCharge = charges.find((c) => String(c.chargeType) === 'ExtraPerson');
     const extraPersons = extraCharge ? Number(extraCharge.quantity || 0) : 0;
-    const allowsExtraPerson = (booking.items || []).some((line) => {
-      const max = Number(line.maxOccupancy || 0);
-      const name = String(line.roomTypeName || '');
-      return max === 1 || /single/i.test(name);
-    });
+    const incidentalCharge = charges.find((c) => String(c.chargeType) === 'Incidental');
+    const snackCharge = charges.find((c) => String(c.chargeType) === 'SnackBeverage');
+    const extensionCharge = charges.find((c) => String(c.chargeType) === 'StayExtension');
+    const extensionNights = extensionCharge ? Number(extensionCharge.quantity || 0) : 0;
+    const incidentalAmount = incidentalCharge ? Number(incidentalCharge.amount || 0) : 0;
+    const snackQty = snackCharge ? Number(snackCharge.quantity || 0) : 0;
+    const snackUnit = snackCharge ? Number(snackCharge.unitAmount || 0) : 0;
+    const incidentalNote = (() => {
+      const label = String(incidentalCharge?.label || '');
+      const marker = '· cash · ';
+      const idx = label.indexOf(marker);
+      return idx >= 0 ? label.slice(idx + marker.length).trim() : '';
+    })();
+    const snackProduct = (() => {
+      const label = String(snackCharge?.label || '');
+      const prefix = 'Snack & beverage · ';
+      if (!label.startsWith(prefix)) return '';
+      const rest = label.slice(prefix.length);
+      const match = rest.match(/^(.*) · \d+\s*×/);
+      return match ? match[1].trim() : '';
+    })();
+    const parseMoneyInput = (value) => {
+      const n = Number(String(value ?? '').replace(/,/g, '').trim());
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    };
+    const parseIntInput = (value) => {
+      const n = Number.parseInt(String(value ?? '').replace(/,/g, '').trim(), 10);
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    };
+    const allowsExtraPerson = true;
 
     const stayLabel = document.createElement('div');
     stayLabel.className = 'admin-booking-stay-label';
@@ -2786,6 +3367,12 @@
       badge.textContent = `Late +${lateHours}h`;
       stayLabel.append(badge);
     }
+    if (extensionNights > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'admin-booking-extended-badge is-extend';
+      badge.textContent = `+${extensionNights} night${extensionNights === 1 ? '' : 's'}`;
+      stayLabel.append(badge);
+    }
 
     const fields = document.createElement('dl');
     fields.className = 'admin-booking-detail-grid';
@@ -2800,65 +3387,574 @@
       detailField('Submitted', formatDateTime(booking.createdAtUtc))
     );
 
+    const feesDisabled = Boolean(booking.isArchived);
+    const roomCount = Math.max(
+      1,
+      (booking.items || []).reduce((sum, line) => sum + Number(line.quantity || 0), 0)
+    );
+
     const feesPanel = document.createElement('section');
     feesPanel.className = 'admin-booking-fees-panel';
-    feesPanel.innerHTML = `
-      <h3>Stay fees</h3>
-      <p class="admin-booking-fees-lede">Reception can add fees when the guest requests them. Times update with an extended-stay indicator.</p>
-      <div class="admin-booking-fees-grid">
-        <label class="admin-booking-fee-option">
-          <input type="checkbox" data-fee-early ${hasEarly ? 'checked' : ''} ${booking.isArchived ? 'disabled' : ''} />
-          <span>Early check-in <strong>11:30 AM</strong> · ₱500 / room</span>
-        </label>
-        <label class="admin-booking-fee-option">
-          <span>Late check-out</span>
-          <select data-fee-late ${booking.isArchived ? 'disabled' : ''}>
-            <option value="0">12:00 PM — no fee</option>
-            <option value="1">+1 hour · ₱100 / room</option>
-            <option value="2">+2 hours · ₱200 / room</option>
-            <option value="3">+3 hours · ₱300 / room</option>
-          </select>
-        </label>
-        <label class="admin-booking-fee-option ${allowsExtraPerson ? '' : 'is-disabled'}">
-          <input type="checkbox" data-fee-extra ${extraPersons > 0 ? 'checked' : ''} ${booking.isArchived || !allowsExtraPerson ? 'disabled' : ''} />
-          <span>Extra person · ₱200 / night${allowsExtraPerson ? ' (max 1 on single room)' : ' (single rooms only)'}</span>
-        </label>
-      </div>
-      <p class="admin-booking-fees-msg" data-fee-msg hidden></p>
-    `;
-    const lateSelect = feesPanel.querySelector('[data-fee-late]');
-    if (lateSelect) lateSelect.value = String(Math.min(3, Math.max(0, lateHours)));
+
+    const feesTitle = document.createElement('h3');
+    feesTitle.textContent = 'Stay fees';
+    const feesLede = document.createElement('p');
+    feesLede.className = 'admin-booking-fees-lede';
+    feesLede.textContent =
+      'Reception can add fees when the guest requests them. Open one category at a time.';
+
+    const feesLayout = document.createElement('div');
+    feesLayout.className = 'admin-booking-fees-layout';
+
+    const feeTriggers = document.createElement('div');
+    feeTriggers.className = 'admin-fee-dd-triggers';
+    feeTriggers.setAttribute('role', 'tablist');
+    feeTriggers.setAttribute('aria-label', 'Stay fee categories');
+
+    const feePanels = document.createElement('div');
+    feePanels.className = 'admin-fee-dd-panels';
+
+    const makeFeeField = (labelText, inputEl, optional = false) => {
+      const label = document.createElement('label');
+      label.className = 'admin-booking-fee-field';
+      const caption = document.createElement('span');
+      caption.append(labelText);
+      if (optional) {
+        caption.append(' ', Object.assign(document.createElement('em'), { textContent: 'optional' }));
+      }
+      label.append(caption, inputEl);
+      return label;
+    };
+
+    const setPanelControlsEnabled = (panel, enabled) => {
+      panel.querySelectorAll('input, select, textarea, button').forEach((el) => {
+        if (el.dataset.keepDisabled === '1') {
+          el.disabled = true;
+          return;
+        }
+        el.disabled = !enabled;
+      });
+    };
+
+    const closeAllFeeDropdowns = () => {
+      feeTriggers.querySelectorAll('.admin-fee-dd-trigger').forEach((btn) => {
+        btn.classList.remove('is-open');
+        btn.setAttribute('aria-expanded', 'false');
+      });
+      feePanels.querySelectorAll('.admin-fee-dd-panel').forEach((panel) => {
+        panel.hidden = true;
+        panel.classList.remove('is-open');
+        setPanelControlsEnabled(panel, false);
+      });
+    };
+
+    const openFeeDropdown = (id) => {
+      const trigger = feeTriggers.querySelector(`[data-fee-dd="${id}"]`);
+      const panel = feePanels.querySelector(`[data-fee-panel="${id}"]`);
+      if (!trigger || !panel) return;
+      const alreadyOpen = trigger.classList.contains('is-open');
+      closeAllFeeDropdowns();
+      if (alreadyOpen) return;
+      trigger.classList.add('is-open');
+      trigger.setAttribute('aria-expanded', 'true');
+      panel.hidden = false;
+      panel.classList.add('is-open');
+      const locked = trigger.classList.contains('is-locked') || feesDisabled;
+      setPanelControlsEnabled(panel, !locked);
+    };
+
+    const feeCategories = [];
+
+    const registerFeeCategory = ({ id, title, hint, locked = false, buildBody, getMeta }) => {
+      const trigger = document.createElement('button');
+      trigger.type = 'button';
+      trigger.className = 'admin-fee-dd-trigger';
+      trigger.dataset.feeDd = id;
+      trigger.setAttribute('role', 'tab');
+      trigger.setAttribute('aria-expanded', 'false');
+      trigger.setAttribute('aria-controls', `fee-panel-${id}`);
+      if (locked || feesDisabled) trigger.classList.add('is-locked');
+
+      const triggerLabel = document.createElement('span');
+      triggerLabel.className = 'admin-fee-dd-trigger-label';
+      triggerLabel.textContent = title;
+      const triggerMeta = document.createElement('span');
+      triggerMeta.className = 'admin-fee-dd-trigger-meta';
+      triggerMeta.dataset.feeDdMeta = id;
+      const triggerChevron = document.createElement('span');
+      triggerChevron.className = 'admin-fee-dd-trigger-chevron';
+      triggerChevron.setAttribute('aria-hidden', 'true');
+      triggerChevron.textContent = '▾';
+      trigger.append(triggerLabel, triggerMeta, triggerChevron);
+
+      const panel = document.createElement('div');
+      panel.className = 'admin-fee-dd-panel';
+      panel.id = `fee-panel-${id}`;
+      panel.dataset.feePanel = id;
+      panel.setAttribute('role', 'tabpanel');
+      panel.hidden = true;
+
+      const panelHead = document.createElement('div');
+      panelHead.className = 'admin-fee-dd-panel-head';
+      panelHead.append(Object.assign(document.createElement('strong'), { textContent: title }));
+      if (hint) {
+        panelHead.append(Object.assign(document.createElement('span'), { textContent: hint }));
+      }
+      const body = document.createElement('div');
+      body.className = 'admin-fee-dd-panel-body';
+      const controls = buildBody();
+      body.append(...(Array.isArray(controls) ? controls : [controls]));
+      panel.append(panelHead, body);
+      setPanelControlsEnabled(panel, false);
+
+      const refreshMeta = () => {
+        const meta = getMeta ? getMeta() : { active: false, text: '' };
+        triggerMeta.textContent = meta.text || '';
+        trigger.classList.toggle('is-active', Boolean(meta.active));
+      };
+
+      trigger.addEventListener('click', () => openFeeDropdown(id));
+      feeTriggers.append(trigger);
+      feePanels.append(panel);
+      feeCategories.push({ id, refreshMeta });
+      refreshMeta();
+      return { trigger, panel, refreshMeta };
+    };
+
+    const earlyInput = document.createElement('input');
+    earlyInput.type = 'checkbox';
+    earlyInput.dataset.feeEarly = '1';
+    earlyInput.checked = hasEarly;
+    earlyInput.disabled = true;
+
+    const lateSelect = document.createElement('select');
+    lateSelect.dataset.feeLate = '1';
+    lateSelect.disabled = true;
+    [
+      ['0', '12:00 PM — no fee'],
+      ['1', '+1 hour · ₱100 / room'],
+      ['2', '+2 hours · ₱200 / room'],
+      ['3', '+3 hours · ₱300 / room'],
+    ].forEach(([value, text]) => {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = text;
+      lateSelect.append(opt);
+    });
+    lateSelect.value = String(Math.min(3, Math.max(0, lateHours)));
+
+    const extraInput = document.createElement('input');
+    extraInput.type = 'checkbox';
+    extraInput.dataset.feeExtra = '1';
+    extraInput.checked = extraPersons > 0;
+    extraInput.disabled = true;
+    if (!allowsExtraPerson) extraInput.dataset.keepDisabled = '1';
+
+    const incidentalInput = Object.assign(document.createElement('input'), {
+      type: 'text',
+      inputMode: 'decimal',
+      autocomplete: 'off',
+      placeholder: '0.00',
+      value: incidentalAmount > 0 ? incidentalAmount.toFixed(2) : '',
+      disabled: true,
+    });
+    incidentalInput.dataset.feeIncidental = '1';
+
+    const incidentalNoteInput = Object.assign(document.createElement('input'), {
+      type: 'text',
+      maxLength: 80,
+      placeholder: 'e.g. broken lamp',
+      value: incidentalNote,
+      disabled: true,
+    });
+    incidentalNoteInput.dataset.feeIncidentalNote = '1';
+
+    const snackProductListId = `fee-snack-products-${booking.id}`;
+    const snackProductInput = Object.assign(document.createElement('input'), {
+      type: 'text',
+      maxLength: 80,
+      autocomplete: 'off',
+      placeholder: 'e.g. Bottled water, coffee, turon',
+      value: snackProduct,
+      disabled: true,
+    });
+    snackProductInput.dataset.feeSnackProduct = '1';
+    snackProductInput.setAttribute('list', snackProductListId);
+    const snackProductDatalist = document.createElement('datalist');
+    snackProductDatalist.id = snackProductListId;
+    [
+      'Bottled water',
+      'Coffee',
+      'Iced tea',
+      'Softdrinks',
+      'Turon',
+      'Banana cue',
+      'Fish crackers',
+      'Chippy',
+      'Piattos',
+      'Skyflakes',
+      'Pancit canton',
+      'Cup noodles',
+    ].forEach((name) => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      snackProductDatalist.append(opt);
+    });
+
+    const snackQtyInput = Object.assign(document.createElement('input'), {
+      type: 'text',
+      inputMode: 'numeric',
+      autocomplete: 'off',
+      placeholder: '0',
+      value: snackQty > 0 ? String(snackQty) : '',
+      disabled: true,
+    });
+    snackQtyInput.dataset.feeSnackQty = '1';
+
+    const snackUnitInput = Object.assign(document.createElement('input'), {
+      type: 'text',
+      inputMode: 'decimal',
+      autocomplete: 'off',
+      placeholder: '0.00',
+      value: snackUnit > 0 ? snackUnit.toFixed(2) : '',
+      disabled: true,
+    });
+    snackUnitInput.dataset.feeSnackUnit = '1';
+
+    const snackPreview = Object.assign(document.createElement('p'), {
+      className: 'admin-booking-fees-hint',
+      textContent: `Line total: ${money(snackQty * snackUnit)}`,
+    });
+
+    const extendInput = Object.assign(document.createElement('input'), {
+      type: 'text',
+      inputMode: 'numeric',
+      autocomplete: 'off',
+      placeholder: '0',
+      value: '',
+      disabled: true,
+    });
+    extendInput.dataset.feeExtend = '1';
+
+    const extendPreview = Object.assign(document.createElement('p'), {
+      className: 'admin-booking-fees-hint',
+      textContent:
+        extensionNights > 0
+          ? `Already extended +${extensionNights} night${extensionNights === 1 ? '' : 's'}.`
+          : 'Moves checkout date forward and adds Extra night(s) in the breakdown.',
+    });
+
+    registerFeeCategory({
+      id: 'early',
+      title: 'Early check-in',
+      hint: '11:30 AM · ₱500 / room',
+      buildBody: () => {
+        const row = document.createElement('label');
+        row.className = 'admin-booking-fee-option';
+        row.append(
+          earlyInput,
+          Object.assign(document.createElement('span'), {
+            textContent: 'Apply early check-in fee for this stay',
+          })
+        );
+        return [row];
+      },
+      getMeta: () =>
+        earlyInput.checked
+          ? { active: true, text: money(500 * roomCount) }
+          : { active: false, text: '' },
+    });
+
+    registerFeeCategory({
+      id: 'late',
+      title: 'Late check-out',
+      hint: '₱100 / hour / room · max 3 hours',
+      buildBody: () => {
+        const row = document.createElement('label');
+        row.className = 'admin-booking-fee-option';
+        row.append(Object.assign(document.createElement('span'), { textContent: 'Checkout time' }), lateSelect);
+        return [row];
+      },
+      getMeta: () => {
+        const hours = Number(lateSelect.value || 0);
+        return hours > 0
+          ? { active: true, text: `+${hours}h · ${money(100 * hours * roomCount)}` }
+          : { active: false, text: '' };
+      },
+    });
+
+    registerFeeCategory({
+      id: 'extra',
+      title: 'Extra person',
+      hint: '₱200 / night · max 1',
+      locked: !allowsExtraPerson,
+      buildBody: () => {
+        const row = document.createElement('label');
+        row.className = `admin-booking-fee-option${allowsExtraPerson ? '' : ' is-disabled'}`;
+        row.append(
+          extraInput,
+          Object.assign(document.createElement('span'), {
+            textContent: allowsExtraPerson
+              ? 'Add one extra person for this stay'
+              : 'Not available for this room setup',
+          })
+        );
+        return [row];
+      },
+      getMeta: () =>
+        extraInput.checked
+          ? { active: true, text: money(200 * nights) }
+          : { active: false, text: '' },
+    });
+
+    registerFeeCategory({
+      id: 'incidental',
+      title: 'Incidental',
+      hint: 'Damage · collect in cash at the desk',
+      buildBody: () => [
+        makeFeeField('Amount (₱)', incidentalInput),
+        makeFeeField('Note', incidentalNoteInput, true),
+        Object.assign(document.createElement('p'), {
+          className: 'admin-booking-fees-hint',
+          textContent: 'Collect incidental in cash at the desk.',
+        }),
+      ],
+      getMeta: () => {
+        const amount = parseMoneyInput(incidentalInput.value);
+        return amount > 0
+          ? { active: true, text: money(amount) }
+          : { active: false, text: '' };
+      },
+    });
+
+    registerFeeCategory({
+      id: 'snack',
+      title: 'Snack & beverage',
+      hint: 'Product · qty × unit price',
+      buildBody: () => {
+        const snackRow = document.createElement('div');
+        snackRow.className = 'admin-booking-fee-snack-row';
+        snackRow.append(
+          makeFeeField('Qty', snackQtyInput),
+          makeFeeField('Unit price (₱)', snackUnitInput)
+        );
+        return [
+          makeFeeField('Product', snackProductInput),
+          snackProductDatalist,
+          Object.assign(document.createElement('p'), {
+            className: 'admin-booking-fees-hint',
+            textContent: 'Suggestions: Bottled water, coffee, or Filipino snacks.',
+          }),
+          snackRow,
+          snackPreview,
+        ];
+      },
+      getMeta: () => {
+        const total =
+          Math.max(0, parseIntInput(snackQtyInput.value)) *
+          Math.max(0, parseMoneyInput(snackUnitInput.value));
+        if (total <= 0) return { active: false, text: '' };
+        const product = (snackProductInput.value || '').trim();
+        return {
+          active: true,
+          text: product ? `${product} · ${money(total)}` : money(total),
+        };
+      },
+    });
+
+    registerFeeCategory({
+      id: 'extend',
+      title: 'Extend stay',
+      hint: 'Adds nights and moves checkout date',
+      buildBody: () => [makeFeeField('Add nights', extendInput), extendPreview],
+      getMeta: () => {
+        const add = parseIntInput(extendInput.value);
+        if (add > 0) return { active: true, text: `+${add} night${add === 1 ? '' : 's'}` };
+        if (extensionNights > 0) {
+          return {
+            active: true,
+            text: `+${extensionNights} night${extensionNights === 1 ? '' : 's'}`,
+          };
+        }
+        return { active: false, text: '' };
+      },
+    });
+
+    const refreshAllFeeMeta = () => feeCategories.forEach((cat) => cat.refreshMeta());
+    [
+      earlyInput,
+      lateSelect,
+      extraInput,
+      incidentalInput,
+      incidentalNoteInput,
+      snackProductInput,
+      snackQtyInput,
+      snackUnitInput,
+      extendInput,
+    ].forEach((el) => {
+      el.addEventListener('input', refreshAllFeeMeta);
+      el.addEventListener('change', refreshAllFeeMeta);
+    });
+
+    const syncSnackPreview = () => {
+      const qty = parseIntInput(snackQtyInput.value);
+      const unit = parseMoneyInput(snackUnitInput.value);
+      snackPreview.textContent = `Line total: ${money(Math.max(0, qty) * Math.max(0, unit))}`;
+    };
+    snackQtyInput.addEventListener('input', syncSnackPreview);
+    snackUnitInput.addEventListener('input', syncSnackPreview);
+
+    feesLayout.append(feeTriggers, feePanels);
+
+    const feesMsg = document.createElement('p');
+    feesMsg.className = 'admin-booking-fees-msg';
+    feesMsg.dataset.feeMsg = '1';
+    feesMsg.hidden = true;
+
+    feesPanel.append(feesTitle, feesLede, feesLayout, feesMsg);
+
+    const collectStayFeesPayload = () => ({
+      earlyCheckIn: Boolean(earlyInput.checked),
+      lateCheckoutHours: Number(lateSelect.value || 0),
+      extraPersons: Boolean(extraInput.checked) ? 1 : 0,
+      incidentalAmount: parseMoneyInput(incidentalInput.value),
+      incidentalNote: (incidentalNoteInput.value || '').trim() || null,
+      serviceFeeAmount: 0,
+      snackBeverageQty: parseIntInput(snackQtyInput.value),
+      snackBeverageUnitAmount: parseMoneyInput(snackUnitInput.value),
+      snackBeverageProduct: (snackProductInput.value || '').trim() || null,
+      extendStayNights: Math.min(30, parseIntInput(extendInput.value)),
+    });
+
+    const buildAdditionalFeesSummary = (payload, updatedBooking) => {
+      const lines = [];
+      const updatedCharges = updatedBooking?.charges || [];
+      const findCharge = (type) =>
+        updatedCharges.find((c) => String(c.chargeType) === type);
+
+      if (payload.earlyCheckIn) {
+        const charge = findCharge('EarlyCheckIn');
+        lines.push({
+          label: 'Early check-in (11:30 AM)',
+          amount: charge ? Number(charge.amount || 0) : 500 * roomCount,
+        });
+      }
+      if (payload.lateCheckoutHours > 0) {
+        const charge = findCharge('LateCheckout');
+        lines.push({
+          label: `Late check-out (+${payload.lateCheckoutHours}h)`,
+          amount: charge
+            ? Number(charge.amount || 0)
+            : 100 * payload.lateCheckoutHours * roomCount,
+        });
+      }
+      if (payload.extraPersons > 0) {
+        const charge = findCharge('ExtraPerson');
+        lines.push({
+          label: 'Extra person',
+          amount: charge ? Number(charge.amount || 0) : 200 * nights,
+        });
+      }
+      if (payload.incidentalAmount > 0) {
+        const note = payload.incidentalNote ? ` · ${payload.incidentalNote}` : '';
+        lines.push({
+          label: `Incidental (cash)${note}`,
+          amount: payload.incidentalAmount,
+        });
+      }
+      const snackTotal =
+        Math.max(0, payload.snackBeverageQty) * Math.max(0, payload.snackBeverageUnitAmount);
+      if (snackTotal > 0) {
+        const product = payload.snackBeverageProduct
+          ? `${payload.snackBeverageProduct} · `
+          : '';
+        lines.push({
+          label: `Snack & beverage · ${product}${payload.snackBeverageQty} × ${money(payload.snackBeverageUnitAmount)}`,
+          amount: snackTotal,
+        });
+      }
+      const extendCharge = findCharge('StayExtension');
+      const extendQty = extendCharge
+        ? Number(extendCharge.quantity || 0)
+        : extensionNights + Math.max(0, payload.extendStayNights);
+      if (extendQty > 0 || payload.extendStayNights > 0) {
+        lines.push({
+          label: `Extend stay · +${Math.max(extendQty, payload.extendStayNights)} night${
+            Math.max(extendQty, payload.extendStayNights) === 1 ? '' : 's'
+          }`,
+          amount: extendCharge ? Number(extendCharge.amount || 0) : null,
+          note: 'Included in room stay',
+        });
+      }
+      return lines;
+    };
+
+    const showFeesSavedPopup = (lines, onOk) => {
+      const popup = detailModal?.querySelector('[data-fees-saved-popup]');
+      const list = detailModal?.querySelector('[data-fees-saved-list]');
+      const empty = detailModal?.querySelector('[data-fees-saved-empty]');
+      const okBtn = detailModal?.querySelector('[data-fees-saved-ok]');
+      if (!popup || !list || !okBtn) {
+        onOk?.();
+        return;
+      }
+      list.replaceChildren();
+      if (!lines.length) {
+        if (empty) empty.hidden = false;
+        list.hidden = true;
+      } else {
+        if (empty) empty.hidden = true;
+        list.hidden = false;
+        lines.forEach((line) => {
+          const item = document.createElement('li');
+          const label = document.createElement('span');
+          label.textContent = line.label;
+          if (line.note) {
+            label.append(
+              Object.assign(document.createElement('small'), { textContent: ` (${line.note})` })
+            );
+          }
+          const value = document.createElement('strong');
+          value.textContent = line.amount == null ? '—' : money(line.amount);
+          item.append(label, value);
+          list.append(item);
+        });
+      }
+      popup.hidden = false;
+      const finish = () => {
+        popup.hidden = true;
+        okBtn.removeEventListener('click', finish);
+        onOk?.();
+      };
+      okBtn.addEventListener('click', finish);
+      okBtn.focus();
+    };
+
     if (!booking.isArchived) {
       const saveFeesBtn = document.createElement('button');
       saveFeesBtn.type = 'button';
       saveFeesBtn.className = 'admin-booking-fees-save';
       saveFeesBtn.textContent = 'Save stay fees';
       saveFeesBtn.addEventListener('click', async () => {
-        const msg = feesPanel.querySelector('[data-fee-msg]');
         saveFeesBtn.disabled = true;
+        closeAllFeeDropdowns();
+        const payload = collectStayFeesPayload();
         try {
           const updated = await apiFetch(`/api/admin/bookings/${booking.id}/charges`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              earlyCheckIn: Boolean(feesPanel.querySelector('[data-fee-early]')?.checked),
-              lateCheckoutHours: Number(feesPanel.querySelector('[data-fee-late]')?.value || 0),
-              extraPersons: Boolean(feesPanel.querySelector('[data-fee-extra]')?.checked) ? 1 : 0,
-            }),
+            body: JSON.stringify(payload),
           });
-          await openBookingDetails(updated.id, updated);
+          const summaryLines = buildAdditionalFeesSummary(payload, updated);
+          showFeesSavedPopup(summaryLines, () => openBookingDetails(updated.id, updated));
         } catch (error) {
-          if (msg) {
-            msg.hidden = false;
-            msg.textContent = error instanceof Error ? error.message : 'Unable to save stay fees.';
-          }
+          feesMsg.hidden = false;
+          feesMsg.textContent = error instanceof Error ? error.message : 'Unable to save stay fees.';
           saveFeesBtn.disabled = false;
         }
       });
       feesPanel.append(saveFeesBtn);
     }
-
-    const roomCount = (booking.items || []).reduce((sum, line) => sum + Number(line.quantity || 0), 0);
     let itemLinesHtml = '';
     (booking.items || []).forEach((line) => {
       const qty = Number(line.quantity || 0);
@@ -2871,9 +3967,17 @@
         </div>
       `;
     });
+    if (extensionCharge) {
+      itemLinesHtml += `
+        <div class="admin-breakdown-row is-sub is-extension">
+          <span>${escapeHtml(extensionCharge.label || `Extra night(s) · +${extensionNights}`)} <small>(included in room stay)</small></span>
+          <strong>${money(extensionCharge.amount)}</strong>
+        </div>
+      `;
+    }
 
     let feeLinesHtml = '';
-    if (!charges.length) {
+    if (!billableCharges.length) {
       feeLinesHtml = `
         <div class="admin-breakdown-row is-sub">
           <span>No stay fees</span>
@@ -2881,7 +3985,7 @@
         </div>
       `;
     } else {
-      charges.forEach((charge) => {
+      billableCharges.forEach((charge) => {
         feeLinesHtml += `
           <div class="admin-breakdown-row is-sub">
             <span>${escapeHtml(charge.label || charge.chargeType || 'Fee')}</span>
@@ -3040,7 +4144,7 @@
           const note = document.createElement('p');
           note.className = 'admin-booking-assign-tip';
           if (balanceDue > 0.009) {
-            note.textContent = `Record full payment before assigning rooms. Balance due: ${money(balanceDue)}.`;
+            note.textContent = `Record full payment before finishing setup. Balance due: ${money(balanceDue)}.`;
           } else {
             note.textContent = arrivalAssignMessage(booking);
           }
@@ -3471,20 +4575,71 @@
     }
   }
 
-  async function openBookingDetails(id, cachedBooking = null) {
+  async function openBookingDetails(id, cachedBooking = null, options = {}) {
     if (!detailModal || !detailBody) return;
-    detailModal.hidden = false;
-    document.body.classList.add('admin-booking-modal-open');
-    detailBody.innerHTML = '<p>Loading details…</p>';
-    if (detailActions) detailActions.replaceChildren();
-    if (cachedBooking) await renderBookingDetails(cachedBooking);
+    const bookingId = Number(id);
+    if (!Number.isFinite(bookingId) || bookingId <= 0) return;
+
+    showBookingDetailsSkeleton(cachedBooking);
+    const requestSeq = (openBookingDetails._seq = (openBookingDetails._seq || 0) + 1);
 
     try {
-      const booking = await apiFetch(`/api/admin/bookings/${id}`);
-      await renderBookingDetails(booking);
+      const bookingPromise = options.markRead
+        ? apiFetch(`/api/admin/bookings/${bookingId}/read`, { method: 'POST' })
+        : apiFetch(`/api/admin/bookings/${bookingId}`);
+      const paymentPromise = apiFetch(`/api/admin/payments/booking/${bookingId}`).catch(() => null);
+
+      // Instant first paint from list/cache while network finishes.
+      if (cachedBooking?.items && !options.markRead) {
+        await renderBookingDetails(cachedBooking, { paymentSummary: null });
+        if (requestSeq !== openBookingDetails._seq) return;
+      }
+
+      const [booking, paymentSummary] = await Promise.all([bookingPromise, paymentPromise]);
+      if (requestSeq !== openBookingDetails._seq) return;
+      await renderBookingDetails(booking, { paymentSummary });
+
+      if (options.markRead) {
+        void refreshNotifications();
+      }
     } catch (error) {
+      if (requestSeq !== openBookingDetails._seq) return;
       detailBody.textContent = error instanceof Error ? error.message : 'Unable to load details.';
+      if (detailActions) detailActions.replaceChildren();
     }
+  }
+
+  function notificationTargetForItem(item) {
+    const message = String(item?.message || '');
+    if (/call guest: checkout|checkout in 20/i.test(message)) {
+      return { type: 'filter', url: '/AdminBookings?checkouts=soon' };
+    }
+    if (/call guest/i.test(message)) {
+      return { type: 'filter', url: '/AdminBookings?pendingCalls=soon' };
+    }
+    if (/arrival/i.test(message)) {
+      return { type: 'filter', url: '/AdminBookings?arrivals=soon' };
+    }
+    return { type: 'booking', id: Number(item.id) };
+  }
+
+  async function openBookingFromNotification(item) {
+    const target = notificationTargetForItem(item);
+    if (panel) {
+      panel.hidden = true;
+      bell?.setAttribute('aria-expanded', 'false');
+    }
+
+    if (target.type === 'filter') {
+      window.location.assign(target.url);
+      return;
+    }
+
+    await openBookingDetails(target.id, {
+      id: item.id,
+      reference: item.reference,
+      guestName: item.guestName,
+    }, { markRead: true });
   }
 
   async function updateStatus(booking, status, button, assignments, options = {}) {
@@ -3510,7 +4665,7 @@
       reservationCalendar?.refetchEvents();
       showBookingMessage(
         status === 'Confirmed' && !assignedNow
-          ? 'Booking confirmed. Assign rooms after full payment (from arrival date).'
+          ? 'Booking confirmed. Finish setup after full payment (from arrival date).'
           : 'Booking updated.'
       );
     } catch (error) {
@@ -3586,8 +4741,7 @@
 
   async function refreshBookings() {
     if (!bookingList) return;
-      bookingList.innerHTML =
-      '<tr><td colspan="8" class="admin-bookings-loading">Loading bookings…</td></tr>';
+    renderBookingsTableSkeleton();
     showBookingMessage('');
     try {
       const query = new URLSearchParams({ page: String(page), pageSize: '25' });
@@ -3615,12 +4769,17 @@
       if (prevButton) prevButton.disabled = page <= 1;
       if (nextButton) nextButton.disabled = page >= totalPages;
 
-      const selected = new URLSearchParams(window.location.search).get('booking');
-      if (selected && !selectedFromUrlHandled) {
-        selectedFromUrlHandled = true;
-        bookingList.querySelector(`[data-booking-id="${CSS.escape(selected)}"]`)
+      const selected =
+        pendingScrollBookingId
+        || Number(new URLSearchParams(window.location.search).get('booking') || 0);
+      if (selected) {
+        bookingList.querySelector(`[data-booking-id="${CSS.escape(String(selected))}"]`)
           ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        openBookingDetails(Number(selected));
+        pendingScrollBookingId = null;
+        if (!selectedFromUrlHandled) {
+          selectedFromUrlHandled = true;
+          void openBookingDetails(Number(selected), null, { markRead: true });
+        }
       }
     } catch (error) {
       bookingList.replaceChildren();
@@ -3635,9 +4794,17 @@
     }
   }
 
-  function initReservationCalendar() {
+  async function initReservationCalendar() {
     if (reservationCalendar || !calendarElement) return;
-    if (!window.FullCalendar?.Calendar) {
+    let ready = Boolean(window.FullCalendar?.Calendar);
+    if (!ready) {
+      try {
+        ready = await ensureFullCalendarLoaded();
+      } catch {
+        ready = false;
+      }
+    }
+    if (!ready || !window.FullCalendar?.Calendar) {
       if (calendarFallback) calendarFallback.hidden = false;
       return;
     }
@@ -3717,8 +4884,9 @@
         item.setAttribute('aria-selected', active ? 'true' : 'false');
       });
       if (showCalendar) {
-        initReservationCalendar();
-        reservationCalendar?.updateSize();
+        void initReservationCalendar().then(() => {
+          reservationCalendar?.updateSize();
+        });
       } else {
         if (history) {
           filter = '';
@@ -3739,7 +4907,10 @@
     setFlushLogExpanded(!open);
   });
   flushModal?.querySelectorAll('[data-history-flush-close]').forEach((button) => {
-    button.addEventListener('click', closeFlushModal);
+    button.addEventListener('click', () => {
+      if (document.body.classList.contains('is-exporting')) return;
+      closeFlushModal();
+    });
   });
   flushDetailModal?.querySelectorAll('[data-history-flush-detail-close]').forEach((button) => {
     button.addEventListener('click', closeFlushDetail);
@@ -3824,6 +4995,10 @@
   });
   paymentAddModal?.querySelector('[data-payment-ocr-apply]')?.addEventListener('click', applyPaymentOcrResult);
   paymentAddModal?.querySelector('[data-payment-ocr-discard]')?.addEventListener('click', discardPaymentOcrResult);
+  paymentAddModal?.querySelector('[data-payment-ocr-scanner-filter]')?.addEventListener(
+    'change',
+    onPaymentOcrScannerFilterToggle
+  );
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     if (isPhotoZoomOpen()) return;
@@ -3847,6 +5022,10 @@
   });
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
+    if (document.body.classList.contains('is-exporting')) {
+      event.preventDefault();
+      return;
+    }
     if (isPhotoZoomOpen()) return;
     if (flushDetailModal && !flushDetailModal.hidden) {
       closeFlushDetail();
@@ -4007,9 +5186,31 @@
     if (searchTimer) window.clearTimeout(searchTimer);
   });
 
-  refreshNotifications();
-  refreshBookings();
   const params = new URLSearchParams(window.location.search);
+  const earlyBookingId = Number(params.get('booking') || 0);
+  let earlyHint = null;
+  try {
+    const rawHint = sessionStorage.getItem('moriOpenBooking');
+    if (rawHint) {
+      sessionStorage.removeItem('moriOpenBooking');
+      const parsed = JSON.parse(rawHint);
+      if (parsed && Number(parsed.id) === earlyBookingId) earlyHint = parsed;
+    }
+  } catch {
+    sessionStorage.removeItem('moriOpenBooking');
+  }
+  if (earlyBookingId > 0 && !selectedFromUrlHandled) {
+    selectedFromUrlHandled = true;
+    pendingScrollBookingId = earlyBookingId;
+    // Open skeleton modal immediately — do not wait for the bookings table.
+    void openBookingDetails(earlyBookingId, earlyHint, { markRead: true });
+    const url = new URL(window.location.href);
+    url.searchParams.delete('booking');
+    window.history.replaceState({}, '', url.pathname + (url.search || ''));
+  }
+
+  void refreshNotifications();
+  void refreshBookings();
   if (params.get('pendingCalls') === 'soon' && !pendingCallsFromUrlHandled) {
     pendingCallsFromUrlHandled = true;
     openPendingCallsSoon();
@@ -4020,5 +5221,5 @@
     checkoutsFromUrlHandled = true;
     openCheckoutsSoon();
   }
-  startSignalR();
+  void startSignalR();
 })();

@@ -31,10 +31,16 @@ public static class DatabaseBootstrap
             }
 
             db.Database.Migrate();
-            EnsureAutoCheckoutColumns(db);
-            EnsureHistoryFlushLogTable(db);
-            EnsurePaymentRecordTable(db);
-            EnsureBookingChargeTable(db);
+
+            // Warm starts: one cheap existence probe, then skip redundant Ensure* SQL.
+            if (SchemaPatchesNeeded(db))
+            {
+                EnsureAutoCheckoutColumns(db);
+                EnsureHistoryFlushLogTable(db);
+                EnsurePaymentFlushLogTable(db);
+                EnsurePaymentRecordTable(db);
+                EnsureBookingChargeTable(db);
+            }
         }
         catch (Exception ex) when (IsSqlConnectivityFailure(ex))
         {
@@ -346,6 +352,57 @@ public static class DatabaseBootstrap
         }
     }
 
+    /// <summary>
+    /// Returns true when any post-migration patch target is still missing.
+    /// Single round-trip so warm app starts avoid four Ensure* scripts.
+    /// </summary>
+    private static bool SchemaPatchesNeeded(HotelBookingDbContext db)
+    {
+        try
+        {
+            var connection = db.Database.GetDbConnection();
+            var shouldClose = connection.State != System.Data.ConnectionState.Open;
+            if (shouldClose)
+            {
+                connection.Open();
+            }
+
+            try
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText =
+                    """
+                    SELECT CASE WHEN
+                        OBJECT_ID(N'[dbo].[Booking]', N'U') IS NULL
+                        OR COL_LENGTH(N'dbo.Booking', N'IsNotificationCleared') IS NULL
+                        OR COL_LENGTH(N'dbo.Booking', N'ArrivalWarningSentAtUtc') IS NULL
+                        OR COL_LENGTH(N'dbo.Booking', N'PendingCallWarningSentAtUtc') IS NULL
+                        OR COL_LENGTH(N'dbo.Booking', N'CheckoutWarningSentAtUtc') IS NULL
+                        OR OBJECT_ID(N'[dbo].[BookingHistoryFlushLog]', N'U') IS NULL
+                        OR OBJECT_ID(N'[dbo].[PaymentFlushLog]', N'U') IS NULL
+                        OR OBJECT_ID(N'[dbo].[PaymentRecord]', N'U') IS NULL
+                        OR OBJECT_ID(N'[dbo].[BookingCharge]', N'U') IS NULL
+                    THEN 1 ELSE 0 END
+                    """;
+                var result = command.ExecuteScalar();
+                return result is int i && i == 1
+                       || result is long l && l == 1
+                       || result is bool b && b;
+            }
+            finally
+            {
+                if (shouldClose)
+                {
+                    connection.Close();
+                }
+            }
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
     private static void EnsureHistoryFlushLogTable(HotelBookingDbContext db)
     {
         try
@@ -365,6 +422,34 @@ public static class DatabaseBootstrap
                     );
                     CREATE INDEX [IX_BookingHistoryFlushLog_FlushedAtUtc]
                         ON [dbo].[BookingHistoryFlushLog] ([FlushedAtUtc]);
+                END
+                """);
+        }
+        catch
+        {
+            // Ignore if table exists or transient schema check
+        }
+    }
+
+    private static void EnsurePaymentFlushLogTable(HotelBookingDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(
+                """
+                IF OBJECT_ID(N'[dbo].[PaymentFlushLog]', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[PaymentFlushLog] (
+                        [Id] int NOT NULL IDENTITY,
+                        [FlushedAtUtc] datetime2 NOT NULL,
+                        [PerformedBy] nvarchar(120) NOT NULL,
+                        [RecordCount] int NOT NULL,
+                        [FileName] nvarchar(200) NOT NULL,
+                        [Summary] nvarchar(2000) NOT NULL,
+                        CONSTRAINT [PK_PaymentFlushLog] PRIMARY KEY ([Id])
+                    );
+                    CREATE INDEX [IX_PaymentFlushLog_FlushedAtUtc]
+                        ON [dbo].[PaymentFlushLog] ([FlushedAtUtc]);
                 END
                 """);
         }

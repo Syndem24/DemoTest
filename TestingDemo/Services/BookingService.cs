@@ -22,6 +22,11 @@ public sealed class BookingService : IBookingService
     /// </summary>
     private static readonly TimeSpan PendingUnverifiedGrace = TimeSpan.FromHours(4);
 
+    /// <summary>
+    /// How long history export audit logs remain before auto-deletion.
+    /// </summary>
+    public static readonly TimeSpan FlushLogRetention = TimeSpan.FromDays(7);
+
     private readonly HotelBookingDbContext _db;
     private readonly IWebHostEnvironment _environment;
 
@@ -137,7 +142,7 @@ public sealed class BookingService : IBookingService
         var typeMeta = await LoadRoomTypeMetaAsync(
             requestedItems.Select(item => item.RoomTypeId),
             cancellationToken);
-        ReplaceCharges(
+        ReplaceTimeFees(
             booking,
             StayTimeFees.IsEarlyCheckIn(checkInAtUtc),
             StayTimeFees.LateCheckoutHours(checkoutTimeUtc),
@@ -275,7 +280,7 @@ public sealed class BookingService : IBookingService
         var typeMeta = await LoadRoomTypeMetaAsync(
             assignments.Select(item => item.RoomTypeId),
             cancellationToken);
-        ReplaceCharges(
+        ReplaceTimeFees(
             booking,
             StayTimeFees.IsEarlyCheckIn(checkInAtUtc),
             StayTimeFees.LateCheckoutHours(checkoutTimeUtc),
@@ -360,6 +365,7 @@ public sealed class BookingService : IBookingService
     {
         var booking = await _db.Bookings
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(item => item.Items)
                 .ThenInclude(line => line.RoomType)
             .Include(item => item.Items)
@@ -501,6 +507,7 @@ public sealed class BookingService : IBookingService
         limit = Math.Clamp(limit, 1, 50);
         var bookings = await _db.Bookings
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(b => b.Items)
                 .ThenInclude(i => i.AssignedRooms)
                     .ThenInclude(a => a.Room)
@@ -1187,7 +1194,7 @@ public sealed class BookingService : IBookingService
         var typeMeta = await LoadRoomTypeMetaAsync(
             booking.Items.Where(line => line.RoomTypeId.HasValue).Select(line => line.RoomTypeId!.Value),
             cancellationToken);
-        ReplaceCharges(booking, early, lateHours, extraPersons, typeMeta);
+        ReplaceTimeFees(booking, early, lateHours, extraPersons, typeMeta);
         RecalculateTotals(booking);
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -1224,15 +1231,34 @@ public sealed class BookingService : IBookingService
             throw new BookingConcurrencyException("This booking can no longer accept fee changes.");
         }
 
+        var extendNights = Math.Max(0, request.ExtendStayNights);
+        if (extendNights > 30)
+        {
+            throw new ArgumentException("Stay extension is limited to 30 nights per save.");
+        }
+
+        if (extendNights > 0)
+        {
+            var newCheckout = AddManilaCalendarDays(booking.CheckoutTimeUtc, extendNights);
+            await EnsureBookingItemsAvailableAsync(
+                booking,
+                booking.CheckInAtUtc,
+                newCheckout,
+                cancellationToken);
+            booking.CheckoutTimeUtc = newCheckout;
+            booking.CheckoutWarningSentAtUtc = null;
+        }
+
         var typeMeta = await LoadRoomTypeMetaAsync(
             booking.Items.Where(line => line.RoomTypeId.HasValue).Select(line => line.RoomTypeId!.Value),
             cancellationToken);
-        ReplaceCharges(
+        ReplaceTimeFees(
             booking,
             request.EarlyCheckIn,
             request.LateCheckoutHours,
             request.ExtraPersons,
             typeMeta);
+        UpsertReceptionExtras(booking, request, extendNights);
         booking.UpdatedAtUtc = DateTime.UtcNow;
         RecalculateTotals(booking);
 
@@ -1315,8 +1341,10 @@ public sealed class BookingService : IBookingService
         performedBy = performedBy?.Trim() ?? string.Empty;
         if (performedBy.Length < 2 || performedBy.Length > 120)
         {
-            throw new ArgumentException("Enter the staff name who is flushing history (2–120 characters).");
+            throw new ArgumentException("Enter the staff name who is exporting history (2–120 characters).");
         }
+
+        await PurgeExpiredHistoryFlushLogsAsync(cancellationToken);
 
         await using var transaction = await _db.Database.BeginTransactionAsync(
             IsolationLevel.Serializable,
@@ -1332,12 +1360,12 @@ public sealed class BookingService : IBookingService
 
         if (archived.Count == 0)
         {
-            throw new ArgumentException("History is empty — nothing to flush.");
+            throw new ArgumentException("History is empty — nothing to export.");
         }
 
         var flushedAtUtc = DateTime.UtcNow;
         var stamp = PhilippinesTime.ToManila(flushedAtUtc).ToString("yyyyMMdd-HHmm");
-        var fileName = $"Mori-History-Flush-{stamp}.pdf";
+        var fileName = $"Mori-History-Export-{stamp}.pdf";
         var logoPath = Path.Combine(_environment.WebRootPath, "Images", "Logo.png");
         var pdfBytes = BookingHistoryPdfBuilder.Build(archived, performedBy, flushedAtUtc, logoPath);
 
@@ -1361,18 +1389,14 @@ public sealed class BookingService : IBookingService
         return new FlushBookingHistoryResult(
             pdfBytes,
             fileName,
-            new BookingHistoryFlushLogDto(
-                log.Id,
-                log.FlushedAtUtc,
-                log.PerformedBy,
-                log.RecordCount,
-                log.FileName,
-                log.Summary));
+            MapHistoryFlushLog(log));
     }
 
     public async Task<IReadOnlyList<BookingHistoryFlushLogDto>> GetHistoryFlushLogsAsync(
         CancellationToken cancellationToken = default)
     {
+        await PurgeExpiredHistoryFlushLogsAsync(cancellationToken);
+
         return await _db.BookingHistoryFlushLogs
             .AsNoTracking()
             .OrderByDescending(log => log.FlushedAtUtc)
@@ -1380,11 +1404,40 @@ public sealed class BookingService : IBookingService
             .Select(log => new BookingHistoryFlushLogDto(
                 log.Id,
                 log.FlushedAtUtc,
+                log.FlushedAtUtc.Add(FlushLogRetention),
                 log.PerformedBy,
                 log.RecordCount,
                 log.FileName,
                 log.Summary))
             .ToListAsync(cancellationToken);
+    }
+
+    private async Task PurgeExpiredHistoryFlushLogsAsync(CancellationToken cancellationToken)
+    {
+        var cutoff = DateTime.UtcNow.Subtract(FlushLogRetention);
+        var expired = await _db.BookingHistoryFlushLogs
+            .Where(log => log.FlushedAtUtc < cutoff)
+            .ToListAsync(cancellationToken);
+
+        if (expired.Count == 0)
+        {
+            return;
+        }
+
+        _db.BookingHistoryFlushLogs.RemoveRange(expired);
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static BookingHistoryFlushLogDto MapHistoryFlushLog(BookingHistoryFlushLog log)
+    {
+        return new BookingHistoryFlushLogDto(
+            log.Id,
+            log.FlushedAtUtc,
+            log.FlushedAtUtc.Add(FlushLogRetention),
+            log.PerformedBy,
+            log.RecordCount,
+            log.FileName,
+            log.Summary);
     }
 
     private static string BuildFlushSummary(IReadOnlyList<Booking> archived)
@@ -1419,7 +1472,8 @@ public sealed class BookingService : IBookingService
             $"Total value: ₱{totalValue:N2}",
             roomTypes.Count > 0
                 ? $"Rooms: {string.Join(", ", roomTypes)}"
-                : "Rooms: —"
+                : "Rooms: —",
+            "Export log retained for 7 days, then auto-deleted."
         };
 
         var summary = string.Join('\n', lines);
@@ -1761,28 +1815,23 @@ public sealed class BookingService : IBookingService
         Booking booking,
         IReadOnlyDictionary<int, (int MaxOccupancy, string Name)> typeMeta)
     {
-        foreach (var line in booking.Items)
-        {
-            if (line.RoomTypeId is int id && typeMeta.TryGetValue(id, out var meta))
-            {
-                if (StayTimeFees.IsSingleRoomType(meta.MaxOccupancy, meta.Name))
-                {
-                    return true;
-                }
-
-                continue;
-            }
-
-            if (StayTimeFees.IsSingleRoomType(line.RoomType?.MaxOccupancy ?? 0, line.RoomTypeName))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        // Extra person (max 1, ₱200/night) is allowed on any room selection.
+        _ = booking;
+        _ = typeMeta;
+        return true;
     }
 
-    private void ReplaceCharges(
+    private static readonly BookingChargeType[] TimeFeeTypes =
+    [
+        BookingChargeType.EarlyCheckIn,
+        BookingChargeType.LateCheckout,
+        BookingChargeType.ExtraPerson
+    ];
+
+    /// <summary>
+    /// Rebuilds early / late / extra-person charges only; preserves reception extras.
+    /// </summary>
+    private void ReplaceTimeFees(
         Booking booking,
         bool earlyCheckIn,
         int lateCheckoutHours,
@@ -1803,10 +1852,16 @@ public sealed class BookingService : IBookingService
             booking.CheckoutTimeUtc,
             StayTimeFees.DefaultCheckOutTime + TimeSpan.FromHours(lateCheckoutHours));
 
-        if (booking.Charges.Count > 0)
+        var toRemove = booking.Charges
+            .Where(c => TimeFeeTypes.Contains(c.ChargeType))
+            .ToList();
+        if (toRemove.Count > 0)
         {
-            _db.BookingCharges.RemoveRange(booking.Charges);
-            booking.Charges.Clear();
+            _db.BookingCharges.RemoveRange(toRemove);
+            foreach (var charge in toRemove)
+            {
+                booking.Charges.Remove(charge);
+            }
         }
 
         var rooms = RoomCount(booking);
@@ -1859,11 +1914,215 @@ public sealed class BookingService : IBookingService
         }
     }
 
+    private void UpsertReceptionExtras(
+        Booking booking,
+        UpdateBookingChargesRequest request,
+        int extendNightsAdded)
+    {
+        var now = DateTime.UtcNow;
+        var incidental = decimal.Round(Math.Max(0m, request.IncidentalAmount), 2, MidpointRounding.AwayFromZero);
+        var service = decimal.Round(Math.Max(0m, request.ServiceFeeAmount), 2, MidpointRounding.AwayFromZero);
+        var snackQty = Math.Max(0, request.SnackBeverageQty);
+        var snackUnit = decimal.Round(Math.Max(0m, request.SnackBeverageUnitAmount), 2, MidpointRounding.AwayFromZero);
+        var snackTotal = decimal.Round(snackQty * snackUnit, 2, MidpointRounding.AwayFromZero);
+
+        if (incidental > 0m)
+        {
+            var note = string.IsNullOrWhiteSpace(request.IncidentalNote)
+                ? null
+                : request.IncidentalNote.Trim();
+            if (note is { Length: > 80 })
+            {
+                note = note[..80];
+            }
+
+            var label = string.IsNullOrWhiteSpace(note)
+                ? "Incidental (damage) · cash"
+                : $"Incidental (damage) · cash · {note}";
+            UpsertCharge(
+                booking,
+                BookingChargeType.Incidental,
+                label,
+                quantity: 1,
+                nights: 1,
+                unitAmount: incidental,
+                amount: incidental,
+                now);
+        }
+        else
+        {
+            RemoveChargesOfType(booking, BookingChargeType.Incidental);
+        }
+
+        if (service > 0m)
+        {
+            UpsertCharge(
+                booking,
+                BookingChargeType.ServiceFee,
+                "Service fee",
+                quantity: 1,
+                nights: 1,
+                unitAmount: service,
+                amount: service,
+                now);
+        }
+        else
+        {
+            RemoveChargesOfType(booking, BookingChargeType.ServiceFee);
+        }
+
+        if (snackQty > 0 && snackUnit > 0m)
+        {
+            var product = string.IsNullOrWhiteSpace(request.SnackBeverageProduct)
+                ? null
+                : request.SnackBeverageProduct.Trim();
+            if (product is { Length: > 80 })
+            {
+                product = product[..80];
+            }
+
+            var snackLabel = string.IsNullOrWhiteSpace(product)
+                ? $"Snack & beverage · {snackQty} × {snackUnit:N2}"
+                : $"Snack & beverage · {product} · {snackQty} × {snackUnit:N2}";
+            UpsertCharge(
+                booking,
+                BookingChargeType.SnackBeverage,
+                snackLabel,
+                quantity: snackQty,
+                nights: 1,
+                unitAmount: snackUnit,
+                amount: snackTotal,
+                now);
+        }
+        else
+        {
+            RemoveChargesOfType(booking, BookingChargeType.SnackBeverage);
+        }
+
+        if (extendNightsAdded > 0)
+        {
+            var nightlyRoomTotal = booking.Items.Sum(line => line.PricePerNight * line.Quantity);
+            var existing = booking.Charges.FirstOrDefault(c => c.ChargeType == BookingChargeType.StayExtension);
+            var totalExtraNights = (existing?.Quantity ?? 0) + extendNightsAdded;
+            var extensionAmount = decimal.Round(
+                nightlyRoomTotal * totalExtraNights,
+                2,
+                MidpointRounding.AwayFromZero);
+            UpsertCharge(
+                booking,
+                BookingChargeType.StayExtension,
+                $"Extra night(s) · +{totalExtraNights}",
+                quantity: totalExtraNights,
+                nights: totalExtraNights,
+                unitAmount: nightlyRoomTotal,
+                amount: extensionAmount,
+                now);
+        }
+        else if (booking.Charges.Any(c => c.ChargeType == BookingChargeType.StayExtension))
+        {
+            // Refresh amount if rates/qty changed but nights were not extended this save.
+            var existing = booking.Charges.First(c => c.ChargeType == BookingChargeType.StayExtension);
+            var nightlyRoomTotal = booking.Items.Sum(line => line.PricePerNight * line.Quantity);
+            existing.UnitAmount = nightlyRoomTotal;
+            existing.Amount = decimal.Round(nightlyRoomTotal * existing.Quantity, 2, MidpointRounding.AwayFromZero);
+            existing.Label = $"Extra night(s) · +{existing.Quantity}";
+            existing.Nights = existing.Quantity;
+        }
+    }
+
+    private void UpsertCharge(
+        Booking booking,
+        BookingChargeType type,
+        string label,
+        int quantity,
+        int nights,
+        decimal unitAmount,
+        decimal amount,
+        DateTime now)
+    {
+        var existing = booking.Charges.FirstOrDefault(c => c.ChargeType == type);
+        if (existing == null)
+        {
+            booking.Charges.Add(new BookingCharge
+            {
+                ChargeType = type,
+                Label = label,
+                Quantity = quantity,
+                Nights = nights,
+                UnitAmount = unitAmount,
+                Amount = amount,
+                CreatedAtUtc = now
+            });
+            return;
+        }
+
+        existing.Label = label;
+        existing.Quantity = quantity;
+        existing.Nights = nights;
+        existing.UnitAmount = unitAmount;
+        existing.Amount = amount;
+    }
+
+    private void RemoveChargesOfType(Booking booking, BookingChargeType type)
+    {
+        var toRemove = booking.Charges.Where(c => c.ChargeType == type).ToList();
+        if (toRemove.Count == 0) return;
+        _db.BookingCharges.RemoveRange(toRemove);
+        foreach (var charge in toRemove)
+        {
+            booking.Charges.Remove(charge);
+        }
+    }
+
+    private static DateTime AddManilaCalendarDays(DateTime utcMoment, int days)
+    {
+        var local = PhilippinesTime.ToManila(utcMoment);
+        var shifted = DateTime.SpecifyKind(local.AddDays(days), DateTimeKind.Unspecified);
+        return PhilippinesTime.ToUtc(shifted);
+    }
+
+    private async Task EnsureBookingItemsAvailableAsync(
+        Booking booking,
+        DateTime checkInAtUtc,
+        DateTime checkoutTimeUtc,
+        CancellationToken cancellationToken)
+    {
+        var capacities = await GetPhysicalCapacityByTypeAsync(cancellationToken);
+        var capacityByType = capacities.ToDictionary(item => item.RoomTypeId);
+
+        foreach (var line in booking.Items.Where(item => item.RoomTypeId.HasValue))
+        {
+            var typeId = line.RoomTypeId!.Value;
+            if (!capacityByType.TryGetValue(typeId, out var roomType))
+            {
+                throw new BookingAvailabilityException(
+                    "One of the room types on this booking is no longer available.");
+            }
+
+            var heldByOthers = await GetHeldQuantityForTypeAsync(
+                typeId,
+                checkInAtUtc,
+                checkoutTimeUtc,
+                excludeBookingId: booking.Id,
+                cancellationToken);
+
+            if (heldByOthers + line.Quantity > roomType.Capacity)
+            {
+                var remaining = Math.Max(0, roomType.Capacity - heldByOthers);
+                throw new BookingAvailabilityException(
+                    $"{roomType.RoomTypeName} has only {remaining} room(s) available for the extended dates.");
+            }
+        }
+    }
+
     private static void RecalculateTotals(Booking booking)
     {
         var nights = StayNights(booking.CheckInAtUtc, booking.CheckoutTimeUtc);
         var stay = booking.Items.Sum(line => line.PricePerNight * line.Quantity * nights);
-        var fees = booking.Charges.Sum(charge => charge.Amount);
+        // StayExtension amount is display-only (lodging already includes those nights via dates).
+        var fees = booking.Charges
+            .Where(charge => charge.ChargeType != BookingChargeType.StayExtension)
+            .Sum(charge => charge.Amount);
         booking.TotalAmount = decimal.Round(stay + fees, 2, MidpointRounding.AwayFromZero);
         booking.AmountDueNow = ComputeAmountDueNow(booking.TotalAmount, booking.PaymentOption);
     }

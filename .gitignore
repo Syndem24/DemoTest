@@ -1,4 +1,4 @@
-﻿## Build
+## Build
 **/bin/
 **/obj/
 **/node_modules/
@@ -12,6 +12,9 @@ ClientApp/dist/
 **/appsettings.*.local.json
 .env
 .env.*
+
+## Azure OCR soft quota tracker (local)
+TestingDemo/App_Data/
 
 ## Uploads (optional — keep empty folder if needed)
 TestingDemo/wwwroot/uploads/

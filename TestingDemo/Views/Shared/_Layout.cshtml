@@ -23,6 +23,10 @@
         && string.Equals(action, "Privacy", StringComparison.OrdinalIgnoreCase)
         ? "is-active"
         : string.Empty;
+    var isRoomsController = string.Equals(controller, "Rooms", StringComparison.OrdinalIgnoreCase);
+    var needsPhotoZoom = !string.IsNullOrEmpty(adminBookingsActive)
+        || !string.IsNullOrEmpty(adminPaymentsActive)
+        || isRoomsController;
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -30,6 +34,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - Mori International Hotel</title>
+    <link rel="icon" type="image/png" href="~/Images/Logo.png" asp-append-version="true" />
+    <link rel="apple-touch-icon" href="~/Images/Logo.png" asp-append-version="true" />
     <script type="importmap"></script>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
@@ -156,20 +162,42 @@
         </footer>
     </div>
 
-    <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/lib/signalr/signalr.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
-    <script src="~/js/photo-zoom.js" asp-append-version="true"></script>
-    @if (!string.IsNullOrEmpty(adminBookingsActive))
+    @if (needsPhotoZoom)
     {
-        <script src="~/lib/fullcalendar/core.min.js"></script>
-        <script src="~/lib/fullcalendar/daygrid.min.js"></script>
-        <script src="~/lib/fullcalendar/list.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+        <script src="~/js/photo-zoom.js" asp-append-version="true"></script>
     }
     <div id="adminAntiForgery" hidden>@Html.AntiForgeryToken()</div>
-    <script src="~/js/admin-bookings.js" asp-append-version="true"></script>
+    <div class="admin-export-loading" data-admin-export-loading hidden>
+        <div class="admin-export-loading-card" role="status" aria-live="assertive" aria-atomic="true" tabindex="-1">
+            <div class="admin-export-loading-spinner" aria-hidden="true"></div>
+            <strong data-admin-export-loading-title>Exporting data…</strong>
+            <p data-admin-export-loading-detail>Building PDF softcopy — please wait.</p>
+            <span class="admin-export-loading-dots" aria-hidden="true">
+                <i></i><i></i><i></i>
+            </span>
+        </div>
+    </div>
+    @if (!string.IsNullOrEmpty(adminBookingsActive))
+    {
+        <script>
+            window.__adminBookingsAssets = {
+                fullCalendar: [
+                    '@Url.Content("~/lib/fullcalendar/core.min.js")',
+                    '@Url.Content("~/lib/fullcalendar/daygrid.min.js")',
+                    '@Url.Content("~/lib/fullcalendar/list.min.js")'
+                ],
+                tesseract: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'
+            };
+        </script>
+        <script src="~/js/admin-bookings.js" asp-append-version="true"></script>
+    }
+    else
+    {
+        <script src="~/js/admin-notifications.js" asp-append-version="true"></script>
+    }
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const shell = document.body;

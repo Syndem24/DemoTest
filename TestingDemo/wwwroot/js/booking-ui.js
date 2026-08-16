@@ -12,7 +12,16 @@
   let toastTimer = null;
   let lastFocusedElement = null;
 
-  const MAX_GUESTS_PER_ROOM = 2;
+  function tx(key, params, fallback) {
+    const value = window.MoriI18n?.t?.(key, params);
+    if (value && value !== key) return value;
+    return fallback ?? key;
+  }
+
+  const BASE_GUESTS_PER_ROOM = 2;
+  const MAX_GUESTS_PER_ROOM = 3;
+  const MAX_EXTRA_PERSONS = 1;
+  const EXTRA_PERSON_FEE_PER_NIGHT = 200;
   const MAX_CHILD_AGE = 12;
   const MAX_GUEST_ROOMS = 8;
   const EARLY_CHECKIN_TIME = '11:30';
@@ -33,15 +42,27 @@
   /** @type {{ adults: number, children: number, childAges: (number|null)[] }[]} */
   let guestRooms = [{ adults: 2, children: 0, childAges: [] }];
   let preferredRoomType = '';
+  /** Room to auto-add (qty 1) when entering the offer step after Book on a card/details. */
+  let pendingSeedRoomType = '';
   let guestsHintTimer = null;
   const BOOK_WIZARD_STEPS = ['guest', 'dates', 'rooms', 'confirm'];
   let bookWizardStep = 'guest';
+  /** @type {'initial' | 'change'} */
+  let offerSelectMode = 'initial';
+  let bookingCartTotalsOpen = false;
+  /** Room type marked for replacement (kept in cart, blurred until a new room is added). */
+  let pendingChangeRoomType = '';
+  /** How many rooms of that type are being replaced (usually 1). */
+  let pendingChangeQty = 0;
 
   function setNavOpen(open) {
     if (!guestNav || !guestNavToggle) return;
     guestNav.classList.toggle('is-open', open);
     guestNavToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-    guestNavToggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    guestNavToggle.setAttribute(
+      'aria-label',
+      open ? tx('lang.closeMenu', null, 'Close menu') : tx('lang.openMenu', null, 'Open menu')
+    );
   }
 
   guestNavToggle?.addEventListener('click', () => {
@@ -172,7 +193,7 @@
 
     nodes.forEach((el, index) => {
       if (!el.style.getPropertyValue('--reveal-delay')) {
-        const step = roomsCadence ? 110 : 90;
+        const step = roomsCadence ? 70 : 90;
         el.style.setProperty('--reveal-delay', `${Math.min(index % 5, 4) * step}ms`);
       }
     });
@@ -433,7 +454,7 @@
     if (!groups.length) {
       const empty = document.createElement('p');
       empty.className = 'guest-inclusion-empty';
-      empty.textContent = 'No listed inclusions';
+      empty.textContent = tx('details.noInclusions', null, 'No listed inclusions');
       container.appendChild(empty);
       return;
     }
@@ -441,10 +462,12 @@
     groups.forEach((group) => {
       const section = document.createElement('section');
       section.className = 'guest-inclusion-group';
+      const groupLabel =
+        window.MoriI18n?.translateInclusionCategory?.(group.name) || group.name;
 
       const heading = document.createElement('h3');
       heading.className = 'guest-inclusion-group-title';
-      heading.innerHTML = `<span class="guest-inclusion-icon">${iconSvg(iconForCategory(group.name))}</span><span>${group.name}</span>`;
+      heading.innerHTML = `<span class="guest-inclusion-icon">${iconSvg(iconForCategory(group.name))}</span><span>${groupLabel}</span>`;
       section.appendChild(heading);
 
       const list = document.createElement('ul');
@@ -552,17 +575,36 @@
 
     if (title) title.textContent = roomTypeStr;
     if (price) price.textContent = formattedPrice;
-    if (occupancy) occupancy.textContent = `Up to ${card.dataset.occupancy || '—'} guests`;
-    if (beds) beds.textContent = `${card.dataset.beds || '—'} bed(s)`;
-    if (description) description.textContent = fullDesc || 'No description provided.';
+    if (occupancy) {
+      occupancy.textContent = tx(
+        'rooms.upToGuests',
+        { n: card.dataset.occupancy || '—' },
+        `Up to ${card.dataset.occupancy || '—'} guests`
+      );
+    }
+    if (beds) {
+      const bedCount = Number(card.dataset.beds || 0);
+      beds.textContent =
+        bedCount === 1
+          ? tx('rooms.bed', { n: bedCount || card.dataset.beds || '—' }, `${card.dataset.beds || '—'} bed`)
+          : tx('rooms.beds', { n: bedCount || card.dataset.beds || '—' }, `${card.dataset.beds || '—'} beds`);
+    }
+    if (description) {
+      description.textContent =
+        fullDesc || tx('details.noDescription', null, 'No description provided.');
+    }
     if (bookBtn) {
       bookBtn.dataset.fillRoom = roomTypeStr;
       bookBtn.disabled = !isAvailable;
-      bookBtn.textContent = isAvailable ? 'Book this room' : 'Unavailable for these dates';
+      bookBtn.textContent = isAvailable
+        ? tx('details.bookThisRoom', null, 'Book this room')
+        : tx('details.unavailable', null, 'Unavailable for these dates');
     }
 
     if (statusPill) {
-      statusPill.textContent = isAvailable ? 'Available' : 'Reserved';
+      statusPill.textContent = isAvailable
+        ? tx('details.available', null, 'Available')
+        : tx('details.reserved', null, 'Reserved');
       statusPill.className = `guest-pill ${isAvailable ? 'is-available' : 'is-unavailable'}`;
     }
 
@@ -630,28 +672,14 @@
 
   function getRoomMeta(roomType) {
     if (!roomType) return null;
-    const modalSelect = document.getElementById('modalRoomType');
-    const opt = modalSelect
-      ? Array.from(modalSelect.options).find((o) => o.value === roomType)
-      : null;
     const card = findRoomCard(roomType);
-    const occupancy = Number(card?.dataset.occupancy || 0);
-    if (opt?.value) {
-      return {
-        roomTypeId: Number(opt.dataset.roomTypeId || 0),
-        roomType: opt.value,
-        available: Number(opt.dataset.available || 0),
-        price: Number(opt.dataset.price || 0),
-        occupancy,
-      };
-    }
     if (!card) return null;
     return {
       roomTypeId: Number(card.dataset.roomTypeId || 0),
       roomType: card.dataset.roomType || roomType,
       available: Number(card.dataset.available || 0),
       price: Number(card.dataset.price || 0),
-      occupancy,
+      occupancy: Number(card.dataset.occupancy || 0),
     };
   }
 
@@ -718,6 +746,46 @@
     return earlyCheckInFee(rooms) + lateCheckOutFee(rooms);
   }
 
+  /** Extra persons beyond 2 included guests/room, capped at 1 for the booking. */
+  function extraPersonsSelected() {
+    const raw = guestRooms.reduce((sum, room) => {
+      const total = (Number(room.adults) || 0) + (Number(room.children) || 0);
+      return sum + Math.max(0, total - BASE_GUESTS_PER_ROOM);
+    }, 0);
+    return Math.min(MAX_EXTRA_PERSONS, raw);
+  }
+
+  function extraPersonFee(nights = nightCount(modalCheckIn?.value || '', modalCheckOut?.value || '')) {
+    const extras = extraPersonsSelected();
+    if (extras < 1 || nights < 1) return 0;
+    return extras * EXTRA_PERSON_FEE_PER_NIGHT * nights;
+  }
+
+  function stayFeesTotal(rooms = cartRoomCount()) {
+    return timeFeesTotal(rooms) + extraPersonFee();
+  }
+
+  function roomHasExtraGuest(room) {
+    const total = (Number(room?.adults) || 0) + (Number(room?.children) || 0);
+    return total > BASE_GUESTS_PER_ROOM;
+  }
+
+  /** Max guests this booking can hold for a given room count (2/room + 1 extra). */
+  function maxPartyForRoomCount(roomCount) {
+    return Math.max(0, roomCount) * BASE_GUESTS_PER_ROOM + MAX_EXTRA_PERSONS;
+  }
+
+  function effectiveGuestsPerRoom() {
+    return MAX_GUESTS_PER_ROOM;
+  }
+
+  function bookingAlreadyUsesExtra(exceptRoomIndex = -1) {
+    return guestRooms.some((room, index) => {
+      if (index === exceptRoomIndex) return false;
+      return roomHasExtraGuest(room);
+    });
+  }
+
   let lastTimeFeeRoomCount = -1;
 
   function refreshStayTimeOptions(force = false) {
@@ -775,12 +843,21 @@
     const early = earlyCheckInFee(rooms);
     const late = lateCheckOutFee(rooms);
     const hours = lateCheckOutHours();
+    const nights = nightCount(modalCheckIn?.value || '', modalCheckOut?.value || '');
+    const extra = extraPersonFee(nights);
     const parts = [];
     if (early > 0) {
       parts.push(`Early check-in (${EARLY_CHECKIN_TIME}): ${formatMoney(early)} (${formatMoney(EARLY_CHECKIN_FEE_PER_ROOM)} × ${rooms} room${rooms === 1 ? '' : 's'})`);
     }
     if (late > 0) {
       parts.push(`Late check-out (+${hours}h): ${formatMoney(late)} (${formatMoney(LATE_CHECKOUT_FEE_PER_ROOM_PER_HOUR)} × ${rooms} room${rooms === 1 ? '' : 's'} × ${hours}h)`);
+    }
+    if (extra > 0) {
+      parts.push(
+        `Extra person: ${formatMoney(extra)} (${formatMoney(EXTRA_PERSON_FEE_PER_NIGHT)} × ${nights} night${nights === 1 ? '' : 's'})`
+      );
+    } else if (extraPersonsSelected() > 0 && nights < 1) {
+      parts.push(`Extra person: ${formatMoney(EXTRA_PERSON_FEE_PER_NIGHT)} / night (added after dates)`);
     }
     hint.hidden = parts.length === 0;
     hint.textContent = parts.length
@@ -790,12 +867,7 @@
 
   function cartGuestHoldCapacity() {
     if (!bookingCart.length) return 0;
-    return bookingCart.reduce((sum, line) => {
-      const meta = getRoomMeta(line.roomType);
-      const listed = meta?.occupancy > 0 ? meta.occupancy : MAX_GUESTS_PER_ROOM;
-      const perRoom = Math.min(listed, MAX_GUESTS_PER_ROOM);
-      return sum + line.qty * perRoom;
-    }, 0);
+    return maxPartyForRoomCount(cartRoomCount());
   }
 
   function guestPartyCount() {
@@ -831,18 +903,77 @@
       : '';
   }
 
+  function buildPriceBreakdownLines() {
+    const nights = nightCount(modalCheckIn?.value || '', modalCheckOut?.value || '');
+    const rooms = cartRoomCount();
+    const lines = [];
+
+    bookingCart.forEach((line) => {
+      const perNight = line.qty * line.price;
+      const amount = nights > 0 ? perNight * nights : perNight;
+      lines.push({
+        label:
+          nights > 1
+            ? `${line.roomType} · ${line.qty} × ${formatMoney(line.price)} × ${nights} nights`
+            : `${line.roomType} · ${line.qty} × ${formatMoney(line.price)}${nights === 1 ? '' : ' / night'}`,
+        amount: formatMoney(amount),
+      });
+    });
+
+    const early = earlyCheckInFee(rooms);
+    if (early > 0) {
+      lines.push({ label: `Early check-in (${EARLY_CHECKIN_TIME})`, amount: formatMoney(early) });
+    }
+    const late = lateCheckOutFee(rooms);
+    const lateHours = lateCheckOutHours();
+    if (late > 0) {
+      lines.push({
+        label: `Late check-out (+${lateHours}h)`,
+        amount: formatMoney(late),
+      });
+    }
+    const extra = extraPersonFee(nights);
+    if (extra > 0) {
+      lines.push({
+        label: `Extra person · ${nights} night${nights === 1 ? '' : 's'}`,
+        amount: formatMoney(extra),
+      });
+    } else if (extraPersonsSelected() > 0 && nights < 1) {
+      lines.push({
+        label: 'Extra person',
+        amount: `${formatMoney(EXTRA_PERSON_FEE_PER_NIGHT)} / night`,
+      });
+    }
+
+    return lines;
+  }
+
+  function syncTotalsDisclosureUi() {
+    const toggle = document.getElementById('bookingCartTotalsToggle');
+    const panel = document.getElementById('bookingCartTotalsPanel');
+    if (toggle) toggle.setAttribute('aria-expanded', bookingCartTotalsOpen ? 'true' : 'false');
+    if (panel) panel.hidden = !bookingCartTotalsOpen;
+    document.getElementById('bookingCartSummary')?.classList.toggle('is-open', bookingCartTotalsOpen);
+  }
+
+  function setBookingCartTotalsOpen(open) {
+    bookingCartTotalsOpen = Boolean(open);
+    syncTotalsDisclosureUi();
+  }
+
   function syncCartSubmitState() {
     const submitBtn = document.getElementById('bookModalSubmit');
     const status = document.getElementById('bookingCartStatus');
     const summary = document.getElementById('bookingCartSummary');
     const summaryLabel = document.getElementById('bookingCartSummaryLabel');
     const summaryTotal = document.getElementById('bookingCartSummaryTotal');
+    const totalsLines = document.getElementById('bookingCartTotalsLines');
     const totalRooms = cartRoomCount();
     const nightTotal = cartNightlyTotal();
     const nights = nightCount(modalCheckIn?.value || '', modalCheckOut?.value || '');
     const stayTotal = nights > 0 ? nightTotal * nights : 0;
-    const fees = timeFeesTotal(totalRooms);
-    const grandTotal = stayTotal + fees;
+    const fees = stayFeesTotal(totalRooms);
+    const grandTotal = nights > 0 ? stayTotal + fees : nightTotal;
     const hasRooms = bookingCart.length > 0;
     const acceptedTerms = document.getElementById('acceptStayTerms')?.checked === true;
     const overCapacity = isGuestCapacityExceeded();
@@ -864,33 +995,49 @@
       status.classList.toggle('is-ready', hasRooms && !overCapacity);
       status.classList.toggle('is-over-capacity', overCapacity);
       if (!hasRooms) {
-        status.textContent = 'Cart empty';
+        status.textContent = tx('booking.cartEmpty', null, 'Cart empty');
       } else if (overCapacity) {
-        status.textContent = 'Capacity exceeded';
+        status.textContent = tx('booking.capacityExceeded', null, 'Capacity exceeded');
       } else {
-        status.textContent = `${totalRooms} room${totalRooms === 1 ? '' : 's'} ready`;
+        status.textContent =
+          totalRooms === 1
+            ? tx('booking.roomsReady', { n: totalRooms }, `${totalRooms} room ready`)
+            : tx('booking.roomsReadyPlural', { n: totalRooms }, `${totalRooms} rooms ready`);
       }
     }
 
     if (summary) summary.hidden = !hasRooms;
+    if (!hasRooms) {
+      setBookingCartTotalsOpen(false);
+    }
+
     if (summaryLabel) {
       if (nights > 0) {
         summaryLabel.textContent = fees > 0
-          ? `${totalRooms} room${totalRooms === 1 ? '' : 's'} · ${nights} night${nights === 1 ? '' : 's'} · time fees`
+          ? `${totalRooms} room${totalRooms === 1 ? '' : 's'} · ${nights} night${nights === 1 ? '' : 's'} · fees`
           : `${totalRooms} room${totalRooms === 1 ? '' : 's'} · ${nights} night${nights === 1 ? '' : 's'}`;
       } else {
-        summaryLabel.textContent = `${totalRooms} room${totalRooms === 1 ? '' : 's'} selected · pick dates`;
+        summaryLabel.textContent = `${totalRooms} room${totalRooms === 1 ? '' : 's'} · per night`;
       }
     }
     if (summaryTotal) {
-      if (nights > 0) {
-        summaryTotal.textContent = fees > 0
-          ? `${formatMoney(grandTotal)} total`
-          : `${formatMoney(stayTotal)} stay total`;
-      } else {
-        summaryTotal.textContent = `${formatMoney(nightTotal)} / night`;
+      summaryTotal.textContent = nights > 0
+        ? formatMoney(grandTotal)
+        : `${formatMoney(nightTotal)} / night`;
+    }
+    if (totalsLines) {
+      const lines = buildPriceBreakdownLines();
+      totalsLines.innerHTML = lines
+        .map(
+          (line) =>
+            `<li><span>${escapeHtml(line.label)}</span><strong>${escapeHtml(line.amount)}</strong></li>`
+        )
+        .join('');
+      if (nights > 0 && lines.length) {
+        totalsLines.innerHTML += `<li class="is-grand"><span>Stay total</span><strong>${formatMoney(grandTotal)}</strong></li>`;
       }
     }
+    syncTotalsDisclosureUi();
     updatePaymentPreview();
   }
 
@@ -919,33 +1066,142 @@
     if (summary) summary.hidden = false;
 
     bookingCart.forEach((line) => {
-      const lineTotal = line.qty * line.price;
       const otherRooms = cartRoomCount() - line.qty;
       const maxByIntent = Math.max(0, intendedRoomCount() - otherRooms);
-      const canInc = line.qty < line.available && line.qty < maxByIntent;
-      const li = document.createElement('li');
-      li.className = 'guest-offer-cart-item';
-      li.innerHTML = `
-        <div class="guest-offer-cart-item-main">
-          <strong>${escapeHtml(line.roomType)}</strong>
-          <span class="guest-offer-cart-item-meta">${line.qty} × ${formatMoney(line.price)} / night</span>
-        </div>
-        <span class="guest-offer-cart-item-total">${formatMoney(lineTotal)}</span>
-        <div class="guest-offer-cart-item-actions">
-          <div class="guest-offer-cart-qty">
-            <button type="button" data-offer-cart-delta="-1" data-offer-cart-room="${escapeHtml(line.roomType)}" aria-label="Fewer ${escapeHtml(line.roomType)}">−</button>
-            <span>${line.qty}</span>
-            <button type="button" data-offer-cart-delta="1" data-offer-cart-room="${escapeHtml(line.roomType)}" aria-label="More ${escapeHtml(line.roomType)}" ${canInc ? '' : 'disabled'}>+</button>
+      const pendingUnits = isPendingChangeRoom(line.roomType) ? pendingChangeLineQty() : 0;
+      const keepQty = Math.max(0, (Number(line.qty) || 0) - pendingUnits);
+
+      const appendOfferCartRow = (qty, { pending = false } = {}) => {
+        if (qty < 1) return;
+        const lineTotal = qty * line.price;
+        const canInc = !pending && line.qty < line.available && line.qty < maxByIntent;
+        const li = document.createElement('li');
+        li.className = `guest-offer-cart-item${pending ? ' is-pending-change' : ''}`;
+        li.innerHTML = `
+          <div class="guest-offer-cart-item-main">
+            <strong>${escapeHtml(line.roomType)}</strong>
+            <span class="guest-offer-cart-item-meta">${qty} × ${formatMoney(line.price)} / night</span>
           </div>
-          <button type="button" class="guest-offer-cart-remove" data-offer-cart-remove="${escapeHtml(line.roomType)}">Remove</button>
-        </div>
-      `;
-      list.appendChild(li);
+          <span class="guest-offer-cart-item-total">${formatMoney(lineTotal)}</span>
+          ${pending ? '<span class="guest-offer-cart-pending-label">Replacing 1…</span>' : ''}
+          <div class="guest-offer-cart-item-actions">
+            <div class="guest-offer-cart-qty">
+              <button type="button" data-offer-cart-delta="-1" data-offer-cart-room="${escapeHtml(line.roomType)}" aria-label="Fewer ${escapeHtml(line.roomType)}" ${pending ? 'disabled' : ''}>−</button>
+              <span>${qty}</span>
+              <button type="button" data-offer-cart-delta="1" data-offer-cart-room="${escapeHtml(line.roomType)}" aria-label="More ${escapeHtml(line.roomType)}" ${canInc ? '' : 'disabled'}>+</button>
+            </div>
+            <button type="button" class="guest-offer-cart-remove" data-offer-cart-remove="${escapeHtml(line.roomType)}" ${pending ? 'data-offer-cart-cancel-change="1"' : ''}>${pending ? 'Cancel' : 'Remove'}</button>
+          </div>
+        `;
+        list.appendChild(li);
+      };
+
+      // Split same room type so only one unit looks pending when qty > 1.
+      appendOfferCartRow(keepQty, { pending: false });
+      appendOfferCartRow(pendingUnits, { pending: true });
     });
 
     if (roomCountEl) roomCountEl.textContent = String(cartRoomCount());
     if (nightlyEl) nightlyEl.textContent = formatMoney(cartNightlyTotal());
+    const noteEl = document.getElementById('offerCartNote');
+    if (noteEl) {
+      if (extraPersonsSelected() > 0) {
+        noteEl.textContent = `Extra person · ₱${EXTRA_PERSON_FEE_PER_NIGHT.toFixed(0)} / night will be added to your stay total.`;
+      } else {
+        noteEl.textContent = 'Stay total is calculated after you choose dates.';
+      }
+    }
     syncOfferContinueState();
+  }
+
+  function syncOfferCardSelectionState() {
+    const slotsLeft = remainingSlotsForOfferAdd();
+    document.querySelectorAll('.guest-offer-card').forEach((card) => {
+      const btn = card.querySelector('[data-offer-add]');
+      const roomType = btn?.getAttribute('data-offer-add') || '';
+      if (!roomType) return;
+
+      const line = bookingCart.find((l) => cartLineKey(l.roomType) === cartLineKey(roomType));
+      const qty = line ? Number(line.qty) || 0 : 0;
+      const selected = qty > 0;
+      card.classList.toggle('is-selected', selected);
+      card.setAttribute('data-offer-selected-qty', String(qty));
+
+      const media = card.querySelector('.guest-offer-media');
+      let badge = card.querySelector('[data-offer-selected-badge]');
+      if (selected && media) {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'guest-offer-selected-badge';
+          badge.setAttribute('data-offer-selected-badge', '');
+          media.appendChild(badge);
+        }
+        badge.textContent =
+          qty === 1
+            ? tx('booking.addedToStay', null, 'Added to stay')
+            : tx('booking.addedQty', { n: qty }, `Added · ${qty}`);
+      } else if (badge) {
+        badge.remove();
+      }
+
+      if (btn) {
+        if (selected && slotsLeft < 1) {
+          btn.textContent = tx('booking.inYourStay', null, 'In your stay');
+          btn.classList.add('is-selected-room');
+        } else if (selected) {
+          btn.textContent = tx('booking.addAnother', null, 'Add another');
+          btn.classList.add('is-selected-room');
+        } else {
+          btn.textContent = tx('booking.addRoom', null, 'Add room');
+          btn.classList.remove('is-selected-room');
+        }
+      }
+    });
+  }
+
+  function syncOfferSelectionStatus() {
+    const status = document.getElementById('offerSelectionStatus');
+    if (!status) return;
+    if (!bookingCart.length) {
+      status.textContent = tx('booking.noRoomSelected', null, 'No room selected yet');
+      status.classList.add('is-empty');
+      status.disabled = true;
+      status.removeAttribute('aria-label');
+      return;
+    }
+    const names = bookingCart
+      .map((line) => `${line.roomType} × ${line.qty}`)
+      .join(' · ');
+    status.textContent = names;
+    status.classList.remove('is-empty');
+    status.disabled = false;
+    status.setAttribute(
+      'aria-label',
+      tx('booking.viewSelectedRooms', { names }, `View selected rooms in cart: ${names}`)
+    );
+  }
+
+  function scrollOfferCartIntoView() {
+    const cart = document.getElementById('offerCartPanel');
+    const layout = document.querySelector('#offerSelectModal .guest-offers-layout');
+    if (!cart || !offerSelectModal || offerSelectModal.hidden) return;
+    if (!bookingCart.length) return;
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const behavior = reduceMotion ? 'auto' : 'smooth';
+
+    // Prefer scrolling the modal layout track on mobile; fall back to element scroll.
+    if (layout && layout.scrollHeight > layout.clientHeight + 8) {
+      const layoutTop = layout.getBoundingClientRect().top;
+      const cartTop = cart.getBoundingClientRect().top;
+      const nextTop = layout.scrollTop + (cartTop - layoutTop) - 12;
+      layout.scrollTo({ top: Math.max(0, nextTop), behavior });
+    } else {
+      cart.scrollIntoView({ behavior, block: 'start' });
+    }
+
+    cart.classList.add('is-flash');
+    window.setTimeout(() => cart.classList.remove('is-flash'), reduceMotion ? 0 : 900);
   }
 
   function syncOfferContinueState() {
@@ -955,15 +1211,20 @@
     const overCapacity = isGuestCapacityExceeded();
     const overIntended = cartRoomCount() > intendedRoomCount();
     const intended = intendedRoomCount();
-    const slotsLeft = remainingIntendedRoomSlots();
+    const slotsLeft = remainingSlotsForOfferAdd();
     const ok = hasRooms && !overCapacity && !overIntended;
 
     document.querySelectorAll('[data-offer-add]').forEach((btn) => {
       btn.disabled = slotsLeft < 1;
       btn.title = slotsLeft < 1
         ? `You already added ${intended} room${intended === 1 ? '' : 's'} for this stay.`
-        : '';
+        : pendingChangeRoomType
+          ? 'Adds a replacement for the blurred room.'
+          : '';
     });
+
+    syncOfferCardSelectionState();
+    syncOfferSelectionStatus();
 
     if (continueBtn) {
       continueBtn.disabled = !ok;
@@ -990,9 +1251,14 @@
         hint.textContent = `Guests (${guestCount}) exceed selected room capacity (${hold}). Add more rooms or go back to adjust guests.`;
       } else {
         hint.hidden = false;
-        hint.textContent = slotsLeft > 0
-          ? `${cartRoomCount()} of ${intended} room${intended === 1 ? '' : 's'} · ${formatMoney(cartNightlyTotal())} per night`
-          : `${cartRoomCount()} room${cartRoomCount() === 1 ? '' : 's'} selected · ${formatMoney(cartNightlyTotal())} per night`;
+        const extras = extraPersonsSelected();
+        const base =
+          slotsLeft > 0
+            ? `${cartRoomCount()} of ${intended} room${intended === 1 ? '' : 's'} · ${formatMoney(cartNightlyTotal())} per night`
+            : `${cartRoomCount()} room${cartRoomCount() === 1 ? '' : 's'} selected · ${formatMoney(cartNightlyTotal())} per night`;
+        hint.textContent = extras > 0
+          ? `${base} · +${formatMoney(EXTRA_PERSON_FEE_PER_NIGHT)}/night extra person`
+          : base;
       }
     }
   }
@@ -1060,9 +1326,9 @@
             ${atCap ? '<span class="guest-cart-avail is-max">Limit reached</span>' : ''}
           </div>
         </div>
-        <button type="button" class="guest-cart-remove" data-remove-room="${line.roomType}" aria-label="Remove ${line.roomType}">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
-          Remove
+        <button type="button" class="guest-cart-change" data-change-room="${line.roomType}" aria-label="Change one ${line.roomType}">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+          Change${line.qty > 1 ? ' one' : ''}
         </button>
       `;
       list.appendChild(li);
@@ -1078,6 +1344,44 @@
 
   function remainingIntendedRoomSlots() {
     return Math.max(0, intendedRoomCount() - cartRoomCount());
+  }
+
+  function pendingChangeLineQty() {
+    if (!pendingChangeRoomType || pendingChangeQty < 1) return 0;
+    const line = bookingCart.find(
+      (l) => cartLineKey(l.roomType) === cartLineKey(pendingChangeRoomType)
+    );
+    if (!line) return 0;
+    return Math.min(pendingChangeQty, Number(line.qty) || 0);
+  }
+
+  function remainingSlotsForOfferAdd() {
+    return remainingIntendedRoomSlots() + pendingChangeLineQty();
+  }
+
+  function clearPendingChangeRoom() {
+    pendingChangeRoomType = '';
+    pendingChangeQty = 0;
+  }
+
+  function isPendingChangeRoom(roomType) {
+    return Boolean(
+      pendingChangeRoomType &&
+        pendingChangeQty > 0 &&
+        cartLineKey(roomType) === cartLineKey(pendingChangeRoomType)
+    );
+  }
+
+  /** Remove only `by` units of a room type from the cart (not the whole line). */
+  function reduceCartLineQty(roomType, by = 1) {
+    const amount = Math.max(1, Number(by) || 1);
+    const line = bookingCart.find((l) => cartLineKey(l.roomType) === cartLineKey(roomType));
+    if (!line) return false;
+    line.qty = Math.max(0, Number(line.qty) || 0) - amount;
+    if (line.qty < 1) {
+      bookingCart = bookingCart.filter((l) => cartLineKey(l.roomType) !== cartLineKey(roomType));
+    }
+    return true;
   }
 
   function addToCart(roomType, qty = 1) {
@@ -1141,9 +1445,7 @@
   }
 
   function fillBookRoom(roomName) {
-    const modalSelect = document.getElementById('modalRoomType');
     const pageSelect = document.getElementById('bookRoomTypeSelect');
-    if (modalSelect && roomName) modalSelect.value = roomName;
     if (pageSelect && roomName) pageSelect.value = roomName;
   }
 
@@ -1405,13 +1707,6 @@
       (Array.isArray(items) ? items : []).map((item) => [Number(item.roomTypeId), item])
     );
 
-    document.querySelectorAll('#modalRoomType option[data-room-type-id]').forEach((option) => {
-      const item = byId.get(Number(option.dataset.roomTypeId || 0));
-      const remaining = item ? Number(item.remaining || 0) : 0;
-      option.dataset.available = String(remaining);
-      option.disabled = remaining < 1;
-    });
-
     document.querySelectorAll('.guest-room[data-room-type-id]').forEach((card) => {
       const item = byId.get(Number(card.dataset.roomTypeId || 0));
       const remaining = item ? Number(item.remaining || 0) : 0;
@@ -1476,7 +1771,7 @@
   function stayTotalAmount() {
     const nights = nightCount(modalCheckIn?.value || '', modalCheckOut?.value || '');
     if (nights < 1) return 0;
-    return cartNightlyTotal() * nights + timeFeesTotal();
+    return cartNightlyTotal() * nights + stayFeesTotal();
   }
 
   function selectedPaymentOption() {
@@ -1578,7 +1873,12 @@
     if (!el) return;
     const totals = guestTotals();
     const guestCount = totals.adults + totals.children;
-    el.textContent = `${guestCount} guest${guestCount === 1 ? '' : 's'} · ${totals.rooms} room${totals.rooms === 1 ? '' : 's'}`;
+    const key = totals.rooms === 1 ? 'rooms.guestsSummary' : 'rooms.guestsSummaryPluralRooms';
+    el.textContent = tx(
+      key,
+      { guests: guestCount, rooms: totals.rooms },
+      `${guestCount} guest${guestCount === 1 ? '' : 's'} · ${totals.rooms} room${totals.rooms === 1 ? '' : 's'}`
+    );
   }
 
   function showGuestsHint(message) {
@@ -1606,6 +1906,7 @@
   }
 
   function clampGuestRoomsCapacity() {
+    let extraUsed = false;
     for (let i = 0; i < guestRooms.length; i += 1) {
       const room = guestRooms[i];
       let a = Number(room.adults) || 1;
@@ -1613,11 +1914,25 @@
       if (a + c > MAX_GUESTS_PER_ROOM) {
         c = Math.max(0, MAX_GUESTS_PER_ROOM - a);
         if (a > MAX_GUESTS_PER_ROOM) a = MAX_GUESTS_PER_ROOM;
-        room.adults = a;
-        room.children = c;
-        if (Array.isArray(room.childAges)) {
-          room.childAges.length = c;
+      }
+      if (a + c > BASE_GUESTS_PER_ROOM) {
+        if (extraUsed) {
+          // Only one extra guest allowed for the whole booking.
+          const roomTotal = BASE_GUESTS_PER_ROOM;
+          if (a > roomTotal) {
+            a = roomTotal;
+            c = 0;
+          } else {
+            c = Math.max(0, roomTotal - a);
+          }
+        } else {
+          extraUsed = true;
         }
+      }
+      room.adults = a;
+      room.children = c;
+      if (Array.isArray(room.childAges)) {
+        room.childAges.length = c;
       }
     }
   }
@@ -1633,9 +1948,12 @@
         const total = (Number(room.adults) || 0) + (Number(room.children) || 0);
         const overCapacity = total > MAX_GUESTS_PER_ROOM;
         const atCapacity = total >= MAX_GUESTS_PER_ROOM;
-        const canInc = total < MAX_GUESTS_PER_ROOM;
+        const wouldUseExtra = total >= BASE_GUESTS_PER_ROOM;
+        const extraBlocked = wouldUseExtra && !roomHasExtraGuest(room) && bookingAlreadyUsesExtra(index);
+        const canInc = total < MAX_GUESTS_PER_ROOM && !extraBlocked;
         const canDecAdult = (Number(room.adults) || 0) > 1;
         const canDecChild = (Number(room.children) || 0) > 0;
+        const hasExtra = roomHasExtraGuest(room);
         const removeBtn =
           index === 0
             ? ''
@@ -1661,11 +1979,16 @@
               </div>`
             : '';
 
-        const tooltipMsg = 'Maximum capacity reached (2 guests per room). Please add another room for additional guests.';
+        const tooltipMsg = extraBlocked
+          ? 'Only one extra guest (₱200/night) is allowed per booking.'
+          : `Maximum ${MAX_GUESTS_PER_ROOM} guests per room. Add another room for more guests.`;
         const tooltipAttr = !canInc ? ` data-tooltip="${tooltipMsg}"` : '';
         const titleAttr = !canInc ? ` title="${tooltipMsg}"` : '';
+        const extraNote = hasExtra
+          ? `<p class="guest-guests-extra-note">Extra person · ₱${EXTRA_PERSON_FEE_PER_NIGHT.toFixed(0)} / night</p>`
+          : '';
 
-        return `<article class="guest-guests-room${atCapacity ? ' is-at-capacity' : ''}${overCapacity ? ' is-over-capacity' : ''}" data-guest-room="${index}">
+        return `<article class="guest-guests-room${atCapacity ? ' is-at-capacity' : ''}${overCapacity ? ' is-over-capacity' : ''}${hasExtra ? ' has-extra-person' : ''}" data-guest-room="${index}">
           <div class="guest-guests-room-head">
             <h3>Room ${index + 1}</h3>
             ${removeBtn}
@@ -1697,6 +2020,7 @@
             </div>
           </div>
           ${ages}
+          ${extraNote}
         </article>`;
       })
       .join('');
@@ -1724,7 +2048,14 @@
     const currentTotal = adults + children;
 
     if (delta > 0 && currentTotal >= MAX_GUESTS_PER_ROOM) {
-      showGuestsHint('Each room holds up to 2 guests. Please add another room for additional guests.');
+      showGuestsHint(
+        `Each room holds up to ${MAX_GUESTS_PER_ROOM} guests. Add another room for additional guests.`
+      );
+      return;
+    }
+
+    if (delta > 0 && currentTotal >= BASE_GUESTS_PER_ROOM && !roomHasExtraGuest(room) && bookingAlreadyUsesExtra(roomIndex)) {
+      showGuestsHint('Only one extra guest (₱200/night) is allowed per booking.');
       return;
     }
 
@@ -1732,7 +2063,9 @@
       const next = adults + delta;
       if (next < 1) return;
       if (next + children > MAX_GUESTS_PER_ROOM) {
-        showGuestsHint('Each room holds up to 2 guests. Please add another room for additional guests.');
+        showGuestsHint(
+          `Each room holds up to ${MAX_GUESTS_PER_ROOM} guests. Add another room for additional guests.`
+        );
         return;
       }
       room.adults = next;
@@ -1740,7 +2073,9 @@
       const next = children + delta;
       if (next < 0) return;
       if (adults + next > MAX_GUESTS_PER_ROOM) {
-        showGuestsHint('Each room holds up to 2 guests. Please add another room for additional guests.');
+        showGuestsHint(
+          `Each room holds up to ${MAX_GUESTS_PER_ROOM} guests. Add another room for additional guests.`
+        );
         return;
       }
       room.children = next;
@@ -1760,28 +2095,29 @@
   }
 
   function maxGuestCapacityAcrossInventory() {
-    let max = 0;
+    let maxRooms = 0;
     document.querySelectorAll('.guest-room[data-room-type-id]').forEach((card) => {
       const available = Number(card.getAttribute('data-available') || 0);
-      const occupancy = Number(card.getAttribute('data-occupancy') || 0);
-      const listed = occupancy > 0 ? occupancy : MAX_GUESTS_PER_ROOM;
-      const perRoom = Math.min(listed, MAX_GUESTS_PER_ROOM);
-      max = Math.max(max, available * perRoom);
+      maxRooms = Math.max(maxRooms, available);
     });
-    return max;
+    return maxPartyForRoomCount(maxRooms);
   }
 
   function capacityShortageMessage(roomCount = guestRooms.length, roomType = '') {
     const totals = guestTotals();
     const guestCount = totals.adults + totals.children;
-    const configuredCapacity = roomCount * MAX_GUESTS_PER_ROOM;
+    const configuredCapacity = maxPartyForRoomCount(roomCount);
     const maxAvailable = maxInventoryAvailable();
     const maxCapacity = maxGuestCapacityAcrossInventory();
     const parts = [];
 
     if (guestCount > configuredCapacity) {
+      const roomsNeeded = Math.max(
+        1,
+        Math.ceil(Math.max(0, guestCount - MAX_EXTRA_PERSONS) / BASE_GUESTS_PER_ROOM)
+      );
       parts.push(
-        `${guestCount} guests need at least ${Math.ceil(guestCount / MAX_GUESTS_PER_ROOM)} room${Math.ceil(guestCount / MAX_GUESTS_PER_ROOM) === 1 ? '' : 's'} (max ${MAX_GUESTS_PER_ROOM} guests per room).`
+        `${guestCount} guests need at least ${roomsNeeded} room${roomsNeeded === 1 ? '' : 's'} (up to ${BASE_GUESTS_PER_ROOM} included per room, plus one extra guest).`
       );
     }
 
@@ -1805,9 +2141,7 @@
       const meta = getRoomMeta(roomType);
       if (meta?.roomType) {
         const qty = Math.min(roomCount, Math.max(0, meta.available));
-        const listed = meta.occupancy > 0 ? meta.occupancy : MAX_GUESTS_PER_ROOM;
-        const perRoom = Math.min(listed, MAX_GUESTS_PER_ROOM);
-        const hold = qty * perRoom;
+        const hold = maxPartyForRoomCount(qty);
         if (guestCount > hold) {
           parts.push(
             `${meta.roomType} with ${qty} room${qty === 1 ? '' : 's'} holds up to ${hold} guest${hold === 1 ? '' : 's'}; your party has ${guestCount}.`
@@ -1883,6 +2217,8 @@
 
   function openGuestsStep(roomName) {
     preferredRoomType = roomName || preferredRoomType || '';
+    // Only seed the offer cart when Book was started from a specific room.
+    pendingSeedRoomType = roomName ? roomName : '';
     showGuestsHint('');
     renderGuestsRooms();
     openModal(guestsModal);
@@ -1975,8 +2311,7 @@
       const safeName = escapeHtml(item.roomType);
       const safeImage = escapeHtml(image);
       const bookQty = Math.min(roomCount, item.available);
-      const listed = item.occupancy > 0 ? item.occupancy : MAX_GUESTS_PER_ROOM;
-      const perRoom = Math.min(listed, MAX_GUESTS_PER_ROOM);
+      const perRoom = effectiveGuestsPerRoom();
       const qtyNote =
         bookQty < roomCount
           ? `${bookQty} of ${roomCount} rooms available now`
@@ -2044,6 +2379,19 @@
     renderOfferCart();
   }
 
+  function seedPreferredRoomIntoOfferCart() {
+    const roomType = pendingSeedRoomType;
+    pendingSeedRoomType = '';
+    if (!roomType) return false;
+    if (bookingCart.length > 0) return false;
+    if (remainingIntendedRoomSlots() < 1) return false;
+    const result = addToCart(roomType, 1);
+    if (!result.ok) return false;
+    preferredRoomType = roomType;
+    fillBookRoom(roomType);
+    return true;
+  }
+
   function openOfferStep() {
     const error = validateGuestRooms();
     if (error) {
@@ -2059,9 +2407,76 @@
       return;
     }
     showGuestsHint('');
+    offerSelectMode = 'initial';
+    clearPendingChangeRoom();
+    syncOfferChangeChrome();
+    syncGuestFlowSummary();
+    const seeded = seedPreferredRoomIntoOfferCart();
+    renderOfferPanel();
+    openModal(offerSelectModal);
+    if (seeded) {
+      const line = bookingCart.find((l) => cartLineKey(l.roomType) === cartLineKey(preferredRoomType));
+      const qty = line?.qty || 1;
+      showToast(
+        `Added ${qty} × ${preferredRoomType} · ${cartRoomCount()} of ${intendedRoomCount()} room${intendedRoomCount() === 1 ? '' : 's'}.`,
+        true
+      );
+    }
+  }
+
+  function syncOfferChangeChrome() {
+    const backBtn = document.getElementById('offerBackToGuestsBtn');
+    const backLabel = document.getElementById('offerBackLabel');
+    const title = document.getElementById('offerSelectTitle');
+    const eyebrow = document.querySelector('#offerSelectModal .guest-offers-head-titles .guest-eyebrow');
+    const continueBtn = document.getElementById('offerContinueBtn');
+    const isChange = offerSelectMode === 'change';
+
+    if (backLabel) backLabel.textContent = isChange ? 'Booking' : 'Guests';
+    if (backBtn) {
+      backBtn.setAttribute('aria-label', isChange ? 'Back to booking' : 'Back to guests');
+    }
+    if (title) title.textContent = isChange ? 'Change rooms' : 'Add rooms & offer';
+    if (eyebrow) eyebrow.textContent = isChange ? 'Edit rooms' : 'Step 2';
+    if (continueBtn) {
+      continueBtn.textContent = isChange ? 'Done' : 'Continue';
+    }
+  }
+
+  function openOfferChangeMode(preferredType = '') {
+    if (preferredType) preferredRoomType = preferredType;
+    pendingChangeRoomType = preferredType || '';
+    pendingChangeQty = preferredType ? 1 : 0;
+    offerSelectMode = 'change';
+    syncOfferChangeChrome();
     syncGuestFlowSummary();
     renderOfferPanel();
     openModal(offerSelectModal);
+    showToast(
+      pendingChangeRoomType
+        ? `Replacing 1 × ${pendingChangeRoomType}. Your other rooms of this type stay as-is.`
+        : 'Pick a room type, then tap Done.',
+      true
+    );
+  }
+
+  function returnToBookRooms() {
+    clearPendingChangeRoom();
+    preferredRoomType = bookingCart[0]?.roomType || preferredRoomType;
+    fillBookRoom(preferredRoomType);
+    updateBookPartySummary();
+    refreshStayTimeOptions(true);
+    updatePaymentPreview();
+    renderCart();
+    setBookWizardStep('rooms');
+    openModal(bookModal);
+    offerSelectMode = 'initial';
+    syncOfferChangeChrome();
+    if (bookingCart.length) {
+      showToast('Rooms updated.', true);
+    } else {
+      showToast('No rooms selected. Add a room to continue.', false);
+    }
   }
 
   function updateBookPartySummary() {
@@ -2083,6 +2498,20 @@
       return;
     }
 
+    if (offerSelectMode === 'change' && pendingChangeRoomType) {
+      if (isPendingChangeRoom(meta.roomType)) {
+        clearPendingChangeRoom();
+        renderOfferCart();
+        showToast(`Keeping ${meta.roomType}.`, true);
+        return;
+      }
+      // Remove only the pending unit(s), keep the rest of that room type.
+      const replacing = pendingChangeRoomType;
+      const replaceQty = pendingChangeLineQty() || 1;
+      clearPendingChangeRoom();
+      reduceCartLineQty(replacing, replaceQty);
+    }
+
     const slotsLeft = remainingIntendedRoomSlots();
     if (slotsLeft < 1) {
       const intended = intendedRoomCount();
@@ -2091,12 +2520,14 @@
         false
       );
       syncOfferContinueState();
+      renderOfferCart();
       return;
     }
 
     const remaining = remainingCapacity(meta.roomType, meta.available);
     if (remaining < 1) {
       showToast(`You've reached the booking limit for ${meta.roomType}.`, false);
+      renderOfferCart();
       return;
     }
 
@@ -2104,6 +2535,7 @@
     const result = addToCart(roomType, qty);
     if (!result.ok) {
       showToast(result.message, false);
+      renderOfferCart();
       return;
     }
 
@@ -2136,6 +2568,11 @@
       const message = `Guests (${guestCount}) exceed selected room capacity (${hold}). Add more rooms or go back to adjust guests.`;
       showToast(message, false);
       syncOfferContinueState();
+      return;
+    }
+
+    if (offerSelectMode === 'change') {
+      returnToBookRooms();
       return;
     }
 
@@ -2420,7 +2857,16 @@
 
     const offerCartRemove = event.target.closest('[data-offer-cart-remove]');
     if (offerCartRemove) {
-      removeFromCart(offerCartRemove.getAttribute('data-offer-cart-remove') || '');
+      const removedType = offerCartRemove.getAttribute('data-offer-cart-remove') || '';
+      const cancelChange = offerCartRemove.getAttribute('data-offer-cart-cancel-change') === '1';
+      if (cancelChange && isPendingChangeRoom(removedType)) {
+        clearPendingChangeRoom();
+        renderOfferCart();
+        showToast('Change cancelled.', true);
+        return;
+      }
+      if (isPendingChangeRoom(removedType)) clearPendingChangeRoom();
+      removeFromCart(removedType);
       return;
     }
 
@@ -2477,11 +2923,23 @@
   });
 
   document.getElementById('offerBackToGuestsBtn')?.addEventListener('click', () => {
+    if (offerSelectMode === 'change') {
+      returnToBookRooms();
+      return;
+    }
     openGuestsStep(preferredRoomType);
   });
 
   document.getElementById('offerBackFooterBtn')?.addEventListener('click', () => {
+    if (offerSelectMode === 'change') {
+      returnToBookRooms();
+      return;
+    }
     openGuestsStep(preferredRoomType);
+  });
+
+  document.getElementById('offerSelectionStatus')?.addEventListener('click', () => {
+    scrollOfferCartIntoView();
   });
 
   document.getElementById('offerContinueBtn')?.addEventListener('click', () => {
@@ -2635,11 +3093,15 @@
   });
 
   document.getElementById('bookingCartList')?.addEventListener('click', (event) => {
-    const btn = event.target.closest('[data-remove-room]');
-    if (!btn) return;
-    removeFromCart(btn.getAttribute('data-remove-room') || '');
-    showToast('Room removed from booking.');
-    syncModalQtyMax();
+    const changeBtn = event.target.closest('[data-change-room]');
+    if (changeBtn) {
+      openOfferChangeMode(changeBtn.getAttribute('data-change-room') || '');
+      return;
+    }
+  });
+
+  document.getElementById('bookingCartTotalsToggle')?.addEventListener('click', () => {
+    setBookingCartTotalsOpen(!bookingCartTotalsOpen);
   });
 
   quickBookForm?.addEventListener('submit', (event) => {
@@ -2770,6 +3232,7 @@
           checkoutTimeUtc: toManilaDateTimeIso(checkOut, selectedCheckOutTime()),
           paymentOption,
           acceptTerms: true,
+          extraPersons: extraPersonsSelected(),
           items: bookingCart.map((line) => ({
             roomTypeId: line.roomTypeId,
             quantity: line.qty,
@@ -2876,24 +3339,29 @@
       nextBtn.disabled = !scrollable;
     }
 
+    function scrollBehavior() {
+      return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    }
+
     function scrollByDir(dir) {
       const maxScroll = maxScrollLeft();
       if (maxScroll <= 2) return;
 
       const atStart = track.scrollLeft <= 2;
       const atEnd = track.scrollLeft >= maxScroll - 2;
+      const behavior = scrollBehavior();
 
       if (dir > 0 && atEnd) {
-        track.scrollTo({ left: 0, behavior: 'smooth' });
+        track.scrollTo({ left: 0, behavior });
         return;
       }
 
       if (dir < 0 && atStart) {
-        track.scrollTo({ left: maxScroll, behavior: 'smooth' });
+        track.scrollTo({ left: maxScroll, behavior });
         return;
       }
 
-      track.scrollBy({ left: dir * stepSize(), behavior: 'smooth' });
+      track.scrollBy({ left: dir * stepSize(), behavior });
     }
 
     prevBtn.addEventListener('click', () => scrollByDir(-1));
@@ -2939,6 +3407,7 @@
 
     let index = Math.max(0, photos.indexOf(img.getAttribute('src') || ''));
     if (index < 0) index = 0;
+    let fadeTimer = 0;
 
     const countEl = pager.querySelector('[data-feature-count]');
     const prevBtn = pager.querySelector('[data-feature-prev]');
@@ -2946,8 +3415,25 @@
 
     function show(i) {
       index = ((i % photos.length) + photos.length) % photos.length;
-      img.src = photos[index];
-      if (countEl) countEl.textContent = `${index + 1} / ${photos.length}`;
+      const nextSrc = photos[index];
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      if (reduceMotion || img.getAttribute('src') === nextSrc) {
+        img.src = nextSrc;
+        img.classList.remove('is-fading');
+        if (countEl) countEl.textContent = `${index + 1} / ${photos.length}`;
+        return;
+      }
+
+      window.clearTimeout(fadeTimer);
+      img.classList.add('is-fading');
+      fadeTimer = window.setTimeout(() => {
+        img.src = nextSrc;
+        if (countEl) countEl.textContent = `${index + 1} / ${photos.length}`;
+        requestAnimationFrame(() => {
+          img.classList.remove('is-fading');
+        });
+      }, 140);
     }
 
     prevBtn?.addEventListener('click', (event) => {
@@ -2963,4 +3449,12 @@
   }
 
   document.querySelectorAll('.guest-room-feature[data-images]').forEach(initFeatureMediaPager);
+
+  document.addEventListener('mori:langchange', () => {
+    syncGuestFlowSummary();
+    syncOfferSelectionStatus();
+    syncOfferCardSelectionState();
+    syncOfferContinueState();
+    renderOfferCart();
+  });
 })();

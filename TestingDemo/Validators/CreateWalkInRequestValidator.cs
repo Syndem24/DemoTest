@@ -38,7 +38,7 @@ public sealed class CreateWalkInRequestValidator : AbstractValidator<CreateWalkI
 
         RuleFor(x => x.ExtraPersons)
             .InclusiveBetween(0, 1)
-            .WithMessage("Extra person is limited to one on a single room.");
+            .WithMessage("Only one extra guest is allowed (₱200 / night).");
 
         RuleForEach(x => x.Assignments).ChildRules(assignment =>
         {

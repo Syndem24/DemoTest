@@ -389,7 +389,16 @@ public sealed class AdminBookingsApiController : ControllerBase
 
         if (request.ExtraPersons is < 0 or > 1)
         {
-            return BadRequest(new { message = "Extra person is limited to one on a single room." });
+            return BadRequest(new { message = "Only one extra guest is allowed (₱200 / night)." });
+        }
+
+        if (request.IncidentalAmount < 0
+            || request.ServiceFeeAmount < 0
+            || request.SnackBeverageQty < 0
+            || request.SnackBeverageUnitAmount < 0
+            || request.ExtendStayNights < 0)
+        {
+            return BadRequest(new { message = "Fee amounts and quantities cannot be negative." });
         }
 
         try
@@ -404,6 +413,10 @@ public sealed class AdminBookingsApiController : ControllerBase
             return NotFound();
         }
         catch (BookingConcurrencyException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        catch (BookingAvailabilityException ex)
         {
             return Conflict(new { message = ex.Message });
         }

@@ -72,23 +72,24 @@
         }
     </div>
     <div class="guest-hero-copy" id="guestHeroCopy">
-        <p class="guest-brand-mark guest-typewriter" id="heroBrandType" data-typewriter aria-label="Mori International Hotel">Mori International Hotel</p>
-        <h1 class="guest-typewriter" id="heroTitleType" data-typewriter aria-label="Stay close to everything in Cebu.">Stay close to everything in Cebu.</h1>
+        <p class="guest-brand-mark guest-typewriter" id="heroBrandType" data-typewriter data-i18n="nav.brand" data-i18n-attr="aria-label" aria-label="Mori International Hotel">Mori International Hotel</p>
+        <h1 class="guest-typewriter" id="heroTitleType" data-typewriter data-i18n="home.heroTitle" data-i18n-attr="aria-label" aria-label="Stay close to everything in Cebu.">Stay close to everything in Cebu.</h1>
         <div class="guest-hero-reveal">
-            <p class="guest-hero-lede">
+            <p class="guest-hero-lede" data-i18n="home.heroLede">
                 Clean rooms, easy parking, and a simple way to book your stay.
             </p>
             <div class="guest-hero-actions">
                 <a class="guest-btn guest-btn-primary"
                    asp-controller="Booking"
-                   asp-action="Accommodations">
+                   asp-action="Accommodations"
+                   data-i18n="home.viewAccommodations">
                     View accommodations
                 </a>
-                <a class="guest-btn guest-btn-ghost" href="#gallery">Explore the hotel</a>
+                <a class="guest-btn guest-btn-ghost" href="#gallery" data-i18n="home.exploreHotel">Explore the hotel</a>
             </div>
         </div>
     </div>
-    <a class="guest-hero-scroll" id="guestHeroScroll" href="#about" aria-label="Scroll to content" hidden>
+    <a class="guest-hero-scroll" id="guestHeroScroll" href="#about" aria-label="Scroll to content" data-i18n="home.scrollContent" data-i18n-attr="aria-label" data-i18n-attr-only hidden>
         <span aria-hidden="true"></span>
         <span aria-hidden="true"></span>
     </a>
@@ -99,9 +100,9 @@
     <div class="guest-intro-frame">
         <p class="guest-intro-kana guest-reveal" data-reveal aria-hidden="true">森</p>
         <div class="guest-intro-copy guest-reveal" data-reveal>
-            <p class="guest-eyebrow">Mandaue, Cebu</p>
-            <h2>A quiet stay with a Japanese spirit</h2>
-            <p class="guest-intro-lede">
+            <p class="guest-eyebrow" data-i18n="home.eyebrowWhere">Mandaue, Cebu</p>
+            <h2 data-i18n="home.introTitle">A quiet stay with a Japanese spirit</h2>
+            <p class="guest-intro-lede" data-i18n="home.introLede">
                 Welcome to Mori International Hotel — where traditional Japanese calm meets contemporary comfort.
             </p>
         </div>
@@ -113,27 +114,28 @@
                      alt="Bright inner courtyard and guest floors at Mori International Hotel"
                      loading="lazy" />
                 <figcaption>
-                    <span>Inside Mori</span>
-                    <strong>Light, greenery, and quiet spaces</strong>
+                    <span data-i18n="home.insideMori">Inside Mori</span>
+                    <strong data-i18n="home.insideMoriStrong">Light, greenery, and quiet spaces</strong>
                 </figcaption>
             </figure>
             <div class="guest-intro-body guest-reveal" data-reveal>
-                <p>
+                <p data-i18n="home.introP1">
                     Our property features a pioneering modular design with 19 cozy rooms of about 18 square meters,
                     each with inverter air conditioning, 24-hour hot and cold showers, complimentary drinking water,
                     unlimited Wi-Fi, and ample parking.
                 </p>
-                <p>
+                <p data-i18n="home.introP2">
                     Just 6 kilometers from the airport and 4 kilometers from Cebu City’s major seaports,
                     you are close to restaurants, shops, and everyday conveniences — without losing the sense of rest.
                 </p>
-                <p class="guest-intro-note">
+                <p class="guest-intro-note" data-i18n="home.introNote">
                     Book ahead and your room is held as a reservation. Arriving within the minimum lead time?
                     It stays a standard booking.
                 </p>
                 <a class="guest-btn guest-btn-primary"
                    asp-controller="Booking"
-                   asp-action="Accommodations">
+                   asp-action="Accommodations"
+                   data-i18n="home.browseRooms">
                     Browse rooms
                 </a>
             </div>
@@ -144,16 +146,16 @@
 <section class="guest-section guest-gallery" id="gallery">
     <div class="guest-section-head guest-reveal" data-reveal>
         <div>
-            <p class="guest-eyebrow">A closer look</p>
-            <h2>Inside Mori</h2>
-            <p class="guest-section-copy">
+            <p class="guest-eyebrow" data-i18n="home.galleryEyebrow">A closer look</p>
+            <h2 data-i18n="home.galleryTitle">Inside Mori</h2>
+            <p class="guest-section-copy" data-i18n="home.galleryCopy">
                 Buildings, Hallways, Lounge, and Reception — tap a frame to browse that album.
             </p>
         </div>
         <a class="guest-gallery-all-rooms"
            asp-controller="Booking"
            asp-action="Accommodations">
-            View all accommodations
+            <span data-i18n="home.viewAllAccommodations">View all accommodations</span>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
         </a>
     </div>
@@ -174,8 +176,8 @@
                          loading="lazy"
                          decoding="async" />
                     <span class="guest-gallery-wall-caption">
-                        <span class="guest-gallery-caption">@tile.Label</span>
-                        <strong>@tile.Count photo@(tile.Count == 1 ? "" : "s")</strong>
+                        <span class="guest-gallery-caption" data-i18n="home.gallery@(tile.Label)">@tile.Label</span>
+                        <strong data-i18n-photo-count="@tile.Count">@tile.Count photo@(tile.Count == 1 ? "" : "s")</strong>
                     </span>
                 </button>
             </figure>
@@ -187,10 +189,10 @@
         <div class="guest-gallery-rooms">
             <div class="guest-gallery-rooms-head guest-reveal" data-reveal>
                 <div>
-                    <p class="guest-eyebrow">Choose your stay</p>
-                    <h3>Our room types</h3>
+                    <p class="guest-eyebrow" data-i18n="home.chooseStay">Choose your stay</p>
+                    <h3 data-i18n="home.ourRoomTypes">Our room types</h3>
                 </div>
-                    <p>Browse our room types — open a room to see availability and book.</p>
+                    <p data-i18n="home.browseRoomTypes">Browse our room types — open a room to see availability and book.</p>
             </div>
 
             <div class="guest-room-carousel guest-gallery-room-carousel"
@@ -225,10 +227,10 @@
                                  alt="@roomType.Name guest room"
                                  loading="lazy" />
                             <span class="guest-gallery-room-overlay">
-                                <span class="guest-gallery-caption">Room type</span>
+                                <span class="guest-gallery-caption" data-i18n="home.roomType">Room type</span>
                                 <strong>@roomType.Name</strong>
                                 <span class="guest-gallery-room-link">
-                                    View room
+                                    <span data-i18n="home.viewRoom">View room</span>
                                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                                 </span>
                             </span>
@@ -250,9 +252,9 @@
 <section class="guest-section guest-contact" id="contact">
     <div class="guest-section-head guest-reveal" data-reveal>
         <div>
-            <p class="guest-eyebrow">Get in touch</p>
-            <h2>Contact Us</h2>
-            <p class="guest-section-copy">Mori International Hotel, Cebu</p>
+            <p class="guest-eyebrow" data-i18n="home.contactEyebrow">Get in touch</p>
+            <h2 data-i18n="home.contactTitle">Contact Us</h2>
+            <p class="guest-section-copy" data-i18n="home.contactCopy">Mori International Hotel, Cebu</p>
         </div>
     </div>
 
@@ -265,38 +267,39 @@
             <ul class="guest-contact-list">
                 <li>
                     <a href="tel:+639604417525">+63 960 441 7525</a>
-                    <span>24/7 Hotel Staff</span>
+                    <span data-i18n="home.staff247">24/7 Hotel Staff</span>
                 </li>
                 <li>
                     <a href="tel:+63322388855">(032) 238 8855</a>
-                    <span>Hotel Phone Number</span>
+                    <span data-i18n="home.hotelPhone">Hotel Phone Number</span>
                 </li>
                 <li>
                     <a href="mailto:moriyamahotel@gmail.com">moriyamahotel&#64;gmail.com</a>
-                    <span>Hotel Official email</span>
+                    <span data-i18n="home.hotelEmail">Hotel Official email</span>
                 </li>
             </ul>
 
             <div class="guest-contact-cta">
-                <p>
+                <p data-i18n="home.contactCta">
                     Always busy? No time for calls? You wish to book a room in the soonest possible time
                     and make sure the room will be ready for you by the time you arrive? We recommend that
                     you use our online booking with best available prices!
                 </p>
                 <a class="guest-btn guest-btn-primary"
                    asp-controller="Booking"
-                   asp-action="Accommodations">
+                   asp-action="Accommodations"
+                   data-i18n="home.bookNow">
                     Book now
                 </a>
             </div>
         </div>
 
         <div class="guest-contact-location">
-            <h3>Location and directions</h3>
+            <h3 data-i18n="home.locationTitle">Location and directions</h3>
             <p class="guest-contact-address">
                 MCity Properties, AS Fortuna Street, Mandaue City, Cebu
             </p>
-            <p>
+            <p data-i18n="home.locationBody">
                 The hotel's convenient location, approximately 700 meters from SM Jmall and just a mere
                 four-minute drive from Oakridge Business Park, makes it an ideal choice for business
                 travelers and tourists alike. Its close proximity to these key destinations allows for

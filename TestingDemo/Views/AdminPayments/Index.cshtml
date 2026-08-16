@@ -35,7 +35,46 @@
                     <option value="Other">Other (legacy)</option>
                 </select>
             </label>
+            <button type="button" class="admin-booking-refresh admin-payment-flush-btn" data-payments-flush>
+                Export payments to PDF
+            </button>
             <button type="button" class="admin-booking-refresh" data-payments-refresh>Refresh</button>
+        </div>
+        <div class="admin-payment-flush-log" data-payments-flush-log>
+            <button
+                type="button"
+                class="admin-payment-flush-toggle"
+                data-payments-flush-toggle
+                aria-expanded="false"
+                aria-controls="paymentFlushLogPanel">
+                <span class="admin-payment-flush-toggle-label">
+                    <strong>Payment export log</strong>
+                    <span data-payments-flush-count>Closed · audit of PDF exports &amp; deletes</span>
+                </span>
+                <span class="admin-payment-flush-chevron" aria-hidden="true"></span>
+            </button>
+            <div id="paymentFlushLogPanel" class="admin-payment-flush-log-body" data-payments-flush-body hidden>
+                <p class="admin-payment-flush-log-hint">
+                    Completed-stay payments are hard-deleted after data export. Export logs auto-clear after 7 days.
+                </p>
+                <div class="admin-payment-flush-table-wrap">
+                    <table class="admin-bookings-table admin-payment-flush-table">
+                        <thead>
+                            <tr>
+                                <th>When (PH)</th>
+                                <th>Staff</th>
+                                <th>Records</th>
+                                <th>PDF file</th>
+                                <th>Expires</th>
+                                <th><span class="visually-hidden">Actions</span></th>
+                            </tr>
+                        </thead>
+                        <tbody data-payments-flush-log-list>
+                            <tr><td colspan="6" class="admin-bookings-loading">No export actions yet.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
         <p class="admin-bookings-message" data-payments-message role="status" hidden></p>
         <div class="admin-bookings-table-wrap admin-payments-table-wrap">
@@ -65,14 +104,15 @@
             <button type="button" data-payments-next disabled>Next</button>
         </nav>
         <p class="admin-payments-future-note">
-            Coming soon: bank-transfer verification workflow and online receipt image upload.
+            Digital payments with a scanned or uploaded receipt open in a compare view (photo + references).
+            New payments are still recorded from a booking’s details.
         </p>
     </div>
 </section>
 
 <div class="admin-booking-modal" data-payment-detail-modal hidden>
     <button type="button" class="admin-booking-modal-backdrop" data-payment-detail-close aria-label="Close payment details"></button>
-    <section class="admin-booking-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentDetailTitle">
+    <section class="admin-booking-modal-dialog admin-payment-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentDetailTitle">
         <header>
             <div>
                 <span class="admin-booking-reference" data-payment-detail-receipt></span>
@@ -85,7 +125,56 @@
         </div>
         <footer class="admin-booking-detail-actions">
             <button type="button" data-payment-detail-close>Close</button>
+            <button type="button" class="admin-payment-save-receipt" data-payment-save-receipt hidden>Save receipt details</button>
             <button type="button" class="admin-booking-delete" data-payment-void hidden>Void payment</button>
+        </footer>
+    </section>
+</div>
+
+<div class="admin-booking-modal" data-payments-flush-detail-modal hidden>
+    <button type="button" class="admin-booking-modal-backdrop" data-payments-flush-detail-close aria-label="Close export details"></button>
+    <section class="admin-booking-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentFlushDetailTitle">
+        <header>
+            <div>
+                <span class="admin-booking-reference" data-payments-flush-detail-file></span>
+                <h2 id="paymentFlushDetailTitle">Payment export details</h2>
+            </div>
+            <button type="button" class="admin-booking-modal-close" data-payments-flush-detail-close aria-label="Close">&times;</button>
+        </header>
+        <div class="admin-booking-detail-body" data-payments-flush-detail-body>
+            <p>Loading…</p>
+        </div>
+        <footer class="admin-booking-detail-actions">
+            <button type="button" data-payments-flush-detail-close>Close</button>
+        </footer>
+    </section>
+</div>
+
+<div class="admin-booking-modal" data-payments-flush-modal hidden>
+    <button type="button" class="admin-booking-modal-backdrop" data-payments-flush-close aria-label="Close export dialog"></button>
+    <section class="admin-booking-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentFlushTitle">
+        <header>
+            <div>
+                <span class="admin-booking-reference">Company records</span>
+                <h2 id="paymentFlushTitle">Export payments to PDF</h2>
+            </div>
+            <button type="button" class="admin-booking-modal-close" data-payments-flush-close aria-label="Close">&times;</button>
+        </header>
+        <div class="admin-booking-detail-body">
+            <p>
+                Export payments for checked-out, cancelled, and archived stays into a branded Mori PDF,
+                save it on this device, then permanently delete those payment rows.
+                Active stays keep their payment history.
+            </p>
+            <label class="admin-payment-flush-name">
+                Staff name performing this data export
+                <input type="text" maxlength="120" autocomplete="name" data-payments-flush-by placeholder="e.g. Ana Reyes" />
+            </label>
+            <p class="admin-payment-flush-warn" role="status">This cannot be undone. Export log entries clear after 7 days.</p>
+        </div>
+        <footer class="admin-booking-detail-actions">
+            <button type="button" data-payments-flush-close>Cancel</button>
+            <button type="button" class="admin-booking-confirm admin-payment-flush-confirm" data-payments-flush-confirm>Export PDF &amp; delete payments</button>
         </footer>
     </section>
 </div>

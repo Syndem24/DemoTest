@@ -13,15 +13,18 @@ public sealed class AdminPaymentsApiController : ControllerBase
 {
     private readonly IPaymentService _paymentService;
     private readonly IPaymentReceiptStorage _receiptStorage;
+    private readonly IReceiptOcrService _receiptOcr;
     private readonly IHubContext<BookingNotificationsHub, IBookingNotificationsClient> _hub;
 
     public AdminPaymentsApiController(
         IPaymentService paymentService,
         IPaymentReceiptStorage receiptStorage,
+        IReceiptOcrService receiptOcr,
         IHubContext<BookingNotificationsHub, IBookingNotificationsClient> hub)
     {
         _paymentService = paymentService;
         _receiptStorage = receiptStorage;
+        _receiptOcr = receiptOcr;
         _hub = hub;
     }
 
@@ -103,6 +106,29 @@ public sealed class AdminPaymentsApiController : ControllerBase
         }
     }
 
+    [HttpPost("{id:int}/receipt-details")]
+    [ValidateAntiForgeryToken]
+    public async Task<ActionResult<PaymentRecordDto>> UpdateReceiptDetails(
+        int id,
+        [FromBody] UpdatePaymentReceiptDetailsRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var payment = await _paymentService.UpdateReceiptDetailsAsync(id, request, cancellationToken);
+            await _hub.Clients.All.PaymentChanged(payment.BookingId);
+            return Ok(payment);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = "Payment was not found." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
+
     /// <summary>
     /// Uploads an e-wallet receipt image before or after OCR review.
     /// </summary>
@@ -135,6 +161,76 @@ public sealed class AdminPaymentsApiController : ControllerBase
                 file.ContentType,
                 cancellationToken);
             return Ok(new { path });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Azure Document Intelligence prebuilt-read OCR for a receipt image.
+    /// Returns engine Azure on success; otherwise Fallback/Unavailable/QuotaExceeded for client Tesseract.
+    /// </summary>
+    [HttpPost("receipt-ocr")]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(8_000_000)]
+    public async Task<ActionResult<object>> AnalyzeReceiptOcr(
+        [FromForm] int bookingId,
+        IFormFile? file,
+        CancellationToken cancellationToken)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest(new { message = "Choose a receipt photo to analyze." });
+        }
+
+        if (bookingId <= 0)
+        {
+            return BadRequest(new { message = "Booking id is required." });
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await _receiptOcr.AnalyzeAsync(
+            stream,
+            file.FileName,
+            file.ContentType,
+            cancellationToken);
+
+        return Ok(new
+        {
+            engine = result.Engine.ToString(),
+            text = result.Text,
+            fallbackReason = result.FallbackReason,
+            pagesUsedThisMonth = result.PagesUsedThisMonth,
+            monthlyBudget = result.MonthlyBudget,
+        });
+    }
+
+    [HttpGet("flush-logs")]
+    public async Task<ActionResult<IReadOnlyList<PaymentFlushLogDto>>> GetPaymentFlushLogs(
+        CancellationToken cancellationToken)
+    {
+        return Ok(await _paymentService.GetPaymentFlushLogsAsync(cancellationToken));
+    }
+
+    [HttpPost("flush")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> FlushPayments(
+        [FromBody] FlushPaymentsRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _paymentService.FlushPaymentsAsync(
+                request.PerformedBy,
+                cancellationToken);
+            Response.Headers["X-Flush-Record-Count"] = result.Log.RecordCount.ToString();
+            Response.Headers["X-Flush-Performed-By"] = result.Log.PerformedBy;
+            Response.Headers.Append(
+                "Access-Control-Expose-Headers",
+                "Content-Disposition, X-Flush-Record-Count, X-Flush-Performed-By");
+            return File(result.PdfBytes, "application/pdf", result.FileName);
         }
         catch (ArgumentException ex)
         {

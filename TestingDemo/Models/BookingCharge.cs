@@ -4,7 +4,12 @@ public enum BookingChargeType
 {
     EarlyCheckIn = 0,
     LateCheckout = 1,
-    ExtraPerson = 2
+    ExtraPerson = 2,
+    Incidental = 3,
+    ServiceFee = 4,
+    SnackBeverage = 5,
+    /// <summary>Display/metadata for extended nights; amount excluded from TotalAmount fee sum.</summary>
+    StayExtension = 6
 }
 
 public class BookingCharge

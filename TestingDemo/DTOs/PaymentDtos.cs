@@ -25,6 +25,18 @@ public sealed class VoidPaymentRequest
     public string Reason { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// Manual corrections to receipt proof metadata (does not change posted Amount).
+/// </summary>
+public sealed class UpdatePaymentReceiptDetailsRequest
+{
+    public string? ExternalReference { get; set; }
+    public string? TransferFrom { get; set; }
+    public string? TransferTo { get; set; }
+    public string? Channel { get; set; }
+    public decimal? ReceiptAmount { get; set; }
+}
+
 public sealed record PaymentRecordDto(
     int Id,
     int BookingId,

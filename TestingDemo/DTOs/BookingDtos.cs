@@ -9,7 +9,7 @@ public sealed class CreateWalkInRequest
     public string GuestPhone { get; set; } = string.Empty;
     public DateTime CheckInAtUtc { get; set; }
     public DateTime CheckoutTimeUtc { get; set; }
-    /// <summary>0 or 1; only allowed when a single room is assigned.</summary>
+    /// <summary>0 or 1; one extra guest beyond 2 included occupants (₱200/night).</summary>
     public int ExtraPersons { get; set; }
     public List<ConfirmRoomAssignmentRequest> Assignments { get; set; } = new();
 }
@@ -23,7 +23,7 @@ public sealed class CreateBookingRequest
     public DateTime CheckoutTimeUtc { get; set; }
     public PaymentOption PaymentOption { get; set; }
     public bool AcceptTerms { get; set; }
-    /// <summary>0 or 1; only allowed when a single room type is booked.</summary>
+    /// <summary>0 or 1; one extra guest beyond 2 included occupants (₱200/night).</summary>
     public int ExtraPersons { get; set; }
     public List<CreateBookingItemRequest> Items { get; set; } = new();
 }
@@ -33,8 +33,23 @@ public sealed class UpdateBookingChargesRequest
     public bool EarlyCheckIn { get; set; }
     /// <summary>0–3 hours past noon checkout.</summary>
     public int LateCheckoutHours { get; set; }
-    /// <summary>0 or 1; single rooms only.</summary>
+    /// <summary>0 or 1; one extra guest (₱200/night).</summary>
     public int ExtraPersons { get; set; }
+
+    /// <summary>Damage / incidental amount (₱). 0 clears.</summary>
+    public decimal IncidentalAmount { get; set; }
+    public string? IncidentalNote { get; set; }
+
+    /// <summary>Service fee amount (₱). 0 clears.</summary>
+    public decimal ServiceFeeAmount { get; set; }
+
+    public int SnackBeverageQty { get; set; }
+    public decimal SnackBeverageUnitAmount { get; set; }
+    /// <summary>Optional product name (e.g. Bottled water, coffee).</summary>
+    public string? SnackBeverageProduct { get; set; }
+
+    /// <summary>Additional nights to append to checkout on this save (0 = no change).</summary>
+    public int ExtendStayNights { get; set; }
 }
 
 public sealed class CreateBookingItemRequest

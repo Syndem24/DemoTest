@@ -1,13 +1,11 @@
-using TestingDemo.Models;
-
 namespace TestingDemo.DTOs;
 
-public sealed class FlushBookingHistoryRequest
+public sealed class FlushPaymentsRequest
 {
     public string PerformedBy { get; set; } = string.Empty;
 }
 
-public sealed record BookingHistoryFlushLogDto(
+public sealed record PaymentFlushLogDto(
     int Id,
     DateTime FlushedAtUtc,
     DateTime ExpiresAtUtc,
@@ -16,7 +14,7 @@ public sealed record BookingHistoryFlushLogDto(
     string FileName,
     string Summary);
 
-public sealed record FlushBookingHistoryResult(
+public sealed record FlushPaymentsResult(
     byte[] PdfBytes,
     string FileName,
-    BookingHistoryFlushLogDto Log);
+    PaymentFlushLogDto Log);

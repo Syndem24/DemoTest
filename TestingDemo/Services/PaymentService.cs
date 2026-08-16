@@ -1,3 +1,5 @@
+using System.Data;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using TestingDemo.Data;
 using TestingDemo.DTOs;
@@ -7,11 +9,15 @@ namespace TestingDemo.Services;
 
 public sealed class PaymentService : IPaymentService
 {
-    private readonly HotelBookingDbContext _db;
+    public static readonly TimeSpan FlushLogRetention = TimeSpan.FromDays(7);
 
-    public PaymentService(HotelBookingDbContext db)
+    private readonly HotelBookingDbContext _db;
+    private readonly IWebHostEnvironment _environment;
+
+    public PaymentService(HotelBookingDbContext db, IWebHostEnvironment environment)
     {
         _db = db;
+        _environment = environment;
     }
 
     public async Task<PaymentRecordDto> RecordAsync(
@@ -144,6 +150,85 @@ public sealed class PaymentService : IPaymentService
         return Map(record, record.Booking);
     }
 
+    public async Task<PaymentRecordDto> UpdateReceiptDetailsAsync(
+        int paymentId,
+        UpdatePaymentReceiptDetailsRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var record = await _db.PaymentRecords
+            .Include(p => p.Booking)
+            .FirstOrDefaultAsync(p => p.Id == paymentId, cancellationToken)
+            ?? throw new KeyNotFoundException("Payment was not found.");
+
+        if (record.Status == PaymentRecordStatus.Voided)
+        {
+            throw new InvalidOperationException("Voided payments cannot be edited.");
+        }
+
+        record.ExternalReference = TrimOrNull(request.ExternalReference, 120);
+
+        var existingNotes = record.Notes ?? string.Empty;
+        var channel = TrimOrNull(request.Channel, 40)
+            ?? ExtractOcrField(existingNotes, "Channel")
+            ?? "Digital";
+        var from = TrimOrNull(request.TransferFrom, 160);
+        var to = TrimOrNull(request.TransferTo, 160);
+        var receiptAmount = request.ReceiptAmount is > 0
+            ? decimal.Round(request.ReceiptAmount.Value, 2, MidpointRounding.AwayFromZero)
+            : (decimal?)null;
+
+        var partyBits = new List<string> { $"Channel: {channel}" };
+        if (!string.IsNullOrWhiteSpace(from))
+        {
+            partyBits.Add($"From: {from}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(to))
+        {
+            partyBits.Add($"To: {to}");
+        }
+
+        if (receiptAmount.HasValue)
+        {
+            partyBits.Add($"Receipt amount: ₱{receiptAmount.Value:N2}");
+        }
+
+        var stamp = $"Digital OCR · {string.Join(" · ", partyBits)}";
+        if (System.Text.RegularExpressions.Regex.IsMatch(
+                existingNotes,
+                @"(?:Digital|E-wallet) OCR ·[^\n]*",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        {
+            record.Notes = TrimOrNull(
+                System.Text.RegularExpressions.Regex.Replace(
+                    existingNotes,
+                    @"(?:Digital|E-wallet) OCR ·[^\n]*",
+                    stamp,
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase),
+                1000);
+        }
+        else
+        {
+            var combined = string.IsNullOrWhiteSpace(existingNotes)
+                ? stamp
+                : $"{existingNotes.Trim()}\n{stamp}";
+            record.Notes = TrimOrNull(combined, 1000);
+        }
+
+        record.Booking.UpdatedAtUtc = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+        return Map(record, record.Booking);
+    }
+
+    private static string? ExtractOcrField(string notes, string label)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(
+            notes,
+            $@"{System.Text.RegularExpressions.Regex.Escape(label)}:\s*([^·\n]+)",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return match.Success ? TrimOrNull(match.Groups[1].Value, 160) : null;
+    }
+
     public async Task<PagedPaymentsDto> GetPagedAsync(
         string? search,
         PaymentMethod? method,
@@ -250,6 +335,185 @@ public sealed class PaymentService : IPaymentService
 
         return record is null ? null : Map(record, record.Booking);
     }
+
+    public async Task<FlushPaymentsResult> FlushPaymentsAsync(
+        string performedBy,
+        CancellationToken cancellationToken = default)
+    {
+        performedBy = performedBy?.Trim() ?? string.Empty;
+        if (performedBy.Length < 2 || performedBy.Length > 120)
+        {
+            throw new ArgumentException("Enter the staff name who is exporting payments (2–120 characters).");
+        }
+
+        await PurgeExpiredFlushLogsAsync(cancellationToken);
+
+        await using var transaction = await _db.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            cancellationToken);
+
+        // Only completed / archived stays — keep payment rows for active bookings.
+        var payments = await _db.PaymentRecords
+            .Include(p => p.Booking)
+            .Where(p =>
+                p.Booking.IsArchived
+                || p.Booking.Status == BookingStatus.CheckedOut
+                || p.Booking.Status == BookingStatus.Cancelled
+                || p.Booking.Status == BookingStatus.Rejected)
+            .OrderByDescending(p => p.PaidAtUtc)
+            .ThenByDescending(p => p.Id)
+            .ToListAsync(cancellationToken);
+
+        if (payments.Count == 0)
+        {
+            throw new ArgumentException(
+                "No completed-stay payments to export. Active bookings keep their payment records.");
+        }
+
+        var flushedAtUtc = DateTime.UtcNow;
+        var stamp = PhilippinesTime.ToManila(flushedAtUtc).ToString("yyyyMMdd-HHmm");
+        var fileName = $"Mori-Payment-Export-{stamp}.pdf";
+        var logoPath = Path.Combine(_environment.WebRootPath, "Images", "Logo.png");
+        var pdfBytes = PaymentFlushPdfBuilder.Build(payments, performedBy, flushedAtUtc, logoPath);
+        var summary = BuildFlushSummary(payments);
+        var receiptPaths = payments
+            .Select(p => p.ReceiptImagePath)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        _db.PaymentRecords.RemoveRange(payments);
+
+        var log = new PaymentFlushLog
+        {
+            FlushedAtUtc = flushedAtUtc,
+            PerformedBy = performedBy,
+            RecordCount = payments.Count,
+            FileName = fileName,
+            Summary = summary.Length > 2000 ? summary[..2000] : summary
+        };
+        _db.PaymentFlushLogs.Add(log);
+
+        await _db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        TryDeleteReceiptFiles(receiptPaths);
+
+        return new FlushPaymentsResult(
+            pdfBytes,
+            fileName,
+            MapFlushLog(log));
+    }
+
+    public async Task<IReadOnlyList<PaymentFlushLogDto>> GetPaymentFlushLogsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await PurgeExpiredFlushLogsAsync(cancellationToken);
+
+        return await _db.PaymentFlushLogs
+            .AsNoTracking()
+            .OrderByDescending(log => log.FlushedAtUtc)
+            .Take(50)
+            .Select(log => new PaymentFlushLogDto(
+                log.Id,
+                log.FlushedAtUtc,
+                log.FlushedAtUtc.Add(FlushLogRetention),
+                log.PerformedBy,
+                log.RecordCount,
+                log.FileName,
+                log.Summary))
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task PurgeExpiredFlushLogsAsync(CancellationToken cancellationToken)
+    {
+        var cutoff = DateTime.UtcNow.Subtract(FlushLogRetention);
+        var expired = await _db.PaymentFlushLogs
+            .Where(log => log.FlushedAtUtc < cutoff)
+            .ToListAsync(cancellationToken);
+
+        if (expired.Count == 0)
+        {
+            return;
+        }
+
+        _db.PaymentFlushLogs.RemoveRange(expired);
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private void TryDeleteReceiptFiles(IEnumerable<string?> relativePaths)
+    {
+        foreach (var relative in relativePaths)
+        {
+            if (string.IsNullOrWhiteSpace(relative))
+            {
+                continue;
+            }
+
+            try
+            {
+                var trimmed = relative.TrimStart('~', '/').Replace('/', Path.DirectorySeparatorChar);
+                var fullPath = Path.Combine(_environment.WebRootPath, trimmed);
+                if (File.Exists(fullPath))
+                {
+                    File.Delete(fullPath);
+                }
+            }
+            catch
+            {
+                // Best-effort cleanup; PDF softcopy is the retained record.
+            }
+        }
+    }
+
+    private static PaymentFlushLogDto MapFlushLog(PaymentFlushLog log)
+    {
+        return new PaymentFlushLogDto(
+            log.Id,
+            log.FlushedAtUtc,
+            log.FlushedAtUtc.Add(FlushLogRetention),
+            log.PerformedBy,
+            log.RecordCount,
+            log.FileName,
+            log.Summary);
+    }
+
+    private static string BuildFlushSummary(IReadOnlyList<PaymentRecord> payments)
+    {
+        var posted = payments.Count(p => p.Status == PaymentRecordStatus.Posted);
+        var voided = payments.Count(p => p.Status == PaymentRecordStatus.Voided);
+        var collected = payments
+            .Where(p => p.Status == PaymentRecordStatus.Posted && p.Amount > 0)
+            .Sum(p => p.Amount);
+        var refunded = Math.Abs(payments
+            .Where(p => p.Status == PaymentRecordStatus.Posted && p.Amount < 0)
+            .Sum(p => p.Amount));
+        var methods = payments
+            .GroupBy(p => p.Method)
+            .OrderByDescending(g => g.Count())
+            .Select(g => $"{FormatMethodLabel(g.Key)} ({g.Count()})")
+            .Take(6);
+        var bookings = payments
+            .Select(p => p.Booking?.Reference)
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+        return string.Join(
+            "\n",
+            $"Posted {posted} · Voided {voided} · Bookings {bookings}",
+            $"Collected ₱{collected:N2} · Refunded ₱{refunded:N2}",
+            $"Methods: {string.Join(", ", methods)}",
+            "Export log retained for 7 days, then auto-deleted.");
+    }
+
+    private static string FormatMethodLabel(PaymentMethod method) => method switch
+    {
+        PaymentMethod.BankTransfer => "Bank transfer",
+        PaymentMethod.EWallet or PaymentMethod.Maya => "E-wallet",
+        PaymentMethod.Card => "Card",
+        _ => method.ToString()
+    };
 
     private async Task RecalculateBalancesAsync(int bookingId, CancellationToken cancellationToken)
     {

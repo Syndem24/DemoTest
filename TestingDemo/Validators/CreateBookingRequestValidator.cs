@@ -37,7 +37,7 @@ public sealed class CreateBookingRequestValidator : AbstractValidator<CreateBook
 
         RuleFor(x => x.ExtraPersons)
             .InclusiveBetween(0, 1)
-            .WithMessage("Extra person is limited to one on a single room.");
+            .WithMessage("Only one extra guest is allowed (₱200 / night).");
 
         RuleFor(x => x.Items)
             .NotEmpty()

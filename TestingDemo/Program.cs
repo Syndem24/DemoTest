@@ -79,7 +79,18 @@ try
     builder.Services.AddScoped<IBookingService, BookingService>();
     builder.Services.AddScoped<IPaymentService, PaymentService>();
     builder.Services.AddSingleton<IPaymentReceiptStorage, LocalPaymentReceiptStorage>();
+    builder.Services.Configure<AzureDocumentIntelligenceOptions>(
+        builder.Configuration.GetSection(AzureDocumentIntelligenceOptions.SectionName));
+    builder.Services.AddSingleton<OcrUsageTracker>();
+    builder.Services.AddScoped<IReceiptOcrService, AzureReceiptOcrService>();
     builder.Services.AddHostedService<AutomaticCheckoutBackgroundService>();
+
+    builder.Services.AddResponseCompression(options =>
+    {
+        options.EnableForHttps = true;
+        options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProvider>();
+        options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProvider>();
+    });
 
     var app = builder.Build();
 
@@ -103,6 +114,7 @@ try
     }
 
     app.UseRequestLocalization();
+    app.UseResponseCompression();
     app.UseRouting();
     app.UseStatusCodePagesWithReExecute("/Home/NotFoundPage");
     app.UseRateLimiter();

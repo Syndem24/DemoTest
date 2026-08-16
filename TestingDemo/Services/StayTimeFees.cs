@@ -14,7 +14,9 @@ public static class StayTimeFees
     public const decimal LateCheckoutFeePerRoomPerHour = 100m;
     public const decimal ExtraPersonFeePerNight = 200m;
     public const int MaxLateCheckoutHours = 3;
-    public const int MaxExtraPersonsOnSingleRoom = 1;
+    /// <summary>Max extra guests beyond 2 included occupants per room (booking-wide).</summary>
+    public const int MaxExtraPersons = 1;
+    public const int MaxExtraPersonsOnSingleRoom = MaxExtraPersons;
 
     public static bool IsEarlyCheckIn(DateTime checkInAtUtc)
     {

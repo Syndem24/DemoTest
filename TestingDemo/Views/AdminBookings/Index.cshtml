@@ -43,7 +43,7 @@
             <div class="admin-arrivals-head">
                 <div>
                     <strong>Call guests soon</strong>
-                    <p>Pending bookings with check-in in the next 20 minutes — call to verify, then Confirm &amp; assign rooms.</p>
+                    <p>Pending bookings with check-in in the next 20 minutes — call to verify, then Confirm &amp; continue setup.</p>
                 </div>
                 <button type="button" class="admin-booking-refresh" data-pending-calls-close>Back to bookings</button>
             </div>
@@ -78,42 +78,43 @@
             <button type="button" class="guest-btn guest-btn-primary admin-walkin-open-btn" data-walkin-open>
                 Walk-in
             </button>
-            <button type="button" class="admin-booking-refresh admin-history-flush-btn" data-history-flush hidden>
-                Flush history to PDF
+            <button type="button" class="admin-booking-refresh admin-payment-flush-btn" data-history-flush hidden>
+                Export history to PDF
             </button>
             <button type="button" class="admin-booking-refresh" data-booking-refresh>Refresh</button>
         </div>
 
-        <div class="admin-history-flush-log" data-history-flush-log hidden>
+        <div class="admin-payment-flush-log" data-history-flush-log hidden>
             <button
                 type="button"
-                class="admin-history-flush-toggle"
+                class="admin-payment-flush-toggle"
                 data-history-flush-toggle
                 aria-expanded="false"
                 aria-controls="historyFlushLogPanel">
-                <span class="admin-history-flush-toggle-label">
-                    <strong>History flush log</strong>
+                <span class="admin-payment-flush-toggle-label">
+                    <strong>History export log</strong>
                     <span data-history-flush-count>Closed · audit of PDF exports &amp; deletes</span>
                 </span>
-                <span class="admin-history-flush-chevron" aria-hidden="true"></span>
+                <span class="admin-payment-flush-chevron" aria-hidden="true"></span>
             </button>
-            <div id="historyFlushLogPanel" class="admin-history-flush-log-body" data-history-flush-body hidden>
-                <p class="admin-history-flush-log-hint">
-                    Archived bookings are hard-deleted after export. Only these flush actions remain.
+            <div id="historyFlushLogPanel" class="admin-payment-flush-log-body" data-history-flush-body hidden>
+                <p class="admin-payment-flush-log-hint">
+                    Archived bookings are hard-deleted after data export. Export logs auto-clear after 7 days.
                 </p>
-                <div class="admin-history-flush-table-wrap">
-                    <table class="admin-bookings-table admin-history-flush-table">
+                <div class="admin-payment-flush-table-wrap">
+                    <table class="admin-bookings-table admin-payment-flush-table">
                         <thead>
                             <tr>
                                 <th>When (PH)</th>
                                 <th>Staff</th>
                                 <th>Records</th>
                                 <th>PDF file</th>
+                                <th>Expires</th>
                                 <th><span class="visually-hidden">Actions</span></th>
                             </tr>
                         </thead>
                         <tbody data-history-flush-log-list>
-                            <tr><td colspan="5" class="admin-bookings-loading">No flush actions yet.</td></tr>
+                            <tr><td colspan="6" class="admin-bookings-loading">No export actions yet.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -181,21 +182,29 @@
             <p>Loading details…</p>
         </div>
         <footer class="admin-booking-detail-actions" data-booking-detail-actions></footer>
+        <div class="admin-fees-saved-popup" data-fees-saved-popup hidden>
+            <div class="admin-fees-saved-popup-card" role="alertdialog" aria-modal="true" aria-labelledby="feesSavedPopupTitle">
+                <h3 id="feesSavedPopupTitle">Additional fees</h3>
+                <ul class="admin-fees-saved-list" data-fees-saved-list></ul>
+                <p class="admin-fees-saved-empty" data-fees-saved-empty hidden>No additional fees on this booking.</p>
+                <button type="button" class="admin-booking-confirm" data-fees-saved-ok>OK</button>
+            </div>
+        </div>
     </section>
 </div>
 
 <div class="admin-booking-modal" data-history-flush-detail-modal hidden>
-    <button type="button" class="admin-booking-modal-backdrop" data-history-flush-detail-close aria-label="Close flush details"></button>
+    <button type="button" class="admin-booking-modal-backdrop" data-history-flush-detail-close aria-label="Close export details"></button>
     <section class="admin-booking-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="historyFlushDetailTitle">
         <header>
             <div>
                 <span class="admin-booking-reference" data-flush-detail-file></span>
-                <h2 id="historyFlushDetailTitle">Flush details</h2>
+                <h2 id="historyFlushDetailTitle">Export details</h2>
             </div>
             <button type="button" class="admin-booking-modal-close" data-history-flush-detail-close aria-label="Close">&times;</button>
         </header>
         <div class="admin-booking-detail-body" data-flush-detail-body>
-            <p>Select a flush log row to view details.</p>
+            <p>Select an export log row to view details.</p>
         </div>
         <footer class="admin-booking-detail-actions">
             <button type="button" data-history-flush-detail-close>Close</button>
@@ -338,25 +347,24 @@
                         <p class="admin-payment-panel-title">Compare OCR result</p>
                         <div class="admin-payment-ocr-grid">
                             <figure class="admin-payment-ocr-photo">
-                                <img
-                                    alt="Uploaded payment receipt"
-                                    data-payment-ocr-image
-                                    data-photo-zoom
-                                    data-photo-zoom-alt="Payment receipt"
-                                    title="Click to zoom · Esc to exit" />
-                                <figcaption>Uploaded receipt · click to zoom · Esc to exit</figcaption>
+                                <div class="admin-payment-ocr-photo-frame">
+                                    <img
+                                        alt="Uploaded payment receipt"
+                                        data-payment-ocr-image
+                                        data-photo-zoom
+                                        data-photo-zoom-alt="Payment receipt"
+                                        title="Click to zoom · Esc to exit" />
+                                </div>
+                                <div class="admin-payment-ocr-photo-meta">
+                                    <p class="admin-payment-ocr-caption" data-payment-ocr-caption>Receipt photo · click to zoom · Esc to exit</p>
+                                    <label class="admin-payment-ocr-filter-switch">
+                                        <input type="checkbox" data-payment-ocr-scanner-filter />
+                                        <span class="admin-payment-ocr-filter-track" aria-hidden="true"></span>
+                                        <span class="admin-payment-ocr-filter-text">Scanner filter</span>
+                                    </label>
+                                </div>
                             </figure>
                             <div class="admin-payment-ocr-fields">
-                                <label>
-                                    <span>Detected channel</span>
-                                    <select data-payment-ocr-wallet>
-                                        <option value="GCash">GCash</option>
-                                        <option value="Maya">Maya</option>
-                                        <option value="PayPal">PayPal</option>
-                                        <option value="InstaPay">InstaPay</option>
-                                        <option value="Other">Other</option>
-                                    </select>
-                                </label>
                                 <label>
                                     <span>Detected reference</span>
                                     <input type="text" maxlength="120" data-payment-ocr-ref placeholder="Ref No. / transaction id" />
@@ -378,7 +386,7 @@
                                     <textarea rows="6" readonly data-payment-ocr-raw></textarea>
                                 </label>
                                 <p class="admin-payment-prices-hint">
-                                    Scan or upload the guest receipt, fix OCR mistakes, then Apply.
+                                    Scan or upload the guest receipt (Azure OCR when available, otherwise local). Fix fields, then Apply.
                                 </p>
                                 <div class="admin-payment-ocr-actions">
                                     <button type="button" data-payment-ocr-discard>Discard scan</button>
@@ -432,7 +440,7 @@
         </header>
         <div class="admin-booking-detail-body admin-payment-camera-body">
             <p class="admin-payment-prices-hint">
-                Align the full receipt inside the guide frame. Capture happens automatically when the photo is clear and details are readable — or tap Capture anytime.
+                Hold the guest’s phone upright. Fit the full mobile receipt inside the portrait frame — capture is automatic when details are clear, or tap Capture anytime.
             </p>
             <div class="admin-payment-camera-stage">
                 <video data-payment-camera-video playsinline autoplay muted></video>
@@ -443,7 +451,11 @@
                         <span class="admin-payment-camera-guide-corner is-tr"></span>
                         <span class="admin-payment-camera-guide-corner is-bl"></span>
                         <span class="admin-payment-camera-guide-corner is-br"></span>
-                        <p class="admin-payment-camera-guide-label" data-payment-camera-guide-label>Place receipt here</p>
+                        <span class="admin-payment-camera-guide-tick is-top"></span>
+                        <span class="admin-payment-camera-guide-tick is-bottom"></span>
+                        <span class="admin-payment-camera-guide-tick is-left"></span>
+                        <span class="admin-payment-camera-guide-tick is-right"></span>
+                        <p class="admin-payment-camera-guide-label" data-payment-camera-guide-label>Mobile receipt</p>
                     </div>
                 </div>
             </div>
@@ -458,12 +470,12 @@
 </div>
 
 <div class="admin-booking-modal" data-history-flush-modal hidden>
-    <button type="button" class="admin-booking-modal-backdrop" data-history-flush-close aria-label="Close flush dialog"></button>
+    <button type="button" class="admin-booking-modal-backdrop" data-history-flush-close aria-label="Close export dialog"></button>
     <section class="admin-booking-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="historyFlushTitle">
         <header>
             <div>
                 <span class="admin-booking-reference">Permanent delete</span>
-                <h2 id="historyFlushTitle">Flush history to PDF</h2>
+                <h2 id="historyFlushTitle">Export history to PDF</h2>
             </div>
             <button type="button" class="admin-booking-modal-close" data-history-flush-close aria-label="Close">&times;</button>
         </header>
@@ -471,17 +483,17 @@
             <p>
                 This exports every history record (guest, stay, rooms, amounts) into a branded Mori International Hotel PDF
                 softcopy with logo and trademark, saves it to this device, then <strong>permanently deletes</strong> those
-                history rows. Only a flush log (who / when / count) will remain.
+                history rows. Only an export log (who / when / count) will remain for 7 days.
             </p>
-            <label class="admin-history-flush-name">
-                <span>Staff name performing this flush</span>
+            <label class="admin-payment-flush-name">
+                <span>Staff name performing this data export</span>
                 <input type="text" maxlength="120" autocomplete="name" data-history-flush-by placeholder="e.g. Ana Reyes" />
             </label>
-            <p class="admin-history-flush-warn" role="status">This cannot be undone.</p>
+            <p class="admin-payment-flush-warn" role="status">This cannot be undone. Export log entries clear after 7 days.</p>
         </div>
         <footer class="admin-booking-detail-actions">
             <button type="button" data-history-flush-close>Cancel</button>
-            <button type="button" class="admin-booking-confirm" data-history-flush-confirm>Export PDF &amp; delete history</button>
+            <button type="button" class="admin-booking-confirm admin-payment-flush-confirm" data-history-flush-confirm>Export PDF &amp; delete history</button>
         </footer>
     </section>
 </div>

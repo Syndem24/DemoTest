@@ -28,6 +28,11 @@ public interface IPaymentService
         VoidPaymentRequest request,
         CancellationToken cancellationToken = default);
 
+    Task<PaymentRecordDto> UpdateReceiptDetailsAsync(
+        int paymentId,
+        UpdatePaymentReceiptDetailsRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<PagedPaymentsDto> GetPagedAsync(
         string? search,
         PaymentMethod? method,
@@ -41,5 +46,12 @@ public interface IPaymentService
 
     Task<PaymentRecordDto?> GetByIdAsync(
         int id,
+        CancellationToken cancellationToken = default);
+
+    Task<FlushPaymentsResult> FlushPaymentsAsync(
+        string performedBy,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<PaymentFlushLogDto>> GetPaymentFlushLogsAsync(
         CancellationToken cancellationToken = default);
 }
