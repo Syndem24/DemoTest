@@ -41,15 +41,51 @@ public sealed class BookingService : IBookingService
         DateTime checkoutTimeUtc,
         CancellationToken cancellationToken = default)
     {
+        return await BuildAvailabilityAsync(
+            checkInAtUtc,
+            checkoutTimeUtc,
+            excludeBookingId: null,
+            allowPastCheckIn: false,
+            cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<RoomAvailabilityDto>> GetAvailabilityForBookingAsync(
+        int bookingId,
+        DateTime checkInAtUtc,
+        DateTime checkoutTimeUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var exists = await _db.Bookings.AsNoTracking()
+            .AnyAsync(b => b.Id == bookingId, cancellationToken);
+        if (!exists)
+        {
+            throw new KeyNotFoundException("Booking was not found.");
+        }
+
+        return await BuildAvailabilityAsync(
+            checkInAtUtc,
+            checkoutTimeUtc,
+            excludeBookingId: bookingId,
+            allowPastCheckIn: true,
+            cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<RoomAvailabilityDto>> BuildAvailabilityAsync(
+        DateTime checkInAtUtc,
+        DateTime checkoutTimeUtc,
+        int? excludeBookingId,
+        bool allowPastCheckIn,
+        CancellationToken cancellationToken)
+    {
         checkInAtUtc = PhilippinesTime.ToUtc(checkInAtUtc);
         checkoutTimeUtc = PhilippinesTime.ToUtc(checkoutTimeUtc);
-        ValidateDates(checkInAtUtc, checkoutTimeUtc);
+        ValidateDates(checkInAtUtc, checkoutTimeUtc, allowPastCheckIn);
 
         var capacities = await GetPhysicalCapacityByTypeAsync(cancellationToken);
         var held = await GetHeldQuantityByTypeAsync(
             checkInAtUtc,
             checkoutTimeUtc,
-            excludeBookingId: null,
+            excludeBookingId,
             cancellationToken);
 
         return capacities
@@ -459,6 +495,7 @@ public sealed class BookingService : IBookingService
             .Include(booking => booking.Items)
                 .ThenInclude(line => line.AssignedRooms)
                     .ThenInclude(assignment => assignment.Room)
+            .Include(booking => booking.Charges)
             .Where(booking =>
                 !booking.IsArchived
                 && booking.Status != BookingStatus.Rejected
@@ -474,6 +511,13 @@ public sealed class BookingService : IBookingService
                 var kindLabel = booking.Kind == BookingKind.Reservation
                     ? "Reservation"
                     : "Booking";
+                var extensionNights = (booking.Charges ?? Array.Empty<BookingCharge>())
+                    .Where(charge => charge.ChargeType == BookingChargeType.StayExtension)
+                    .Sum(charge => Math.Max(0, charge.Quantity));
+                var totalNights = StayNights(booking.CheckInAtUtc, booking.CheckoutTimeUtc);
+                // Keep at least one primary night so the original stay remains visible.
+                extensionNights = Math.Clamp(extensionNights, 0, Math.Max(0, totalNights - 1));
+
                 return new ReservationCalendarEventDto(
                     booking.Id,
                     $"{kindLabel} · {booking.Reference} · {booking.GuestName}",
@@ -495,7 +539,8 @@ public sealed class BookingService : IBookingService
                         return assigned.Count > 0
                             ? $"{line.RoomTypeName}: {string.Join(", ", assigned)}"
                             : $"{line.Quantity}× {line.RoomTypeName}";
-                    })));
+                    })),
+                    extensionNights);
             })
             .ToList();
     }
@@ -1053,6 +1098,16 @@ public sealed class BookingService : IBookingService
             throw new BookingConcurrencyException("This booking already has rooms assigned.");
         }
 
+        var paid = await _db.PaymentRecords
+            .Where(p => p.BookingId == booking.Id && p.Status == PaymentRecordStatus.Posted)
+            .SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0m;
+        var balanceDue = decimal.Round(booking.TotalAmount - paid, 2, MidpointRounding.AwayFromZero);
+        if (balanceDue > 0.009m)
+        {
+            throw new BookingConcurrencyException(
+                $"Guest must be fully paid before assigning rooms. Balance due: ₱{balanceDue:N2}.");
+        }
+
         EnsureRoomAssignmentAllowed(booking);
         await AssignAndOccupyRoomsAsync(booking, assignments, cancellationToken);
         booking.IsNotificationCleared = false;
@@ -1070,7 +1125,6 @@ public sealed class BookingService : IBookingService
     {
         var checkInAtUtc = PhilippinesTime.ToUtc(request.CheckInAtUtc);
         var checkoutTimeUtc = PhilippinesTime.ToUtc(request.CheckoutTimeUtc);
-        ValidateDates(checkInAtUtc, checkoutTimeUtc);
 
         var requestedItems = request.Items
             .Where(line => line.Quantity > 0)
@@ -1101,66 +1155,128 @@ public sealed class BookingService : IBookingService
             throw new BookingConcurrencyException("Bookings in history cannot be edited.");
         }
 
-        if (booking.Status == BookingStatus.Confirmed)
+        if (booking.Status is not BookingStatus.Pending and not BookingStatus.Confirmed)
         {
             throw new BookingConcurrencyException(
-                "Confirmed bookings with assigned rooms cannot be edited. Cancel to history first.");
+                "Only pending or confirmed bookings can be edited.");
         }
 
-        var requestedTypeIds = requestedItems.Select(line => line.RoomTypeId).ToList();
-        var capacities = await GetPhysicalCapacityByTypeAsync(cancellationToken);
-        var capacityByType = capacities
-            .Where(item => requestedTypeIds.Contains(item.RoomTypeId))
-            .ToDictionary(item => item.RoomTypeId);
+        var hasAssignments = booking.Items.Any(line => line.AssignedRooms.Count > 0);
+        ValidateDates(checkInAtUtc, checkoutTimeUtc, allowPastCheckIn: hasAssignments);
 
-        foreach (var requested in requestedItems)
+        if (hasAssignments)
         {
-            if (!capacityByType.TryGetValue(requested.RoomTypeId, out var roomType))
+            // Hard edit: contact + dates only; keep assigned rooms and quantities.
+            if (booking.Status != BookingStatus.Confirmed)
             {
-                throw new BookingAvailabilityException(
-                    "One of the selected room types is no longer operationally available.");
+                throw new BookingConcurrencyException(
+                    "Rooms are already assigned — only confirmed stays can be corrected.");
             }
 
-            var heldByOthers = await GetHeldQuantityForTypeAsync(
-                requested.RoomTypeId,
+            var existingByType = booking.Items
+                .Where(line => line.RoomTypeId.HasValue)
+                .ToDictionary(line => line.RoomTypeId!.Value, line => line);
+
+            if (requestedItems.Count == 0)
+            {
+                throw new ArgumentException("At least one room type is required.");
+            }
+
+            foreach (var requested in requestedItems)
+            {
+                if (!existingByType.TryGetValue(requested.RoomTypeId, out var line)
+                    || line.Quantity != requested.Quantity)
+                {
+                    throw new BookingConcurrencyException(
+                        "Room types and quantities cannot change after rooms are assigned. Correct guest details or stay dates only.");
+                }
+            }
+
+            foreach (var typeId in existingByType.Keys)
+            {
+                if (requestedItems.All(r => r.RoomTypeId != typeId))
+                {
+                    throw new BookingConcurrencyException(
+                        "Room types and quantities cannot change after rooms are assigned. Correct guest details or stay dates only.");
+                }
+            }
+
+            var blockedRoomIds = await GetRoomIdsAssignedOnOverlappingStaysAsync(
                 checkInAtUtc,
                 checkoutTimeUtc,
                 excludeBookingId: booking.Id,
                 cancellationToken);
 
-            if (heldByOthers + requested.Quantity > roomType.Capacity)
+            foreach (var line in booking.Items)
             {
-                var remaining = Math.Max(0, roomType.Capacity - heldByOthers);
-                throw new BookingAvailabilityException(
-                    $"{roomType.RoomTypeName} has only {remaining} room(s) available for those dates.");
+                foreach (var assignment in line.AssignedRooms)
+                {
+                    var roomNumber = assignment.Room?.RoomNumber ?? $"#{assignment.RoomId}";
+                    if (blockedRoomIds.Contains(assignment.RoomId))
+                    {
+                        throw new BookingAvailabilityException(
+                            $"Room {roomNumber} is already held by another stay for those dates. Keep the current dates or cancel and rebook.");
+                    }
+                }
             }
         }
-
-        var requestedByType = requestedItems.ToDictionary(line => line.RoomTypeId);
-        foreach (var existing in booking.Items.ToList())
+        else
         {
-            if (!existing.RoomTypeId.HasValue
-                || !requestedByType.ContainsKey(existing.RoomTypeId.Value))
-            {
-                _db.BookingItems.Remove(existing);
-                booking.Items.Remove(existing);
-            }
-        }
+            var requestedTypeIds = requestedItems.Select(line => line.RoomTypeId).ToList();
+            var capacities = await GetPhysicalCapacityByTypeAsync(cancellationToken);
+            var capacityByType = capacities
+                .Where(item => requestedTypeIds.Contains(item.RoomTypeId))
+                .ToDictionary(item => item.RoomTypeId);
 
-        foreach (var requested in requestedItems)
-        {
-            var roomType = capacityByType[requested.RoomTypeId];
-            var line = booking.Items.FirstOrDefault(
-                existing => existing.RoomTypeId == requested.RoomTypeId);
-            if (line == null)
+            foreach (var requested in requestedItems)
             {
-                line = new BookingItem { RoomTypeId = requested.RoomTypeId };
-                booking.Items.Add(line);
+                if (!capacityByType.TryGetValue(requested.RoomTypeId, out var roomType))
+                {
+                    throw new BookingAvailabilityException(
+                        "One of the selected room types is no longer operationally available.");
+                }
+
+                var heldByOthers = await GetHeldQuantityForTypeAsync(
+                    requested.RoomTypeId,
+                    checkInAtUtc,
+                    checkoutTimeUtc,
+                    excludeBookingId: booking.Id,
+                    cancellationToken);
+
+                if (heldByOthers + requested.Quantity > roomType.Capacity)
+                {
+                    var remaining = Math.Max(0, roomType.Capacity - heldByOthers);
+                    throw new BookingAvailabilityException(
+                        $"{roomType.RoomTypeName} has only {remaining} room(s) available for those dates.");
+                }
             }
 
-            line.RoomTypeName = roomType.RoomTypeName;
-            line.Quantity = requested.Quantity;
-            line.PricePerNight = roomType.PricePerNight;
+            var requestedByType = requestedItems.ToDictionary(line => line.RoomTypeId);
+            foreach (var existing in booking.Items.ToList())
+            {
+                if (!existing.RoomTypeId.HasValue
+                    || !requestedByType.ContainsKey(existing.RoomTypeId.Value))
+                {
+                    _db.BookingItems.Remove(existing);
+                    booking.Items.Remove(existing);
+                }
+            }
+
+            foreach (var requested in requestedItems)
+            {
+                var roomType = capacityByType[requested.RoomTypeId];
+                var line = booking.Items.FirstOrDefault(
+                    existing => existing.RoomTypeId == requested.RoomTypeId);
+                if (line == null)
+                {
+                    line = new BookingItem { RoomTypeId = requested.RoomTypeId };
+                    booking.Items.Add(line);
+                }
+
+                line.RoomTypeName = roomType.RoomTypeName;
+                line.Quantity = requested.Quantity;
+                line.PricePerNight = roomType.PricePerNight;
+            }
         }
 
         booking.GuestName = request.GuestName.Trim();
@@ -1226,15 +1342,21 @@ public sealed class BookingService : IBookingService
             throw new BookingConcurrencyException("Bookings in history cannot be edited.");
         }
 
-        if (booking.Status is BookingStatus.Cancelled or BookingStatus.Rejected or BookingStatus.CheckedOut)
+        if (booking.Status != BookingStatus.Confirmed)
         {
-            throw new BookingConcurrencyException("This booking can no longer accept fee changes.");
+            throw new BookingConcurrencyException(
+                "Confirm the booking before adding stay fees / service charges.");
         }
 
         var extendNights = Math.Max(0, request.ExtendStayNights);
         if (extendNights > 30)
         {
             throw new ArgumentException("Stay extension is limited to 30 nights per save.");
+        }
+
+        if (request.RevertStayExtension)
+        {
+            RevertStayExtension(booking);
         }
 
         if (extendNights > 0)
@@ -1321,6 +1443,11 @@ public sealed class BookingService : IBookingService
         if (booking.Status != BookingStatus.Confirmed)
         {
             throw new BookingConcurrencyException("Only confirmed bookings with assigned rooms can be checked out.");
+        }
+
+        if (!booking.Items.SelectMany(i => i.AssignedRooms).Any())
+        {
+            throw new BookingConcurrencyException("Assign rooms before checking out this guest.");
         }
 
         booking.Status = BookingStatus.CheckedOut;
@@ -1580,7 +1707,8 @@ public sealed class BookingService : IBookingService
             {
                 if (assignment.Room != null && assignment.Room.Status == RoomStatus.Occupied)
                 {
-                    assignment.Room.Status = RoomStatus.Available;
+                    // Vacant dirty — receptionist marks Available after cleaning.
+                    assignment.Room.Status = RoomStatus.Cleaning;
                 }
             }
         }
@@ -1733,9 +1861,12 @@ public sealed class BookingService : IBookingService
         return ids.ToHashSet();
     }
 
-    private static void ValidateDates(DateTime checkInAtUtc, DateTime checkoutTimeUtc)
+    private static void ValidateDates(
+        DateTime checkInAtUtc,
+        DateTime checkoutTimeUtc,
+        bool allowPastCheckIn = false)
     {
-        if (checkInAtUtc < PhilippinesTime.StartOfTodayUtc())
+        if (!allowPastCheckIn && checkInAtUtc < PhilippinesTime.StartOfTodayUtc())
         {
             throw new ArgumentException("Check-in cannot be in the past.");
         }
@@ -1920,39 +2051,9 @@ public sealed class BookingService : IBookingService
         int extendNightsAdded)
     {
         var now = DateTime.UtcNow;
-        var incidental = decimal.Round(Math.Max(0m, request.IncidentalAmount), 2, MidpointRounding.AwayFromZero);
         var service = decimal.Round(Math.Max(0m, request.ServiceFeeAmount), 2, MidpointRounding.AwayFromZero);
-        var snackQty = Math.Max(0, request.SnackBeverageQty);
-        var snackUnit = decimal.Round(Math.Max(0m, request.SnackBeverageUnitAmount), 2, MidpointRounding.AwayFromZero);
-        var snackTotal = decimal.Round(snackQty * snackUnit, 2, MidpointRounding.AwayFromZero);
 
-        if (incidental > 0m)
-        {
-            var note = string.IsNullOrWhiteSpace(request.IncidentalNote)
-                ? null
-                : request.IncidentalNote.Trim();
-            if (note is { Length: > 80 })
-            {
-                note = note[..80];
-            }
-
-            var label = string.IsNullOrWhiteSpace(note)
-                ? "Incidental (damage) · cash"
-                : $"Incidental (damage) · cash · {note}";
-            UpsertCharge(
-                booking,
-                BookingChargeType.Incidental,
-                label,
-                quantity: 1,
-                nights: 1,
-                unitAmount: incidental,
-                amount: incidental,
-                now);
-        }
-        else
-        {
-            RemoveChargesOfType(booking, BookingChargeType.Incidental);
-        }
+        ReplaceIncidentalCharges(booking, request, now);
 
         if (service > 0m)
         {
@@ -1971,33 +2072,7 @@ public sealed class BookingService : IBookingService
             RemoveChargesOfType(booking, BookingChargeType.ServiceFee);
         }
 
-        if (snackQty > 0 && snackUnit > 0m)
-        {
-            var product = string.IsNullOrWhiteSpace(request.SnackBeverageProduct)
-                ? null
-                : request.SnackBeverageProduct.Trim();
-            if (product is { Length: > 80 })
-            {
-                product = product[..80];
-            }
-
-            var snackLabel = string.IsNullOrWhiteSpace(product)
-                ? $"Snack & beverage · {snackQty} × {snackUnit:N2}"
-                : $"Snack & beverage · {product} · {snackQty} × {snackUnit:N2}";
-            UpsertCharge(
-                booking,
-                BookingChargeType.SnackBeverage,
-                snackLabel,
-                quantity: snackQty,
-                nights: 1,
-                unitAmount: snackUnit,
-                amount: snackTotal,
-                now);
-        }
-        else
-        {
-            RemoveChargesOfType(booking, BookingChargeType.SnackBeverage);
-        }
+        ReplaceSnackBeverageCharges(booking, request, now);
 
         if (extendNightsAdded > 0)
         {
@@ -2028,6 +2103,159 @@ public sealed class BookingService : IBookingService
             existing.Label = $"Extra night(s) · +{existing.Quantity}";
             existing.Nights = existing.Quantity;
         }
+    }
+
+    private void ReplaceIncidentalCharges(
+        Booking booking,
+        UpdateBookingChargesRequest request,
+        DateTime now)
+    {
+        RemoveChargesOfType(booking, BookingChargeType.Incidental);
+
+        var lines = (request.Incidentals ?? new List<IncidentalLineRequest>())
+            .Where(line => line is not null)
+            .Select(line => new
+            {
+                Amount = decimal.Round(Math.Max(0m, line.Amount), 2, MidpointRounding.AwayFromZero),
+                Note = string.IsNullOrWhiteSpace(line.Note) ? null : line.Note.Trim()
+            })
+            .Where(line => line.Amount > 0m)
+            .Take(40)
+            .ToList();
+
+        if (lines.Count == 0)
+        {
+            var legacy = decimal.Round(Math.Max(0m, request.IncidentalAmount), 2, MidpointRounding.AwayFromZero);
+            if (legacy > 0m)
+            {
+                var note = string.IsNullOrWhiteSpace(request.IncidentalNote)
+                    ? null
+                    : request.IncidentalNote.Trim();
+                lines.Add(new { Amount = legacy, Note = note });
+            }
+        }
+
+        foreach (var line in lines)
+        {
+            var note = line.Note;
+            if (note is { Length: > 80 })
+            {
+                note = note[..80];
+            }
+
+            var label = string.IsNullOrWhiteSpace(note)
+                ? "Incidental (damage) · cash"
+                : $"Incidental (damage) · cash · {note}";
+
+            booking.Charges.Add(new BookingCharge
+            {
+                ChargeType = BookingChargeType.Incidental,
+                Label = label,
+                Quantity = 1,
+                Nights = 1,
+                UnitAmount = line.Amount,
+                Amount = line.Amount,
+                CreatedAtUtc = now
+            });
+        }
+    }
+
+    private void ReplaceSnackBeverageCharges(
+        Booking booking,
+        UpdateBookingChargesRequest request,
+        DateTime now)
+    {
+        RemoveChargesOfType(booking, BookingChargeType.SnackBeverage);
+
+        var todayIso = DateOnly.FromDateTime(PhilippinesTime.NowManila()).ToString("yyyy-MM-dd");
+        var lines = (request.SnackBeverages ?? new List<SnackBeverageLineRequest>())
+            .Where(line => line is not null)
+            .Select(line => new
+            {
+                Qty = Math.Max(0, line.Qty),
+                Unit = decimal.Round(Math.Max(0m, line.UnitAmount), 2, MidpointRounding.AwayFromZero),
+                Product = string.IsNullOrWhiteSpace(line.Product) ? null : line.Product.Trim(),
+                TakenDate = NormalizeTakenDate(line.TakenDate) ?? todayIso
+            })
+            .Where(line => line.Qty > 0 && line.Unit > 0m)
+            .Take(40)
+            .ToList();
+
+        if (lines.Count == 0)
+        {
+            var legacyQty = Math.Max(0, request.SnackBeverageQty);
+            var legacyUnit = decimal.Round(Math.Max(0m, request.SnackBeverageUnitAmount), 2, MidpointRounding.AwayFromZero);
+            if (legacyQty > 0 && legacyUnit > 0m)
+            {
+                var product = string.IsNullOrWhiteSpace(request.SnackBeverageProduct)
+                    ? null
+                    : request.SnackBeverageProduct.Trim();
+                lines.Add(new
+                {
+                    Qty = legacyQty,
+                    Unit = legacyUnit,
+                    Product = product,
+                    TakenDate = todayIso
+                });
+            }
+        }
+
+        foreach (var line in lines)
+        {
+            var product = line.Product;
+            if (product is { Length: > 80 })
+            {
+                product = product[..80];
+            }
+
+            var amount = decimal.Round(line.Qty * line.Unit, 2, MidpointRounding.AwayFromZero);
+            var takenLabel = FormatTakenDateLabel(line.TakenDate);
+            var snackLabel = string.IsNullOrWhiteSpace(product)
+                ? $"Snack & beverage · {takenLabel} · {line.Qty} × {line.Unit:N2}"
+                : $"Snack & beverage · {product} · {takenLabel} · {line.Qty} × {line.Unit:N2}";
+
+            booking.Charges.Add(new BookingCharge
+            {
+                ChargeType = BookingChargeType.SnackBeverage,
+                Label = snackLabel,
+                Quantity = line.Qty,
+                Nights = 1,
+                UnitAmount = line.Unit,
+                Amount = amount,
+                CreatedAtUtc = now
+            });
+        }
+    }
+
+    private static string? NormalizeTakenDate(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        var text = raw.Trim();
+        if (DateOnly.TryParse(text, out var date))
+        {
+            return date.ToString("yyyy-MM-dd");
+        }
+
+        if (DateTime.TryParse(text, out var dt))
+        {
+            return DateOnly.FromDateTime(PhilippinesTime.ToManila(dt)).ToString("yyyy-MM-dd");
+        }
+
+        return null;
+    }
+
+    private static string FormatTakenDateLabel(string isoDate)
+    {
+        if (DateOnly.TryParse(isoDate, out var date))
+        {
+            return date.ToString("MMM d, yyyy");
+        }
+
+        return isoDate;
     }
 
     private void UpsertCharge(
@@ -2072,6 +2300,34 @@ public sealed class BookingService : IBookingService
         {
             booking.Charges.Remove(charge);
         }
+    }
+
+    private void RevertStayExtension(Booking booking)
+    {
+        var existing = booking.Charges.FirstOrDefault(c => c.ChargeType == BookingChargeType.StayExtension);
+        var nightsToRevert = existing?.Quantity ?? 0;
+        if (nightsToRevert <= 0)
+        {
+            if (existing != null)
+            {
+                RemoveChargesOfType(booking, BookingChargeType.StayExtension);
+            }
+
+            return;
+        }
+
+        var rolledBack = AddManilaCalendarDays(booking.CheckoutTimeUtc, -nightsToRevert);
+        var checkInDate = PhilippinesTime.ToManila(booking.CheckInAtUtc).Date;
+        var checkoutDate = PhilippinesTime.ToManila(rolledBack).Date;
+        if (checkoutDate <= checkInDate)
+        {
+            throw new ArgumentException(
+                "Cannot reverse the stay extension without shortening the stay below one night.");
+        }
+
+        booking.CheckoutTimeUtc = rolledBack;
+        booking.CheckoutWarningSentAtUtc = null;
+        RemoveChargesOfType(booking, BookingChargeType.StayExtension);
     }
 
     private static DateTime AddManilaCalendarDays(DateTime utcMoment, int days)

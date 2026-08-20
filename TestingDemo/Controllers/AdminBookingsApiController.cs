@@ -254,6 +254,31 @@ public sealed class AdminBookingsApiController : ControllerBase
         }
     }
 
+    [HttpGet("{id:int}/availability")]
+    public async Task<ActionResult<IReadOnlyList<RoomAvailabilityDto>>> GetAvailabilityForBooking(
+        int id,
+        [FromQuery] DateTime checkInAtUtc,
+        [FromQuery] DateTime checkoutTimeUtc,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _bookingService.GetAvailabilityForBookingAsync(
+                id,
+                checkInAtUtc,
+                checkoutTimeUtc,
+                cancellationToken));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPost("{id:int}/status")]
     [ValidateAntiForgeryToken]
     public async Task<ActionResult<BookingDto>> UpdateStatus(
@@ -399,6 +424,17 @@ public sealed class AdminBookingsApiController : ControllerBase
             || request.ExtendStayNights < 0)
         {
             return BadRequest(new { message = "Fee amounts and quantities cannot be negative." });
+        }
+
+        var snackLines = request.SnackBeverages ?? new List<SnackBeverageLineRequest>();
+        if (snackLines.Count > 40)
+        {
+            return BadRequest(new { message = "Snack & beverage is limited to 40 items per save." });
+        }
+
+        if (snackLines.Any(line => line.Qty < 0 || line.UnitAmount < 0))
+        {
+            return BadRequest(new { message = "Snack & beverage quantities and amounts cannot be negative." });
         }
 
         try

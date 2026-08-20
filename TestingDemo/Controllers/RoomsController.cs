@@ -221,10 +221,37 @@ public class RoomsController : Controller
                 cancellationToken);
             await _hub.Clients.All.BookingArchived(booking.Id);
             TempData["Success"] =
-                $"Checked out {booking.Reference}. Room is available again.";
+                $"Checked out {booking.Reference}. Room is now Maintaining — open it when ready.";
             return RedirectToAction(nameof(Index), new { view = "list" });
         }
         catch (BookingConcurrencyException ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Details), new { id });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetRoomOpen(
+        int id,
+        bool open,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var room = await _roomService.SetGuestReadyAsync(id, open, cancellationToken);
+            if (room is null)
+            {
+                return NotFound();
+            }
+
+            TempData["Success"] = open
+                ? $"Room {room.RoomNumber} is Available and can take guests."
+                : $"Room {room.RoomNumber} is Maintaining — closed until ready.";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+        catch (InvalidOperationException ex)
         {
             TempData["Error"] = ex.Message;
             return RedirectToAction(nameof(Details), new { id });

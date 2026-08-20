@@ -36,13 +36,26 @@ public sealed class UpdateBookingChargesRequest
     /// <summary>0 or 1; one extra guest (₱200/night).</summary>
     public int ExtraPersons { get; set; }
 
-    /// <summary>Damage / incidental amount (₱). 0 clears.</summary>
+    /// <summary>Damage / incidental amount (₱). 0 clears. Legacy when <see cref="Incidentals"/> is empty.</summary>
     public decimal IncidentalAmount { get; set; }
     public string? IncidentalNote { get; set; }
+
+    /// <summary>
+    /// Full incidental/damage cart for this save. Replaces all existing Incidental charges.
+    /// Empty list falls back to <see cref="IncidentalAmount"/> / <see cref="IncidentalNote"/>.
+    /// </summary>
+    public List<IncidentalLineRequest> Incidentals { get; set; } = new();
 
     /// <summary>Service fee amount (₱). 0 clears.</summary>
     public decimal ServiceFeeAmount { get; set; }
 
+    /// <summary>
+    /// Full snack/beverage cart for this save. Replaces all existing SnackBeverage charges.
+    /// Empty list clears. Prefer this over the legacy single-line fields below.
+    /// </summary>
+    public List<SnackBeverageLineRequest> SnackBeverages { get; set; } = new();
+
+    /// <summary>Legacy single snack line (used only when <see cref="SnackBeverages"/> is empty).</summary>
     public int SnackBeverageQty { get; set; }
     public decimal SnackBeverageUnitAmount { get; set; }
     /// <summary>Optional product name (e.g. Bottled water, coffee).</summary>
@@ -50,6 +63,27 @@ public sealed class UpdateBookingChargesRequest
 
     /// <summary>Additional nights to append to checkout on this save (0 = no change).</summary>
     public int ExtendStayNights { get; set; }
+
+    /// <summary>
+    /// When true, rolls checkout back by the existing StayExtension quantity and removes that charge.
+    /// Applied before <see cref="ExtendStayNights"/> so a save can revert then re-extend.
+    /// </summary>
+    public bool RevertStayExtension { get; set; }
+}
+
+public sealed class IncidentalLineRequest
+{
+    public decimal Amount { get; set; }
+    public string? Note { get; set; }
+}
+
+public sealed class SnackBeverageLineRequest
+{
+    public string? Product { get; set; }
+    public int Qty { get; set; }
+    public decimal UnitAmount { get; set; }
+    /// <summary>Manila calendar date the guest took the item (yyyy-MM-dd).</summary>
+    public string? TakenDate { get; set; }
 }
 
 public sealed class CreateBookingItemRequest
@@ -166,7 +200,8 @@ public sealed record ReservationCalendarEventDto(
     BookingStatus Status,
     decimal TotalAmount,
     decimal AmountDueNow,
-    string RoomSummary);
+    string RoomSummary,
+    int ExtensionNights = 0);
 
 public sealed record BookingNotificationDto(
     int Id,

@@ -1,5 +1,7 @@
 (() => {
   const STORAGE_KEY = 'moriGuestLang';
+  /** Bump when locale JSON keys change so browsers fetch fresh files. */
+  const LOCALES_VERSION = '2026-08-16-booking-i18n-2';
   const LOCALES = [
     { code: 'en', label: 'English', native: 'English' },
     { code: 'ja', label: '日本語', native: '日本語' },
@@ -10,6 +12,8 @@
 
   /** @type {Record<string, any>} */
   const cache = {};
+  /** @type {Record<string, string>} */
+  const cacheVersion = {};
   let current = 'en';
   let dict = null;
   let applying = false;
@@ -36,12 +40,14 @@
   }
 
   async function loadLocale(code) {
-    if (cache[code]) return cache[code];
-    const url = `/locales/${encodeURIComponent(code)}.json`;
-    const res = await fetch(url, { credentials: 'same-origin', cache: 'force-cache' });
+    if (cache[code] && cacheVersion[code] === LOCALES_VERSION) return cache[code];
+    // Bust HTTP cache so newly added translation keys are picked up after deploys.
+    const url = `/locales/${encodeURIComponent(code)}.json?v=${encodeURIComponent(LOCALES_VERSION)}`;
+    const res = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
     if (!res.ok) throw new Error(`Locale ${code} failed`);
     const json = await res.json();
     cache[code] = json;
+    cacheVersion[code] = LOCALES_VERSION;
     return json;
   }
 

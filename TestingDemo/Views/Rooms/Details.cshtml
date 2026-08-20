@@ -25,7 +25,7 @@
     <div class="hero-meta">
         <span class="hotel-chip">@room.Name</span>
         <span class="hotel-chip">@room.PricePerNight.ToString("C") / night</span>
-        <span class="hotel-chip">@room.Status</span>
+        <span class="hotel-chip">@TestingDemo.Models.RoomStatusDisplay.Label(room.Status)</span>
     </div>
 </section>
 
@@ -180,7 +180,7 @@
                                 }
                             </dl>
                             <p class="hotel-guest-stay-note">
-                                Check out ends this stay and sets assigned rooms back to Available.
+                                Check out ends this stay and sets assigned rooms to Maintaining until housekeeping opens them.
                             </p>
                             <form asp-action="Checkout"
                                   asp-route-id="@room.Id"
@@ -223,7 +223,41 @@
         </div>
 
         <div class="hotel-panel mb-3">
-            <h2 class="hotel-details-heading">Overview</h2>
+            <div class="hotel-details-overview-head">
+                <h2 class="hotel-details-heading">Overview</h2>
+                @{
+                    var isOccupied = room.Status == TestingDemo.Models.RoomStatus.Occupied;
+                    var isOpen = room.Status == TestingDemo.Models.RoomStatus.Available;
+                    var switchTitle = isOccupied
+                        ? "Guest is in-house — check out before changing availability"
+                        : isOpen
+                            ? "Turn off to close for maintaining (e.g. broken tap)"
+                            : "Turn on when the room is ready for guests";
+                }
+                <form asp-action="SetRoomOpen"
+                      asp-route-id="@room.Id"
+                      method="post"
+                      class="hotel-cleaning-ready @(isOccupied ? "is-disabled" : string.Empty)"
+                      data-room-open-toggle>
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="open" value="@(isOpen ? "true" : "false")" data-room-open-value />
+                    <label class="hotel-cleaning-switch" title="@switchTitle">
+                        <input type="checkbox"
+                               class="hotel-cleaning-switch-input"
+                               value="true"
+                               aria-label="@(isOpen ? "Room is open for guests" : "Room is closed for maintaining")"
+                               @(isOpen ? "checked" : null)
+                               @(isOccupied ? "disabled" : null) />
+                        <span class="hotel-cleaning-switch-track" aria-hidden="true">
+                            <span class="hotel-cleaning-switch-thumb"></span>
+                        </span>
+                        <span class="hotel-cleaning-switch-copy">
+                            <strong>@(isOpen ? "Open for guests" : "Maintaining")</strong>
+                            <small>@(isOccupied ? "Occupied — checkout first" : isOpen ? "Turn off to close room" : "Turn on when ready")</small>
+                        </span>
+                    </label>
+                </form>
+            </div>
             <dl class="hotel-summary mb-0">
                 <div class="hotel-summary-row">
                     <dt>Room number</dt>
@@ -236,8 +270,8 @@
                 <div class="hotel-summary-row">
                     <dt>Status</dt>
                     <dd>
-                        <span class="hotel-status @(room.Status == TestingDemo.Models.RoomStatus.Available ? "is-available" : room.Status == TestingDemo.Models.RoomStatus.Occupied ? "is-occupied" : "is-unavailable")">
-                            @room.Status
+                        <span class="hotel-status @TestingDemo.Models.RoomStatusDisplay.CssClass(room.Status)">
+                            @TestingDemo.Models.RoomStatusDisplay.Label(room.Status)
                         </span>
                     </dd>
                 </div>
@@ -285,6 +319,35 @@
     </div>
 </div>
 
+<div class="hotel-confirm-overlay"
+     id="roomCloseConfirm"
+     hidden
+     data-room-close-confirm>
+    <button type="button"
+            class="hotel-confirm-backdrop"
+            data-room-close-confirm-ok
+            aria-label="Confirm close room"></button>
+    <div class="hotel-confirm-dialog"
+         role="alertdialog"
+         aria-modal="true"
+         aria-labelledby="roomCloseConfirmTitle"
+         aria-describedby="roomCloseConfirmLede">
+        <div class="hotel-confirm-dialog-icon" aria-hidden="true">!</div>
+        <h2 id="roomCloseConfirmTitle" class="hotel-confirm-dialog-title">Close room for Maintaining?</h2>
+        <p id="roomCloseConfirmLede" class="hotel-confirm-dialog-lede">
+            Guests will not be able to book this room until you open it again.
+        </p>
+        <div class="hotel-confirm-dialog-actions">
+            <button type="button" class="btn hotel-confirm-btn-cancel" data-room-close-confirm-cancel>
+                Cancel
+            </button>
+            <button type="button" class="btn hotel-confirm-btn-ok" data-room-close-confirm-ok>
+                Okay
+            </button>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -314,6 +377,109 @@
                 document.getElementById('guestStayToggle'),
                 document.getElementById('guestStayBody'),
                 document.getElementById('guestStayCollapse'));
+
+            const openForm = document.querySelector('[data-room-open-toggle]');
+            const openToggle = openForm?.querySelector('.hotel-cleaning-switch-input');
+            const openValue = openForm?.querySelector('[data-room-open-value]');
+            const closeConfirm = document.querySelector('[data-room-close-confirm]');
+            const closeConfirmOk = closeConfirm?.querySelectorAll('[data-room-close-confirm-ok]');
+            const closeConfirmCancel = closeConfirm?.querySelector('[data-room-close-confirm-cancel]');
+
+            function submitRoomOpen(isOpen) {
+                if (!(openForm instanceof HTMLFormElement)
+                    || !(openToggle instanceof HTMLInputElement)
+                    || !(openValue instanceof HTMLInputElement)) {
+                    return;
+                }
+
+                openToggle.checked = isOpen;
+                openValue.value = isOpen ? 'true' : 'false';
+                openForm.requestSubmit();
+            }
+
+            function closeRoomConfirmModal() {
+                if (!(closeConfirm instanceof HTMLElement)) {
+                    return;
+                }
+
+                closeConfirm.classList.remove('is-visible');
+                document.body.classList.remove('hotel-confirm-open');
+                window.setTimeout(function () {
+                    closeConfirm.hidden = true;
+                }, 180);
+                document.removeEventListener('keydown', onRoomCloseConfirmKey);
+            }
+
+            function confirmCloseRoom() {
+                closeRoomConfirmModal();
+                submitRoomOpen(false);
+            }
+
+            function cancelCloseRoom() {
+                closeRoomConfirmModal();
+                if (openToggle instanceof HTMLInputElement) {
+                    openToggle.checked = true;
+                }
+            }
+
+            function onRoomCloseConfirmKey(event) {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    cancelCloseRoom();
+                    return;
+                }
+
+                if (event.key.length === 1 && /[a-z]/i.test(event.key) && !event.ctrlKey && !event.metaKey && !event.altKey) {
+                    event.preventDefault();
+                    confirmCloseRoom();
+                }
+            }
+
+            function openRoomCloseConfirmModal() {
+                if (!(closeConfirm instanceof HTMLElement)) {
+                    submitRoomOpen(false);
+                    return;
+                }
+
+                closeConfirm.hidden = false;
+                document.body.classList.add('hotel-confirm-open');
+                requestAnimationFrame(function () {
+                    closeConfirm.classList.add('is-visible');
+                    const okBtn = closeConfirm.querySelector('.hotel-confirm-btn-ok');
+                    if (okBtn instanceof HTMLElement) {
+                        okBtn.focus();
+                    }
+                });
+                document.addEventListener('keydown', onRoomCloseConfirmKey);
+            }
+
+            if (openForm instanceof HTMLFormElement
+                && openToggle instanceof HTMLInputElement
+                && openValue instanceof HTMLInputElement) {
+                openToggle.addEventListener('change', function () {
+                    if (this.disabled) {
+                        return;
+                    }
+
+                    if (!this.checked) {
+                        openRoomCloseConfirmModal();
+                        return;
+                    }
+
+                    submitRoomOpen(true);
+                });
+            }
+
+            closeConfirmOk?.forEach(function (el) {
+                el.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    confirmCloseRoom();
+                });
+            });
+            closeConfirmCancel?.addEventListener('click', function (event) {
+                event.preventDefault();
+                cancelCloseRoom();
+            });
 
             if (!main) {
                 return;

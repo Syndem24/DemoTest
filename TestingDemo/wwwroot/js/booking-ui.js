@@ -341,6 +341,8 @@
     closeAllModals(false);
     modal.hidden = false;
     document.body.classList.add('guest-modal-open');
+    // Re-apply translations for static data-i18n nodes (and after locale cache updates).
+    window.MoriI18n?.apply?.();
     requestAnimationFrame(() => {
       const firstControl = modal.querySelector(
         '.guest-modal-close, input:not([disabled]), select:not([disabled]), button:not([disabled]), a[href]'
@@ -804,8 +806,8 @@
     if (checkInSelect) {
       const freeTimes = ['14:00', '14:30', '15:00', '15:30', '16:00'];
       checkInSelect.innerHTML = [
-        `<option value="${EARLY_CHECKIN_TIME}">${EARLY_CHECKIN_TIME} — ${formatMoney(earlyFee)} early check-in</option>`,
-        ...freeTimes.map((t) => `<option value="${t}">${t} — free of charge</option>`),
+        `<option value="${EARLY_CHECKIN_TIME}">${tx('booking.earlyCheckInOption', { time: EARLY_CHECKIN_TIME, fee: earlyFee }, `${EARLY_CHECKIN_TIME} — early check-in ${formatMoney(earlyFee)}`)}</option>`,
+        ...freeTimes.map((t) => `<option value="${t}">${tx('booking.timeFreeOption', { time: t }, `${t} — free of charge`)}</option>`),
       ].join('');
       checkInSelect.value = [...checkInSelect.options].some((o) => o.value === prevIn)
         ? prevIn
@@ -814,7 +816,7 @@
 
     if (checkOutSelect) {
       const options = [
-        `<option value="${DEFAULT_CHECKOUT_TIME}">${DEFAULT_CHECKOUT_TIME} — free of charge</option>`,
+        `<option value="${DEFAULT_CHECKOUT_TIME}">${tx('booking.timeFreeOption', { time: DEFAULT_CHECKOUT_TIME }, `${DEFAULT_CHECKOUT_TIME} — free of charge`)}</option>`,
       ];
       for (let hour = 1; hour <= MAX_LATE_CHECKOUT_HOURS; hour += 1) {
         const [baseH, baseM] = DEFAULT_CHECKOUT_TIME.split(':').map(Number);
@@ -824,7 +826,7 @@
         const time = `${hh}:${mm}`;
         const fee = LATE_CHECKOUT_FEE_PER_ROOM_PER_HOUR * hour * rooms;
         options.push(
-          `<option value="${time}">${time} — ${formatMoney(fee)} late check-out</option>`
+          `<option value="${time}">${tx('booking.lateCheckOutOption', { time: time, fee: fee }, `${time} — late checkout ${formatMoney(fee)}/hr`)}</option>`
         );
       }
       checkOutSelect.innerHTML = options.join('');
@@ -847,21 +849,25 @@
     const extra = extraPersonFee(nights);
     const parts = [];
     if (early > 0) {
-      parts.push(`Early check-in (${EARLY_CHECKIN_TIME}): ${formatMoney(early)} (${formatMoney(EARLY_CHECKIN_FEE_PER_ROOM)} × ${rooms} room${rooms === 1 ? '' : 's'})`);
+      parts.push(
+        `${tx('booking.feeEarlyCheckIn', null, 'Early check-in')} (${EARLY_CHECKIN_TIME}): ${formatMoney(early)}`
+      );
     }
     if (late > 0) {
-      parts.push(`Late check-out (+${hours}h): ${formatMoney(late)} (${formatMoney(LATE_CHECKOUT_FEE_PER_ROOM_PER_HOUR)} × ${rooms} room${rooms === 1 ? '' : 's'} × ${hours}h)`);
+      parts.push(
+        `${tx('booking.feeLateCheckOut', null, 'Late checkout')} (+${hours}h): ${formatMoney(late)}`
+      );
     }
     if (extra > 0) {
-      parts.push(
-        `Extra person: ${formatMoney(extra)} (${formatMoney(EXTRA_PERSON_FEE_PER_NIGHT)} × ${nights} night${nights === 1 ? '' : 's'})`
-      );
+      parts.push(`${tx('booking.feeExtraPerson', null, 'Extra person')}: ${formatMoney(extra)}`);
     } else if (extraPersonsSelected() > 0 && nights < 1) {
-      parts.push(`Extra person: ${formatMoney(EXTRA_PERSON_FEE_PER_NIGHT)} / night (added after dates)`);
+      parts.push(
+        `${tx('booking.feeExtraPerson', null, 'Extra person')}: ${formatMoney(EXTRA_PERSON_FEE_PER_NIGHT)} ${tx('booking.perNightShort', null, '/ night')}`
+      );
     }
     hint.hidden = parts.length === 0;
     hint.textContent = parts.length
-      ? `${parts.join(' · ')}. Added to your stay total.`
+      ? tx('booking.feesAddedHint', { detail: parts.join(' · ') }, `${parts.join(' · ')}. Added to your stay total.`)
       : '';
   }
 
@@ -986,7 +992,7 @@
     if (submitBtn) {
       submitBtn.disabled = !onConfirmStep || !hasRooms || !acceptedTerms || overCapacity;
       submitBtn.title = overCapacity
-        ? 'Guests exceed room capacity. Add more rooms or reduce guests.'
+        ? tx('booking.capacityHint', null, 'Guests exceed room capacity. Add more rooms or reduce guests.')
         : '';
     }
 
@@ -1013,17 +1019,41 @@
 
     if (summaryLabel) {
       if (nights > 0) {
-        summaryLabel.textContent = fees > 0
-          ? `${totalRooms} room${totalRooms === 1 ? '' : 's'} · ${nights} night${nights === 1 ? '' : 's'} · fees`
-          : `${totalRooms} room${totalRooms === 1 ? '' : 's'} · ${nights} night${nights === 1 ? '' : 's'}`;
+        summaryLabel.textContent =
+          fees > 0
+            ? tx(
+                'booking.roomsNightsFeesSummary',
+                {
+                  rooms: totalRooms,
+                  roomsSuffix: '',
+                  nights,
+                  nightsSuffix: '',
+                  fees: formatMoney(fees),
+                },
+                `${totalRooms} room${totalRooms === 1 ? '' : 's'} · ${nights} night${nights === 1 ? '' : 's'} · fees ${formatMoney(fees)}`
+              )
+            : tx(
+                'booking.roomsNightsSummary',
+                {
+                  rooms: totalRooms,
+                  roomsSuffix: '',
+                  nights,
+                  nightsSuffix: '',
+                },
+                `${totalRooms} room${totalRooms === 1 ? '' : 's'} · ${nights} night${nights === 1 ? '' : 's'}`
+              );
       } else {
-        summaryLabel.textContent = `${totalRooms} room${totalRooms === 1 ? '' : 's'} · per night`;
+        summaryLabel.textContent = `${
+          totalRooms === 1
+            ? tx('booking.roomsCount', { n: totalRooms }, `${totalRooms} room`)
+            : tx('booking.roomsCountPlural', { n: totalRooms }, `${totalRooms} rooms`)
+        } · ${tx('booking.perNight', null, 'per night')}`;
       }
     }
     if (summaryTotal) {
       summaryTotal.textContent = nights > 0
         ? formatMoney(grandTotal)
-        : `${formatMoney(nightTotal)} / night`;
+        : `${formatMoney(nightTotal)} ${tx('booking.perNightShort', null, '/ night')}`;
     }
     if (totalsLines) {
       const lines = buildPriceBreakdownLines();
@@ -1034,7 +1064,7 @@
         )
         .join('');
       if (nights > 0 && lines.length) {
-        totalsLines.innerHTML += `<li class="is-grand"><span>Stay total</span><strong>${formatMoney(grandTotal)}</strong></li>`;
+        totalsLines.innerHTML += `<li class="is-grand"><span>${tx('booking.stayTotal', null, 'Stay total')}</span><strong>${formatMoney(grandTotal)}</strong></li>`;
       }
     }
     syncTotalsDisclosureUi();
@@ -1080,17 +1110,17 @@
         li.innerHTML = `
           <div class="guest-offer-cart-item-main">
             <strong>${escapeHtml(line.roomType)}</strong>
-            <span class="guest-offer-cart-item-meta">${qty} × ${formatMoney(line.price)} / night</span>
+            <span class="guest-offer-cart-item-meta">${qty} × ${formatMoney(line.price)} ${tx('booking.perNightShort', null, '/ night')}</span>
           </div>
           <span class="guest-offer-cart-item-total">${formatMoney(lineTotal)}</span>
-          ${pending ? '<span class="guest-offer-cart-pending-label">Replacing 1…</span>' : ''}
+          ${pending ? `<span class="guest-offer-cart-pending-label">${tx('booking.replacingRoom', { n: '1' }, 'Replacing 1…')}</span>` : ''}
           <div class="guest-offer-cart-item-actions">
             <div class="guest-offer-cart-qty">
-              <button type="button" data-offer-cart-delta="-1" data-offer-cart-room="${escapeHtml(line.roomType)}" aria-label="Fewer ${escapeHtml(line.roomType)}" ${pending ? 'disabled' : ''}>−</button>
+              <button type="button" data-offer-cart-delta="-1" data-offer-cart-room="${escapeHtml(line.roomType)}" aria-label="${tx('booking.fewerRoomAria', { room: escapeHtml(line.roomType) }, `Fewer ${escapeHtml(line.roomType)}`)}" ${pending ? 'disabled' : ''}>−</button>
               <span>${qty}</span>
-              <button type="button" data-offer-cart-delta="1" data-offer-cart-room="${escapeHtml(line.roomType)}" aria-label="More ${escapeHtml(line.roomType)}" ${canInc ? '' : 'disabled'}>+</button>
+              <button type="button" data-offer-cart-delta="1" data-offer-cart-room="${escapeHtml(line.roomType)}" aria-label="${tx('booking.moreRoomAria', { room: escapeHtml(line.roomType) }, `More ${escapeHtml(line.roomType)}`)}" ${canInc ? '' : 'disabled'}>+</button>
             </div>
-            <button type="button" class="guest-offer-cart-remove" data-offer-cart-remove="${escapeHtml(line.roomType)}" ${pending ? 'data-offer-cart-cancel-change="1"' : ''}>${pending ? 'Cancel' : 'Remove'}</button>
+            <button type="button" class="guest-offer-cart-remove" data-offer-cart-remove="${escapeHtml(line.roomType)}" ${pending ? 'data-offer-cart-cancel-change="1"' : ''}>${pending ? tx('booking.cancel', null, 'Cancel') : tx('booking.remove', null, 'Remove')}</button>
           </div>
         `;
         list.appendChild(li);
@@ -1106,9 +1136,9 @@
     const noteEl = document.getElementById('offerCartNote');
     if (noteEl) {
       if (extraPersonsSelected() > 0) {
-        noteEl.textContent = `Extra person · ₱${EXTRA_PERSON_FEE_PER_NIGHT.toFixed(0)} / night will be added to your stay total.`;
+        noteEl.textContent = tx('booking.extraPersonNote', null, `Extra person · ₱${EXTRA_PERSON_FEE_PER_NIGHT.toFixed(0)} / night will be added to your stay total.`);
       } else {
-        noteEl.textContent = 'Stay total is calculated after you choose dates.';
+        noteEl.textContent = tx('booking.stayTotalAfterDates', null, 'Stay total is calculated after you choose dates.');
       }
     }
     syncOfferContinueState();
@@ -1217,9 +1247,13 @@
     document.querySelectorAll('[data-offer-add]').forEach((btn) => {
       btn.disabled = slotsLeft < 1;
       btn.title = slotsLeft < 1
-        ? `You already added ${intended} room${intended === 1 ? '' : 's'} for this stay.`
+        ? tx(
+            'booking.alreadyAddedRooms',
+            { n: intended, suffix: intended === 1 ? '' : 's' },
+            `You already added ${intended} room${intended === 1 ? '' : 's'} for this stay.`
+          )
         : pendingChangeRoomType
-          ? 'Adds a replacement for the blurred room.'
+          ? tx('booking.addsReplacement', null, 'Adds a replacement for the blurred room.')
           : '';
     });
 
@@ -1229,11 +1263,15 @@
     if (continueBtn) {
       continueBtn.disabled = !ok;
       continueBtn.title = !hasRooms
-        ? 'Add at least one room to continue.'
+        ? tx('booking.addRoomHint', null, 'Add at least one room to continue.')
         : overIntended
-          ? `You chose ${intended} room${intended === 1 ? '' : 's'} in Guests. Remove extras to continue.`
+          ? tx(
+              'booking.choseRoomsHint',
+              { n: intended, suffix: intended === 1 ? '' : 's' },
+              `You chose ${intended} room${intended === 1 ? '' : 's'} in Guests. Remove extras before continuing.`
+            )
           : overCapacity
-            ? 'Guests exceed room capacity. Add more rooms or reduce guests.'
+            ? tx('booking.capacityHint', null, 'Guests exceed room capacity. Add more rooms or reduce guests.')
             : '';
     }
 
@@ -1243,21 +1281,39 @@
         hint.textContent = '';
       } else if (overIntended) {
         hint.hidden = false;
-        hint.textContent = `You chose ${intended} room${intended === 1 ? '' : 's'} in Guests. Remove extras before continuing.`;
+        hint.textContent = tx(
+          'booking.choseRoomsHint',
+          { n: intended, suffix: intended === 1 ? '' : 's' },
+          `You chose ${intended} room${intended === 1 ? '' : 's'} in Guests. Remove extras before continuing.`
+        );
       } else if (overCapacity) {
         const guestCount = guestPartyCount();
         const hold = cartGuestHoldCapacity();
         hint.hidden = false;
-        hint.textContent = `Guests (${guestCount}) exceed selected room capacity (${hold}). Add more rooms or go back to adjust guests.`;
+        hint.textContent = tx(
+          'booking.capacityExceedHint',
+          { guests: guestCount, hold },
+          `Guests (${guestCount}) exceed selected room capacity (${hold}). Add more rooms or go back to adjust guests.`
+        );
       } else {
         hint.hidden = false;
         const extras = extraPersonsSelected();
+        const count = cartRoomCount();
+        const total = formatMoney(cartNightlyTotal());
         const base =
           slotsLeft > 0
-            ? `${cartRoomCount()} of ${intended} room${intended === 1 ? '' : 's'} · ${formatMoney(cartNightlyTotal())} per night`
-            : `${cartRoomCount()} room${cartRoomCount() === 1 ? '' : 's'} selected · ${formatMoney(cartNightlyTotal())} per night`;
+            ? tx(
+                'booking.roomsOfAvailable',
+                { bookQty: count, roomCount: intended },
+                `${count} of ${intended} rooms available now`
+              ) + ` · ${total} ${tx('booking.perNight', null, 'per night')}`
+            : tx(
+                count === 1 ? 'booking.selectionStatus' : 'booking.selectionStatusPlural',
+                { count, total },
+                `${count} room${count === 1 ? '' : 's'} selected · ${total} per night`
+              );
         hint.textContent = extras > 0
-          ? `${base} · +${formatMoney(EXTRA_PERSON_FEE_PER_NIGHT)}/night extra person`
+          ? `${base} · ${tx('booking.extraPersonFeeNote', { fee: EXTRA_PERSON_FEE_PER_NIGHT.toFixed(0) }, `+${formatMoney(EXTRA_PERSON_FEE_PER_NIGHT)}/night extra person`)}`
           : base;
       }
     }
@@ -1321,14 +1377,22 @@
             <span class="guest-cart-qty-badge">${line.qty}</span>
           </div>
           <div class="guest-cart-item-meta">
-            <span class="guest-cart-rate">${line.qty} × ${formatMoney(line.price)}${nights > 1 ? ` × ${nights} nights` : ''}</span>
-            <span class="guest-cart-line-total">${formatMoney(stayLine)}${nights > 0 ? '' : ' / night'}</span>
-            ${atCap ? '<span class="guest-cart-avail is-max">Limit reached</span>' : ''}
+            <span class="guest-cart-rate">${line.qty} × ${formatMoney(line.price)}${
+              nights > 1
+                ? ` × ${tx(
+                    nights === 1 ? 'booking.nightsCount' : 'booking.nightsCountPlural',
+                    { n: nights },
+                    `${nights} night${nights === 1 ? '' : 's'}`
+                  )}`
+                : ''
+            }</span>
+            <span class="guest-cart-line-total">${formatMoney(stayLine)}${nights > 0 ? '' : ` ${tx('booking.perNightShort', null, '/ night')}`}</span>
+            ${atCap ? `<span class="guest-cart-avail is-max">${tx('booking.limitReached', null, 'Limit reached')}</span>` : ''}
           </div>
         </div>
-        <button type="button" class="guest-cart-change" data-change-room="${line.roomType}" aria-label="Change one ${line.roomType}">
+        <button type="button" class="guest-cart-change" data-change-room="${line.roomType}" aria-label="${tx('booking.changeOneAria', { room: line.roomType }, `Change one ${line.roomType}`)}">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
-          Change${line.qty > 1 ? ' one' : ''}
+          ${tx('booking.change', null, 'Change')}
         </button>
       `;
       list.appendChild(li);
@@ -1387,7 +1451,7 @@
   function addToCart(roomType, qty = 1) {
     const meta = getRoomMeta(roomType);
     if (!meta || !meta.roomType) {
-      return { ok: false, message: 'Please select a room.' };
+      return { ok: false, message: tx('booking.validateSelectRoom', null, 'Please select a room.') };
     }
     if (meta.available < 1) {
       return { ok: false, message: `${meta.roomType} cannot be added right now.` };
@@ -1484,9 +1548,21 @@
 
   function formatRequiredList(items) {
     if (!items.length) return '';
-    if (items.length === 1) return `${items[0]} is required.`;
-    if (items.length === 2) return `${items[0]} and ${items[1]} are required.`;
-    return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]} are required.`;
+    if (items.length === 1) {
+      return tx('booking.validateRequiredOne', { a: items[0] }, `${items[0]} is required.`);
+    }
+    if (items.length === 2) {
+      return tx(
+        'booking.validateRequiredTwo',
+        { a: items[0], b: items[1] },
+        `${items[0]} and ${items[1]} are required.`
+      );
+    }
+    return tx(
+      'booking.validateRequiredList',
+      { list: items.slice(0, -1).join(', '), last: items[items.length - 1] },
+      `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]} are required.`
+    );
   }
 
   function validateBookRequiredFields() {
@@ -1514,32 +1590,32 @@
     let focusEl = null;
 
     if (!name) {
-      guestMissing.push('name');
-      allMissing.push('Name');
+      guestMissing.push(tx('booking.fullName', null, 'Full name'));
+      allMissing.push(tx('booking.fullName', null, 'Full name'));
       markFieldInvalid(nameEl);
       focusEl = focusEl || nameEl;
     }
     if (!email) {
-      guestMissing.push('email');
-      allMissing.push('email');
+      guestMissing.push(tx('booking.email', null, 'Email'));
+      allMissing.push(tx('booking.email', null, 'Email'));
       markFieldInvalid(emailEl);
       focusEl = focusEl || emailEl;
     }
     if (!phone) {
-      guestMissing.push('phone');
-      allMissing.push('phone');
+      guestMissing.push(tx('booking.phone', null, 'Phone'));
+      allMissing.push(tx('booking.phone', null, 'Phone'));
       markFieldInvalid(phoneEl);
       focusEl = focusEl || phoneEl;
     }
     if (!checkIn) {
-      dateMissing.push('check-in date');
-      allMissing.push('check-in date');
+      dateMissing.push(tx('booking.checkInDate', null, 'Check-in date'));
+      allMissing.push(tx('booking.checkInDate', null, 'Check-in date'));
       markFieldInvalid(checkInEl);
       focusEl = focusEl || checkInEl;
     }
     if (!checkOut) {
-      dateMissing.push('check-out date');
-      allMissing.push('check-out date');
+      dateMissing.push(tx('booking.checkOutDate', null, 'Check-out date'));
+      allMissing.push(tx('booking.checkOutDate', null, 'Check-out date'));
       markFieldInvalid(checkOutEl);
       focusEl = focusEl || checkOutEl;
     }
@@ -1575,10 +1651,10 @@
       markFieldInvalid(emailEl);
       if (guestMsg) {
         guestMsg.hidden = false;
-        guestMsg.textContent = 'Enter a valid email address.';
+        guestMsg.textContent = tx('booking.validateEmail', null, 'Enter a valid email address.');
       }
       emailEl?.focus();
-      return { ok: false, message: 'Enter a valid email address.' };
+      return { ok: false, message: tx('booking.validateEmail', null, 'Enter a valid email address.') };
     }
 
     if (phone && !isValidPhone(phone)) {
@@ -1586,10 +1662,10 @@
       markFieldInvalid(phoneEl);
       if (guestMsg) {
         guestMsg.hidden = false;
-        guestMsg.textContent = 'Enter a valid phone number.';
+        guestMsg.textContent = tx('booking.validatePhone', null, 'Enter a valid phone number.');
       }
       phoneEl?.focus();
-      return { ok: false, message: 'Enter a valid phone number.' };
+      return { ok: false, message: tx('booking.validatePhone', null, 'Enter a valid phone number.') };
     }
 
     const dateError = validateDates(checkIn, checkOut);
@@ -1687,17 +1763,25 @@
 
   function validateDates(checkIn, checkOut) {
     if (!checkIn || !checkOut) {
-      return 'Please choose check-in and check-out dates.';
+      return tx('booking.validateDates', null, 'Please choose check-in and check-out dates.');
     }
     const today = todayIso();
     if (checkIn < today) {
-      return 'Past dates cannot be booked. Choose today or a future check-in.';
+      return tx(
+        'booking.validatePastCheckIn',
+        null,
+        'Past dates cannot be booked. Choose today or a future check-in.'
+      );
     }
     if (checkOut <= checkIn) {
-      return 'Check-out must be after check-in.';
+      return tx('booking.validateCheckOutAfter', null, 'Check-out must be after check-in.');
     }
     if (checkOut < today) {
-      return 'Past dates cannot be booked. Choose a future check-out.';
+      return tx(
+        'booking.validatePastCheckOut',
+        null,
+        'Past dates cannot be booked. Choose a future check-out.'
+      );
     }
     return '';
   }
@@ -1822,14 +1906,14 @@
     const successEyebrow = document.getElementById('successEyebrow');
     const successTitle = document.getElementById('successTitle');
     const successMessage = document.getElementById('successMessage');
-    if (successEyebrow) successEyebrow.textContent = classification.label || 'Request';
+    if (successEyebrow) successEyebrow.textContent = classification.label || tx('booking.booking', null, 'Booking');
     if (successTitle) {
       successTitle.textContent =
-        classification.kind === 'reservation' ? 'Reservation received' : 'Booking received';
+        classification.kind === 'reservation' ? tx('booking.successTitleReservation', null, 'Reservation received') : tx('booking.successTitleBooking', null, 'Booking received');
     }
     if (successMessage) successMessage.textContent = message;
     openModal(successModal);
-    showToast('Booking request sent.', true);
+    showToast(tx('booking.toastRequestSent', null, 'Booking request sent.'), true);
   }
 
 
@@ -1848,15 +1932,16 @@
   function partySummaryText() {
     const totals = guestTotals();
     const guestCount = totals.adults + totals.children;
-    const parts = [
-      `${guestCount} guest${guestCount === 1 ? '' : 's'}`,
-      `${totals.rooms} room${totals.rooms === 1 ? '' : 's'}`,
-    ];
-    const detail = [];
-    if (totals.adults) detail.push(`${totals.adults} adult${totals.adults === 1 ? '' : 's'}`);
-    if (totals.children) detail.push(`${totals.children} child${totals.children === 1 ? '' : 'ren'}`);
-    if (detail.length) parts.push(detail.join(' · '));
-    return parts.join(' · ');
+    const childrenPart = totals.children ? tx('booking.partyChildrenPart', { n: totals.children, suffix: totals.children === 1 ? '' : 'ren' }, ` · ${totals.children} child${totals.children === 1 ? '' : 'ren'}`) : '';
+    return tx('booking.partySummary', {
+      guests: guestCount,
+      guestsSuffix: guestCount === 1 ? '' : 's',
+      rooms: totals.rooms,
+      roomsSuffix: totals.rooms === 1 ? '' : 's',
+      adults: totals.adults,
+      adultsSuffix: totals.adults === 1 ? '' : 's',
+      childrenPart
+    }, `${guestCount} guest${guestCount === 1 ? '' : 's'} · ${totals.rooms} room${totals.rooms === 1 ? '' : 's'} · ${totals.adults} adult${totals.adults === 1 ? '' : 's'}${childrenPart}`);
   }
 
   function escapeHtml(value) {
@@ -1896,9 +1981,13 @@
   }
 
   function ageOptionsHtml(selected) {
-    let html = '<option value="">Select age</option>';
+    let html = `<option value="">${tx('booking.selectAge', null, 'Select age')}</option>`;
     for (let age = 0; age <= MAX_CHILD_AGE; age += 1) {
-      const label = age === 0 ? 'Under 1 year' : `${age} year${age === 1 ? '' : 's'} old`;
+      const label = age === 0 
+        ? tx('booking.under1Year', null, 'Under 1 year')
+        : age === 1 
+          ? tx('booking.yearsOld', { n: age }, `${age} year old`)
+          : tx('booking.yearsOldPlural', { n: age }, `${age} years old`);
       const isSelected = selected !== null && selected !== undefined && Number(selected) === age;
       html += `<option value="${age}"${isSelected ? ' selected' : ''}>${label}</option>`;
     }
@@ -1957,19 +2046,19 @@
         const removeBtn =
           index === 0
             ? ''
-            : `<button type="button" class="guest-guests-remove" data-guest-remove-room="${index}" aria-label="Remove room ${index + 1}">
+            : `<button type="button" class="guest-guests-remove" data-guest-remove-room="${index}" aria-label="${tx('booking.removeRoomAria', { n: index + 1 }, `Remove room ${index + 1}`)}">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
               </button>`;
 
         const ages =
           (Number(room.children) || 0) > 0
             ? `<div class="guest-guests-ages">
-                <span class="guest-guests-ages-label">${room.children} child${room.children === 1 ? '' : "ren"}'s age</span>
+                <span class="guest-guests-ages-label">${tx('booking.childAge', { n: room.children }, `${room.children} child${room.children === 1 ? '' : "ren"}'s age`)}</span>
                 <div class="guest-guests-ages-grid">
                   ${Array.from({ length: room.children }, (_, childIndex) => {
                     const age = room.childAges[childIndex];
                     return `<label class="guest-guests-age-field">
-                      <span class="visually-hidden">Child ${childIndex + 1} age</span>
+                      <span class="visually-hidden">${tx('booking.childAge', { n: childIndex + 1 }, `Child ${childIndex + 1} age`)}</span>
                       <select data-guest-age="${index}" data-guest-age-index="${childIndex}">
                         ${ageOptionsHtml(age)}
                       </select>
@@ -1980,41 +2069,41 @@
             : '';
 
         const tooltipMsg = extraBlocked
-          ? 'Only one extra guest (₱200/night) is allowed per booking.'
-          : `Maximum ${MAX_GUESTS_PER_ROOM} guests per room. Add another room for more guests.`;
+          ? tx('booking.oneExtraOnly', null, 'Only one extra guest (₱200/night) is allowed per booking.')
+          : tx('booking.maxGuestsPerRoom', { n: MAX_GUESTS_PER_ROOM }, `Each room holds up to ${MAX_GUESTS_PER_ROOM} guests. Please add another room for additional guests.`);
         const tooltipAttr = !canInc ? ` data-tooltip="${tooltipMsg}"` : '';
         const titleAttr = !canInc ? ` title="${tooltipMsg}"` : '';
         const extraNote = hasExtra
-          ? `<p class="guest-guests-extra-note">Extra person · ₱${EXTRA_PERSON_FEE_PER_NIGHT.toFixed(0)} / night</p>`
+          ? `<p class="guest-guests-extra-note">${tx('booking.extraPersonFeeNote', { fee: EXTRA_PERSON_FEE_PER_NIGHT.toFixed(0) }, `Extra person · ₱${EXTRA_PERSON_FEE_PER_NIGHT.toFixed(0)}/night`)}</p>`
           : '';
 
         return `<article class="guest-guests-room${atCapacity ? ' is-at-capacity' : ''}${overCapacity ? ' is-over-capacity' : ''}${hasExtra ? ' has-extra-person' : ''}" data-guest-room="${index}">
           <div class="guest-guests-room-head">
-            <h3>Room ${index + 1}</h3>
+            <h3>${tx('booking.roomLabel', { n: index + 1 }, `Room ${index + 1}`)}</h3>
             ${removeBtn}
           </div>
           <div class="guest-guests-counters">
             <div class="guest-guests-counter">
-              <span class="guest-guests-counter-label">Adults</span>
+              <span class="guest-guests-counter-label">${tx('booking.adults', null, 'Adults')}</span>
               <div class="guest-guests-stepper">
                 <div class="guest-stepper-btn-wrap">
-                  <button type="button" data-guest-step="adults" data-guest-room-index="${index}" data-guest-delta="-1" aria-label="Fewer adults in room ${index + 1}" ${canDecAdult ? '' : 'disabled'}>−</button>
+                  <button type="button" data-guest-step="adults" data-guest-room-index="${index}" data-guest-delta="-1" aria-label="${tx('booking.fewerAdultsAria', { n: index + 1 }, `Fewer adults in room ${index + 1}`)}" ${canDecAdult ? '' : 'disabled'}>−</button>
                 </div>
                 <span aria-live="polite">${room.adults}</span>
                 <div class="guest-stepper-btn-wrap${!canInc ? ' has-tooltip' : ''}"${tooltipAttr}>
-                  <button type="button" data-guest-step="adults" data-guest-room-index="${index}" data-guest-delta="1" aria-label="More adults in room ${index + 1}" ${canInc ? '' : 'disabled'}${titleAttr}>+</button>
+                  <button type="button" data-guest-step="adults" data-guest-room-index="${index}" data-guest-delta="1" aria-label="${tx('booking.moreAdultsAria', { n: index + 1 }, `More adults in room ${index + 1}`)}" ${canInc ? '' : 'disabled'}${titleAttr}>+</button>
                 </div>
               </div>
             </div>
             <div class="guest-guests-counter">
-              <span class="guest-guests-counter-label">Children under 12 years old</span>
+              <span class="guest-guests-counter-label">${tx('booking.childrenUnder12', null, 'Children under 12')}</span>
               <div class="guest-guests-stepper">
                 <div class="guest-stepper-btn-wrap">
-                  <button type="button" data-guest-step="children" data-guest-room-index="${index}" data-guest-delta="-1" aria-label="Fewer children in room ${index + 1}" ${canDecChild ? '' : 'disabled'}>−</button>
+                  <button type="button" data-guest-step="children" data-guest-room-index="${index}" data-guest-delta="-1" aria-label="${tx('booking.fewerChildrenAria', { n: index + 1 }, `Fewer children in room ${index + 1}`)}" ${canDecChild ? '' : 'disabled'}>−</button>
                 </div>
                 <span aria-live="polite">${room.children}</span>
                 <div class="guest-stepper-btn-wrap${!canInc ? ' has-tooltip' : ''}"${tooltipAttr}>
-                  <button type="button" data-guest-step="children" data-guest-room-index="${index}" data-guest-delta="1" aria-label="More children in room ${index + 1}" ${canInc ? '' : 'disabled'}${titleAttr}>+</button>
+                  <button type="button" data-guest-step="children" data-guest-room-index="${index}" data-guest-delta="1" aria-label="${tx('booking.moreChildrenAria', { n: index + 1 }, `More children in room ${index + 1}`)}" ${canInc ? '' : 'disabled'}${titleAttr}>+</button>
                 </div>
               </div>
             </div>
@@ -2035,7 +2124,7 @@
     const over = guestRoomsOverCapacity();
     btn.disabled = over;
     btn.title = over
-      ? 'Guests exceed room capacity. Add another room or reduce guests to continue.'
+      ? tx('booking.capacityHint', null, 'Guests exceed room capacity. Add more rooms or reduce guests.')
       : '';
   }
 
@@ -2049,13 +2138,17 @@
 
     if (delta > 0 && currentTotal >= MAX_GUESTS_PER_ROOM) {
       showGuestsHint(
-        `Each room holds up to ${MAX_GUESTS_PER_ROOM} guests. Add another room for additional guests.`
+        tx(
+          'booking.maxGuestsPerRoom',
+          { n: MAX_GUESTS_PER_ROOM },
+          `Each room holds up to ${MAX_GUESTS_PER_ROOM} guests. Please add another room for additional guests.`
+        )
       );
       return;
     }
 
     if (delta > 0 && currentTotal >= BASE_GUESTS_PER_ROOM && !roomHasExtraGuest(room) && bookingAlreadyUsesExtra(roomIndex)) {
-      showGuestsHint('Only one extra guest (₱200/night) is allowed per booking.');
+      showGuestsHint(tx('booking.oneExtraOnly', null, 'Only one extra guest (₱200/night) is allowed per booking.'));
       return;
     }
 
@@ -2064,7 +2157,11 @@
       if (next < 1) return;
       if (next + children > MAX_GUESTS_PER_ROOM) {
         showGuestsHint(
-          `Each room holds up to ${MAX_GUESTS_PER_ROOM} guests. Add another room for additional guests.`
+          tx(
+            'booking.maxGuestsPerRoom',
+            { n: MAX_GUESTS_PER_ROOM },
+            `Each room holds up to ${MAX_GUESTS_PER_ROOM} guests. Please add another room for additional guests.`
+          )
         );
         return;
       }
@@ -2074,7 +2171,11 @@
       if (next < 0) return;
       if (adults + next > MAX_GUESTS_PER_ROOM) {
         showGuestsHint(
-          `Each room holds up to ${MAX_GUESTS_PER_ROOM} guests. Add another room for additional guests.`
+          tx(
+            'booking.maxGuestsPerRoom',
+            { n: MAX_GUESTS_PER_ROOM },
+            `Each room holds up to ${MAX_GUESTS_PER_ROOM} guests. Please add another room for additional guests.`
+          )
         );
         return;
       }
@@ -2198,16 +2299,24 @@
       const adults = Number(room.adults) || 0;
       const children = Number(room.children) || 0;
       if (adults < 1) {
-        return `Room ${i + 1} needs at least 1 adult.`;
+        return tx('booking.needAdultInRoom', { n: i + 1 }, `Room ${i + 1} needs at least 1 adult.`);
       }
       if (children > 0) {
         for (let c = 0; c < children; c += 1) {
           const age = room.childAges[c];
           if (age === null || age === undefined || age === '') {
-            return `Select an age for each child in Room ${i + 1}.`;
+            return tx(
+              'booking.selectAgesInRoom',
+              { n: i + 1 },
+              `Select an age for each child in Room ${i + 1}.`
+            );
           }
           if (Number(age) > MAX_CHILD_AGE) {
-            return `Children must be ${MAX_CHILD_AGE} years old or under.`;
+            return tx(
+              'booking.childAgeMax',
+              { n: MAX_CHILD_AGE },
+              `Children must be ${MAX_CHILD_AGE} years old or under.`
+            );
           }
         }
       }
@@ -2276,8 +2385,8 @@
     if (lede) {
       lede.textContent =
         roomCount > 1
-          ? `Add room types for your party of ${roomCount} rooms. Prices shown are per night.`
-          : 'Add a room type to your stay. Prices shown are per night.';
+          ? tx('booking.offerLedeMulti', null, 'Add room types for your party. Prices shown are per night.')
+          : tx('booking.offerLede', null, 'Add room types to your stay. Prices shown are per night.');
     }
 
     const items = collectOfferRoomTypes();
@@ -2289,7 +2398,7 @@
       if (items.length < 1) {
         const totals = guestTotals();
         const guestCount = totals.adults + totals.children;
-        if (title) title.textContent = 'No rooms listed right now';
+        if (title) title.textContent = tx('booking.noRoomsListed', null, 'No rooms listed right now');
         if (message) {
           message.textContent =
             `No available room types are listed for ${guestCount} guest${guestCount === 1 ? '' : 's'}. Check back later, or contact the hotel to continue.`;
@@ -2303,7 +2412,9 @@
         .slice(0, 5)
         .map((inc) => `<li>${escapeHtml(inc)}</li>`)
         .join('');
-      const more = item.inclusions.length > 5 ? `<li>+${item.inclusions.length - 5} more</li>` : '';
+      const more = item.inclusions.length > 5
+        ? `<li>${tx('rooms.more', { n: item.inclusions.length - 5 }, `+${item.inclusions.length - 5} more`)}</li>`
+        : '';
       const desc =
         item.description.length > 160
           ? `${item.description.slice(0, 160).trimEnd()}…`
@@ -2314,8 +2425,20 @@
       const perRoom = effectiveGuestsPerRoom();
       const qtyNote =
         bookQty < roomCount
-          ? `${bookQty} of ${roomCount} rooms available now`
-          : `${bookQty} room${bookQty === 1 ? '' : 's'} · up to ${perRoom} guests each`;
+          ? tx(
+              'booking.roomsOfAvailable',
+              { bookQty, roomCount },
+              `${bookQty} of ${roomCount} rooms available now`
+            )
+          : tx(
+              'booking.roomsQtyUpTo',
+              { qty: bookQty, suffix: bookQty === 1 ? '' : 's', perRoom },
+              `${bookQty} room${bookQty === 1 ? '' : 's'} · up to ${perRoom} guests each`
+            );
+      const bedsLabel =
+        Number(item.beds) === 1
+          ? tx('rooms.bed', { n: item.beds || '—' }, `${item.beds || '—'} bed`)
+          : tx('rooms.beds', { n: item.beds || '—' }, `${item.beds || '—'} beds`);
       const article = document.createElement('article');
       article.className = `guest-offer-card${item.preferred ? ' is-preferred' : ''}`;
       article.innerHTML = `
@@ -2326,49 +2449,49 @@
                 ? `<img src="${safeImage}" alt="" loading="lazy" />`
                 : `<div class="guest-room-placeholder" aria-hidden="true"><span>${(item.roomType || 'R').trim().charAt(0).toUpperCase()}</span></div>`
             }
-            <span class="guest-offer-availability">${item.available} available</span>
+            <span class="guest-offer-availability">${tx('booking.nAvailable', { n: item.available }, `${item.available} available`)}</span>
           </div>
           <div class="guest-offer-copy">
-            <p class="guest-eyebrow">Guest room</p>
+            <p class="guest-eyebrow">${tx('booking.guestRoom', null, 'Guest room')}</p>
             <h3>${safeName}</h3>
             <ul class="guest-offer-meta">
-              <li>Up to ${perRoom} guests / room</li>
-              <li>${item.beds || '—'} bed${item.beds === 1 ? '' : 's'}</li>
+              <li>${tx('booking.upToGuestsPerRoom', { n: perRoom }, `Up to ${perRoom} guests / room`)}</li>
+              <li>${bedsLabel}</li>
             </ul>
             ${tags ? `<ul class="guest-offer-tags">${tags}${more}</ul>` : ''}
-            <p class="guest-offer-desc">${escapeHtml(desc) || 'A comfortable stay with everything you need.'}</p>
+            <p class="guest-offer-desc">${escapeHtml(desc) || tx('booking.defaultOfferDesc', null, 'A comfortable stay with everything you need.')}</p>
           </div>
         </div>
         <div class="guest-offer-rates">
           <div class="guest-offer-group">
             <div class="guest-offer-group-head">
-              <strong>Best deal</strong>
-              <span>Best Available Rate — Room Only</span>
+              <strong>${tx('booking.bestDeal', null, 'Best deal')}</strong>
+              <span>${tx('booking.bestAvailableRate', null, 'Best Available Rate — Room Only')}</span>
             </div>
             <div class="guest-offer-row">
               <div class="guest-offer-includes">
-                <span>Room only</span>
-                <span>Meals not included</span>
-                <span>Wi‑Fi and hotel facilities</span>
+                <span>${tx('booking.roomOnly', null, 'Room only')}</span>
+                <span>${tx('booking.mealsNotIncluded', null, 'Meals not included')}</span>
+                <span>${tx('booking.wifiAndFacilities', null, 'Wi‑Fi and hotel facilities')}</span>
               </div>
               <div class="guest-offer-price-block">
-                <span class="guest-offer-price-label">Price for 1 night</span>
+                <span class="guest-offer-price-label">${tx('booking.priceFor1Night', null, 'Price for 1 night')}</span>
                 <strong class="guest-offer-price">${formatMoney(item.price)}</strong>
                 <span class="guest-offer-price-note">${qtyNote}</span>
                 <button type="button"
                         class="guest-btn guest-btn-primary guest-offer-select"
                         data-offer-add="">
-                  Add room
+                  ${tx('booking.addRoom', null, 'Add room')}
                 </button>
               </div>
             </div>
           </div>
           <div class="guest-offer-group is-special">
             <div class="guest-offer-group-head">
-              <strong>Special offers</strong>
-              <span>Limited-time rates</span>
+              <strong>${tx('booking.specialOffers', null, 'Special offers')}</strong>
+              <span>${tx('booking.limitedRates', null, 'Limited-time rates')}</span>
             </div>
-            <p class="guest-offer-special-empty">No limited offers right now.</p>
+            <p class="guest-offer-special-empty">${tx('booking.noLimitedOffers', null, 'No limited offers right now.')}</p>
           </div>
         </div>
       `;
@@ -2400,7 +2523,11 @@
       return;
     }
     if (guestRoomsOverCapacity()) {
-      const message = `Guests exceed room capacity (max ${MAX_GUESTS_PER_ROOM} per room). Add another room or reduce guests to continue.`;
+      const message = tx(
+        'booking.capacityHint',
+        null,
+        `Guests exceed room capacity (max ${MAX_GUESTS_PER_ROOM} per room). Add another room or reduce guests to continue.`
+      );
       showGuestsHint(message);
       showToast(message, false);
       syncGuestsContinueState();
@@ -2432,14 +2559,14 @@
     const continueBtn = document.getElementById('offerContinueBtn');
     const isChange = offerSelectMode === 'change';
 
-    if (backLabel) backLabel.textContent = isChange ? 'Booking' : 'Guests';
+    if (backLabel) backLabel.textContent = isChange ? tx('booking.booking', null, 'Booking') : tx('booking.guestsTitle', null, 'Guests');
     if (backBtn) {
-      backBtn.setAttribute('aria-label', isChange ? 'Back to booking' : 'Back to guests');
+      backBtn.setAttribute('aria-label', isChange ? tx('booking.backToBooking', null, 'Back to booking') : tx('booking.backToGuests', null, 'Back to guests'));
     }
-    if (title) title.textContent = isChange ? 'Change rooms' : 'Add rooms & offer';
-    if (eyebrow) eyebrow.textContent = isChange ? 'Edit rooms' : 'Step 2';
+    if (title) title.textContent = isChange ? tx('booking.changeRoomsTitle', null, 'Change rooms') : tx('booking.addRoomsOffer', null, 'Add rooms & offer');
+    if (eyebrow) eyebrow.textContent = isChange ? tx('booking.editRoomsEyebrow', null, 'Edit rooms') : tx('booking.step2', null, 'Step 2');
     if (continueBtn) {
-      continueBtn.textContent = isChange ? 'Done' : 'Continue';
+      continueBtn.textContent = isChange ? tx('booking.done', null, 'Done') : tx('booking.continue', null, 'Continue');
     }
   }
 
@@ -2454,8 +2581,8 @@
     openModal(offerSelectModal);
     showToast(
       pendingChangeRoomType
-        ? `Replacing 1 × ${pendingChangeRoomType}. Your other rooms of this type stay as-is.`
-        : 'Pick a room type, then tap Done.',
+        ? tx('booking.replacingRoom', { n: `1 × ${pendingChangeRoomType}` }, `Replacing 1 × ${pendingChangeRoomType}. Your other rooms of this type stay as-is.`)
+        : tx('booking.pickRoomThenDone', null, 'Pick a room type, then tap Done.'),
       true
     );
   }
@@ -2473,9 +2600,9 @@
     offerSelectMode = 'initial';
     syncOfferChangeChrome();
     if (bookingCart.length) {
-      showToast('Rooms updated.', true);
+      showToast(tx('booking.toastRoomsUpdated', null, 'Rooms updated.'), true);
     } else {
-      showToast('No rooms selected. Add a room to continue.', false);
+      showToast(tx('booking.toastNoRoomsSelected', null, 'No rooms selected. Add a room to continue.'), false);
     }
   }
 
@@ -2490,7 +2617,7 @@
   function addOfferRoomToCart(roomType) {
     const meta = getRoomMeta(roomType);
     if (!meta?.roomType) {
-      showToast('Please choose a room.', false);
+      showToast(tx('booking.toastPleaseChooseRoom', null, 'Please choose a room.'), false);
       return;
     }
     if (meta.available < 1) {
@@ -2549,7 +2676,7 @@
 
   function continueFromOfferToBooking() {
     if (!bookingCart.length) {
-      showToast('Add at least one room to continue.', false);
+      showToast(tx('booking.toastAddRoom', null, 'Add at least one room to continue.'), false);
       syncOfferContinueState();
       return;
     }
@@ -2618,7 +2745,7 @@
 
     if (backBtn) {
       backBtn.hidden = false;
-      backBtn.textContent = step === 'guest' ? 'Back to rooms' : 'Back';
+      backBtn.textContent = step === 'guest' ? tx('booking.backToRooms', null, 'Back to rooms') : tx('booking.back', null, 'Back');
     }
     if (nextBtn) nextBtn.hidden = isLast;
     if (submitBtn) submitBtn.hidden = !isLast;
@@ -2626,10 +2753,10 @@
     const lede = document.getElementById('bookModalLede');
     if (lede) {
       const copy = {
-        guest: 'Enter guest contact details to continue.',
-        dates: 'Choose check-in and check-out for every room in this stay.',
-        rooms: 'Review your rooms. You can still adjust quantities.',
-        confirm: 'Choose payment and accept the Terms of Stay to submit.',
+        guest: tx('booking.ledeGuest', null, 'Enter guest contact details to continue.'),
+        dates: tx('booking.ledeDates', null, 'Choose check-in and check-out for every room in this stay.'),
+        rooms: tx('booking.ledeRooms', null, 'Review your rooms. You can still adjust quantities.'),
+        confirm: tx('booking.ledeConfirm', null, 'Choose payment and accept the Terms of Stay to submit.'),
       };
       lede.textContent = copy[step] || copy.guest;
     }
@@ -2658,17 +2785,17 @@
     let focusEl = null;
 
     if (!name) {
-      missing.push('Name');
+      missing.push(tx('booking.fullName', null, 'Full name'));
       markFieldInvalid(nameEl);
       focusEl = focusEl || nameEl;
     }
     if (!email) {
-      missing.push('email');
+      missing.push(tx('booking.email', null, 'Email'));
       markFieldInvalid(emailEl);
       focusEl = focusEl || emailEl;
     }
     if (!phone) {
-      missing.push('phone');
+      missing.push(tx('booking.phone', null, 'Phone'));
       markFieldInvalid(phoneEl);
       focusEl = focusEl || phoneEl;
     }
@@ -2688,10 +2815,10 @@
       markFieldInvalid(emailEl);
       if (guestMsg) {
         guestMsg.hidden = false;
-        guestMsg.textContent = 'Enter a valid email address.';
+        guestMsg.textContent = tx('booking.validateEmail', null, 'Enter a valid email address.');
       }
       emailEl?.focus();
-      return { ok: false, message: 'Enter a valid email address.' };
+      return { ok: false, message: tx('booking.validateEmail', null, 'Enter a valid email address.') };
     }
 
     if (phone && !isValidPhone(phone)) {
@@ -2699,10 +2826,10 @@
       markFieldInvalid(phoneEl);
       if (guestMsg) {
         guestMsg.hidden = false;
-        guestMsg.textContent = 'Enter a valid phone number.';
+        guestMsg.textContent = tx('booking.validatePhone', null, 'Enter a valid phone number.');
       }
       phoneEl?.focus();
-      return { ok: false, message: 'Enter a valid phone number.' };
+      return { ok: false, message: tx('booking.validatePhone', null, 'Enter a valid phone number.') };
     }
 
     return { ok: true, message: '' };
@@ -2757,7 +2884,7 @@
   function validateRoomsWizardStep() {
     updateBookRoomsCapacityWarning();
     if (!bookingCart.length) {
-      return { ok: false, message: 'Add at least one room to your booking.' };
+      return { ok: false, message: tx('booking.validateAddRoom', null, 'Add at least one room to your booking.') };
     }
     if (cartRoomCount() > intendedRoomCount()) {
       const intended = intendedRoomCount();
@@ -2862,7 +2989,7 @@
       if (cancelChange && isPendingChangeRoom(removedType)) {
         clearPendingChangeRoom();
         renderOfferCart();
-        showToast('Change cancelled.', true);
+        showToast(tx('booking.toastChangeCancelled', null, 'Change cancelled.'), true);
         return;
       }
       if (isPendingChangeRoom(removedType)) clearPendingChangeRoom();
@@ -3119,11 +3246,11 @@
       return;
     }
     if (!email.includes('@')) {
-      setMessage(bookPageMsg, 'Enter a valid email address.', false);
+      setMessage(bookPageMsg, tx('booking.validateEmail', null, 'Enter a valid email address.'), false);
       return;
     }
     if (!isValidPhone(phone)) {
-      setMessage(bookPageMsg, 'Enter a valid phone number.', false);
+      setMessage(bookPageMsg, tx('booking.validatePhone', null, 'Enter a valid phone number.'), false);
       return;
     }
     const dateError = validateDates(checkIn, checkOut);
@@ -3133,7 +3260,7 @@
       return;
     }
     if (!roomType) {
-      setMessage(bookPageMsg, 'Please select a room.', false);
+      setMessage(bookPageMsg, tx('booking.validateSelectRoom', null, 'Please select a room.'), false);
       return;
     }
     if (guests < 1) {
@@ -3200,7 +3327,7 @@
       return;
     }
     if (!acceptStayTerms?.checked) {
-      setMessage(bookMsg, 'Please read and accept the Terms of Stay before submitting.', false);
+      setMessage(bookMsg, tx('booking.validateAcceptTerms', null, 'Please read and accept the Terms of Stay before submitting.'), false);
       acceptStayTerms?.focus();
       return;
     }
@@ -3212,7 +3339,7 @@
     if (submitButton) {
       submitButton.disabled = true;
       submitButton.dataset.originalText = submitButton.textContent || '';
-      submitButton.textContent = 'Sending…';
+      submitButton.textContent = tx('booking.sending', null, 'Sending…');
     }
     setMessage(bookMsg, '', false);
 
@@ -3252,8 +3379,12 @@
           payload.message
           || validationMessage
           || (response.status === 429
-            ? 'Too many booking attempts. Please wait a minute and try again.'
-            : 'We could not submit your booking. Please try again.')
+            ? tx(
+                'booking.toastTooManyAttempts',
+                null,
+                'Too many booking attempts. Please wait a minute and try again.'
+              )
+            : tx('booking.toastSubmitFailed', null, 'We could not submit your booking. Please try again.'))
         );
       }
 
@@ -3271,7 +3402,9 @@
       showSuccess(
         {
           kind,
-          label: kind === 'reservation' ? 'Reservation' : 'Booking',
+          label: kind === 'reservation'
+            ? tx('booking.reservation', null, 'Reservation')
+            : tx('booking.booking', null, 'Booking'),
         },
         `Thanks, ${name}. Your booking request ${payload.reference} is Pending. Reception will call to verify ${roomSummary} (${checkIn} ${checkInTime} → ${checkOut} ${checkOutTime}).${feeNote}`
       );
@@ -3452,9 +3585,32 @@
 
   document.addEventListener('mori:langchange', () => {
     syncGuestFlowSummary();
+    if (guestsModal && !guestsModal.hidden) {
+      renderGuestsRooms();
+      syncGuestsContinueState();
+    }
     syncOfferSelectionStatus();
     syncOfferCardSelectionState();
     syncOfferContinueState();
     renderOfferCart();
+    if (offerSelectModal && !offerSelectModal.hidden) {
+      renderOfferPanel();
+      syncOfferChangeChrome();
+    }
+    if (bookModal && !bookModal.hidden) {
+      setBookWizardStep(bookWizardStep);
+      renderCart();
+      refreshStayTimeOptions();
+      updateStayTimeFeesHint();
+      const party = document.getElementById('bookPartySummary');
+      if (party) {
+        party.hidden = false;
+        party.textContent = partySummaryText();
+      }
+    }
+    if (successModal && !successModal.hidden) {
+      const doneBtn = successModal.querySelector('[data-close-modal].guest-btn-primary');
+      if (doneBtn) doneBtn.textContent = tx('booking.done', null, 'Done');
+    }
   });
 })();

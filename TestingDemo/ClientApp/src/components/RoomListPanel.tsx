@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState } from 'react'
 import { formatMoney } from '../format'
 import { compareValues, useDebouncedValue, usePagination, useSortState } from '../hooks'
 import type { RoomItem, RoomSortKey } from '../types'
+import { roomStatusLabel } from '../types'
 import { DeleteIconLink, DetailsIconLink, EditIconLink } from './ActionIcons'
 import { ZoomableImage } from './PhotoZoom'
 import { Pagination } from './Pagination'
@@ -19,6 +20,7 @@ type LayoutMode = 'grid' | 'list'
 function statusClass(status: string) {
   if (status === 'Available') return 'is-available'
   if (status === 'Occupied') return 'is-occupied'
+  if (status === 'Cleaning') return 'is-cleaning'
   return 'is-unavailable'
 }
 
@@ -121,7 +123,7 @@ function RoomCard({ room }: { room: RoomItem }) {
           <div className="rm-card-media-empty">No photo</div>
         )}
         <span className={`rm-pill rm-card-status ${statusClass(room.status)}`}>
-          {room.status}
+          {roomStatusLabel(room.status)}
         </span>
       </div>
 
@@ -370,7 +372,7 @@ export function RoomListPanel({ data, loading, error }: Props) {
                         </td>
                         <td>
                           <span className={`rm-pill ${statusClass(room.status)}`}>
-                            {room.status}
+                            {roomStatusLabel(room.status)}
                           </span>
                         </td>
                         <td className="rm-col-actions">

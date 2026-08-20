@@ -355,6 +355,49 @@ public class RoomService : IRoomService
         return true;
     }
 
+    public async Task<RoomDto?> SetGuestReadyAsync(
+        int id,
+        bool open,
+        CancellationToken cancellationToken = default)
+    {
+        var room = await _db.Rooms
+            .Include(r => r.RoomType)
+            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
+        if (room is null)
+        {
+            return null;
+        }
+
+        if (room.Status == RoomStatus.Occupied)
+        {
+            throw new InvalidOperationException(
+                $"Room {room.RoomNumber} is Occupied. Check out the guest before changing availability.");
+        }
+
+        if (open)
+        {
+            if (room.Status == RoomStatus.Available)
+            {
+                return room.ToDto();
+            }
+
+            room.Status = RoomStatus.Available;
+        }
+        else
+        {
+            if (room.Status == RoomStatus.Cleaning)
+            {
+                return room.ToDto();
+            }
+
+            // Available or Unavailable → maintaining/cleaning (cannot take guests).
+            room.Status = RoomStatus.Cleaning;
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return room.ToDto();
+    }
+
     public async Task<int> DeleteRoomTypeAsync(
         int roomTypeId,
         CancellationToken cancellationToken = default)

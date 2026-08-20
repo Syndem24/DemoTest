@@ -1,9 +1,9 @@
 @{
     ViewData["Title"] = "Room Management";
     var view = Context.Request.Query["view"].ToString();
-    if (!string.Equals(view, "list", StringComparison.OrdinalIgnoreCase))
+    if (!string.Equals(view, "types", StringComparison.OrdinalIgnoreCase))
     {
-        view = "types";
+        view = "list";
     }
 }
 

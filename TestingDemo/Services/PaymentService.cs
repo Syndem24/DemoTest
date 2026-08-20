@@ -50,6 +50,17 @@ public sealed class PaymentService : IPaymentService
             .FirstOrDefaultAsync(b => b.Id == request.BookingId, cancellationToken)
             ?? throw new KeyNotFoundException("Booking was not found.");
 
+        if (booking.IsArchived)
+        {
+            throw new ArgumentException("Archived bookings cannot take new payments.");
+        }
+
+        if (booking.Status != BookingStatus.Confirmed)
+        {
+            throw new ArgumentException(
+                "Confirm the booking first. Payments can only be recorded after confirmation.");
+        }
+
         var postedPaid = booking.PaymentRecords
             .Where(p => p.Status == PaymentRecordStatus.Posted)
             .Sum(p => p.Amount);

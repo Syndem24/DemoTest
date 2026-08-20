@@ -7,18 +7,18 @@ import type { RoomItem, RoomTypeSummary, ViewMode } from './types'
 function readInitialView(): ViewMode {
   const root = document.getElementById('room-management-root')
   const fromData = root?.dataset.view?.toLowerCase()
-  if (fromData === 'list') {
-    return 'list'
+  if (fromData === 'types' || fromData === 'list') {
+    return fromData
   }
 
   const params = new URLSearchParams(window.location.search)
-  return params.get('view') === 'list' ? 'list' : 'types'
+  return params.get('view') === 'types' ? 'types' : 'list'
 }
 
 function setViewQuery(view: ViewMode) {
   const url = new URL(window.location.href)
-  if (view === 'list') {
-    url.searchParams.set('view', 'list')
+  if (view === 'types') {
+    url.searchParams.set('view', 'types')
   } else {
     url.searchParams.delete('view')
   }
@@ -74,20 +74,20 @@ export default function App() {
         <button
           type="button"
           role="tab"
-          aria-selected={view === 'types'}
-          className={`rm-tab ${view === 'types' ? 'is-active' : ''}`}
-          onClick={() => changeView('types')}
-        >
-          Room Types
-        </button>
-        <button
-          type="button"
-          role="tab"
           aria-selected={view === 'list'}
           className={`rm-tab ${view === 'list' ? 'is-active' : ''}`}
           onClick={() => changeView('list')}
         >
           Room List
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'types'}
+          className={`rm-tab ${view === 'types' ? 'is-active' : ''}`}
+          onClick={() => changeView('types')}
+        >
+          Room Types
         </button>
       </div>
 

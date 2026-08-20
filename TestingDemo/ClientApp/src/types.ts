@@ -1,4 +1,9 @@
-export type RoomStatus = 'Available' | 'Unavailable' | 'Occupied'
+export type RoomStatus = 'Available' | 'Unavailable' | 'Occupied' | 'Cleaning'
+
+export function roomStatusLabel(status: string): string {
+  if (status === 'Cleaning') return 'Maintaining'
+  return status
+}
 
 export type RoomTypeSummary = {
   roomTypeId: number

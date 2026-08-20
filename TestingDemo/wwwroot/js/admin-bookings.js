@@ -142,6 +142,8 @@
   const paymentCameraGuideLabel = paymentCameraModal?.querySelector('[data-payment-camera-guide-label]');
   let reservationCalendar = null;
   let selectedBooking = null;
+  /** When set to a booking id, reception flow is on Extras (incidental / snack) after Fees checkout CTA. */
+  let receptionExtrasStageBookingId = null;
   let searchTimer = null;
   let selectedFromUrlHandled = false;
   let pendingScrollBookingId = null;
@@ -2095,7 +2097,8 @@
       }
     }
 
-    const canAdd = !booking.isArchived && paymentPriceContext.balanceDue > 0.009;
+    const canAdd =
+      canRecordPayment(booking) && paymentPriceContext.balanceDue > 0.009;
     if (paymentViewAddBtn) {
       paymentViewAddBtn.hidden = !canAdd;
     }
@@ -2131,6 +2134,13 @@
     if (!paymentAddModal || !booking) return;
     if (booking.isArchived) {
       showBookingMessage('Archived bookings cannot take new payments.', true);
+      return;
+    }
+    if (displayEnum(booking.status) !== 'Confirmed') {
+      showBookingMessage(
+        'Confirm the booking first. Payments can only be recorded after confirmation.',
+        true
+      );
       return;
     }
     paymentBookingContext = booking;
@@ -3011,7 +3021,11 @@
 
   function arrivalAssignMessage(booking) {
     const arrival = formatDate(booking.checkInAtUtc || booking.checkIn);
-    return `Finish booking setup from the arrival date (${arrival}), after the stay is fully paid.`;
+    return (
+      `Assign rooms is locked until the check-in date (${arrival}, Philippines time). ` +
+      `Payment can be recorded anytime after confirmation. ` +
+      `If the guest arrives earlier, use Adjust stay to move check-in — then assign rooms once that date is today and the stay is fully paid.`
+    );
   }
 
   function isBookingFullyPaid(booking, summary = null) {
@@ -3019,6 +3033,11 @@
       fillPaymentSummaryFields(booking, summary);
     }
     return Number(paymentPriceContext.balanceDue) <= 0.009;
+  }
+
+  function canRecordPayment(booking) {
+    if (!booking || booking.isArchived) return false;
+    return displayEnum(booking.status) === 'Confirmed';
   }
 
   function formatBookingRooms(booking) {
@@ -3110,15 +3129,31 @@
     if (!detailModal) return;
     detailModal.hidden = true;
     selectedBooking = null;
+    // Keep receptionExtrasStageBookingId so reopening the same guest stays on Checkout (step 5).
+    clearReceptionFlowPath();
+    hideCheckoutConfirmModal();
+    hideExtrasStageIntro();
     document.body.classList.remove('admin-booking-modal-open');
   }
 
+  /** Field row for guest details — plain label/value blocks (never dl/dt/dd). */
   function detailField(label, value) {
     const wrapper = document.createElement('div');
-    const term = document.createElement('dt');
-    const detail = document.createElement('dd');
+    wrapper.className = 'admin-booking-detail-field';
+    const term = document.createElement('span');
+    term.className = 'admin-booking-detail-field-label';
     term.textContent = label;
-    detail.textContent = value;
+    const detail = document.createElement('div');
+    detail.className = 'admin-booking-detail-field-value';
+    if (value != null && typeof value === 'object' && value.nodeType) {
+      detail.append(value);
+      if (!detail.textContent.trim() && detail.childElementCount === 0) {
+        detail.textContent = '—';
+      }
+    } else {
+      const text = String(value ?? '').trim();
+      detail.textContent = text || '—';
+    }
     wrapper.append(term, detail);
     return wrapper;
   }
@@ -3137,11 +3172,205 @@
     return button;
   }
 
+  /** Primary next-step control with step badge, optional icon, and visible text. */
+  function actionFlowButton({ step, label, onClick, className = '', icon = '' }) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `admin-booking-flow-btn ${className}`.trim();
+    button.setAttribute('aria-label', label);
+    if (step) {
+      const badge = document.createElement('span');
+      badge.className = 'admin-booking-flow-btn-step';
+      badge.textContent = String(step);
+      button.append(badge);
+    }
+    if (icon) {
+      const glyph = document.createElement('span');
+      glyph.className = 'admin-booking-flow-btn-icon';
+      glyph.setAttribute('aria-hidden', 'true');
+      glyph.innerHTML = icon;
+      button.append(glyph);
+    }
+    const text = document.createElement('span');
+    text.className = 'admin-booking-flow-btn-label';
+    text.textContent = label;
+    button.append(text);
+    button.addEventListener('click', onClick);
+    return button;
+  }
+
+  function resolveReceptionFlowStep({
+    status,
+    balanceDue,
+    hasAssignedRooms,
+    isArchived,
+    occupying = false,
+    extrasStage = false,
+  }) {
+    const steps = [
+      { id: 'confirm', label: 'Confirm', short: '1', icon: 'confirm' },
+      { id: 'pay', label: 'Payment', short: '2', icon: 'pay' },
+      { id: 'rooms', label: 'Room', short: '3', icon: 'rooms' },
+      { id: 'fees', label: 'Fees', short: '4', icon: 'fees' },
+      { id: 'checkout', label: 'Checkout', short: '5', icon: 'checkout' },
+      { id: 'archive', label: 'Archive', short: '6', icon: 'archive' },
+    ];
+
+    let current = 'confirm';
+    if (isArchived || status === 'CheckedOut' || status === 'Cancelled' || status === 'Rejected') {
+      current = 'archive';
+    } else if (status === 'Pending') {
+      current = 'confirm';
+    } else if (status === 'Confirmed') {
+      if (occupying && hasAssignedRooms) {
+        // Fees until receptionist continues → Checkout (incidental / snacks), then Archive.
+        current = extrasStage ? 'checkout' : 'fees';
+      } else if (balanceDue > 0.009) current = 'pay';
+      else if (!hasAssignedRooms) current = 'rooms';
+      else current = 'fees';
+    }
+
+    const currentIndex = Math.max(0, steps.findIndex((s) => s.id === current));
+    let hint = 'Follow the highlighted step.';
+    if (isArchived) {
+      hint = 'Booking archived.';
+    } else if (status === 'Pending') {
+      hint = 'Next: confirm — payment unlocks after confirmation.';
+    } else if (current === 'pay') {
+      hint = `Next: record payment · due ${money(balanceDue)}.`;
+    } else if (current === 'rooms') {
+      hint = 'Next: assign room (fully paid).';
+    } else if (current === 'fees') {
+      hint = occupying
+        ? 'Add stay fees and snack & beverage if needed, then continue to Checkout for incidental damages.'
+        : 'Add stay fees and snack & beverage if needed. Incidental damages record at Checkout.';
+    } else if (current === 'checkout') {
+      hint =
+        balanceDue > 0.009
+          ? `Record incidental damages if any, then settle balance ${money(balanceDue)} before Archive.`
+          : 'Record incidental damages if any, then Archive (fully paid).';
+    } else if (current === 'archive') {
+      hint = 'Ready to archive this stay.';
+    }
+
+    return { steps, current, currentIndex, hint };
+  }
+
+  const FLOW_STEP_ICONS = {
+    confirm:
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5 9.5 17 19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    pay: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v3H3V7zm0 5h18v7H3v-7zm3 2.5h6v2H6v-2z" fill="currentColor"/></svg>',
+    rooms:
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h16v9H4v-9zm2-4h12l1 4H5l1-4zm4 8h6v2h-6v-2z" fill="currentColor"/></svg>',
+    fees: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10M7 12h10M7 17h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="5" cy="7" r="1.2" fill="currentColor"/><circle cx="5" cy="12" r="1.2" fill="currentColor"/><circle cx="5" cy="17" r="1.2" fill="currentColor"/></svg>',
+    checkout:
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v14h-5M10 12H3m0 0 3-3M3 12l3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    archive:
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v3H4V7zm1 3h14v9H5v-9zm4 3h6v2H9v-2z" fill="currentColor"/></svg>',
+    done: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5 9.5 17 19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6 9 12l6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  };
+
+  /** Slim header progress path with icon + label steps. Room step can reopen assign. */
+  function updateReceptionFlowPath(options) {
+    const path = detailModal?.querySelector('[data-detail-flow-path]');
+    if (!path) return;
+
+    const { steps, currentIndex, hint } = resolveReceptionFlowStep(options);
+    const onRoomsStepClick = typeof options.onRoomsStepClick === 'function'
+      ? options.onRoomsStepClick
+      : null;
+    const stepNumber = currentIndex + 1;
+    // Fill to the current step center so the teal segment sits over the active tick.
+    const fillPercent = Math.round(((currentIndex + 0.5) / steps.length) * 100);
+
+    path.hidden = false;
+    path.setAttribute('aria-valuemin', '1');
+    path.setAttribute('aria-valuemax', String(steps.length));
+    path.setAttribute('aria-valuenow', String(stepNumber));
+    path.setAttribute(
+      'aria-valuetext',
+      `Step ${stepNumber} of ${steps.length}: ${steps[currentIndex].label}. ${hint}`
+    );
+    path.title = hint;
+
+    path.replaceChildren();
+
+    const rail = document.createElement('div');
+    rail.className = 'admin-booking-flow-path-rail';
+    rail.setAttribute('aria-hidden', 'true');
+
+    const track = document.createElement('div');
+    track.className = 'admin-booking-flow-path-track';
+    const fill = document.createElement('div');
+    fill.className = 'admin-booking-flow-path-fill';
+    fill.style.width = `${fillPercent}%`;
+    track.append(fill);
+
+    const ticks = document.createElement('ol');
+    ticks.className = 'admin-booking-flow-path-ticks';
+    ticks.style.gridTemplateColumns = `repeat(${steps.length}, minmax(0, 1fr))`;
+    steps.forEach((step, index) => {
+      const item = document.createElement('li');
+      item.className = 'admin-booking-flow-path-tick';
+      if (index < currentIndex) item.classList.add('is-done');
+      if (index === currentIndex) {
+        item.classList.add('is-current');
+        item.setAttribute('aria-current', 'step');
+      }
+      const mark = document.createElement('span');
+      mark.className = 'admin-booking-flow-path-dot';
+      const iconKey = index < currentIndex ? 'done' : step.icon;
+      mark.innerHTML = FLOW_STEP_ICONS[iconKey] || step.short;
+      mark.setAttribute('data-step', step.short);
+      const label = document.createElement('span');
+      label.className = 'admin-booking-flow-path-label';
+      label.textContent = step.label;
+      item.append(mark, label);
+
+      if (step.id === 'rooms' && onRoomsStepClick) {
+        item.classList.add('is-actionable');
+        item.setAttribute('role', 'button');
+        item.tabIndex = 0;
+        item.title = 'Open Assign rooms (step 3)';
+        item.addEventListener('click', (event) => {
+          event.preventDefault();
+          onRoomsStepClick();
+        });
+        item.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onRoomsStepClick();
+          }
+        });
+      }
+
+      ticks.append(item);
+    });
+
+    rail.append(track, ticks);
+
+    const status = document.createElement('p');
+    status.className = 'admin-booking-flow-path-status';
+    status.innerHTML = `<span class="admin-booking-flow-path-stepnum">Step ${stepNumber} of ${steps.length}</span> · ${escapeHtml(hint)}`;
+
+    path.append(rail, status);
+  }
+
+  function clearReceptionFlowPath() {
+    const path = detailModal?.querySelector('[data-detail-flow-path]');
+    if (!path) return;
+    path.hidden = true;
+    path.replaceChildren();
+    path.removeAttribute('aria-valuetext');
+    path.setAttribute('aria-valuenow', '1');
+  }
+
   const ACTION_ICONS = {
     edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l10.5-10.5-4-4L4 16v4zm12.7-13.3 1.8-1.8a1 1 0 0 1 1.4 0l1.2 1.2a1 1 0 0 1 0 1.4l-1.8 1.8-2.6-2.6z" fill="currentColor"/></svg>',
     payments: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v3H3V7zm0 5h18v7H3v-7zm3 2.5h6v2H6v-2z" fill="currentColor"/></svg>',
     addPay: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
-    cancel: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 9.5h17M8 3.5v4M16 3.5v4M9.2 13.2l5.6 5.6M14.8 13.2l-5.6 5.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    cancel: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 9l6 6M15 9l-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
     confirm: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5 9.5 17 19 7.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
     assign: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h16v9H4v-9zm2-4h12l1 4H5l1-4zm4 8h6v2h-6v-2z" fill="currentColor"/></svg>',
     checkout: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v14h-5M10 12H3m0 0 3-3M3 12l3 3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
@@ -3193,7 +3422,10 @@
     const refEl = detailModal.querySelector('[data-detail-reference]');
     const guestEl = detailModal.querySelector('[data-detail-guest]');
     if (refEl) refEl.textContent = hint?.reference || 'Loading…';
-    if (guestEl) guestEl.textContent = hint?.guestName || 'Guest details';
+    if (guestEl) {
+      guestEl.textContent = hint?.guestName || 'Guest details';
+      guestEl.title = hint?.guestName || '';
+    }
 
     const rootEl = document.createElement('div');
     rootEl.className = 'admin-skel-detail';
@@ -3238,7 +3470,9 @@
     if (!detailModal || !detailBody || !detailActions) return;
     selectedBooking = booking;
     detailModal.querySelector('[data-detail-reference]').textContent = booking.reference;
-    detailModal.querySelector('[data-detail-guest]').textContent = booking.guestName;
+    const guestEl = detailModal.querySelector('[data-detail-guest]');
+    guestEl.textContent = booking.guestName;
+    guestEl.title = booking.guestName || '';
     detailBody.replaceChildren();
     detailActions.replaceChildren();
 
@@ -3285,15 +3519,18 @@
       balanceBlock.classList.add('is-paid');
       balanceLabel.textContent = 'Overpaid';
       balanceValue.textContent = money(Math.abs(balanceDue));
-    } else if (balanceDue <= 0.009) {
-      balanceBlock.classList.add('is-paid');
-      balanceLabel.textContent = 'Fully paid';
-      balanceValue.textContent = money(0);
-    } else {
+      balanceBlock.append(balanceLabel, balanceValue);
+      summary.append(statusGroup, balanceBlock);
+    } else if (balanceDue > 0.009) {
       balanceValue.textContent = money(balanceDue);
+      balanceBlock.append(balanceLabel, balanceValue);
+      summary.append(statusGroup, balanceBlock);
+    } else {
+      balanceBlock.classList.add('is-paid', 'is-fully-paid');
+      balanceLabel.textContent = 'Fully paid';
+      balanceBlock.append(balanceLabel);
+      summary.append(statusGroup, balanceBlock);
     }
-    balanceBlock.append(balanceLabel, balanceValue);
-    summary.append(statusGroup, balanceBlock);
 
     const nights = Math.max(
       1,
@@ -3316,27 +3553,67 @@
     const lateHours = lateCharge ? Number(lateCharge.quantity || 0) : 0;
     const extraCharge = charges.find((c) => String(c.chargeType) === 'ExtraPerson');
     const extraPersons = extraCharge ? Number(extraCharge.quantity || 0) : 0;
-    const incidentalCharge = charges.find((c) => String(c.chargeType) === 'Incidental');
-    const snackCharge = charges.find((c) => String(c.chargeType) === 'SnackBeverage');
+    const incidentalCharges = charges.filter((c) => String(c.chargeType) === 'Incidental');
+    const snackCharges = charges.filter((c) => String(c.chargeType) === 'SnackBeverage');
     const extensionCharge = charges.find((c) => String(c.chargeType) === 'StayExtension');
     const extensionNights = extensionCharge ? Number(extensionCharge.quantity || 0) : 0;
-    const incidentalAmount = incidentalCharge ? Number(incidentalCharge.amount || 0) : 0;
-    const snackQty = snackCharge ? Number(snackCharge.quantity || 0) : 0;
-    const snackUnit = snackCharge ? Number(snackCharge.unitAmount || 0) : 0;
-    const incidentalNote = (() => {
-      const label = String(incidentalCharge?.label || '');
+    const parseIncidentalNoteFromLabel = (label) => {
+      const text = String(label || '');
       const marker = '· cash · ';
-      const idx = label.indexOf(marker);
-      return idx >= 0 ? label.slice(idx + marker.length).trim() : '';
-    })();
-    const snackProduct = (() => {
-      const label = String(snackCharge?.label || '');
+      const idx = text.indexOf(marker);
+      return idx >= 0 ? text.slice(idx + marker.length).trim() : '';
+    };
+    let incidentalLineSeq = 0;
+    const incidentalLines = incidentalCharges
+      .filter((c) => Number(c.amount || 0) > 0)
+      .map((charge) => ({
+        key: `inc-${charge.id || ++incidentalLineSeq}`,
+        amount: Math.max(0, Number(charge.amount || 0)),
+        note: parseIncidentalNoteFromLabel(charge.label),
+      }));
+    const parseSnackFromLabel = (label) => {
+      const text = String(label || '');
       const prefix = 'Snack & beverage · ';
-      if (!label.startsWith(prefix)) return '';
-      const rest = label.slice(prefix.length);
-      const match = rest.match(/^(.*) · \d+\s*×/);
-      return match ? match[1].trim() : '';
-    })();
+      if (!text.startsWith(prefix)) {
+        return { product: '', takenDate: manilaTodayIso() };
+      }
+      const rest = text.slice(prefix.length);
+      const takenMatch = rest.match(/(?:^| · )([A-Z][a-z]{2} \d{1,2}, \d{4}) · \d+\s*×/);
+      let takenDate = manilaTodayIso();
+      if (takenMatch) {
+        const parsed = new Date(`${takenMatch[1]} 12:00:00`);
+        if (!Number.isNaN(parsed.getTime())) {
+          const parts = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Manila',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).formatToParts(parsed);
+          const get = (type) => parts.find((p) => p.type === type)?.value || '';
+          takenDate = `${get('year')}-${get('month')}-${get('day')}`;
+        }
+      }
+      const productMatch = rest.match(/^(.*) · [A-Z][a-z]{2} \d{1,2}, \d{4} · \d+\s*×/);
+      if (productMatch) {
+        return { product: productMatch[1].trim(), takenDate };
+      }
+      const legacyProduct = rest.match(/^(.*) · \d+\s*×/);
+      return {
+        product: legacyProduct ? legacyProduct[1].trim() : '',
+        takenDate,
+      };
+    };
+    let snackLineSeq = 0;
+    const snackLines = snackCharges.map((charge) => {
+      const parsed = parseSnackFromLabel(charge.label);
+      return {
+        key: `snack-${charge.id || ++snackLineSeq}`,
+        product: parsed.product,
+        takenDate: parsed.takenDate,
+        qty: Math.max(0, Number(charge.quantity || 0)),
+        unitAmount: Math.max(0, Number(charge.unitAmount || 0)),
+      };
+    });
     const parseMoneyInput = (value) => {
       const n = Number(String(value ?? '').replace(/,/g, '').trim());
       return Number.isFinite(n) && n >= 0 ? n : 0;
@@ -3347,61 +3624,125 @@
     };
     const allowsExtraPerson = true;
 
-    const stayLabel = document.createElement('div');
-    stayLabel.className = 'admin-booking-stay-label';
-    const stayText = document.createElement('span');
-    stayText.textContent = formatStayRange(
-      booking.checkInAtUtc || booking.checkIn,
-      booking.checkoutTimeUtc || booking.checkOut
-    );
-    stayLabel.append(stayText);
-    if (hasEarly) {
-      const badge = document.createElement('span');
-      badge.className = 'admin-booking-extended-badge';
-      badge.textContent = 'Early 11:30 AM';
-      stayLabel.append(badge);
-    }
-    if (lateHours > 0) {
-      const badge = document.createElement('span');
-      badge.className = 'admin-booking-extended-badge is-late';
-      badge.textContent = `Late +${lateHours}h`;
-      stayLabel.append(badge);
-    }
+    const checkInRaw = booking.checkInAtUtc || booking.checkIn;
+    const checkOutRaw = booking.checkoutTimeUtc || booking.checkOut;
+    const checkInLabel = formatDateTime(checkInRaw) || formatDate(checkInRaw) || '—';
+    const checkOutLabel = formatDateTime(checkOutRaw) || formatDate(checkOutRaw) || '—';
+    const stayBadges = [];
+    if (hasEarly) stayBadges.push('Early 11:30 AM');
+    if (lateHours > 0) stayBadges.push(`Late +${lateHours}h`);
     if (extensionNights > 0) {
-      const badge = document.createElement('span');
-      badge.className = 'admin-booking-extended-badge is-extend';
-      badge.textContent = `+${extensionNights} night${extensionNights === 1 ? '' : 's'}`;
-      stayLabel.append(badge);
+      stayBadges.push(`+${extensionNights} night${extensionNights === 1 ? '' : 's'}`);
     }
+    const staySummary =
+      stayBadges.length > 0
+        ? `${checkInLabel} → ${checkOutLabel} (${stayBadges.join(' · ')})`
+        : `${checkInLabel} → ${checkOutLabel}`;
+    const roomSummary = formatBookingRooms(booking) || '—';
 
-    const fields = document.createElement('dl');
-    fields.className = 'admin-booking-detail-grid';
-    const stayField = detailField('Stay', '');
-    stayField.querySelector('dd')?.replaceChildren(stayLabel);
+    const fields = document.createElement('div');
+    fields.className = 'admin-booking-detail-grid admin-booking-guest-details-grid';
     fields.append(
-      stayField,
-      detailField('Request type', displayEnum(booking.kind)),
+      detailField('Guest', booking.guestName || '—'),
+      detailField('Phone', booking.guestPhone || '—'),
+      detailField('Email', booking.guestEmail || '—'),
+      detailField('Check-in', checkInLabel),
+      detailField('Check-out', checkOutLabel),
+      detailField('Stay', staySummary),
+      detailField('Nights', String(nights)),
+      detailField('Rooms', roomSummary),
+      detailField('Request type', displayEnum(booking.kind) || '—'),
+      detailField('Payment option', displayEnum(booking.paymentOption) || '—'),
       detailField('Stay total', money(stayTotal)),
-      detailField('Email', booking.guestEmail),
-      detailField('Phone', booking.guestPhone),
-      detailField('Submitted', formatDateTime(booking.createdAtUtc))
+      detailField('Reference', booking.reference || '—'),
+      detailField('Submitted', formatDateTime(booking.createdAtUtc) || formatDate(booking.createdAtUtc) || '—')
     );
 
-    const feesDisabled = Boolean(booking.isArchived);
+    const feesDisabled =
+      Boolean(booking.isArchived) || displayEnum(booking.status) !== 'Confirmed';
+    const occupyingGuest = isGuestOccupying(booking);
+    const extrasStage =
+      occupyingGuest && Number(receptionExtrasStageBookingId) === Number(booking.id);
+    // Incidental on Checkout; snack on Fees (step 4) and Checkout.
+    const showCheckoutExtras = extrasStage;
+    const showSnackFees = !feesDisabled;
     const roomCount = Math.max(
       1,
       (booking.items || []).reduce((sum, line) => sum + Number(line.quantity || 0), 0)
     );
 
+    const guestDetails = document.createElement('section');
+    guestDetails.className = 'admin-booking-guest-details';
+    const guestToggle = document.createElement('button');
+    guestToggle.type = 'button';
+    guestToggle.className = 'admin-booking-guest-details-toggle';
+    guestToggle.setAttribute('aria-expanded', extrasStage ? 'false' : 'true');
+    const guestPreview = [booking.guestName, booking.guestPhone, booking.guestEmail]
+      .map((part) => String(part || '').trim())
+      .filter(Boolean)
+      .join(' · ');
+    guestToggle.innerHTML =
+      `<span class="admin-booking-guest-details-toggle-label"><span class="admin-booking-guest-details-toggle-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-4 0-7 2-7 4.5V20h14v-1.5C19 16 16 14 12 14z" fill="currentColor"/></svg></span><span class="admin-booking-guest-details-toggle-text"><strong>Guest details</strong><small class="admin-booking-guest-details-preview">${escapeHtml(guestPreview || 'No contact on file')}</small></span></span><span class="admin-booking-guest-details-chevron" aria-hidden="true">▾</span>`;
+    const guestBody = document.createElement('div');
+    guestBody.className = 'admin-booking-guest-details-body';
+    guestBody.append(fields);
+    guestToggle.addEventListener('click', () => {
+      const open = !guestDetails.classList.contains('is-open');
+      guestDetails.classList.toggle('is-open', open);
+      guestToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      guestBody.hidden = !open;
+    });
+    if (extrasStage) {
+      guestBody.hidden = true;
+    } else {
+      guestDetails.classList.add('is-open');
+      guestBody.hidden = false;
+    }
+    guestDetails.append(guestToggle, guestBody);
+
     const feesPanel = document.createElement('section');
     feesPanel.className = 'admin-booking-fees-panel';
+    if (extrasStage) feesPanel.dataset.extrasFees = '1';
 
+    const feesHead = document.createElement('div');
+    feesHead.className = 'admin-booking-fees-head';
+    const feesHeadText = document.createElement('div');
+    feesHeadText.className = 'admin-booking-fees-head-text';
     const feesTitle = document.createElement('h3');
-    feesTitle.textContent = 'Stay fees';
+    feesTitle.textContent = extrasStage ? 'Checkout · incidental & snacks' : 'Stay fees';
     const feesLede = document.createElement('p');
     feesLede.className = 'admin-booking-fees-lede';
-    feesLede.textContent =
-      'Reception can add fees when the guest requests them. Open one category at a time.';
+    feesLede.textContent = feesDisabled
+      ? displayEnum(booking.status) === 'Pending'
+        ? 'Confirm the booking first, then record payment and assign rooms before adding stay fees.'
+        : 'Stay fees are locked for this booking.'
+      : extrasStage
+        ? 'Record incidental damages (multiple allowed) or more snacks. Settle any balance under Price & payments, then Archive when fully paid.'
+        : occupyingGuest
+          ? 'Add early / late / extra person / extend stay and snack & beverage here. Continue to Checkout for incidental damages.'
+          : 'Add early / late / extra person / extend stay and snack & beverage here. Incidental damages unlock at Checkout.';
+    feesHeadText.append(feesTitle, feesLede);
+
+    const feesManageBtn = document.createElement('button');
+    feesManageBtn.type = 'button';
+    feesManageBtn.className = 'admin-booking-fees-manage-btn';
+    feesManageBtn.setAttribute('aria-label', 'Manage all fees');
+    feesManageBtn.setAttribute('aria-expanded', 'false');
+    feesManageBtn.title = 'Manage all added fees';
+    feesManageBtn.innerHTML =
+      '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+    const feesManageBadge = document.createElement('span');
+    feesManageBadge.className = 'admin-booking-fees-manage-badge';
+    feesManageBadge.hidden = true;
+    feesManageBtn.append(feesManageBadge);
+    feesHead.append(feesHeadText, feesManageBtn);
+
+    const feesManageList = document.createElement('div');
+    feesManageList.className = 'admin-booking-fees-manage-list';
+    feesManageList.dataset.feesManageList = '1';
+    feesManageList.hidden = true;
+    feesManageList.setAttribute('role', 'region');
+    feesManageList.setAttribute('aria-label', 'All added fees');
 
     const feesLayout = document.createElement('div');
     feesLayout.className = 'admin-booking-fees-layout';
@@ -3465,7 +3806,16 @@
 
     const feeCategories = [];
 
-    const registerFeeCategory = ({ id, title, hint, locked = false, buildBody, getMeta }) => {
+    const registerFeeCategory = ({
+      id,
+      title,
+      hint,
+      locked = false,
+      canDelete = true,
+      buildBody,
+      getMeta,
+      showTrigger = true,
+    }) => {
       const trigger = document.createElement('button');
       trigger.type = 'button';
       trigger.className = 'admin-fee-dd-trigger';
@@ -3474,6 +3824,7 @@
       trigger.setAttribute('aria-expanded', 'false');
       trigger.setAttribute('aria-controls', `fee-panel-${id}`);
       if (locked || feesDisabled) trigger.classList.add('is-locked');
+      if (!showTrigger) trigger.hidden = true;
 
       const triggerLabel = document.createElement('span');
       triggerLabel.className = 'admin-fee-dd-trigger-label';
@@ -3516,7 +3867,14 @@
       trigger.addEventListener('click', () => openFeeDropdown(id));
       feeTriggers.append(trigger);
       feePanels.append(panel);
-      feeCategories.push({ id, refreshMeta });
+      feeCategories.push({
+        id,
+        title,
+        canDelete: Boolean(canDelete),
+        getMeta,
+        refreshMeta,
+        showTrigger: Boolean(showTrigger),
+      });
       refreshMeta();
       return { trigger, panel, refreshMeta };
     };
@@ -3550,24 +3908,116 @@
     extraInput.disabled = true;
     if (!allowsExtraPerson) extraInput.dataset.keepDisabled = '1';
 
-    const incidentalInput = Object.assign(document.createElement('input'), {
+    const incidentalAmountInput = Object.assign(document.createElement('input'), {
       type: 'text',
       inputMode: 'decimal',
       autocomplete: 'off',
       placeholder: '0.00',
-      value: incidentalAmount > 0 ? incidentalAmount.toFixed(2) : '',
+      value: '',
       disabled: true,
     });
-    incidentalInput.dataset.feeIncidental = '1';
+    incidentalAmountInput.dataset.feeIncidentalAmount = '1';
 
     const incidentalNoteInput = Object.assign(document.createElement('input'), {
       type: 'text',
       maxLength: 80,
       placeholder: 'e.g. broken lamp',
-      value: incidentalNote,
+      value: '',
       disabled: true,
     });
     incidentalNoteInput.dataset.feeIncidentalNote = '1';
+
+    const incidentalLinesList = document.createElement('ul');
+    incidentalLinesList.className = 'admin-booking-fee-snack-items';
+
+    const incidentalCartHint = Object.assign(document.createElement('p'), {
+      className: 'admin-booking-fees-hint',
+      textContent: 'Add each damage as its own line, then Save stay fees. Collect in cash.',
+    });
+
+    const incidentalAddBtn = Object.assign(document.createElement('button'), {
+      type: 'button',
+      className: 'admin-booking-fee-snack-add',
+      textContent: 'Add damage',
+      disabled: true,
+    });
+
+    const incidentalLinesTotal = () =>
+      incidentalLines.reduce((sum, line) => sum + Math.max(0, line.amount), 0);
+
+    const formatIncidentalLineText = (line) => {
+      const note = (line.note || '').trim();
+      return note ? `${money(line.amount)} · ${note}` : money(line.amount);
+    };
+
+    const renderIncidentalLines = () => {
+      incidentalLinesList.replaceChildren();
+      if (!incidentalLines.length) {
+        incidentalLinesList.append(
+          Object.assign(document.createElement('li'), {
+            className: 'admin-booking-fee-snack-empty',
+            textContent: 'No incidental damages yet.',
+          })
+        );
+        return;
+      }
+      incidentalLines.forEach((line) => {
+        const item = document.createElement('li');
+        item.className = 'admin-booking-fee-snack-item';
+        item.append(
+          Object.assign(document.createElement('span'), {
+            textContent: formatIncidentalLineText(line),
+          })
+        );
+        const removeBtn = Object.assign(document.createElement('button'), {
+          type: 'button',
+          className: 'admin-booking-fee-snack-remove',
+          textContent: 'Remove',
+          disabled: feesDisabled,
+        });
+        removeBtn.addEventListener('click', () => {
+          const idx = incidentalLines.findIndex((row) => row.key === line.key);
+          if (idx >= 0) incidentalLines.splice(idx, 1);
+          renderIncidentalLines();
+          refreshAllFeeMeta();
+        });
+        item.append(removeBtn);
+        incidentalLinesList.append(item);
+      });
+    };
+
+    const clearIncidentalDraft = () => {
+      incidentalAmountInput.value = '';
+      incidentalNoteInput.value = '';
+    };
+
+    const pushIncidentalDraft = (opts = {}) => {
+      const amount = parseMoneyInput(incidentalAmountInput.value);
+      if (amount <= 0) {
+        if (!opts.silent) {
+          incidentalCartHint.textContent = 'Enter a damage amount before adding.';
+        }
+        return false;
+      }
+      incidentalLines.push({
+        key: `inc-draft-${Date.now()}-${++incidentalLineSeq}`,
+        amount,
+        note: (incidentalNoteInput.value || '').trim(),
+      });
+      clearIncidentalDraft();
+      renderIncidentalLines();
+      if (!opts.silent) {
+        incidentalCartHint.textContent =
+          'Add each damage as its own line, then Save stay fees. Collect in cash.';
+        refreshAllFeeMeta();
+      }
+      return true;
+    };
+
+    incidentalAddBtn.addEventListener('click', () => {
+      pushIncidentalDraft();
+    });
+    renderIncidentalLines();
 
     const snackProductListId = `fee-snack-products-${booking.id}`;
     const snackProductInput = Object.assign(document.createElement('input'), {
@@ -3575,7 +4025,7 @@
       maxLength: 80,
       autocomplete: 'off',
       placeholder: 'e.g. Bottled water, coffee, turon',
-      value: snackProduct,
+      value: '',
       disabled: true,
     });
     snackProductInput.dataset.feeSnackProduct = '1';
@@ -3601,12 +4051,19 @@
       snackProductDatalist.append(opt);
     });
 
+    const snackTakenInput = Object.assign(document.createElement('input'), {
+      type: 'date',
+      value: manilaTodayIso(),
+      disabled: true,
+    });
+    snackTakenInput.dataset.feeSnackTaken = '1';
+
     const snackQtyInput = Object.assign(document.createElement('input'), {
       type: 'text',
       inputMode: 'numeric',
       autocomplete: 'off',
       placeholder: '0',
-      value: snackQty > 0 ? String(snackQty) : '',
+      value: '',
       disabled: true,
     });
     snackQtyInput.dataset.feeSnackQty = '1';
@@ -3616,15 +4073,137 @@
       inputMode: 'decimal',
       autocomplete: 'off',
       placeholder: '0.00',
-      value: snackUnit > 0 ? snackUnit.toFixed(2) : '',
+      value: '',
       disabled: true,
     });
     snackUnitInput.dataset.feeSnackUnit = '1';
 
+    const snackLinesList = document.createElement('ul');
+    snackLinesList.className = 'admin-booking-fee-snack-items';
+
     const snackPreview = Object.assign(document.createElement('p'), {
       className: 'admin-booking-fees-hint',
-      textContent: `Line total: ${money(snackQty * snackUnit)}`,
+      textContent: 'Line total: ₱0.00',
     });
+
+    const snackCartHint = Object.assign(document.createElement('p'), {
+      className: 'admin-booking-fees-hint',
+      textContent: 'Add each product with the date it was taken, then Save stay fees.',
+    });
+
+    const snackAddBtn = Object.assign(document.createElement('button'), {
+      type: 'button',
+      className: 'admin-booking-fee-snack-add',
+      textContent: 'Add item',
+      disabled: true,
+    });
+
+    const snackLinesTotal = () =>
+      snackLines.reduce(
+        (sum, line) => sum + Math.max(0, line.qty) * Math.max(0, line.unitAmount),
+        0
+      );
+
+    const formatSnackLineText = (line) => {
+      const total = Math.max(0, line.qty) * Math.max(0, line.unitAmount);
+      const product = (line.product || '').trim();
+      const taken = line.takenDate
+        ? formatDate(`${line.takenDate}T12:00:00`) || line.takenDate
+        : '—';
+      const qtyPart = `${line.qty} × ${money(line.unitAmount)}`;
+      return product
+        ? `${product} · ${taken} · ${qtyPart} = ${money(total)}`
+        : `${taken} · ${qtyPart} = ${money(total)}`;
+    };
+
+    const renderSnackLines = () => {
+      snackLinesList.replaceChildren();
+      if (!snackLines.length) {
+        snackLinesList.append(
+          Object.assign(document.createElement('li'), {
+            className: 'admin-booking-fee-snack-empty',
+            textContent: 'No snack items yet.',
+          })
+        );
+        return;
+      }
+      snackLines.forEach((line) => {
+        const item = document.createElement('li');
+        item.className = 'admin-booking-fee-snack-item';
+        item.append(
+          Object.assign(document.createElement('span'), {
+            textContent: formatSnackLineText(line),
+          })
+        );
+        const removeBtn = Object.assign(document.createElement('button'), {
+          type: 'button',
+          className: 'admin-booking-fee-snack-remove',
+          textContent: 'Remove',
+          disabled: feesDisabled,
+        });
+        removeBtn.addEventListener('click', () => {
+          const idx = snackLines.findIndex((row) => row.key === line.key);
+          if (idx >= 0) snackLines.splice(idx, 1);
+          renderSnackLines();
+          refreshAllFeeMeta();
+        });
+        item.append(removeBtn);
+        snackLinesList.append(item);
+      });
+    };
+
+    const clearSnackDraft = () => {
+      snackProductInput.value = '';
+      snackQtyInput.value = '';
+      snackUnitInput.value = '';
+      snackTakenInput.value = manilaTodayIso();
+      syncSnackPreview();
+    };
+
+    const readSnackDraft = () => {
+      const product = (snackProductInput.value || '').trim();
+      const qty = parseIntInput(snackQtyInput.value);
+      const unitAmount = parseMoneyInput(snackUnitInput.value);
+      const takenDate = String(snackTakenInput.value || '').trim() || manilaTodayIso();
+      return { product, qty, unitAmount, takenDate, total: qty * unitAmount };
+    };
+
+    const pushSnackDraft = (opts = {}) => {
+      const draft = readSnackDraft();
+      if (draft.qty <= 0 || draft.unitAmount <= 0) {
+        if (!opts.silent) {
+          snackCartHint.textContent = 'Enter qty and unit price before adding a snack item.';
+        }
+        return false;
+      }
+      if (!draft.takenDate) {
+        if (!opts.silent) {
+          snackCartHint.textContent = 'Choose the date the snack or beverage was taken.';
+        }
+        return false;
+      }
+      snackLines.push({
+        key: `snack-new-${++snackLineSeq}`,
+        product: draft.product,
+        takenDate: draft.takenDate,
+        qty: draft.qty,
+        unitAmount: draft.unitAmount,
+      });
+      clearSnackDraft();
+      renderSnackLines();
+      if (!opts.silent) {
+        snackCartHint.textContent =
+          'Add each product with the date it was taken, then Save stay fees.';
+        refreshAllFeeMeta();
+      }
+      return true;
+    };
+
+    snackAddBtn.addEventListener('click', () => {
+      pushSnackDraft();
+    });
+
+    renderSnackLines();
 
     const extendInput = Object.assign(document.createElement('input'), {
       type: 'text',
@@ -3636,18 +4215,36 @@
     });
     extendInput.dataset.feeExtend = '1';
 
-    const extendPreview = Object.assign(document.createElement('p'), {
-      className: 'admin-booking-fees-hint',
-      textContent:
+    let pendingRevertExtend = false;
+
+    const syncExtendPreview = () => {
+      if (pendingRevertExtend) {
+        const add = parseIntInput(extendInput.value);
+        extendPreview.textContent =
+          add > 0
+            ? `On Save: remove current +${extensionNights} night${extensionNights === 1 ? '' : 's'}, then add +${add}.`
+            : `On Save: remove +${extensionNights} night${extensionNights === 1 ? '' : 's'} and roll checkout back.`;
+        return;
+      }
+      extendPreview.textContent =
         extensionNights > 0
           ? `Already extended +${extensionNights} night${extensionNights === 1 ? '' : 's'}.`
-          : 'Moves checkout date forward and adds Extra night(s) in the breakdown.',
-    });
+          : 'Moves checkout date forward and adds Extra night(s) in the breakdown.';
+    };
 
+    const extendPreview = Object.assign(document.createElement('p'), {
+      className: 'admin-booking-fees-hint',
+      textContent: '',
+    });
+    syncExtendPreview();
+
+    // Register every fee category so Manage fees lists them on Fees and Checkout.
+    // Only stage-relevant triggers stay visible in the pill row.
     registerFeeCategory({
       id: 'early',
       title: 'Early check-in',
       hint: '11:30 AM · ₱500 / room',
+      showTrigger: !extrasStage,
       buildBody: () => {
         const row = document.createElement('label');
         row.className = 'admin-booking-fee-option';
@@ -3669,6 +4266,7 @@
       id: 'late',
       title: 'Late check-out',
       hint: '₱100 / hour / room · max 3 hours',
+      showTrigger: !extrasStage,
       buildBody: () => {
         const row = document.createElement('label');
         row.className = 'admin-booking-fee-option';
@@ -3688,6 +4286,7 @@
       title: 'Extra person',
       hint: '₱200 / night · max 1',
       locked: !allowsExtraPerson,
+      showTrigger: !extrasStage,
       buildBody: () => {
         const row = document.createElement('label');
         row.className = `admin-booking-fee-option${allowsExtraPerson ? '' : ' is-disabled'}`;
@@ -3708,69 +4307,16 @@
     });
 
     registerFeeCategory({
-      id: 'incidental',
-      title: 'Incidental',
-      hint: 'Damage · collect in cash at the desk',
-      buildBody: () => [
-        makeFeeField('Amount (₱)', incidentalInput),
-        makeFeeField('Note', incidentalNoteInput, true),
-        Object.assign(document.createElement('p'), {
-          className: 'admin-booking-fees-hint',
-          textContent: 'Collect incidental in cash at the desk.',
-        }),
-      ],
-      getMeta: () => {
-        const amount = parseMoneyInput(incidentalInput.value);
-        return amount > 0
-          ? { active: true, text: money(amount) }
-          : { active: false, text: '' };
-      },
-    });
-
-    registerFeeCategory({
-      id: 'snack',
-      title: 'Snack & beverage',
-      hint: 'Product · qty × unit price',
-      buildBody: () => {
-        const snackRow = document.createElement('div');
-        snackRow.className = 'admin-booking-fee-snack-row';
-        snackRow.append(
-          makeFeeField('Qty', snackQtyInput),
-          makeFeeField('Unit price (₱)', snackUnitInput)
-        );
-        return [
-          makeFeeField('Product', snackProductInput),
-          snackProductDatalist,
-          Object.assign(document.createElement('p'), {
-            className: 'admin-booking-fees-hint',
-            textContent: 'Suggestions: Bottled water, coffee, or Filipino snacks.',
-          }),
-          snackRow,
-          snackPreview,
-        ];
-      },
-      getMeta: () => {
-        const total =
-          Math.max(0, parseIntInput(snackQtyInput.value)) *
-          Math.max(0, parseMoneyInput(snackUnitInput.value));
-        if (total <= 0) return { active: false, text: '' };
-        const product = (snackProductInput.value || '').trim();
-        return {
-          active: true,
-          text: product ? `${product} · ${money(total)}` : money(total),
-        };
-      },
-    });
-
-    registerFeeCategory({
       id: 'extend',
       title: 'Extend stay',
       hint: 'Adds nights and moves checkout date',
+      showTrigger: !extrasStage,
       buildBody: () => [makeFeeField('Add nights', extendInput), extendPreview],
       getMeta: () => {
         const add = parseIntInput(extendInput.value);
+        if (pendingRevertExtend && add <= 0) return { active: false, text: '' };
         if (add > 0) return { active: true, text: `+${add} night${add === 1 ? '' : 's'}` };
-        if (extensionNights > 0) {
+        if (!pendingRevertExtend && extensionNights > 0) {
           return {
             active: true,
             text: `+${extensionNights} night${extensionNights === 1 ? '' : 's'}`,
@@ -3780,14 +4326,214 @@
       },
     });
 
-    const refreshAllFeeMeta = () => feeCategories.forEach((cat) => cat.refreshMeta());
+    registerFeeCategory({
+      id: 'incidental',
+      title: 'Incidental',
+      hint: 'Multiple damages · collect in cash',
+      showTrigger: Boolean(showCheckoutExtras),
+      buildBody: () => {
+        const draftRow = document.createElement('div');
+        draftRow.className = 'admin-booking-fee-snack-row';
+        draftRow.append(
+          makeFeeField('Amount (₱)', incidentalAmountInput),
+          makeFeeField('Note', incidentalNoteInput, true)
+        );
+        const draftBlock = document.createElement('div');
+        draftBlock.className = 'admin-booking-fee-snack-draft';
+        draftBlock.append(draftRow, incidentalAddBtn);
+        return [incidentalCartHint, incidentalLinesList, draftBlock];
+      },
+      getMeta: () => {
+        const draftAmount = parseMoneyInput(incidentalAmountInput.value);
+        const total = incidentalLinesTotal() + Math.max(0, draftAmount);
+        const count = incidentalLines.length + (draftAmount > 0 ? 1 : 0);
+        if (total <= 0) return { active: false, text: '' };
+        if (count === 1) return { active: true, text: money(total) };
+        return { active: true, text: `${count} damages · ${money(total)}` };
+      },
+    });
+
+    registerFeeCategory({
+      id: 'snack',
+      title: 'Snack & beverage',
+      hint: 'Products with date taken · qty × unit price',
+      showTrigger: Boolean(showSnackFees),
+      buildBody: () => {
+        const snackRow = document.createElement('div');
+        snackRow.className = 'admin-booking-fee-snack-row';
+        snackRow.append(
+          makeFeeField('Taken date', snackTakenInput),
+          makeFeeField('Qty', snackQtyInput),
+          makeFeeField('Unit price (₱)', snackUnitInput)
+        );
+        const draftBlock = document.createElement('div');
+        draftBlock.className = 'admin-booking-fee-snack-draft';
+        draftBlock.append(
+          makeFeeField('Product', snackProductInput),
+          snackProductDatalist,
+          Object.assign(document.createElement('p'), {
+            className: 'admin-booking-fees-hint',
+            textContent: 'Suggestions: Bottled water, coffee, or Filipino snacks.',
+          }),
+          snackRow,
+          snackPreview,
+          snackAddBtn
+        );
+        return [snackCartHint, snackLinesList, draftBlock];
+      },
+      getMeta: () => {
+        const draft = readSnackDraft();
+        const draftActive = draft.qty > 0 && draft.unitAmount > 0;
+        const total = snackLinesTotal() + (draftActive ? draft.total : 0);
+        const count = snackLines.length + (draftActive ? 1 : 0);
+        if (total <= 0) return { active: false, text: '' };
+        if (count === 1 && snackLines[0] && !draftActive) {
+          const product = (snackLines[0].product || '').trim();
+          return {
+            active: true,
+            text: product ? `${product} · ${money(total)}` : money(total),
+          };
+        }
+        if (count === 1 && draftActive && !snackLines.length) {
+          return {
+            active: true,
+            text: draft.product ? `${draft.product} · ${money(total)}` : money(total),
+          };
+        }
+        return { active: true, text: `${count} items · ${money(total)}` };
+      },
+    });
+
+    const syncSnackPreview = () => {
+      const draft = readSnackDraft();
+      snackPreview.textContent = `Draft line: ${money(Math.max(0, draft.total))}`;
+    };
+    snackQtyInput.addEventListener('input', syncSnackPreview);
+    snackUnitInput.addEventListener('input', syncSnackPreview);
+    snackProductInput.addEventListener('input', syncSnackPreview);
+    snackTakenInput.addEventListener('change', syncSnackPreview);
+    syncSnackPreview();
+
+    const clearFeeCategory = (id) => {
+      if (id === 'early') earlyInput.checked = false;
+      if (id === 'late') lateSelect.value = '0';
+      if (id === 'extra' && !extraInput.dataset.keepDisabled) extraInput.checked = false;
+      if (id === 'incidental') {
+        incidentalLines.splice(0, incidentalLines.length);
+        clearIncidentalDraft();
+        renderIncidentalLines();
+      }
+      if (id === 'snack') {
+        snackLines.splice(0, snackLines.length);
+        clearSnackDraft();
+        renderSnackLines();
+      }
+      if (id === 'extend') {
+        extendInput.value = '';
+        pendingRevertExtend = extensionNights > 0;
+        syncExtendPreview();
+      }
+    };
+
+    const refreshFeeManageList = () => {
+      feesManageList.replaceChildren();
+      const active = feeCategories.filter((cat) => {
+        const meta = cat.getMeta ? cat.getMeta() : { active: false };
+        return Boolean(meta.active);
+      });
+      feesManageBadge.hidden = active.length < 1;
+      feesManageBadge.textContent = active.length > 0 ? String(active.length) : '';
+      feesManageBtn.classList.toggle('has-fees', active.length > 0);
+
+      if (!active.length) {
+        feesManageList.append(
+          Object.assign(document.createElement('p'), {
+            className: 'admin-booking-fees-manage-empty',
+            textContent: 'No fees added yet.',
+          })
+        );
+        return;
+      }
+
+      const list = document.createElement('ul');
+      list.className = 'admin-booking-fees-manage-items';
+      active.forEach((cat) => {
+        const meta = cat.getMeta();
+        const item = document.createElement('li');
+        item.className = 'admin-booking-fees-manage-item';
+        const info = document.createElement('div');
+        info.className = 'admin-booking-fees-manage-info';
+        info.append(
+          Object.assign(document.createElement('strong'), { textContent: cat.title }),
+          Object.assign(document.createElement('span'), { textContent: meta.text || '' })
+        );
+        if (!cat.showTrigger) {
+          info.append(
+            Object.assign(document.createElement('small'), {
+              className: 'admin-booking-fees-manage-stage',
+              textContent: extrasStage
+                ? 'From Stay fees · Edit opens here'
+                : 'From Checkout · Edit opens here',
+            })
+          );
+        }
+        const actions = document.createElement('div');
+        actions.className = 'admin-booking-fees-manage-actions';
+
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'admin-booking-fees-manage-edit';
+        editBtn.textContent = 'Edit';
+        editBtn.disabled = feesDisabled;
+        editBtn.addEventListener('click', () => {
+          feesManageList.hidden = true;
+          feesManageBtn.setAttribute('aria-expanded', 'false');
+          openFeeDropdown(cat.id);
+        });
+        actions.append(editBtn);
+
+        if (cat.canDelete) {
+          const deleteBtn = document.createElement('button');
+          deleteBtn.type = 'button';
+          deleteBtn.className = 'admin-booking-fees-manage-delete';
+          deleteBtn.textContent = 'Delete';
+          deleteBtn.disabled = feesDisabled;
+          deleteBtn.addEventListener('click', () => {
+            clearFeeCategory(cat.id);
+            refreshAllFeeMeta();
+            feesMsg.hidden = false;
+            feesMsg.textContent = 'Cleared — click Save stay fees to apply.';
+          });
+          actions.append(deleteBtn);
+        } else {
+          actions.append(
+            Object.assign(document.createElement('span'), {
+              className: 'admin-booking-fees-manage-locked',
+              textContent: 'Checkout date already moved',
+            })
+          );
+        }
+
+        item.append(info, actions);
+        list.append(item);
+      });
+      feesManageList.append(list);
+    };
+
+    const refreshAllFeeMeta = () => {
+      syncExtendPreview();
+      feeCategories.forEach((cat) => cat.refreshMeta());
+      refreshFeeManageList();
+    };
+
     [
       earlyInput,
       lateSelect,
       extraInput,
-      incidentalInput,
+      incidentalAmountInput,
       incidentalNoteInput,
       snackProductInput,
+      snackTakenInput,
       snackQtyInput,
       snackUnitInput,
       extendInput,
@@ -3796,13 +4542,16 @@
       el.addEventListener('change', refreshAllFeeMeta);
     });
 
-    const syncSnackPreview = () => {
-      const qty = parseIntInput(snackQtyInput.value);
-      const unit = parseMoneyInput(snackUnitInput.value);
-      snackPreview.textContent = `Line total: ${money(Math.max(0, qty) * Math.max(0, unit))}`;
-    };
-    snackQtyInput.addEventListener('input', syncSnackPreview);
-    snackUnitInput.addEventListener('input', syncSnackPreview);
+    feesManageBtn.addEventListener('click', () => {
+      const open = feesManageList.hidden;
+      feesManageList.hidden = !open;
+      feesManageBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) {
+        closeAllFeeDropdowns();
+        refreshFeeManageList();
+      }
+    });
+    if (feesDisabled) feesManageBtn.disabled = true;
 
     feesLayout.append(feeTriggers, feePanels);
 
@@ -3811,20 +4560,36 @@
     feesMsg.dataset.feeMsg = '1';
     feesMsg.hidden = true;
 
-    feesPanel.append(feesTitle, feesLede, feesLayout, feesMsg);
+    refreshFeeManageList();
+    feesPanel.append(feesHead, feesManageList, feesLayout, feesMsg);
 
-    const collectStayFeesPayload = () => ({
-      earlyCheckIn: Boolean(earlyInput.checked),
-      lateCheckoutHours: Number(lateSelect.value || 0),
-      extraPersons: Boolean(extraInput.checked) ? 1 : 0,
-      incidentalAmount: parseMoneyInput(incidentalInput.value),
-      incidentalNote: (incidentalNoteInput.value || '').trim() || null,
-      serviceFeeAmount: 0,
-      snackBeverageQty: parseIntInput(snackQtyInput.value),
-      snackBeverageUnitAmount: parseMoneyInput(snackUnitInput.value),
-      snackBeverageProduct: (snackProductInput.value || '').trim() || null,
-      extendStayNights: Math.min(30, parseIntInput(extendInput.value)),
-    });
+    const collectStayFeesPayload = () => {
+      pushIncidentalDraft({ silent: true });
+      pushSnackDraft({ silent: true });
+      return {
+        earlyCheckIn: Boolean(earlyInput.checked),
+        lateCheckoutHours: Number(lateSelect.value || 0),
+        extraPersons: Boolean(extraInput.checked) ? 1 : 0,
+        incidentalAmount: 0,
+        incidentalNote: null,
+        incidentals: incidentalLines.map((line) => ({
+          amount: Math.max(0, line.amount),
+          note: (line.note || '').trim() || null,
+        })),
+        serviceFeeAmount: 0,
+        snackBeverages: snackLines.map((line) => ({
+          product: (line.product || '').trim() || null,
+          qty: Math.max(0, line.qty),
+          unitAmount: Math.max(0, line.unitAmount),
+          takenDate: line.takenDate || manilaTodayIso(),
+        })),
+        snackBeverageQty: 0,
+        snackBeverageUnitAmount: 0,
+        snackBeverageProduct: null,
+        extendStayNights: Math.min(30, parseIntInput(extendInput.value)),
+        revertStayExtension: Boolean(pendingRevertExtend),
+      };
+    };
 
     const buildAdditionalFeesSummary = (payload, updatedBooking) => {
       const lines = [];
@@ -3855,28 +4620,61 @@
           amount: charge ? Number(charge.amount || 0) : 200 * nights,
         });
       }
-      if (payload.incidentalAmount > 0) {
+      if (Array.isArray(payload.incidentals) && payload.incidentals.length) {
+        payload.incidentals.forEach((line) => {
+          const amount = Math.max(0, Number(line.amount || 0));
+          if (amount <= 0) return;
+          const note = (line.note || '').trim();
+          lines.push({
+            label: note ? `Incidental (cash) · ${note}` : 'Incidental (cash)',
+            amount,
+          });
+        });
+      } else if (payload.incidentalAmount > 0) {
         const note = payload.incidentalNote ? ` · ${payload.incidentalNote}` : '';
         lines.push({
           label: `Incidental (cash)${note}`,
           amount: payload.incidentalAmount,
         });
       }
-      const snackTotal =
-        Math.max(0, payload.snackBeverageQty) * Math.max(0, payload.snackBeverageUnitAmount);
-      if (snackTotal > 0) {
-        const product = payload.snackBeverageProduct
-          ? `${payload.snackBeverageProduct} · `
-          : '';
-        lines.push({
-          label: `Snack & beverage · ${product}${payload.snackBeverageQty} × ${money(payload.snackBeverageUnitAmount)}`,
-          amount: snackTotal,
+      const snackLinesPayload = Array.isArray(payload.snackBeverages) ? payload.snackBeverages : [];
+      if (snackLinesPayload.length) {
+        snackLinesPayload.forEach((line) => {
+          const qty = Math.max(0, Number(line.qty || 0));
+          const unit = Math.max(0, Number(line.unitAmount || 0));
+          const total = qty * unit;
+          if (total <= 0) return;
+          const product = (line.product || '').trim();
+          const taken = line.takenDate
+            ? formatDate(`${line.takenDate}T12:00:00`) || line.takenDate
+            : '';
+          const takenPart = taken ? ` · ${taken}` : '';
+          lines.push({
+            label: product
+              ? `Snack & beverage · ${product}${takenPart} · ${qty} × ${money(unit)}`
+              : `Snack & beverage${takenPart} · ${qty} × ${money(unit)}`,
+            amount: total,
+          });
         });
+      } else {
+        const snackTotal =
+          Math.max(0, payload.snackBeverageQty) * Math.max(0, payload.snackBeverageUnitAmount);
+        if (snackTotal > 0) {
+          const product = payload.snackBeverageProduct
+            ? `${payload.snackBeverageProduct} · `
+            : '';
+          lines.push({
+            label: `Snack & beverage · ${product}${payload.snackBeverageQty} × ${money(payload.snackBeverageUnitAmount)}`,
+            amount: snackTotal,
+          });
+        }
       }
       const extendCharge = findCharge('StayExtension');
       const extendQty = extendCharge
         ? Number(extendCharge.quantity || 0)
-        : extensionNights + Math.max(0, payload.extendStayNights);
+        : pendingRevertExtend
+          ? Math.max(0, payload.extendStayNights)
+          : extensionNights + Math.max(0, payload.extendStayNights);
       if (extendQty > 0 || payload.extendStayNights > 0) {
         lines.push({
           label: `Extend stay · +${Math.max(extendQty, payload.extendStayNights)} night${
@@ -3884,6 +4682,12 @@
           }`,
           amount: extendCharge ? Number(extendCharge.amount || 0) : null,
           note: 'Included in room stay',
+        });
+      } else if (payload.revertStayExtension && extensionNights > 0) {
+        lines.push({
+          label: `Extend stay removed · −${extensionNights} night${extensionNights === 1 ? '' : 's'}`,
+          amount: null,
+          note: 'Checkout rolled back',
         });
       }
       return lines;
@@ -3930,7 +4734,7 @@
       okBtn.focus();
     };
 
-    if (!booking.isArchived) {
+    if (!feesDisabled) {
       const saveFeesBtn = document.createElement('button');
       saveFeesBtn.type = 'button';
       saveFeesBtn.className = 'admin-booking-fees-save';
@@ -4093,8 +4897,17 @@
 
     const roomsBlock = document.createElement('section');
     roomsBlock.className = 'admin-booking-rooms-block';
+    const hasAssignedRooms = (booking.items || []).some(
+      (line) => (line.assignedRooms || []).length > 0
+    );
+    const onRoomsStep =
+      !booking.isArchived && status === 'Confirmed' && !hasAssignedRooms
+        ? () => renderConfirmAssign(booking, { assignOnly: true })
+        : null;
+
     const heading = document.createElement('h3');
-    heading.textContent = 'Rooms';
+    heading.textContent =
+      onRoomsStep ? 'Step 3 · Assign rooms' : 'Rooms';
     const lines = document.createElement('ul');
     lines.className = 'admin-booking-lines';
     (booking.items || []).forEach((line) => {
@@ -4113,9 +4926,71 @@
     });
     roomsBlock.append(heading, lines);
 
-    detailBody.replaceChildren();
-    detailBody.append(summary, fields, feesPanel, breakdownPanel, roomsBlock);
+    if (onRoomsStep) {
+      roomsBlock.classList.add('is-step-assign');
+      const stepLede = document.createElement('p');
+      stepLede.className = 'admin-booking-rooms-step-lede';
+      if (balanceDue > 0.009) {
+        stepLede.textContent =
+          `Finish payment first (balance ${money(balanceDue)}), then use Assign rooms. Reopen anytime if the picker closed.`;
+      } else if (!canAssignRoomsToday(booking)) {
+        stepLede.textContent =
+          `Check-in is ${formatDate(booking.checkInAtUtc || booking.checkIn)} (not today yet), so room numbers cannot be assigned. ` +
+          `Use Adjust stay if the guest called to arrive earlier — Assign rooms unlocks on the new check-in date when fully paid.`;
+      } else {
+        stepLede.textContent =
+          'Pick room numbers for this stay. If the assign screen closes or the system restarts, reopen Assign rooms here.';
+      }
 
+      const stepActions = document.createElement('div');
+      stepActions.className = 'admin-booking-rooms-step-actions';
+
+      const adjustStayBtn = document.createElement('button');
+      adjustStayBtn.type = 'button';
+      adjustStayBtn.className = 'admin-booking-rooms-adjust-btn';
+      adjustStayBtn.textContent = 'Adjust stay';
+      adjustStayBtn.title = 'Change check-in / check-out when the guest reschedules';
+      adjustStayBtn.addEventListener('click', () =>
+        renderBookingEdit(booking, { adjustStay: true })
+      );
+
+      const assignStepBtn = actionFlowButton({
+        step: 3,
+        label: 'Assign rooms',
+        icon: FLOW_STEP_ICONS.rooms,
+        className: 'admin-booking-confirm admin-booking-rooms-assign-btn',
+        onClick: onRoomsStep,
+      });
+      stepActions.append(adjustStayBtn, assignStepBtn);
+      roomsBlock.append(stepLede, stepActions);
+    }
+
+    const receptionFlow = resolveReceptionFlowStep({
+      status,
+      balanceDue,
+      hasAssignedRooms,
+      isArchived: Boolean(booking.isArchived),
+      occupying: occupyingGuest,
+      extrasStage,
+    });
+    updateReceptionFlowPath({
+      status,
+      balanceDue,
+      hasAssignedRooms,
+      isArchived: Boolean(booking.isArchived),
+      occupying: occupyingGuest,
+      extrasStage,
+      onRoomsStepClick: onRoomsStep,
+    });
+
+    detailBody.replaceChildren();
+    if (receptionFlow.current === 'rooms') {
+      detailBody.append(summary, guestDetails, roomsBlock, feesPanel, breakdownPanel);
+    } else {
+      detailBody.append(summary, guestDetails, feesPanel, breakdownPanel, roomsBlock);
+    }
+
+    // Secondary actions (left / first)
     if (!booking.isArchived && status !== 'Confirmed') {
       detailActions.append(
         actionIconButton({
@@ -4124,57 +4999,31 @@
           onClick: () => renderBookingEdit(booking),
         })
       );
-    }
-
-    if (!booking.isArchived && status === 'Confirmed') {
-      const hasAssignedRooms = (booking.items || []).some(
-        (line) => (line.assignedRooms || []).length > 0
+    } else if (!booking.isArchived && status === 'Confirmed' && !hasAssignedRooms) {
+      // Step 3: guest may call to reschedule arrival before rooms are assigned.
+      detailActions.append(
+        actionIconButton({
+          label: 'Adjust stay',
+          icon: ACTION_ICONS.edit,
+          onClick: () => renderBookingEdit(booking, { adjustStay: true }),
+        })
       );
-      if (!hasAssignedRooms) {
-        if (canAssignRoomsToday(booking) && balanceDue <= 0.009) {
-          detailActions.append(
-            actionIconButton({
-              label: 'Assign rooms',
-              icon: ACTION_ICONS.assign,
-              className: 'admin-booking-confirm',
-              onClick: () => renderConfirmAssign(booking, { assignOnly: true }),
-            })
-          );
-        } else {
-          const note = document.createElement('p');
-          note.className = 'admin-booking-assign-tip';
-          if (balanceDue > 0.009) {
-            note.textContent = `Record full payment before finishing setup. Balance due: ${money(balanceDue)}.`;
-          } else {
-            note.textContent = arrivalAssignMessage(booking);
-          }
-          detailBody.append(note);
-        }
-      } else {
-        detailActions.append(
-          actionIconButton({
-            label: 'Check out guest',
-            icon: ACTION_ICONS.checkout,
-            className: 'admin-booking-confirm',
-            onClick: (event) => checkoutBooking(booking, event.currentTarget),
-          })
-        );
-      }
+    } else if (!booking.isArchived && status === 'Confirmed' && hasAssignedRooms) {
+      // Guest schedule error after rooms assigned — contact + dates only.
+      detailActions.append(
+        actionIconButton({
+          label: 'Correct guest / stay',
+          icon: ACTION_ICONS.edit,
+          onClick: () => renderBookingEdit(booking, { hardEdit: true }),
+        })
+      );
     }
 
-    detailActions.append(
-      actionIconButton({
-        label:
-          balanceDue > 0.009 && !booking.isArchived
-            ? 'Payments — view & record'
-            : 'Payments — view record',
-        icon: ACTION_ICONS.payments,
-        className: balanceDue > 0.009 && !booking.isArchived ? 'admin-booking-confirm' : '',
-        onClick: () => openPaymentViewModal(booking),
-      })
-    );
-
-    if (!booking.isArchived) {
+    // Cancel only on Confirm / Payment steps — not Rooms, Fees, Extras, or Checkout.
+    if (
+      !booking.isArchived &&
+      (receptionFlow.current === 'confirm' || receptionFlow.current === 'pay')
+    ) {
       detailActions.append(
         actionIconButton({
           label: 'Cancel booking',
@@ -4185,11 +5034,115 @@
       );
     }
 
+    // Payments only after confirmation — hidden while Pending.
+    if (canRecordPayment(booking)) {
+      const canTakePayment = balanceDue > 0.009;
+      if (canTakePayment && !hasAssignedRooms) {
+        detailActions.append(
+          actionFlowButton({
+            step: 2,
+            label: 'Record payment',
+            icon: FLOW_STEP_ICONS.pay,
+            className: 'admin-booking-confirm',
+            onClick: () => openPaymentViewModal(booking),
+          })
+        );
+      } else {
+        detailActions.append(
+          actionIconButton({
+            label: 'Payments — view record',
+            icon: ACTION_ICONS.payments,
+            onClick: () => openPaymentViewModal(booking),
+          })
+        );
+      }
+    }
+
+    // Primary next-step CTA last (rightmost)
+    if (!booking.isArchived && status === 'Confirmed') {
+      if (!hasAssignedRooms) {
+        // Always keep Assign rooms on step 3 so staff can reopen after a crash / closed picker.
+        detailActions.append(
+          actionFlowButton({
+            step: 3,
+            label: 'Assign rooms',
+            icon: FLOW_STEP_ICONS.rooms,
+            className: 'admin-booking-confirm',
+            onClick: () => renderConfirmAssign(booking, { assignOnly: true }),
+          })
+        );
+        if (balanceDue > 0.009) {
+          const note = document.createElement('p');
+          note.className = 'admin-booking-assign-tip';
+          note.textContent = `Step 2: record full payment before assigning rooms. Balance due: ${money(balanceDue)}.`;
+          detailBody.append(note);
+        } else if (!canAssignRoomsToday(booking)) {
+          const note = document.createElement('p');
+          note.className = 'admin-booking-assign-tip';
+          note.textContent = arrivalAssignMessage(booking);
+          detailBody.append(note);
+        }
+      } else if (occupyingGuest && !extrasStage) {
+        detailActions.append(
+          actionFlowButton({
+            step: 5,
+            label: 'Continue to checkout',
+            icon: FLOW_STEP_ICONS.checkout,
+            className: 'admin-booking-confirm is-emphasized',
+            onClick: () => enterReceptionExtrasStage(booking),
+          })
+        );
+      } else {
+        if (extrasStage) {
+          detailActions.append(
+            actionIconButton({
+              label: 'Back to fees',
+              icon: FLOW_STEP_ICONS.back,
+              className: 'admin-booking-flow-back-icon',
+              onClick: () => leaveReceptionExtrasStage(booking),
+            })
+          );
+          if (balanceDue > 0.009) {
+            detailActions.append(
+              actionFlowButton({
+                step: 2,
+                label: 'Record payment',
+                icon: FLOW_STEP_ICONS.pay,
+                className: 'admin-booking-confirm is-emphasized',
+                onClick: () => openAddPaymentModal(booking),
+              })
+            );
+          } else {
+            detailActions.append(
+              actionFlowButton({
+                step: 6,
+                label: 'Archive guest',
+                icon: FLOW_STEP_ICONS.archive,
+                className: 'admin-booking-confirm is-emphasized',
+                onClick: (event) => checkoutBooking(booking, event.currentTarget),
+              })
+            );
+          }
+        } else {
+          detailActions.append(
+            actionFlowButton({
+              step: 6,
+              label: 'Archive guest',
+              icon: FLOW_STEP_ICONS.archive,
+              className: 'admin-booking-confirm',
+              onClick: (event) => checkoutBooking(booking, event.currentTarget),
+            })
+          );
+        }
+      }
+    }
+
     if (!booking.isArchived && status === 'Pending') {
       detailActions.append(
-        actionIconButton({
+        actionFlowButton({
+          step: 1,
           label: 'Confirm booking',
-          icon: ACTION_ICONS.confirm,
+          icon: FLOW_STEP_ICONS.confirm,
           className: 'admin-booking-confirm',
           onClick: () => renderConfirmAssign(booking),
         })
@@ -4215,14 +5168,15 @@
       intro.className = 'admin-booking-assign-intro';
       intro.textContent = fullyPaid && canAssign
         ? 'Guest is fully paid. Confirm and assign room numbers now.'
-        : 'Confirm this booking now. Assign room numbers only after the guest is fully paid'
+        : 'Confirm this booking now. Record payment only after confirmation, then assign rooms when fully paid'
           + (canAssign ? '.' : ` (and from arrival date ${formatDate(booking.checkInAtUtc || booking.checkIn)}).`);
       detailBody.append(intro);
 
       if (!fullyPaid) {
         const tip = document.createElement('p');
         tip.className = 'admin-booking-assign-tip';
-        tip.textContent = `Balance due ${money(paymentPriceContext.balanceDue)}. Rooms unlock after full payment.`;
+        tip.textContent =
+          `Balance due ${money(paymentPriceContext.balanceDue)}. After you confirm, record payment — rooms unlock when fully paid.`;
         detailBody.append(tip);
       }
 
@@ -4478,13 +5432,27 @@
     return field;
   }
 
-  function renderBookingEdit(booking) {
+  function renderBookingEdit(booking, options = {}) {
     if (!detailBody || !detailActions) return;
+    const adjustStay = Boolean(options.adjustStay);
+    const hardEdit = Boolean(options.hardEdit);
+    const needsAvailPreview = adjustStay || hardEdit;
     detailBody.replaceChildren();
     detailActions.replaceChildren();
 
     const form = document.createElement('form');
     form.className = 'admin-booking-edit-form';
+    if (adjustStay) form.classList.add('is-adjust-stay');
+    if (hardEdit) form.classList.add('is-hard-edit');
+
+    const intro = document.createElement('p');
+    intro.className = 'admin-booking-edit-hint';
+    intro.textContent = hardEdit
+      ? 'Correct a guest schedule error: update contact and check-in / check-out. Assigned room numbers stay the same. Saving recalculates nights and total.'
+      : adjustStay
+        ? 'Guest called to change arrival? Update check-in / check-out (and contact if needed). Saving recalculates nights and total. Assign rooms unlocks on the new Manila arrival date once fully paid.'
+        : 'Update guest details, stay dates, or room quantities.';
+
     const fields = document.createElement('div');
     fields.className = 'admin-booking-edit-grid';
     const checkInParts = manilaParts(booking.checkInAtUtc || booking.checkIn) || { date: '', time: '14:00' };
@@ -4499,26 +5467,62 @@
       editField('Check-out time', 'checkOutTime', 'time', checkOutParts.time)
     );
 
+    const availPanel = document.createElement('div');
+    availPanel.className = 'admin-booking-edit-availability';
+    availPanel.hidden = !needsAvailPreview;
+    const availTitle = document.createElement('p');
+    availTitle.className = 'admin-booking-edit-availability-title';
+    availTitle.textContent = 'Rooms available for these dates';
+    const availList = document.createElement('ul');
+    availList.className = 'admin-booking-edit-availability-list';
+    const availStatus = document.createElement('p');
+    availStatus.className = 'admin-booking-edit-availability-status';
+    availStatus.textContent = 'Checking availability…';
+    availPanel.append(availTitle, availList, availStatus);
+
     const roomHeading = document.createElement('h3');
-    roomHeading.textContent = 'Room quantities';
+    roomHeading.textContent = hardEdit ? 'Assigned rooms (locked)' : 'Room quantities';
     const roomFields = document.createElement('div');
     roomFields.className = 'admin-booking-edit-rooms';
-    (booking.items || []).forEach((line) => {
-      const field = editField(line.roomTypeName, `room-${line.roomTypeId}`, 'number', line.quantity);
-      const input = field.querySelector('input');
-      input.min = '0';
-      input.max = '20';
-      input.dataset.roomTypeId = String(line.roomTypeId);
-      roomFields.append(field);
-    });
+
+    if (hardEdit) {
+      (booking.items || []).forEach((line) => {
+        const assigned = (line.assignedRooms || [])
+          .map((room) => room.roomNumber)
+          .filter(Boolean);
+        const row = document.createElement('div');
+        row.className = 'admin-booking-edit-assigned-row';
+        row.innerHTML =
+          `<span>${escapeHtml(String(line.quantity || 0))}× ${escapeHtml(line.roomTypeName || 'Room')}` +
+          `${assigned.length ? ` → ${escapeHtml(assigned.join(', '))}` : ''}</span>` +
+          `<strong>${money(line.pricePerNight)} / night</strong>`;
+        const hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.dataset.roomTypeId = String(line.roomTypeId);
+        hidden.value = String(line.quantity || 0);
+        row.append(hidden);
+        roomFields.append(row);
+      });
+    } else {
+      (booking.items || []).forEach((line) => {
+        const field = editField(line.roomTypeName, `room-${line.roomTypeId}`, 'number', line.quantity);
+        const input = field.querySelector('input');
+        input.min = '0';
+        input.max = '20';
+        input.dataset.roomTypeId = String(line.roomTypeId);
+        roomFields.append(field);
+      });
+    }
 
     const hint = document.createElement('p');
     hint.className = 'admin-booking-edit-hint';
-    hint.textContent = 'Set a room quantity to 0 to remove it. At least one room must remain.';
+    hint.textContent = hardEdit
+      ? 'Room numbers stay assigned. If another guest holds the same room on the new dates, save will be blocked.'
+      : 'Set a room quantity to 0 to remove it. At least one room must remain.';
     const error = document.createElement('p');
     error.className = 'admin-booking-edit-error';
     error.hidden = true;
-    form.append(fields, roomHeading, roomFields, hint, error);
+    form.append(intro, fields, availPanel, roomHeading, roomFields, hint, error);
     detailBody.append(form);
 
     const backButton = document.createElement('button');
@@ -4528,20 +5532,190 @@
     const saveButton = document.createElement('button');
     saveButton.type = 'button';
     saveButton.className = 'admin-booking-confirm';
-    saveButton.textContent = 'Save changes';
+    saveButton.textContent = hardEdit || adjustStay ? 'Save stay changes' : 'Save changes';
     detailActions.append(backButton, saveButton);
-    saveButton.addEventListener('click', () => form.requestSubmit());
-    form.addEventListener('submit', (event) => saveBookingEdit(event, booking, saveButton, error));
+
+    let availOk = !needsAvailPreview;
+    let availTimer = null;
+    let lastNoAvailKey = '';
+
+    function requiredLines() {
+      if (hardEdit) {
+        return (booking.items || []).map((line) => ({
+          roomTypeId: Number(line.roomTypeId),
+          roomTypeName: line.roomTypeName || 'Room',
+          quantity: Number(line.quantity || 0),
+        }));
+      }
+      return Array.from(form.querySelectorAll('[data-room-type-id]')).map((input) => ({
+        roomTypeId: Number(input.dataset.roomTypeId),
+        roomTypeName: input.closest('label')?.querySelector('span')?.textContent || 'Room',
+        quantity: Number(input.value || 0),
+      })).filter((line) => line.quantity > 0);
+    }
+
+    function showNoAvailabilityPopup(message) {
+      const popup = detailModal?.querySelector('[data-edit-availability-popup]');
+      const msg = popup?.querySelector('[data-edit-availability-message]');
+      if (!popup || !msg) {
+        window.alert(message);
+        return;
+      }
+      msg.textContent = message;
+      popup.hidden = false;
+    }
+
+    function hideNoAvailabilityPopup() {
+      const popup = detailModal?.querySelector('[data-edit-availability-popup]');
+      if (popup) popup.hidden = true;
+    }
+
+    async function refreshEditAvailability() {
+      if (!needsAvailPreview) return;
+      const checkIn = String(form.querySelector('[name="checkIn"]')?.value || '');
+      const checkInTime = String(form.querySelector('[name="checkInTime"]')?.value || '14:00');
+      const checkOut = String(form.querySelector('[name="checkOut"]')?.value || '');
+      const checkOutTime = String(form.querySelector('[name="checkOutTime"]')?.value || '12:00');
+      if (!checkIn || !checkOut) {
+        availOk = false;
+        saveButton.disabled = true;
+        availStatus.textContent = 'Enter check-in and check-out dates.';
+        availList.replaceChildren();
+        return;
+      }
+
+      availStatus.textContent = 'Checking availability…';
+      try {
+        const checkInAtUtc = toManilaDateTimeIso(checkIn, checkInTime);
+        const checkoutTimeUtc = toManilaDateTimeIso(checkOut, checkOutTime);
+        const query = new URLSearchParams({ checkInAtUtc, checkoutTimeUtc });
+        const rows = await apiFetch(
+          `/api/admin/bookings/${booking.id}/availability?${query.toString()}`
+        );
+        const byType = new Map((rows || []).map((row) => [Number(row.roomTypeId), row]));
+        const needed = requiredLines();
+        availList.replaceChildren();
+        let insufficient = false;
+        const shortLines = [];
+
+        needed.forEach((line) => {
+          const row = byType.get(line.roomTypeId);
+          const remaining = row ? Number(row.remaining ?? row.Remaining ?? 0) : 0;
+          const li = document.createElement('li');
+          const ok = remaining >= line.quantity;
+          if (!ok) {
+            insufficient = true;
+            shortLines.push(
+              `${line.roomTypeName}: need ${line.quantity}, only ${remaining} available`
+            );
+          }
+          li.className = ok ? 'is-ok' : 'is-short';
+          li.textContent = `${line.roomTypeName}: ${remaining} available` +
+            (line.quantity > 1 ? ` (need ${line.quantity})` : '');
+          availList.append(li);
+        });
+
+        if (!needed.length) {
+          availOk = false;
+          saveButton.disabled = true;
+          availStatus.textContent = 'Add at least one room quantity.';
+          return;
+        }
+
+        availOk = !insufficient;
+        saveButton.disabled = insufficient;
+        availStatus.textContent = insufficient
+          ? 'Not enough rooms for these dates — change the dates or wait for availability.'
+          : 'Enough rooms for this stay on the selected dates.';
+
+        if (insufficient) {
+          const key = `${checkIn}|${checkOut}|${shortLines.join(';')}`;
+          if (key !== lastNoAvailKey) {
+            lastNoAvailKey = key;
+            showNoAvailabilityPopup(
+              'Even if you adjust these dates, there is still no available room right now for what this booking needs. ' +
+                shortLines.join('. ') +
+                '.'
+            );
+          }
+        } else {
+          lastNoAvailKey = '';
+        }
+      } catch (err) {
+        availOk = false;
+        saveButton.disabled = true;
+        availList.replaceChildren();
+        availStatus.textContent =
+          err instanceof Error ? err.message : 'Unable to check availability.';
+      }
+    }
+
+    function scheduleAvailRefresh() {
+      if (!needsAvailPreview) return;
+      window.clearTimeout(availTimer);
+      availTimer = window.setTimeout(() => {
+        void refreshEditAvailability();
+      }, 280);
+    }
+
+    ['checkIn', 'checkInTime', 'checkOut', 'checkOutTime'].forEach((name) => {
+      form.querySelector(`[name="${name}"]`)?.addEventListener('change', scheduleAvailRefresh);
+      form.querySelector(`[name="${name}"]`)?.addEventListener('input', scheduleAvailRefresh);
+    });
+    if (!hardEdit) {
+      form.querySelectorAll('[data-room-type-id]').forEach((input) => {
+        input.addEventListener('change', scheduleAvailRefresh);
+        input.addEventListener('input', scheduleAvailRefresh);
+      });
+    }
+
+    detailModal?.querySelectorAll('[data-edit-availability-ok]').forEach((btn) => {
+      if (btn.dataset.wired === '1') return;
+      btn.dataset.wired = '1';
+      btn.addEventListener('click', () => {
+        const popup = detailModal?.querySelector('[data-edit-availability-popup]');
+        if (popup) popup.hidden = true;
+      });
+    });
+
+    saveButton.addEventListener('click', () => {
+      if (needsAvailPreview && !availOk) {
+        showNoAvailabilityPopup(
+          'Even if you adjust these dates, there is still no available room right now for what this booking needs.'
+        );
+        return;
+      }
+      if (hardEdit) {
+        const ok = window.confirm(
+          'Update this confirmed stay while keeping the assigned rooms?\n\nNights and total may change.'
+        );
+        if (!ok) return;
+      }
+      form.requestSubmit();
+    });
+    form.addEventListener('submit', (event) =>
+      saveBookingEdit(event, booking, saveButton, error, { hardEdit, adjustStay })
+    );
+
+    if (needsAvailPreview) {
+      void refreshEditAvailability();
+    }
   }
 
-  async function saveBookingEdit(event, booking, button, errorElement) {
+  async function saveBookingEdit(event, booking, button, errorElement, options = {}) {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
-    const items = Array.from(form.querySelectorAll('[data-room-type-id]')).map((input) => ({
-      roomTypeId: Number(input.dataset.roomTypeId),
-      quantity: Number(input.value || 0),
-    }));
+    const hardEdit = Boolean(options.hardEdit);
+    const items = hardEdit
+      ? (booking.items || []).map((line) => ({
+          roomTypeId: Number(line.roomTypeId),
+          quantity: Number(line.quantity || 0),
+        }))
+      : Array.from(form.querySelectorAll('[data-room-type-id]')).map((input) => ({
+          roomTypeId: Number(input.dataset.roomTypeId),
+          quantity: Number(input.value || 0),
+        }));
 
     button.disabled = true;
     errorElement.hidden = true;
@@ -4564,7 +5738,11 @@
           items,
         }),
       });
-      renderBookingDetails(updated);
+      // Reload payment summary so balance / assign gate match the recalculated stay total.
+      const paymentSummary = await apiFetch(`/api/admin/payments/booking/${updated.id}`).catch(
+        () => null
+      );
+      await renderBookingDetails(updated, { paymentSummary });
       await Promise.all([refreshBookings(), refreshNotifications()]);
       reservationCalendar?.refetchEvents();
     } catch (error) {
@@ -4579,6 +5757,14 @@
     if (!detailModal || !detailBody) return;
     const bookingId = Number(id);
     if (!Number.isFinite(bookingId) || bookingId <= 0) return;
+
+    if (Number(receptionExtrasStageBookingId) !== bookingId) {
+      receptionExtrasStageBookingId = null;
+      hideExtrasStageIntro();
+    } else {
+      // Same guest reopened while on Checkout — keep step 5, hide leftover intro overlay.
+      hideExtrasStageIntro();
+    }
 
     showBookingDetailsSkeleton(cachedBooking);
     const requestSeq = (openBookingDetails._seq = (openBookingDetails._seq || 0) + 1);
@@ -4692,16 +5878,178 @@
     }
   }
 
+  function hideCheckoutConfirmModal() {
+    const popup = detailModal?.querySelector('[data-checkout-confirm-popup]');
+    if (!popup) return;
+    popup.hidden = true;
+  }
+
+  /**
+   * Branded checkout confirm (replaces window.confirm).
+   * @returns {Promise<'checkout'|'payment'|'cancel'>}
+   */
+  function showCheckoutConfirmModal({
+    booking,
+    balanceDue,
+    stayTotal,
+    amountPaid,
+    rooms = [],
+  }) {
+    const popup = detailModal?.querySelector('[data-checkout-confirm-popup]');
+    const titleEl = detailModal?.querySelector('[data-checkout-confirm-title]');
+    const messageEl = detailModal?.querySelector('[data-checkout-confirm-message]');
+    const summaryEl = detailModal?.querySelector('[data-checkout-confirm-summary]');
+    const noteEl = detailModal?.querySelector('[data-checkout-confirm-note]');
+    const cancelBtn = detailModal?.querySelector('[data-checkout-confirm-cancel]');
+    const payBtn = detailModal?.querySelector('[data-checkout-confirm-pay]');
+    const okBtn = detailModal?.querySelector('[data-checkout-confirm-ok]');
+    const refEl = detailModal?.querySelector('[data-checkout-confirm-ref]');
+    const totalEl = detailModal?.querySelector('[data-checkout-confirm-total]');
+    const paidEl = detailModal?.querySelector('[data-checkout-confirm-paid]');
+    const balanceEl = detailModal?.querySelector('[data-checkout-confirm-balance]');
+
+    if (!popup || !cancelBtn || !okBtn) {
+      return Promise.resolve('cancel');
+    }
+
+    const unpaid = balanceDue > 0.009;
+    const roomLabel = rooms.length ? ` (${rooms.join(', ')})` : '';
+
+    if (titleEl) {
+      titleEl.textContent = unpaid ? 'Balance still due' : 'Archive guest';
+    }
+    if (messageEl) {
+      messageEl.textContent = unpaid
+        ? `${booking.reference} still has an unpaid balance. Review the payment figures below before archiving.`
+        : `Archive ${booking.reference}${roomLabel}?`;
+    }
+
+    if (summaryEl) {
+      summaryEl.hidden = !unpaid;
+      if (unpaid) {
+        if (refEl) refEl.textContent = booking.reference || '—';
+        if (totalEl) totalEl.textContent = money(stayTotal);
+        if (paidEl) paidEl.textContent = money(amountPaid);
+        if (balanceEl) balanceEl.textContent = money(balanceDue);
+      }
+    }
+
+    if (noteEl) {
+      noteEl.textContent = unpaid
+        ? 'Archiving will free assigned rooms (Available again). Collect the balance first if the guest can still pay.'
+        : 'Assigned rooms will become Available again.';
+    }
+
+    if (payBtn) {
+      payBtn.hidden = !unpaid;
+    }
+    okBtn.textContent = unpaid ? 'Archive anyway' : 'Archive';
+    popup.classList.toggle('is-warning', unpaid);
+
+    return new Promise((resolve) => {
+      const finish = (result) => {
+        cancelBtn.removeEventListener('click', onCancel);
+        okBtn.removeEventListener('click', onOk);
+        payBtn?.removeEventListener('click', onPay);
+        popup.removeEventListener('click', onBackdrop);
+        document.removeEventListener('keydown', onKey);
+        hideCheckoutConfirmModal();
+        resolve(result);
+      };
+      const onCancel = () => finish('cancel');
+      const onOk = () => finish('checkout');
+      const onPay = () => finish('payment');
+      const onBackdrop = (event) => {
+        if (event.target === popup) finish('cancel');
+      };
+      const onKey = (event) => {
+        if (event.key === 'Escape') finish('cancel');
+      };
+
+      cancelBtn.addEventListener('click', onCancel);
+      okBtn.addEventListener('click', onOk);
+      payBtn?.addEventListener('click', onPay);
+      popup.addEventListener('click', onBackdrop);
+      document.addEventListener('keydown', onKey);
+
+      popup.hidden = false;
+      (unpaid ? payBtn : okBtn)?.focus();
+    });
+  }
+
+  function hideExtrasStageIntro() {
+    detailModal?.querySelectorAll('[data-extras-stage-popup]').forEach((popup) => {
+      popup.hidden = true;
+    });
+  }
+
+  function showExtrasStageIntro() {
+    const popup = detailModal?.querySelector('[data-extras-stage-popup]');
+    let okBtn = popup?.querySelector('[data-extras-stage-ok]');
+    if (!popup || !okBtn) return;
+    // Reset button listeners if intro is shown again without closing.
+    const fresh = okBtn.cloneNode(true);
+    okBtn.replaceWith(fresh);
+    okBtn = fresh;
+    popup.hidden = false;
+    popup.style.zIndex = '80';
+    const finish = () => {
+      popup.hidden = true;
+      const extrasPanel = detailBody?.querySelector('[data-extras-fees="1"]');
+      extrasPanel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      extrasPanel
+        ?.querySelector('.admin-fee-dd-trigger:not(.is-locked)')
+        ?.focus();
+    };
+    okBtn.addEventListener('click', finish, { once: true });
+    requestAnimationFrame(() => {
+      popup.hidden = false;
+      okBtn.focus();
+    });
+  }
+
+  async function enterReceptionExtrasStage(booking) {
+    receptionExtrasStageBookingId = Number(booking.id);
+    await renderBookingDetails(booking);
+    requestAnimationFrame(() => showExtrasStageIntro());
+  }
+
+  async function leaveReceptionExtrasStage(booking) {
+    receptionExtrasStageBookingId = null;
+    hideExtrasStageIntro();
+    await renderBookingDetails(booking);
+  }
+
   async function checkoutBooking(booking, button) {
     const rooms = (booking.items || [])
       .flatMap((line) => (line.assignedRooms || []).map((room) => room.roomNumber))
       .filter(Boolean);
-    const roomLabel = rooms.length ? ` (${rooms.join(', ')})` : '';
-    if (
-      !window.confirm(
-        `Check out ${booking.reference}${roomLabel}? Assigned rooms will become Available again.`
-      )
-    ) {
+
+    let balanceDue = Number(paymentPriceContext.balanceDue);
+    let stayTotal = Number(paymentPriceContext.stayTotal) || 0;
+    let amountPaid = Number(paymentPriceContext.amountPaid) || 0;
+    if (selectedBooking?.id === booking.id && Number.isFinite(balanceDue)) {
+      // use loaded context
+    } else {
+      const summary = await loadBookingPaymentSummary(booking);
+      if (summary) fillPaymentSummaryFields(booking, summary);
+      balanceDue = Number(paymentPriceContext.balanceDue) || 0;
+      stayTotal = Number(paymentPriceContext.stayTotal) || 0;
+      amountPaid = Number(paymentPriceContext.amountPaid) || 0;
+    }
+
+    const decision = await showCheckoutConfirmModal({
+      booking,
+      balanceDue,
+      stayTotal,
+      amountPaid,
+      rooms,
+    });
+
+    if (decision === 'cancel') return;
+
+    if (decision === 'payment') {
+      await openAddPaymentModal(booking);
       return;
     }
 
@@ -4712,6 +6060,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
+      receptionExtrasStageBookingId = null;
       window.location.href = '/Rooms?view=list';
     } catch (error) {
       showBookingMessage(error instanceof Error ? error.message : 'Unable to check out booking.', true);
@@ -4794,6 +6143,82 @@
     }
   }
 
+  function mapCalendarEvents(items) {
+    return (items || []).map((item) => {
+      const bookingId = Number(item.id);
+      const isReservation = item.kind === 'Reservation' || item.kind === 1;
+      const extensionNights = Math.max(0, Number(item.extensionNights || 0));
+      const primaryBg = isReservation ? '#1aa6a6' : '#3d7ea6';
+      const primaryBorder = isReservation ? '#0f6e6e' : '#2f6488';
+      const title =
+        extensionNights > 0
+          ? `${item.title} · +${extensionNights} night${extensionNights === 1 ? '' : 's'} extended`
+          : item.title;
+
+      return {
+        id: String(bookingId),
+        title,
+        start: item.start,
+        end: item.end,
+        allDay: true,
+        backgroundColor: primaryBg,
+        borderColor: primaryBorder,
+        classNames: [
+          isReservation ? 'is-reservation' : 'is-booking',
+          extensionNights > 0 ? 'has-extension' : '',
+        ].filter(Boolean),
+        extendedProps: {
+          ...item,
+          bookingId,
+          extensionNights,
+          isReservation,
+          primaryBg,
+          // Same hue family, lighter — reads as continuation, not a second guest.
+          extensionBg: isReservation ? '#7dcccc' : '#7aaec8',
+          primaryBorder,
+        },
+      };
+    });
+  }
+
+  function paintCalendarExtension(info) {
+    const props = info.event.extendedProps || {};
+    const extensionNights = Math.max(0, Number(props.extensionNights || 0));
+    const el = info.el;
+    if (!el) return;
+
+    el.title = info.event.title || props.title || '';
+
+    if (extensionNights <= 0) return;
+
+    const start = info.event.start;
+    const end = info.event.end;
+    if (!start || !end) return;
+
+    const dayMs = 24 * 60 * 60 * 1000;
+    const totalDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / dayMs));
+    const primaryDays = Math.max(1, totalDays - extensionNights);
+    const primaryPct = Math.min(99, Math.max(1, (primaryDays / totalDays) * 100));
+    const primaryBg = props.primaryBg || (props.isReservation ? '#1aa6a6' : '#3d7ea6');
+    const extensionBg = props.extensionBg || (props.isReservation ? '#7dcccc' : '#7aaec8');
+    const border = props.primaryBorder || primaryBg;
+
+    el.style.backgroundColor = primaryBg;
+    el.style.backgroundImage = `linear-gradient(90deg, ${primaryBg} 0%, ${primaryBg} ${primaryPct}%, ${extensionBg} ${primaryPct}%, ${extensionBg} 100%)`;
+    el.style.borderColor = border;
+    el.style.color = '#ffffff';
+    el.classList.add('has-extension');
+
+    // One clear “extended” cue without a second event bar.
+    if (!el.querySelector('.admin-calendar-ext-mark')) {
+      const mark = document.createElement('span');
+      mark.className = 'admin-calendar-ext-mark';
+      mark.setAttribute('aria-hidden', 'true');
+      mark.textContent = `+${extensionNights}`;
+      el.append(mark);
+    }
+  }
+
   async function initReservationCalendar() {
     if (reservationCalendar || !calendarElement) return;
     let ready = Boolean(window.FullCalendar?.Calendar);
@@ -4831,30 +6256,22 @@
             end: info.endStr.slice(0, 10),
           });
           const items = await apiFetch(`/api/admin/bookings/calendar?${query}`);
-          success(items.map((item) => {
-            const isReservation = item.kind === 'Reservation' || item.kind === 1;
-            // Booking: mid blue (not navy/black). Reservation: brand teal.
-            const backgroundColor = isReservation ? '#1aa6a6' : '#3d7ea6';
-            const borderColor = isReservation ? '#0f6e6e' : '#2f6488';
-            return {
-              id: String(item.id),
-              title: item.title,
-              start: item.start,
-              end: item.end,
-              allDay: true,
-              backgroundColor,
-              borderColor,
-              classNames: [isReservation ? 'is-reservation' : 'is-booking'],
-              extendedProps: item,
-            };
-          }));
+          success(mapCalendarEvents(items));
           if (calendarFallback) calendarFallback.hidden = true;
         } catch (error) {
           if (calendarFallback) calendarFallback.hidden = false;
           failure(error);
         }
       },
-      eventClick: (info) => openBookingDetails(Number(info.event.id)),
+      eventDidMount: paintCalendarExtension,
+      eventClick: (info) => {
+        const bookingId = Number(
+          info.event.extendedProps?.bookingId || info.event.id
+        );
+        if (Number.isFinite(bookingId) && bookingId > 0) {
+          openBookingDetails(bookingId);
+        }
+      },
     });
     reservationCalendar.render();
   }

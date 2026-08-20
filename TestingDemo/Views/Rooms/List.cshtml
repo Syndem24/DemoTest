@@ -63,8 +63,8 @@ else
                                     }
                                 </td>
                                 <td>
-                                    <span class="badge @(room.Status == TestingDemo.Models.RoomStatus.Available ? "text-bg-success" : room.Status == TestingDemo.Models.RoomStatus.Occupied ? "text-bg-warning" : "text-bg-secondary")">
-                                        @room.Status
+                                    <span class="hotel-status @TestingDemo.Models.RoomStatusDisplay.CssClass(room.Status)">
+                                        @TestingDemo.Models.RoomStatusDisplay.Label(room.Status)
                                     </span>
                                 </td>
                                 <td class="text-end text-nowrap">

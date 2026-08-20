@@ -10,6 +10,15 @@ public interface IBookingService
         DateTime checkoutTimeUtc,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Availability for a stay window, excluding holds from the given booking (edit / reschedule preview).
+    /// </summary>
+    Task<IReadOnlyList<RoomAvailabilityDto>> GetAvailabilityForBookingAsync(
+        int bookingId,
+        DateTime checkInAtUtc,
+        DateTime checkoutTimeUtc,
+        CancellationToken cancellationToken = default);
+
     Task<BookingDto> CreateAsync(
         CreateBookingRequest request,
         CancellationToken cancellationToken = default);

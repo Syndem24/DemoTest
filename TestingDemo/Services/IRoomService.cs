@@ -13,4 +13,9 @@ public interface IRoomService
     Task<int> UpdateRoomTypeAsync(UpdateRoomTypeDto dto, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default);
     Task<int> DeleteRoomTypeAsync(int roomTypeId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Opens (Available) or closes (Cleaning / maintaining) a vacant room.
+    /// Occupied rooms cannot be toggled.
+    /// </summary>
+    Task<RoomDto?> SetGuestReadyAsync(int id, bool open, CancellationToken cancellationToken = default);
 }
