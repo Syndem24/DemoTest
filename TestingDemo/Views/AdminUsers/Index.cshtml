@@ -1,0 +1,20 @@
+@{
+    ViewData["Title"] = "Staff users";
+    var message = TempData["Message"] as string;
+    var error = TempData["Error"] as string;
+}
+
+@section Scripts {
+    <script type="module" src="~/room-management/room-app.js" asp-append-version="true"></script>
+}
+
+<link rel="stylesheet" href="~/room-management/room-app.css" asp-append-version="true" />
+
+<div id="admin-users-root"
+     data-list-url="/api/admin/users/list"
+     data-suggest-url="@Url.Action("Suggestions", "AdminUsers")"
+     data-action-base-url="/api/admin/users"
+     data-create-url="@Url.Action("Create", "AdminUsers")"
+     data-message="@message"
+     data-error="@error">
+</div>

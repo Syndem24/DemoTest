@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using TestingDemo.Hubs;
@@ -7,6 +8,7 @@ using TestingDemo.ViewModels;
 
 namespace TestingDemo.Controllers;
 
+[Authorize(Roles = "AdminManager,Receptionist")]
 public class RoomsController : Controller
 {
     private readonly IRoomService _roomService;
@@ -36,6 +38,7 @@ public class RoomsController : Controller
         return RedirectToAction(nameof(Index), new { view = "list" });
     }
 
+    [Authorize(Roles = AppRoles.AdminManager)]
     public async Task<IActionResult> EditType(int id, CancellationToken cancellationToken)
     {
         var rooms = await _roomService.GetAllAsync(cancellationToken);
@@ -55,6 +58,7 @@ public class RoomsController : Controller
     }
 
     [HttpPost]
+    [Authorize(Roles = AppRoles.AdminManager)]
     [ValidateAntiForgeryToken]
     [RequestSizeLimit(60_000_000)]
     [RequestFormLimits(MultipartBodyLengthLimit = 60_000_000)]
@@ -133,6 +137,7 @@ public class RoomsController : Controller
         }
     }
 
+    [Authorize(Roles = AppRoles.AdminManager)]
     public async Task<IActionResult> DeleteType(int id, CancellationToken cancellationToken)
     {
         var rooms = await _roomService.GetAllAsync(cancellationToken);
@@ -148,6 +153,7 @@ public class RoomsController : Controller
     }
 
     [HttpPost, ActionName("DeleteType")]
+    [Authorize(Roles = AppRoles.AdminManager)]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteTypeConfirmed(
         int id,
@@ -258,6 +264,7 @@ public class RoomsController : Controller
         }
     }
 
+    [Authorize(Roles = AppRoles.AdminManager)]
     public async Task<IActionResult> Create(CancellationToken cancellationToken)
     {
         var model = new CreateRoomsViewModel();
@@ -266,6 +273,7 @@ public class RoomsController : Controller
     }
 
     [HttpPost]
+    [Authorize(Roles = AppRoles.AdminManager)]
     [ValidateAntiForgeryToken]
     [RequestSizeLimit(60_000_000)]
     [RequestFormLimits(MultipartBodyLengthLimit = 60_000_000)]
@@ -342,6 +350,7 @@ public class RoomsController : Controller
         }
     }
 
+    [Authorize(Roles = AppRoles.AdminManager)]
     public async Task<IActionResult> Edit(int id, CancellationToken cancellationToken)
     {
         var room = await _roomService.GetByIdAsync(id, cancellationToken);
@@ -356,6 +365,7 @@ public class RoomsController : Controller
     }
 
     [HttpPost]
+    [Authorize(Roles = AppRoles.AdminManager)]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(int id, RoomFormViewModel model, CancellationToken cancellationToken)
     {
@@ -391,6 +401,7 @@ public class RoomsController : Controller
         }
     }
 
+    [Authorize(Roles = AppRoles.AdminManager)]
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
         var room = await _roomService.GetByIdAsync(id, cancellationToken);
@@ -403,6 +414,7 @@ public class RoomsController : Controller
     }
 
     [HttpPost, ActionName("Delete")]
+    [Authorize(Roles = AppRoles.AdminManager)]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteConfirmed(int id, CancellationToken cancellationToken)
     {

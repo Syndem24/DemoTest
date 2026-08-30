@@ -1,31 +1,26 @@
 @{
-    Layout = "~/Views/Shared/_CustomerLayout.cshtml";
     ViewData["Title"] = "Staff Entry";
+    ViewData["GuestAuthPage"] = true;
+    Layout = "~/Views/Shared/_CustomerLayout.cshtml";
 }
 
-<section class="guest-section staff-entry">
-    <div class="guest-reserve-panel staff-entry-panel">
-        <div>
-            <p class="guest-eyebrow">Staff portal</p>
-            <h2>Mori International Hotel · Admin</h2>
-            <p class="guest-section-copy staff-entry-copy">
-                Temporary staff entry only. This page lets you open the admin side without signing in.
-            </p>
+<section class="guest-auth guest-auth--status" aria-labelledby="guestAuthTitle">
+    <div class="guest-auth-media" aria-hidden="true">
+        <img src="~/Images/ReceptionArea/Reception1.jpg"
+             asp-append-version="true"
+             alt=""
+             decoding="async" />
+        <div class="guest-auth-media-veil"></div>
+    </div>
+    <div class="guest-auth-panel">
+        <p class="guest-eyebrow" data-i18n="auth.eyebrow">Staff portal</p>
+        <h1 id="guestAuthTitle" data-i18n="auth.staffEntryTitle">Staff sign in</h1>
+        <p class="guest-section-copy guest-auth-lede" data-i18n="auth.staffEntryLede">
+            Continue to the staff sign-in page to open the admin tools.
+        </p>
+        <div class="guest-auth-actions">
+            <a class="guest-btn guest-btn-primary" asp-controller="Account" asp-action="Login" data-i18n="auth.signIn">Sign in</a>
+            <a class="guest-btn guest-btn-ghost" asp-controller="Booking" asp-action="Index" data-i18n="auth.backGuest">Back to guest site</a>
         </div>
-
-        <form asp-controller="Staff" asp-action="Enter" method="post" class="guest-form">
-            @Html.AntiForgeryToken()
-            <label>
-                <span>Staff code (placeholder)</span>
-                <input type="text" name="staffCode" value="admin" readonly aria-label="Placeholder staff code" />
-            </label>
-            <p class="guest-form-message is-ok">
-                Authentication is disabled. Click continue to open Room Management.
-            </p>
-            <div class="guest-form-actions">
-                <button type="submit" class="guest-btn guest-btn-primary">Continue to Admin</button>
-                <a class="guest-btn guest-btn-ghost" asp-controller="Booking" asp-action="Index">Back to guest site</a>
-            </div>
-        </form>
     </div>
 </section>

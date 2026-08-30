@@ -493,6 +493,7 @@
         </header>
 
         <div class="guest-offers-layout">
+            <nav class="guest-offer-booktags" id="offerBookTags" hidden aria-label="Jump to room type" data-i18n="booking.jumpAria" data-i18n-attr="aria-label" data-i18n-attr-only></nav>
             <div class="guest-offers-main">
                 <div class="guest-offers-list" id="offerRoomList"></div>
                 <p class="guest-offers-empty" id="offerEmptyState" hidden>
@@ -629,6 +630,15 @@
                     </div>
                 </div>
                 <p class="guest-room-capacity-msg" id="stayDatesRequiredMsg" hidden></p>
+                <p class="guest-stay-min-banner" id="stayLongerMinBanner" role="status" hidden></p>
+                <div class="guest-stay-suggest-banner" id="stayLongerSuggestBanner" role="status" hidden>
+                    <span id="stayLongerSuggestText"></span>
+                    <button type="button"
+                            class="guest-btn guest-btn-ghost guest-btn-sm"
+                            id="stayLongerSuggestSwitchBtn">
+                        Switch to stay longer offer
+                    </button>
+                </div>
                 <div class="guest-form-grid guest-form-grid-2">
                     <label>
                         <span data-i18n="booking.checkInDate">Check-in date</span>
@@ -638,6 +648,10 @@
                         <span data-i18n="booking.checkOutDate">Check-out date</span>
                         <input type="date" name="modalCheckOut" id="modalCheckOut" required inputmode="none" autocomplete="off" class="guest-date-picker" />
                     </label>
+                </div>
+                <div class="guest-stay-highlight" id="stayDateHighlight" hidden>
+                    <p class="guest-stay-highlight-title" id="stayDateHighlightTitle">Selected stay</p>
+                    <div class="guest-stay-highlight-track" id="stayDateHighlightTrack"></div>
                 </div>
                 <div class="guest-form-grid guest-form-grid-2 guest-time-grid">
                     <label>
@@ -707,6 +721,16 @@
                     </div>
                 </div>
                 <input type="hidden" name="paymentOption" id="paymentOption" value="Full" />
+                <input type="hidden" name="specialOfferId" id="specialOfferId" value="" />
+
+                <div class="guest-field guest-pay-method-block" id="guestPayMethodBlock" hidden style="margin-bottom: 1rem;">
+                    <span class="guest-offer-tag" id="guestSpecialOfferTag">
+                        <span data-i18n="booking.specialOfferTag">Special offer</span>
+                    </span>
+                    <p class="guest-payment-hint is-booking" id="guestSpecialOfferPayHint" data-i18n="booking.specialOfferCashOnly">
+                        This special offer is cash on arrival only. Pay at the front desk when you check in.
+                    </p>
+                </div>
 
                 <div class="guest-terms-stay guest-book-terms">
                     <p class="guest-terms-intro" data-i18n="details.termsIntro">
@@ -730,6 +754,15 @@
                         <input type="checkbox" id="acceptStayTerms" name="acceptStayTerms" required />
                         <span data-i18n="booking.acceptTerms">I have read and agree to the Terms of Stay.</span>
                     </label>
+
+                    <div class="guest-field guest-arrival-discount" style="margin-top: 1rem;">
+                        <p class="guest-label-caps" data-i18n="booking.arrivalDiscount">
+                            Senior Citizen &amp; PWD (20%) — claim at arrival
+                        </p>
+                        <p class="guest-form-hint" id="arrivalDiscountHint" data-i18n="booking.arrivalDiscountHint">
+                            Senior Citizen and PWD discounts take effect only at arrival. Reception verifies your ID at the front desk — they are not applied online. They cannot be combined with an active special offer or walk-in promo.
+                        </p>
+                    </div>
                 </div>
             </section>
 
@@ -757,11 +790,13 @@
     <div class="guest-modal-backdrop" data-close-modal></div>
     <div class="guest-modal-dialog guest-modal-dialog-sm" role="dialog" aria-modal="true" aria-labelledby="successTitle">
         <button type="button" class="guest-modal-close" data-close-modal aria-label="Close" data-i18n="details.close" data-i18n-attr="aria-label" data-i18n-attr-only>&times;</button>
-        <p class="guest-eyebrow" id="successEyebrow" data-i18n="booking.booking">Booking</p>
-        <h2 id="successTitle" data-i18n="booking.successTitleBooking">Booking received</h2>
-        <p class="guest-modal-lede" id="successMessage" data-i18n="booking.successBody">
-            Your request has been sent to the hotel for review.
-        </p>
+        <header class="guest-success-head">
+            <p class="guest-eyebrow" id="successEyebrow" data-i18n="booking.booking">Booking</p>
+            <h2 id="successTitle" data-i18n="booking.successTitleBooking">Booking received</h2>
+            <p class="guest-modal-lede" id="successMessage" data-i18n="booking.successBody">
+                Your request has been sent to the hotel for review.
+            </p>
+        </header>
         <div class="guest-modal-actions">
             <button type="button" class="guest-btn guest-btn-primary" data-close-modal data-i18n="booking.done">Done</button>
         </div>

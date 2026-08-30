@@ -54,21 +54,58 @@
   }
 
   function playChime() {
-    if (!soundEnabled || !audioUnlocked || !audioContext) return;
-    const now = audioContext.currentTime;
-    [660, 880].forEach((frequency, index) => {
-      const oscillator = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.value = frequency;
-      gain.gain.setValueAtTime(0.0001, now + index * 0.09);
-      gain.gain.exponentialRampToValueAtTime(0.13, now + index * 0.09 + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.09 + 0.22);
-      oscillator.connect(gain);
-      gain.connect(audioContext.destination);
-      oscillator.start(now + index * 0.09);
-      oscillator.stop(now + index * 0.09 + 0.24);
-    });
+    if (!soundEnabled) return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    audioContext ||= new AudioContext();
+
+    const emit = () => {
+      if (!audioContext) return;
+      const now = audioContext.currentTime;
+      [660, 880].forEach((frequency, index) => {
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(0.0001, now + index * 0.09);
+        gain.gain.exponentialRampToValueAtTime(0.13, now + index * 0.09 + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.09 + 0.22);
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start(now + index * 0.09);
+        oscillator.stop(now + index * 0.09 + 0.24);
+      });
+    };
+
+    if (audioContext.state !== 'running') {
+      audioContext.resume()
+        .then(() => {
+          audioUnlocked = audioContext?.state === 'running';
+          if (audioUnlocked) emit();
+        })
+        .catch(() => {});
+      return;
+    }
+
+    audioUnlocked = true;
+    emit();
+  }
+
+  function showOfferEndingSoonAlert(notification) {
+    const mins = Math.max(1, Number(notification?.minutesRemaining || 0));
+    const title = String(notification?.title || 'Special offer');
+    const rooms = Array.isArray(notification?.roomTypes) ? notification.roomTypes.filter(Boolean).join(', ') : '';
+    const message = `${title} ends in about ${mins} minute${mins === 1 ? '' : 's'}${rooms ? ` (${rooms})` : ''}.`;
+    const host = document.body;
+    if (!host) return;
+    const alert = document.createElement('div');
+    alert.className = 'admin-live-alert is-warning';
+    alert.textContent = message;
+    host.append(alert);
+    window.setTimeout(() => {
+      alert.classList.add('is-leaving');
+      window.setTimeout(() => alert.remove(), 250);
+    }, 10000);
   }
 
   function setBadge(unread) {
@@ -278,8 +315,16 @@
       playChime();
       await refreshNotifications();
     });
-    connection.on('BookingUpdated', () => refreshNotifications());
+    connection.on('BookingUpdated', () => {
+      playChime();
+      return refreshNotifications();
+    });
     connection.on('BookingArchived', () => refreshNotifications());
+    connection.on('OfferEndingSoon', (notification) => {
+      playChime();
+      showOfferEndingSoonAlert(notification);
+      return refreshNotifications();
+    });
     connection.onreconnecting(beginPolling);
     connection.onreconnected(async () => {
       stopPolling();

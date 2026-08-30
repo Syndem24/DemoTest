@@ -31,7 +31,7 @@ public enum PaymentRecordStatus
 }
 
 /// <summary>
-/// Append-only company payment log for a booking/walk-in stay.
+/// Table <c>PaymentRecord</c> — append-only company payment log for a booking/walk-in stay.
 /// </summary>
 public class PaymentRecord
 {

@@ -42,7 +42,7 @@ public interface IBookingService
     Task<IReadOnlyDictionary<int, BookingDto>> GetActiveStaysByRoomIdsAsync(
         IEnumerable<int> roomIds,
         CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<ReservationCalendarEventDto>> GetReservationCalendarAsync(
+    Task<ReservationCalendarDto> GetReservationCalendarAsync(
         DateTime start,
         DateTime end,
         CancellationToken cancellationToken = default);
@@ -64,6 +64,10 @@ public interface IBookingService
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BookingDto>> GetCheckoutsSoonAsync(
         int windowMinutes = 20,
+        CancellationToken cancellationToken = default);
+    Task<DaytimeBookingFlowDto> GetDaytimeBookingFlowAsync(
+        int startHour = 6,
+        int endHour = 18,
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BookingDto>> AutoCancelExpiredPendingAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AssignableRoomsByTypeDto>> GetAssignableRoomsAsync(

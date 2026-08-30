@@ -1,0 +1,15 @@
+@{
+    ViewData["Title"] = "Special offers";
+    var message = TempData["Success"] as string ?? "";
+}
+
+@section Scripts {
+    <script type="module" src="~/room-management/room-app.js" asp-append-version="true"></script>
+}
+
+<link rel="stylesheet" href="~/room-management/room-app.css" asp-append-version="true" />
+<div id="special-offers-root"
+     data-create-url="@Url.Action("Create")"
+     data-edit-base="@Url.Action("Edit")"
+     data-can-manage="@(User.IsInRole("AdminManager") ? "true" : "false")"
+     data-message="@message"></div>

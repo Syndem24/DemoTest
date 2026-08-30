@@ -12,6 +12,7 @@ description: >-
 1. Identify surface: **admin** (`_Layout`) vs **customer** (`_CustomerLayout`)
 2. Reuse `IRoomService` / existing models before creating new ones
 3. Default to UI-only unless user says save/persist/API
+4. Persistence, APIs, jobs, or schema: read `backend-systems-architect` and pick 1–3 patterns first
 
 ## Checklist
 - [ ] Controller action + view (or API if JSON needed)

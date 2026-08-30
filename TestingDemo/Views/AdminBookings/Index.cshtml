@@ -8,21 +8,35 @@
         <h1>Bookings</h1>
         <p>Review requests in a compact table or scan upcoming reservations on the calendar.</p>
     </div>
+    <div class="hero-meta">
+        <button type="button" class="admin-booking-refresh" data-daytime-flow-open>
+            Daytime arrivals &amp; checkouts
+        </button>
+    </div>
 </section>
 
 <section class="hotel-panel admin-bookings-panel" data-admin-bookings>
     @Html.AntiForgeryToken()
 
-    <div class="admin-booking-view-tabs" role="tablist" aria-label="Booking views">
-        <button type="button" class="is-active" role="tab" aria-selected="true" data-booking-view="table">
-            Booking table
-        </button>
-        <button type="button" role="tab" aria-selected="false" data-booking-view="calendar">
-            Booking calendar
-        </button>
-        <button type="button" role="tab" aria-selected="false" data-booking-view="history">
-            History
-        </button>
+    <div class="admin-bookings-topbar">
+        <div class="admin-booking-view-tabs" role="tablist" aria-label="Booking views">
+            <button type="button" class="is-active" role="tab" aria-selected="true" data-booking-view="table">
+                Booking table
+            </button>
+            <button type="button" role="tab" aria-selected="false" data-booking-view="calendar">
+                Booking calendar
+            </button>
+            <button type="button" role="tab" aria-selected="false" data-booking-view="history">
+                History
+            </button>
+        </div>
+        <div class="admin-daytime-flow-toolbar-shell" data-daytime-flow-toolbar hidden>
+            <button type="button" class="admin-daytime-back-btn" data-daytime-flow-close
+                aria-label="Back to booking table">
+                <span aria-hidden="true">←</span>
+                <span>Back to booking table</span>
+            </button>
+        </div>
     </div>
 
     <div data-booking-table-panel>
@@ -67,6 +81,29 @@
             </div>
         </div>
 
+        <div class="admin-arrivals-panel admin-daytime-flow-panel" data-daytime-flow-panel hidden>
+            <div class="admin-arrivals-head">
+                <div>
+                    <strong>Daytime flow (today)</strong>
+                    <p>Review expected daytime arrivals and checkouts for today (Philippines time). Opening guest details clears the call highlight.</p>
+                </div>
+            </div>
+            <div class="admin-daytime-flow-grid">
+                <section class="admin-daytime-flow-column">
+                    <h4 data-daytime-arrivals-title>Arrivals · Daytime</h4>
+                    <div class="admin-arrivals-list" data-daytime-arrivals-list>
+                        <p class="admin-bookings-loading">Loading daytime arrivals…</p>
+                    </div>
+                </section>
+                <section class="admin-daytime-flow-column">
+                    <h4 data-daytime-checkouts-title>Checkouts · Daytime</h4>
+                    <div class="admin-arrivals-list" data-daytime-checkouts-list>
+                        <p class="admin-bookings-loading">Loading daytime checkouts…</p>
+                    </div>
+                </section>
+            </div>
+        </div>
+
         <div class="admin-bookings-toolbar">
             <div class="admin-booking-filters" role="group" aria-label="Filter bookings">
                 <button type="button" class="admin-booking-filter is-active" data-booking-filter="">All</button>
@@ -80,45 +117,7 @@
             <button type="button" class="guest-btn guest-btn-primary admin-walkin-open-btn" data-walkin-open>
                 Walk-in
             </button>
-            <button type="button" class="admin-booking-refresh admin-payment-flush-btn" data-history-flush hidden>
-                Export history to PDF
-            </button>
             <button type="button" class="admin-booking-refresh" data-booking-refresh>Refresh</button>
-        </div>
-
-        <div class="admin-payment-flush-log" data-history-flush-log hidden>
-            <button type="button" class="admin-payment-flush-toggle" data-history-flush-toggle aria-expanded="false"
-                aria-controls="historyFlushLogPanel">
-                <span class="admin-payment-flush-toggle-label">
-                    <strong>History export log</strong>
-                    <span data-history-flush-count>Closed · audit of PDF exports &amp; deletes</span>
-                </span>
-                <span class="admin-payment-flush-chevron" aria-hidden="true"></span>
-            </button>
-            <div id="historyFlushLogPanel" class="admin-payment-flush-log-body" data-history-flush-body hidden>
-                <p class="admin-payment-flush-log-hint">
-                    Archived bookings are hard-deleted after data export. Export logs auto-clear after 7 days.
-                </p>
-                <div class="admin-payment-flush-table-wrap">
-                    <table class="admin-bookings-table admin-payment-flush-table">
-                        <thead>
-                            <tr>
-                                <th>When (PH)</th>
-                                <th>Staff</th>
-                                <th>Records</th>
-                                <th>PDF file</th>
-                                <th>Expires</th>
-                                <th><span class="visually-hidden">Actions</span></th>
-                            </tr>
-                        </thead>
-                        <tbody data-history-flush-log-list>
-                            <tr>
-                                <td colspan="6" class="admin-bookings-loading">No export actions yet.</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
         </div>
 
         <p class="admin-bookings-message" data-bookings-message role="status" hidden></p>
@@ -156,13 +155,15 @@
         <div class="admin-calendar-intro">
             <div>
                 <strong>Booking calendar</strong>
-                <p>Shows pending and confirmed stays for the visible range.</p>
+                <p>Reserved guests are waiting for a room. Occupied guests already have a door. Available rooms are those not occupied.</p>
             </div>
-            <div class="admin-calendar-legend" aria-label="Status legend">
-                <span class="is-full">Booking</span>
-                <span class="is-half">Reservation</span>
-                <span class="is-extension">Same guest · extended nights</span>
-            </div>
+            <ul class="admin-calendar-key" aria-label="Calendar counts">
+                <li class="is-today">Today</li>
+                <li class="is-reserved">Reserved</li>
+                <li class="is-occupied">Occupied</li>
+                <li class="is-open">Available</li>
+                <li class="is-out">Checkout</li>
+            </ul>
         </div>
         <div class="admin-reservation-calendar" data-reservation-calendar></div>
         <p class="admin-calendar-fallback" data-calendar-fallback hidden>
@@ -170,6 +171,61 @@
         </p>
     </div>
 </section>
+
+<div class="admin-cal-day-modal" data-calendar-day-modal hidden>
+    <button type="button" class="admin-cal-day-backdrop" data-calendar-day-close aria-label="Close guest list"></button>
+    <section class="admin-cal-day-dialog" role="dialog" aria-modal="true" aria-labelledby="calendarDayTitle">
+        <header class="admin-cal-day-head">
+            <div class="admin-cal-day-head-copy">
+                <p class="admin-cal-day-kicker">Guest list</p>
+                <h2 id="calendarDayTitle" data-calendar-day-title>Guests</h2>
+                <div class="admin-cal-day-stats">
+                    <span class="is-stay"><strong data-calendar-day-stay-count>0</strong> stay</span>
+                    <span class="is-out"><strong data-calendar-day-out-count>0</strong> out</span>
+                </div>
+            </div>
+            <button type="button" class="admin-cal-day-close" data-calendar-day-close aria-label="Close">&times;</button>
+        </header>
+        <div class="admin-cal-day-body">
+            <div class="admin-cal-day-occupancy" data-calendar-day-occupancy hidden>
+                <p class="admin-cal-day-occupancy-kicker">Rooms this night</p>
+                <div class="admin-cal-day-stats admin-cal-day-stats--rooms">
+                    <span class="is-reserved"><strong data-calendar-day-reserved>0</strong> reserved</span>
+                    <span class="is-occupied"><strong data-calendar-day-occupied>0</strong> occupied</span>
+                    <span class="is-open"><strong data-calendar-day-available>0</strong> available</span>
+                </div>
+                <div class="admin-cal-day-occupancy-meter"
+                     role="meter"
+                     data-calendar-day-occupancy-meter
+                     aria-label="Rooms occupied this night"
+                     aria-valuemin="0"
+                     aria-valuemax="0"
+                     aria-valuenow="0">
+                    <span class="is-occupied" data-calendar-day-occupancy-occupied-fill></span>
+                    <span class="is-reserved" data-calendar-day-occupancy-reserved-fill></span>
+                </div>
+                <p class="admin-cal-day-occupancy-hint" data-calendar-day-occupancy-hint></p>
+                <ul class="admin-cal-day-types" data-calendar-day-types></ul>
+            </div>
+            <label class="admin-cal-day-find" data-calendar-day-find hidden>
+                <input type="search" data-calendar-day-filter placeholder="Find a guest" aria-label="Find a guest" autocomplete="off">
+            </label>
+            <p class="admin-cal-day-empty" data-calendar-day-empty hidden>No guests on this date.</p>
+            <section class="admin-cal-day-group" data-calendar-day-occupied-block hidden>
+                <h3>Occupied <span data-calendar-day-occupied-heading-count></span></h3>
+                <div class="admin-cal-day-rows" data-calendar-day-occupied-list></div>
+            </section>
+            <section class="admin-cal-day-group" data-calendar-day-reserved-block hidden>
+                <h3>Reserved <span data-calendar-day-reserved-heading-count></span></h3>
+                <div class="admin-cal-day-rows" data-calendar-day-reserved-list></div>
+            </section>
+            <section class="admin-cal-day-group" data-calendar-day-out-block hidden>
+                <h3>Checkout <span data-calendar-day-out-heading-count></span></h3>
+                <div class="admin-cal-day-rows" data-calendar-day-out-list></div>
+            </section>
+        </div>
+    </section>
+</div>
 
 <div class="admin-booking-modal" data-booking-modal hidden>
     <button type="button" class="admin-booking-modal-backdrop" data-booking-modal-close
@@ -256,28 +312,6 @@
                 </div>
             </div>
         </div>
-    </section>
-</div>
-
-<div class="admin-booking-modal" data-history-flush-detail-modal hidden>
-    <button type="button" class="admin-booking-modal-backdrop" data-history-flush-detail-close
-        aria-label="Close export details"></button>
-    <section class="admin-booking-modal-dialog" role="dialog" aria-modal="true"
-        aria-labelledby="historyFlushDetailTitle">
-        <header>
-            <div>
-                <span class="admin-booking-reference" data-flush-detail-file></span>
-                <h2 id="historyFlushDetailTitle">Export details</h2>
-            </div>
-            <button type="button" class="admin-booking-modal-close" data-history-flush-detail-close
-                aria-label="Close">&times;</button>
-        </header>
-        <div class="admin-booking-detail-body" data-flush-detail-body>
-            <p>Select an export log row to view details.</p>
-        </div>
-        <footer class="admin-booking-detail-actions">
-            <button type="button" data-history-flush-detail-close>Close</button>
-        </footer>
     </section>
 </div>
 
@@ -556,42 +590,6 @@
             <button type="button" data-payment-camera-close>Cancel</button>
             <button type="button" data-payment-camera-switch>Flip camera</button>
             <button type="button" class="admin-booking-confirm" data-payment-camera-capture>Capture photo</button>
-        </footer>
-    </section>
-</div>
-
-<div class="admin-booking-modal" data-history-flush-modal hidden>
-    <button type="button" class="admin-booking-modal-backdrop" data-history-flush-close
-        aria-label="Close export dialog"></button>
-    <section class="admin-booking-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="historyFlushTitle">
-        <header>
-            <div>
-                <span class="admin-booking-reference">Permanent delete</span>
-                <h2 id="historyFlushTitle">Export history to PDF</h2>
-            </div>
-            <button type="button" class="admin-booking-modal-close" data-history-flush-close
-                aria-label="Close">&times;</button>
-        </header>
-        <div class="admin-booking-detail-body">
-            <p>
-                This exports every history record (guest, stay, rooms, amounts) into a branded Mori International Hotel
-                PDF
-                softcopy with logo and trademark, saves it to this device, then <strong>permanently deletes</strong>
-                those
-                history rows. Only an export log (who / when / count) will remain for 7 days.
-            </p>
-            <label class="admin-payment-flush-name">
-                <span>Staff name performing this data export</span>
-                <input type="text" maxlength="120" autocomplete="name" data-history-flush-by
-                    placeholder="e.g. Ana Reyes" />
-            </label>
-            <p class="admin-payment-flush-warn" role="status">This cannot be undone. Export log entries clear after 7
-                days.</p>
-        </div>
-        <footer class="admin-booking-detail-actions">
-            <button type="button" data-history-flush-close>Cancel</button>
-            <button type="button" class="admin-booking-confirm admin-payment-flush-confirm"
-                data-history-flush-confirm>Export PDF &amp; delete history</button>
         </footer>
     </section>
 </div>

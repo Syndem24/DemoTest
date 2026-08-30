@@ -1,0 +1,10 @@
+C:\Users\Kristian\Desktop\DemoTest\TestingDemo\obj-verify\Debug\net9.0\TestingDemo.csproj.AssemblyReference.cache
+C:\Users\Kristian\Desktop\DemoTest\TestingDemo\obj-verify\Debug\net9.0\rpswa.dswa.cache.json
+C:\Users\Kristian\Desktop\DemoTest\TestingDemo\obj-verify\Debug\net9.0\TestingDemo.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Kristian\Desktop\DemoTest\TestingDemo\obj-verify\Debug\net9.0\TestingDemo.AssemblyInfoInputs.cache
+C:\Users\Kristian\Desktop\DemoTest\TestingDemo\obj-verify\Debug\net9.0\TestingDemo.AssemblyInfo.cs
+C:\Users\Kristian\Desktop\DemoTest\TestingDemo\obj-verify\Debug\net9.0\TestingDemo.csproj.CoreCompileInputs.cache
+C:\Users\Kristian\Desktop\DemoTest\TestingDemo\obj-verify\Debug\net9.0\TestingDemo.MvcApplicationPartsAssemblyInfo.cache
+C:\Users\Kristian\Desktop\DemoTest\TestingDemo\obj-verify\Debug\net9.0\TestingDemo.RazorAssemblyInfo.cache
+C:\Users\Kristian\Desktop\DemoTest\TestingDemo\obj-verify\Debug\net9.0\TestingDemo.RazorAssemblyInfo.cs
+C:\Users\Kristian\Desktop\DemoTest\TestingDemo\obj-verify\Debug\net9.0\TestingDemo.sourcelink.json

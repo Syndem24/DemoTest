@@ -328,7 +328,7 @@ public static class BookingHistoryPdfBuilder
             .OrderBy(i => i.RoomTypeName, StringComparer.OrdinalIgnoreCase)
             .Select(item =>
             {
-                var rooms = (item.AssignedRooms ?? Array.Empty<AssignedRoom>())
+                var rooms = (item.RoomAssignments ?? Array.Empty<BookingRoomAssignment>())
                     .Select(a => a.Room?.RoomNumber)
                     .Where(n => !string.IsNullOrWhiteSpace(n))
                     .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)

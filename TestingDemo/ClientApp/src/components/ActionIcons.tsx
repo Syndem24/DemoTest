@@ -20,9 +20,9 @@ function IconLink({ href, label, variant = 'default', children }: IconLinkProps)
   )
 }
 
-export function DetailsIconLink({ href }: { href: string }) {
+export function DetailsIconLink({ href, label = 'View' }: { href: string; label?: string }) {
   return (
-    <IconLink href={href} label="Details">
+    <IconLink href={href} label={label}>
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path d="M12 5c5.2 0 9.3 3.7 10.5 7-1.2 3.3-5.3 7-10.5 7S2.7 15.3 1.5 12C2.7 8.7 6.8 5 12 5zm0 2c-3.9 0-7.2 2.7-8.4 5 1.2 2.3 4.5 5 8.4 5s7.2-2.7 8.4-5C19.2 9.7 15.9 7 12 7zm0 2.5A2.5 2.5 0 1 1 12 14a2.5 2.5 0 0 1 0-4.5z" />
       </svg>

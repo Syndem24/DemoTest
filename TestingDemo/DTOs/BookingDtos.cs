@@ -12,6 +12,10 @@ public sealed class CreateWalkInRequest
     /// <summary>0 or 1; one extra guest beyond 2 included occupants (₱200/night).</summary>
     public int ExtraPersons { get; set; }
     public List<ConfirmRoomAssignmentRequest> Assignments { get; set; } = new();
+    /// <summary>WalkIn, FrontDeskExtension, or OTA channel (Agoda/Expedia/…).</summary>
+    public BookingChannel Channel { get; set; } = BookingChannel.WalkIn;
+    public int? SpecialOfferId { get; set; }
+    public ArrivalDiscountRequest ArrivalDiscountRequest { get; set; } = ArrivalDiscountRequest.None;
 }
 
 public sealed class CreateBookingRequest
@@ -26,6 +30,10 @@ public sealed class CreateBookingRequest
     /// <summary>0 or 1; one extra guest beyond 2 included occupants (₱200/night).</summary>
     public int ExtraPersons { get; set; }
     public List<CreateBookingItemRequest> Items { get; set; } = new();
+    /// <summary>Flag for front desk to verify Senior/PWD ID on arrival.</summary>
+    public ArrivalDiscountRequest ArrivalDiscountRequest { get; set; } = ArrivalDiscountRequest.None;
+    /// <summary>Optional active Limited Time offer (online). Cash-only when the offer requires it.</summary>
+    public int? SpecialOfferId { get; set; }
 }
 
 public sealed class UpdateBookingChargesRequest
@@ -69,6 +77,12 @@ public sealed class UpdateBookingChargesRequest
     /// Applied before <see cref="ExtendStayNights"/> so a save can revert then re-extend.
     /// </summary>
     public bool RevertStayExtension { get; set; }
+
+    /// <summary>
+    /// Senior/PWD claim flag for front desk (verify ID). Not auto-applied to totals.
+    /// Cannot combine with an active special-offer promo.
+    /// </summary>
+    public ArrivalDiscountRequest ArrivalDiscountRequest { get; set; } = ArrivalDiscountRequest.None;
 }
 
 public sealed class IncidentalLineRequest
@@ -105,6 +119,7 @@ public sealed record BookingItemDto(
     int Quantity,
     decimal PricePerNight,
     int MaxOccupancy,
+    /// <summary>Physical rooms assigned to this line (from BookingRoomAssignment). JSON key stays assignedRooms.</summary>
     IReadOnlyList<AssignedRoomDto> AssignedRooms);
 
 public sealed record BookingChargeDto(
@@ -116,6 +131,7 @@ public sealed record BookingChargeDto(
     decimal UnitAmount,
     decimal Amount);
 
+/// <summary>JSON for one assigned door number. Maps from table <c>BookingRoomAssignment</c>.</summary>
 public sealed record AssignedRoomDto(
     int RoomId,
     string RoomNumber);
@@ -138,7 +154,13 @@ public sealed record BookingDto(
     bool IsArchived,
     DateTime? ArchivedAtUtc,
     IReadOnlyList<BookingItemDto> Items,
-    IReadOnlyList<BookingChargeDto> Charges);
+    IReadOnlyList<BookingChargeDto> Charges,
+    BookingChannel Channel = BookingChannel.Online,
+    int? SpecialOfferId = null,
+    ArrivalDiscountRequest ArrivalDiscountRequest = ArrivalDiscountRequest.None,
+    bool CashOnlyPromo = false,
+    string? SpecialOfferTitle = null,
+    decimal? SpecialOfferRegularPricePerNight = null);
 
 public sealed record CreateBookingResponse(
     string Reference,
@@ -201,7 +223,32 @@ public sealed record ReservationCalendarEventDto(
     decimal TotalAmount,
     decimal AmountDueNow,
     string RoomSummary,
-    int ExtensionNights = 0);
+    int ExtensionNights = 0,
+    int RequestedRooms = 0,
+    int AssignedRooms = 0);
+
+/// <summary>
+/// Confirmed rooms for one Manila night: reserved (no door yet), occupied (assigned),
+/// available (not occupied).
+/// </summary>
+public sealed record DayRoomTypeOccupancyDto(
+    string RoomTypeName,
+    int Reserved,
+    int Occupied,
+    int Available,
+    int Capacity);
+
+public sealed record DayRoomOccupancyDto(
+    string Date,
+    int Reserved,
+    int Occupied,
+    int Available,
+    int Capacity,
+    IReadOnlyList<DayRoomTypeOccupancyDto> Types);
+
+public sealed record ReservationCalendarDto(
+    IReadOnlyList<ReservationCalendarEventDto> Stays,
+    IReadOnlyList<DayRoomOccupancyDto> Occupancy);
 
 public sealed record BookingNotificationDto(
     int Id,
@@ -219,3 +266,10 @@ public sealed record PagedBookingsDto(
     int Page,
     int PageSize,
     int Total);
+
+public sealed record DaytimeBookingFlowDto(
+    string LocalDateIso,
+    int StartHour,
+    int EndHour,
+    IReadOnlyList<BookingDto> Arrivals,
+    IReadOnlyList<BookingDto> Checkouts);

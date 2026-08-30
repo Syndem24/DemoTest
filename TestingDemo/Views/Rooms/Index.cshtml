@@ -20,4 +20,6 @@
 }
 
 <link rel="stylesheet" href="~/room-management/room-app.css" asp-append-version="true" />
-<div id="room-management-root" data-view="@view"></div>
+<div id="room-management-root"
+     data-view="@view"
+     data-can-manage-types="@(User.IsInRole("AdminManager") ? "true" : "false")"></div>

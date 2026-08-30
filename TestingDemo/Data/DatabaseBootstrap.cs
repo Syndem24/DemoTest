@@ -31,13 +31,18 @@ public static class DatabaseBootstrap
             }
 
             db.Database.Migrate();
+            EnsureSecureSettingTable(db);
+            EnsureSystemAuditLogTable(db);
+            EnsureStaffDashboardLayoutColumn(db);
 
             // Warm starts: one cheap existence probe, then skip redundant Ensure* SQL.
             if (SchemaPatchesNeeded(db))
             {
                 EnsureAutoCheckoutColumns(db);
-                EnsureHistoryFlushLogTable(db);
-                EnsurePaymentFlushLogTable(db);
+                EnsureReadableAssignmentNames(db);
+                EnsureReadableIdentityNames(db);
+                EnsureStaffJoinTablesMerged(db);
+                EnsureSystemFlushLogTable(db);
                 EnsurePaymentRecordTable(db);
                 EnsureBookingChargeTable(db);
             }
@@ -378,10 +383,17 @@ public static class DatabaseBootstrap
                         OR COL_LENGTH(N'dbo.Booking', N'ArrivalWarningSentAtUtc') IS NULL
                         OR COL_LENGTH(N'dbo.Booking', N'PendingCallWarningSentAtUtc') IS NULL
                         OR COL_LENGTH(N'dbo.Booking', N'CheckoutWarningSentAtUtc') IS NULL
-                        OR OBJECT_ID(N'[dbo].[BookingHistoryFlushLog]', N'U') IS NULL
-                        OR OBJECT_ID(N'[dbo].[PaymentFlushLog]', N'U') IS NULL
                         OR OBJECT_ID(N'[dbo].[PaymentRecord]', N'U') IS NULL
                         OR OBJECT_ID(N'[dbo].[BookingCharge]', N'U') IS NULL
+                        OR OBJECT_ID(N'[dbo].[AssignedRoom]', N'U') IS NOT NULL
+                        OR OBJECT_ID(N'[dbo].[AspNetUsers]', N'U') IS NOT NULL
+                        OR OBJECT_ID(N'[dbo].[StaffUser]', N'U') IS NOT NULL
+                        OR OBJECT_ID(N'[dbo].[StaffAccountRole]', N'U') IS NOT NULL
+                        OR OBJECT_ID(N'[dbo].[StaffAccountClaim]', N'U') IS NOT NULL
+                        OR OBJECT_ID(N'[dbo].[StaffRoleClaim]', N'U') IS NOT NULL
+                        OR COL_LENGTH(N'dbo.StaffAccount', N'RoleId') IS NULL
+                        OR OBJECT_ID(N'[dbo].[SystemFlushLog]', N'U') IS NULL
+                        OR OBJECT_ID(N'[dbo].[SystemAuditLog]', N'U') IS NULL
                     THEN 1 ELSE 0 END
                     """;
                 var result = command.ExecuteScalar();
@@ -403,59 +415,319 @@ public static class DatabaseBootstrap
         }
     }
 
-    private static void EnsureHistoryFlushLogTable(HotelBookingDbContext db)
+    /// <summary>
+    /// Warm-start patch if EF history already looks current but AssignedRoom / RoomTypeID remain.
+    /// </summary>
+    private static void EnsureReadableAssignmentNames(HotelBookingDbContext db)
     {
         try
         {
             db.Database.ExecuteSqlRaw(
                 """
-                IF OBJECT_ID(N'[dbo].[BookingHistoryFlushLog]', N'U') IS NULL
+                IF OBJECT_ID(N'[dbo].[AssignedRoom]', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'[dbo].[BookingRoomAssignment]', N'U') IS NULL
                 BEGIN
-                    CREATE TABLE [dbo].[BookingHistoryFlushLog] (
-                        [Id] int NOT NULL IDENTITY,
-                        [FlushedAtUtc] datetime2 NOT NULL,
-                        [PerformedBy] nvarchar(120) NOT NULL,
-                        [RecordCount] int NOT NULL,
-                        [FileName] nvarchar(200) NOT NULL,
-                        [Summary] nvarchar(2000) NOT NULL,
-                        CONSTRAINT [PK_BookingHistoryFlushLog] PRIMARY KEY ([Id])
-                    );
-                    CREATE INDEX [IX_BookingHistoryFlushLog_FlushedAtUtc]
-                        ON [dbo].[BookingHistoryFlushLog] ([FlushedAtUtc]);
+                    EXEC sp_rename N'[dbo].[AssignedRoom]', N'BookingRoomAssignment';
+                    IF OBJECT_ID(N'[PK_AssignedRoom]', N'PK') IS NOT NULL
+                        EXEC sp_rename N'PK_AssignedRoom', N'PK_BookingRoomAssignment', N'OBJECT';
+                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_AssignedRoom_BookingItemId_RoomId' AND object_id = OBJECT_ID(N'dbo.BookingRoomAssignment'))
+                        EXEC sp_rename N'[dbo].[BookingRoomAssignment].[IX_AssignedRoom_BookingItemId_RoomId]', N'IX_BookingRoomAssignment_BookingItemId_RoomId', N'INDEX';
+                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_AssignedRoom_RoomId' AND object_id = OBJECT_ID(N'dbo.BookingRoomAssignment'))
+                        EXEC sp_rename N'[dbo].[BookingRoomAssignment].[IX_AssignedRoom_RoomId]', N'IX_BookingRoomAssignment_RoomId', N'INDEX';
                 END
+
+                IF EXISTS (
+                    SELECT 1 FROM sys.columns
+                    WHERE object_id = OBJECT_ID(N'dbo.RoomType')
+                      AND name COLLATE Latin1_General_BIN = N'RoomTypeID')
+                    EXEC sp_rename N'[dbo].[RoomType].[RoomTypeID]', N'RoomTypeId', N'COLUMN';
+
+                IF EXISTS (
+                    SELECT 1 FROM sys.columns
+                    WHERE object_id = OBJECT_ID(N'dbo.Room')
+                      AND name COLLATE Latin1_General_BIN = N'RoomTypeID')
+                    EXEC sp_rename N'[dbo].[Room].[RoomTypeID]', N'RoomTypeId', N'COLUMN';
                 """);
         }
-        catch
+        catch (Exception)
         {
-            // Ignore if table exists or transient schema check
+            // Next EF migrate / explicit reset still applies the named migration.
         }
     }
 
-    private static void EnsurePaymentFlushLogTable(HotelBookingDbContext db)
+    /// <summary>
+    /// Warm-start patch if AspNet* Identity tables remain after the staff-account rename.
+    /// </summary>
+    private static void EnsureReadableIdentityNames(HotelBookingDbContext db)
     {
         try
         {
             db.Database.ExecuteSqlRaw(
                 """
-                IF OBJECT_ID(N'[dbo].[PaymentFlushLog]', N'U') IS NULL
+                IF OBJECT_ID(N'[dbo].[AspNetUsers]', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'[dbo].[StaffAccount]', N'U') IS NULL
                 BEGIN
-                    CREATE TABLE [dbo].[PaymentFlushLog] (
+                    IF OBJECT_ID(N'[dbo].[FK_AspNetRoleClaims_AspNetRoles_RoleId]', N'F') IS NOT NULL
+                        ALTER TABLE [dbo].[AspNetRoleClaims] DROP CONSTRAINT [FK_AspNetRoleClaims_AspNetRoles_RoleId];
+                    IF OBJECT_ID(N'[dbo].[FK_AspNetUserClaims_AspNetUsers_UserId]', N'F') IS NOT NULL
+                        ALTER TABLE [dbo].[AspNetUserClaims] DROP CONSTRAINT [FK_AspNetUserClaims_AspNetUsers_UserId];
+                    IF OBJECT_ID(N'[dbo].[FK_AspNetUserLogins_AspNetUsers_UserId]', N'F') IS NOT NULL
+                        ALTER TABLE [dbo].[AspNetUserLogins] DROP CONSTRAINT [FK_AspNetUserLogins_AspNetUsers_UserId];
+                    IF OBJECT_ID(N'[dbo].[FK_AspNetUserRoles_AspNetRoles_RoleId]', N'F') IS NOT NULL
+                        ALTER TABLE [dbo].[AspNetUserRoles] DROP CONSTRAINT [FK_AspNetUserRoles_AspNetRoles_RoleId];
+                    IF OBJECT_ID(N'[dbo].[FK_AspNetUserRoles_AspNetUsers_UserId]', N'F') IS NOT NULL
+                        ALTER TABLE [dbo].[AspNetUserRoles] DROP CONSTRAINT [FK_AspNetUserRoles_AspNetUsers_UserId];
+                    IF OBJECT_ID(N'[dbo].[FK_AspNetUserTokens_AspNetUsers_UserId]', N'F') IS NOT NULL
+                        ALTER TABLE [dbo].[AspNetUserTokens] DROP CONSTRAINT [FK_AspNetUserTokens_AspNetUsers_UserId];
+
+                    EXEC sp_rename N'[dbo].[AspNetRoles]', N'StaffRole';
+                    EXEC sp_rename N'[dbo].[AspNetRoleClaims]', N'StaffRoleClaim';
+                    EXEC sp_rename N'[dbo].[AspNetUsers]', N'StaffAccount';
+                    EXEC sp_rename N'[dbo].[AspNetUserClaims]', N'StaffAccountClaim';
+                    EXEC sp_rename N'[dbo].[AspNetUserLogins]', N'StaffAccountLogin';
+                    EXEC sp_rename N'[dbo].[AspNetUserRoles]', N'StaffAccountRole';
+                    EXEC sp_rename N'[dbo].[AspNetUserTokens]', N'StaffAccountToken';
+
+                    IF OBJECT_ID(N'[PK_AspNetRoles]', N'PK') IS NOT NULL
+                        EXEC sp_rename N'PK_AspNetRoles', N'PK_StaffRole', N'OBJECT';
+                    IF OBJECT_ID(N'[PK_AspNetRoleClaims]', N'PK') IS NOT NULL
+                        EXEC sp_rename N'PK_AspNetRoleClaims', N'PK_StaffRoleClaim', N'OBJECT';
+                    IF OBJECT_ID(N'[PK_AspNetUsers]', N'PK') IS NOT NULL
+                        EXEC sp_rename N'PK_AspNetUsers', N'PK_StaffAccount', N'OBJECT';
+                    IF OBJECT_ID(N'[PK_AspNetUserClaims]', N'PK') IS NOT NULL
+                        EXEC sp_rename N'PK_AspNetUserClaims', N'PK_StaffAccountClaim', N'OBJECT';
+                    IF OBJECT_ID(N'[PK_AspNetUserLogins]', N'PK') IS NOT NULL
+                        EXEC sp_rename N'PK_AspNetUserLogins', N'PK_StaffAccountLogin', N'OBJECT';
+                    IF OBJECT_ID(N'[PK_AspNetUserRoles]', N'PK') IS NOT NULL
+                        EXEC sp_rename N'PK_AspNetUserRoles', N'PK_StaffAccountRole', N'OBJECT';
+                    IF OBJECT_ID(N'[PK_AspNetUserTokens]', N'PK') IS NOT NULL
+                        EXEC sp_rename N'PK_AspNetUserTokens', N'PK_StaffAccountToken', N'OBJECT';
+
+                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_AspNetRoleClaims_RoleId' AND object_id = OBJECT_ID(N'dbo.StaffRoleClaim'))
+                        EXEC sp_rename N'[dbo].[StaffRoleClaim].[IX_AspNetRoleClaims_RoleId]', N'IX_StaffRoleClaim_RoleId', N'INDEX';
+                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_AspNetUserClaims_UserId' AND object_id = OBJECT_ID(N'dbo.StaffAccountClaim'))
+                        EXEC sp_rename N'[dbo].[StaffAccountClaim].[IX_AspNetUserClaims_UserId]', N'IX_StaffAccountClaim_UserId', N'INDEX';
+                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_AspNetUserLogins_UserId' AND object_id = OBJECT_ID(N'dbo.StaffAccountLogin'))
+                        EXEC sp_rename N'[dbo].[StaffAccountLogin].[IX_AspNetUserLogins_UserId]', N'IX_StaffAccountLogin_UserId', N'INDEX';
+                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_AspNetUserRoles_RoleId' AND object_id = OBJECT_ID(N'dbo.StaffAccountRole'))
+                        EXEC sp_rename N'[dbo].[StaffAccountRole].[IX_AspNetUserRoles_RoleId]', N'IX_StaffAccountRole_RoleId', N'INDEX';
+                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_AspNetUsers_NormalizedGoogleEmail' AND object_id = OBJECT_ID(N'dbo.StaffAccount'))
+                        EXEC sp_rename N'[dbo].[StaffAccount].[IX_AspNetUsers_NormalizedGoogleEmail]', N'IX_StaffAccount_NormalizedGoogleEmail', N'INDEX';
+
+                    ALTER TABLE [dbo].[StaffRoleClaim] ADD CONSTRAINT [FK_StaffRoleClaim_StaffRole_RoleId]
+                        FOREIGN KEY ([RoleId]) REFERENCES [dbo].[StaffRole] ([Id]) ON DELETE CASCADE;
+                    ALTER TABLE [dbo].[StaffAccountClaim] ADD CONSTRAINT [FK_StaffAccountClaim_StaffAccount_UserId]
+                        FOREIGN KEY ([UserId]) REFERENCES [dbo].[StaffAccount] ([Id]) ON DELETE CASCADE;
+                    ALTER TABLE [dbo].[StaffAccountLogin] ADD CONSTRAINT [FK_StaffAccountLogin_StaffAccount_UserId]
+                        FOREIGN KEY ([UserId]) REFERENCES [dbo].[StaffAccount] ([Id]) ON DELETE CASCADE;
+                    ALTER TABLE [dbo].[StaffAccountRole] ADD CONSTRAINT [FK_StaffAccountRole_StaffRole_RoleId]
+                        FOREIGN KEY ([RoleId]) REFERENCES [dbo].[StaffRole] ([Id]) ON DELETE CASCADE;
+                    ALTER TABLE [dbo].[StaffAccountRole] ADD CONSTRAINT [FK_StaffAccountRole_StaffAccount_UserId]
+                        FOREIGN KEY ([UserId]) REFERENCES [dbo].[StaffAccount] ([Id]) ON DELETE CASCADE;
+                    ALTER TABLE [dbo].[StaffAccountToken] ADD CONSTRAINT [FK_StaffAccountToken_StaffAccount_UserId]
+                        FOREIGN KEY ([UserId]) REFERENCES [dbo].[StaffAccount] ([Id]) ON DELETE CASCADE;
+                END
+                """);
+        }
+        catch (Exception)
+        {
+            // Next EF migrate / explicit reset still applies the named migration.
+        }
+    }
+
+    /// <summary>
+    /// Copies StaffAccountRole onto StaffAccount.RoleId, then drops unused join/claim/legacy tables.
+    /// </summary>
+    private static void EnsureStaffJoinTablesMerged(HotelBookingDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(
+                """
+                IF OBJECT_ID(N'[dbo].[StaffAccount]', N'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.StaffAccount', N'RoleId') IS NULL
+                    ALTER TABLE [dbo].[StaffAccount] ADD [RoleId] nvarchar(450) NULL;
+
+                IF OBJECT_ID(N'[dbo].[StaffAccountRole]', N'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.StaffAccount', N'RoleId') IS NOT NULL
+                BEGIN
+                    UPDATE a
+                    SET a.[RoleId] = picked.[RoleId]
+                    FROM [dbo].[StaffAccount] a
+                    INNER JOIN (
+                        SELECT [UserId], MIN([RoleId]) AS [RoleId]
+                        FROM [dbo].[StaffAccountRole]
+                        GROUP BY [UserId]
+                    ) picked ON picked.[UserId] = a.[Id]
+                    WHERE a.[RoleId] IS NULL;
+                END
+
+                IF OBJECT_ID(N'[dbo].[StaffAccount]', N'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.StaffAccount', N'RoleId') IS NOT NULL
+                   AND NOT EXISTS (
+                        SELECT 1 FROM sys.indexes
+                        WHERE name = N'IX_StaffAccount_RoleId'
+                          AND object_id = OBJECT_ID(N'dbo.StaffAccount'))
+                    CREATE INDEX [IX_StaffAccount_RoleId] ON [dbo].[StaffAccount] ([RoleId]);
+
+                IF OBJECT_ID(N'[dbo].[StaffAccount]', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'[dbo].[StaffRole]', N'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.StaffAccount', N'RoleId') IS NOT NULL
+                   AND OBJECT_ID(N'[dbo].[FK_StaffAccount_StaffRole_RoleId]', N'F') IS NULL
+                    ALTER TABLE [dbo].[StaffAccount] WITH CHECK
+                    ADD CONSTRAINT [FK_StaffAccount_StaffRole_RoleId]
+                        FOREIGN KEY ([RoleId]) REFERENCES [dbo].[StaffRole] ([Id]) ON DELETE SET NULL;
+
+                IF OBJECT_ID(N'[dbo].[StaffAccountRole]', N'U') IS NOT NULL
+                    DROP TABLE [dbo].[StaffAccountRole];
+                IF OBJECT_ID(N'[dbo].[StaffAccountClaim]', N'U') IS NOT NULL
+                    DROP TABLE [dbo].[StaffAccountClaim];
+                IF OBJECT_ID(N'[dbo].[StaffRoleClaim]', N'U') IS NOT NULL
+                    DROP TABLE [dbo].[StaffRoleClaim];
+                IF OBJECT_ID(N'[dbo].[StaffUser]', N'U') IS NOT NULL
+                    DROP TABLE [dbo].[StaffUser];
+                """);
+        }
+        catch (Exception)
+        {
+            // Next EF migrate / explicit reset still applies the named migration.
+        }
+    }
+
+    private static void EnsureSecureSettingTable(HotelBookingDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(
+                """
+                IF OBJECT_ID(N'[dbo].[SecureSetting]', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[SecureSetting] (
                         [Id] int NOT NULL IDENTITY,
+                        [Key] nvarchar(80) NOT NULL,
+                        [Ciphertext] nvarchar(max) NOT NULL,
+                        [UpdatedUtc] datetime2 NOT NULL,
+                        CONSTRAINT [PK_SecureSetting] PRIMARY KEY ([Id])
+                    );
+                    CREATE UNIQUE INDEX [IX_SecureSetting_Key]
+                        ON [dbo].[SecureSetting] ([Key]);
+                END
+                """);
+        }
+        catch (Exception)
+        {
+            // Next EF migrate / explicit reset still applies the named migration.
+        }
+    }
+
+    private static void EnsureSystemAuditLogTable(HotelBookingDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(
+                """
+                IF OBJECT_ID(N'[dbo].[SystemAuditLog]', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[SystemAuditLog] (
+                        [Id] bigint NOT NULL IDENTITY,
+                        [AtUtc] datetime2 NOT NULL,
+                        [Intent] nvarchar(40) NOT NULL,
+                        [Domain] nvarchar(40) NOT NULL,
+                        [Action] nvarchar(80) NOT NULL,
+                        [ActorUserId] nvarchar(450) NOT NULL,
+                        [ActorDisplayName] nvarchar(120) NOT NULL,
+                        [TargetType] nvarchar(40) NOT NULL,
+                        [TargetId] nvarchar(80) NOT NULL,
+                        [TargetLabel] nvarchar(200) NOT NULL,
+                        [Reason] nvarchar(500) NULL,
+                        [Summary] nvarchar(500) NOT NULL,
+                        CONSTRAINT [PK_SystemAuditLog] PRIMARY KEY ([Id])
+                    );
+                    CREATE INDEX [IX_SystemAuditLog_AtUtc]
+                        ON [dbo].[SystemAuditLog] ([AtUtc] DESC);
+                    CREATE INDEX [IX_SystemAuditLog_Intent_AtUtc]
+                        ON [dbo].[SystemAuditLog] ([Intent], [AtUtc] DESC);
+                    CREATE INDEX [IX_SystemAuditLog_Domain_AtUtc]
+                        ON [dbo].[SystemAuditLog] ([Domain], [AtUtc] DESC);
+                    CREATE INDEX [IX_SystemAuditLog_TargetType_TargetId]
+                        ON [dbo].[SystemAuditLog] ([TargetType], [TargetId]);
+                END
+                """);
+        }
+        catch (Exception)
+        {
+            // Next EF migrate / explicit reset still applies the named migration.
+        }
+    }
+
+    private static void EnsureStaffDashboardLayoutColumn(HotelBookingDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(
+                """
+                IF COL_LENGTH(N'dbo.StaffAccount', N'DashboardLayoutJson') IS NULL
+                    ALTER TABLE [dbo].[StaffAccount] ADD [DashboardLayoutJson] nvarchar(max) NULL;
+                """);
+        }
+        catch (Exception)
+        {
+            // Next EF migrate still applies the named migration.
+        }
+    }
+
+    private static void EnsureSystemFlushLogTable(HotelBookingDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(
+                """
+                IF OBJECT_ID(N'[dbo].[SystemFlushLog]', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[SystemFlushLog] (
+                        [Id] int NOT NULL IDENTITY,
+                        [Kind] nvarchar(40) NOT NULL,
                         [FlushedAtUtc] datetime2 NOT NULL,
                         [PerformedBy] nvarchar(120) NOT NULL,
                         [RecordCount] int NOT NULL,
                         [FileName] nvarchar(200) NOT NULL,
                         [Summary] nvarchar(2000) NOT NULL,
-                        CONSTRAINT [PK_PaymentFlushLog] PRIMARY KEY ([Id])
+                        CONSTRAINT [PK_SystemFlushLog] PRIMARY KEY ([Id])
                     );
-                    CREATE INDEX [IX_PaymentFlushLog_FlushedAtUtc]
-                        ON [dbo].[PaymentFlushLog] ([FlushedAtUtc]);
+                    CREATE INDEX [IX_SystemFlushLog_FlushedAtUtc]
+                        ON [dbo].[SystemFlushLog] ([FlushedAtUtc]);
+                    CREATE INDEX [IX_SystemFlushLog_Kind_FlushedAtUtc]
+                        ON [dbo].[SystemFlushLog] ([Kind], [FlushedAtUtc]);
+                END
+
+                IF OBJECT_ID(N'[dbo].[BookingHistoryFlushLog]', N'U') IS NOT NULL
+                BEGIN
+                    INSERT INTO [dbo].[SystemFlushLog] ([Kind], [FlushedAtUtc], [PerformedBy], [RecordCount], [FileName], [Summary])
+                    SELECT N'BookingHistory', h.[FlushedAtUtc], h.[PerformedBy], h.[RecordCount], h.[FileName], h.[Summary]
+                    FROM [dbo].[BookingHistoryFlushLog] h
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM [dbo].[SystemFlushLog] s
+                        WHERE s.[Kind] = N'BookingHistory'
+                          AND s.[FlushedAtUtc] = h.[FlushedAtUtc]
+                          AND s.[FileName] = h.[FileName]);
+                END
+
+                IF OBJECT_ID(N'[dbo].[PaymentFlushLog]', N'U') IS NOT NULL
+                BEGIN
+                    INSERT INTO [dbo].[SystemFlushLog] ([Kind], [FlushedAtUtc], [PerformedBy], [RecordCount], [FileName], [Summary])
+                    SELECT N'Payments', p.[FlushedAtUtc], p.[PerformedBy], p.[RecordCount], p.[FileName], p.[Summary]
+                    FROM [dbo].[PaymentFlushLog] p
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM [dbo].[SystemFlushLog] s
+                        WHERE s.[Kind] = N'Payments'
+                          AND s.[FlushedAtUtc] = p.[FlushedAtUtc]
+                          AND s.[FileName] = p.[FileName]);
                 END
                 """);
         }
         catch
         {
-            // Ignore if table exists or transient schema check
+            // Next EF migrate still applies the named migration.
         }
     }
 

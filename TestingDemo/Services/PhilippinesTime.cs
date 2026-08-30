@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace TestingDemo.Services;
 
 /// <summary>
@@ -5,6 +7,8 @@ namespace TestingDemo.Services;
 /// </summary>
 public static class PhilippinesTime
 {
+    private static readonly CultureInfo DisplayCulture = CultureInfo.GetCultureInfo("en-PH");
+
     public static readonly TimeZoneInfo Zone = ResolveZone();
 
     private static TimeZoneInfo ResolveZone()
@@ -31,7 +35,7 @@ public static class PhilippinesTime
     }
 
     /// <summary>
-    /// Interprets Unspecified as Manila local; passes through UTC; converts Local via system rules.
+    /// User-entered wall times: Unspecified is Manila local. UTC and Local pass through system rules.
     /// </summary>
     public static DateTime ToUtc(DateTime value)
     {
@@ -45,15 +49,20 @@ public static class PhilippinesTime
         };
     }
 
+    /// <summary>
+    /// Display/convert stored UTC. EF Core loads datetime2 as Unspecified — treat that as UTC,
+    /// not Manila, or 3:00 PM PH is shown as 7:00 AM.
+    /// </summary>
     public static DateTime ToManila(DateTime utcOrAny)
     {
-        var utc = utcOrAny.Kind == DateTimeKind.Utc
-            ? utcOrAny
-            : ToUtc(utcOrAny);
-        return TimeZoneInfo.ConvertTimeFromUtc(
-            DateTime.SpecifyKind(utc, DateTimeKind.Utc),
-            Zone);
+        var utc = utcOrAny.Kind == DateTimeKind.Local
+            ? utcOrAny.ToUniversalTime()
+            : DateTime.SpecifyKind(utcOrAny, DateTimeKind.Utc);
+        return TimeZoneInfo.ConvertTimeFromUtc(utc, Zone);
     }
+
+    public static string FormatStamp(DateTime utcOrAny) =>
+        ToManila(utcOrAny).ToString("dd MMM yyyy · h:mm tt", DisplayCulture);
 
     public static DateTime NowManila() => ToManila(DateTime.UtcNow);
 

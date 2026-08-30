@@ -1,0 +1,138 @@
+@{
+    Layout = "~/Views/Shared/_CustomerLayout.cshtml";
+    ViewData["Title"] = "Sign In";
+    ViewData["GuestAuthPage"] = true;
+}
+@model TestingDemo.ViewModels.LoginViewModel
+
+<section class="guest-auth-login" aria-labelledby="guestAuthTitle">
+    <div class="guest-auth-login-bg" aria-hidden="true">
+        <img src="~/Images/Lounge/Lounge1.jpg"
+             asp-append-version="true"
+             alt=""
+             decoding="async"
+             fetchpriority="high" />
+        <div class="guest-auth-login-veil"></div>
+    </div>
+
+    <div class="guest-auth-login-stage">
+        <div class="guest-auth-card">
+            <div class="guest-auth-card-accent" aria-hidden="true"></div>
+
+            <div class="guest-auth-card-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="28" height="28" focusable="false">
+                    <path fill="currentColor" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+                </svg>
+            </div>
+
+            <header class="guest-auth-card-header">
+                <h1 id="guestAuthTitle" data-i18n="auth.eyebrow">Welcome Back</h1>
+                <p class="guest-auth-card-lede" data-i18n="auth.loginLede">
+                    Sign in to access the guest portal
+                </p>
+            </header>
+
+            <form asp-controller="Account"
+                  asp-action="Login"
+                  method="post"
+                  class="guest-auth-card-form"
+                  novalidate>
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="ReturnUrl" />
+
+                @if (!ViewData.ModelState.IsValid && ViewData.ModelState.ErrorCount > 0)
+                {
+                    <div asp-validation-summary="ModelOnly" class="guest-form-message is-error" role="alert"></div>
+                }
+
+                <div class="guest-auth-field">
+                    <label for="UserNameOrEmail" class="guest-auth-field-label">
+                        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+                            <path fill="currentColor" d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                        </svg>
+                        <span data-i18n="auth.emailAddress">EMAIL ADDRESS</span>
+                    </label>
+                    <input asp-for="UserNameOrEmail"
+                           id="UserNameOrEmail"
+                           autocomplete="username"
+                           inputmode="email"
+                           placeholder="name@example.com"
+                           aria-required="true"
+                           aria-describedby="UserNameOrEmail-error" />
+                    <span asp-validation-for="UserNameOrEmail" class="guest-form-message is-error" id="UserNameOrEmail-error"></span>
+                </div>
+
+                <div class="guest-auth-field">
+                    <label for="Password" class="guest-auth-field-label">
+                        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+                            <path fill="currentColor" d="M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+                        </svg>
+                        <span data-i18n="auth.password">PASSWORD</span>
+                    </label>
+                    <div class="guest-auth-password-wrap">
+                        <input asp-for="Password"
+                               id="Password"
+                               type="password"
+                               autocomplete="current-password"
+                               placeholder="Enter your password"
+                               aria-required="true"
+                               aria-describedby="Password-error" />
+                        <button type="button"
+                                class="guest-password-toggle"
+                                data-password-toggle="Password"
+                                aria-label="Show password"
+                                aria-pressed="false"
+                                title="Show password">
+                            <svg class="icon-eye-show" viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="18" height="18">
+                                <path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                            </svg>
+                            <svg class="icon-eye-hide" viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="18" height="18" hidden>
+                                <path fill="currentColor" d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.44-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-2.28 2.2 2.2c.08-.24.16-.48.16-.72 0-1.66-1.34-3-3-3-.24 0-.48.08-.72.16z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <span asp-validation-for="Password" class="guest-form-message is-error" id="Password-error"></span>
+                </div>
+
+                <div class="guest-auth-card-row">
+                    <label class="guest-check" for="RememberMe">
+                        <input asp-for="RememberMe" id="RememberMe" />
+                        <span data-i18n="auth.remember">Remember me</span>
+                    </label>
+                    <a asp-controller="Account"
+                       asp-action="ForgotPassword"
+                       class="guest-auth-forgot"
+                       data-i18n="auth.forgotPassword">Forgot password?</a>
+                </div>
+
+                <button type="submit" class="guest-auth-submit">
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+                        <path fill="currentColor" d="M11 7L9.6 8.4l2.6 2.6H2v2h10.2l-2.6 2.6L11 17l5-5-5-5zm9 12h-8v2h8c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-8v2h8v14z"/>
+                    </svg>
+                    <span data-i18n="auth.logIn">Log In</span>
+                </button>
+
+                <div class="guest-auth-divider" aria-hidden="true">
+                    <span data-i18n="auth.or">OR</span>
+                </div>
+
+                <button type="button" class="guest-btn-google guest-auth-google">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="20" height="20">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                    </svg>
+                    <span data-i18n="auth.continueWithGoogle">Continue with Google</span>
+                </button>
+            </form>
+
+            <a class="guest-auth-back"
+               asp-controller="Booking"
+               asp-action="Index"
+               data-i18n="auth.backGuest">
+                ← Back to hotel site
+            </a>
+        </div>
+    </div>
+</section>

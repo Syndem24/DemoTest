@@ -1,0 +1,180 @@
+@model TestingDemo.DTOs.UpsertSpecialOfferRequest
+@using TestingDemo.Models
+@using TestingDemo.DTOs
+@{
+    var startsLocal = Model.StartsAtUtc == default
+        ? string.Empty
+        : Model.StartsAtUtc.ToString("yyyy-MM-ddTHH:mm");
+    var endsLocal = Model.EndsAtUtc == default
+        ? string.Empty
+        : Model.EndsAtUtc.ToString("yyyy-MM-ddTHH:mm");
+    var limitedKind = (int)SpecialOfferKind.LimitedTime;
+    var stayLongerKind = (int)SpecialOfferKind.StayLongerSaveMore;
+    var roomOptions = ViewBag.RoomTypeOptions as IList<RoomTypePriceOption> ?? new List<RoomTypePriceOption>();
+    var selectedIds = new HashSet<int>(Model.RoomTypeIds ?? new List<int>());
+    if (selectedIds.Count == 0 && Model.RoomTypeId > 0)
+        selectedIds.Add(Model.RoomTypeId);
+    var discountValue = Model.DiscountPercent is decimal d
+        ? d.ToString(d == decimal.Truncate(d) ? "0" : "0.##")
+        : string.Empty;
+    var minNightsValue = Model.MinNights is int mn ? mn.ToString() : string.Empty;
+    var kindItems = new SelectList(new[]
+    {
+        new { Value = limitedKind, Text = "Limited time" },
+        new { Value = stayLongerKind, Text = "Stay longer, save more" }
+    }, "Value", "Text", (int)Model.Kind);
+}
+
+<div asp-validation-summary="All" class="text-danger" role="alert"></div>
+
+<div class="admin-offers-fields-2">
+    <div class="admin-offers-field">
+        <label asp-for="Kind" class="form-label">Offer kind</label>
+        <select asp-for="Kind"
+                class="form-select"
+                asp-items="kindItems"
+                data-offer-kind
+                data-limited-kind="@limitedKind"
+                data-stay-longer-kind="@stayLongerKind"></select>
+        <span asp-validation-for="Kind" class="text-danger"></span>
+    </div>
+    <div class="admin-offers-field">
+        <div class="offer-room-type-picker" data-offer-room-picker>
+            <label class="form-label">Room types</label>
+            <button type="button"
+                    class="form-select text-start offer-room-type-toggle"
+                    data-offer-room-toggle
+                    aria-expanded="false"
+                    aria-controls="offerRoomTypeMenu">
+                <span data-offer-room-label>Select room types…</span>
+            </button>
+            <div id="offerRoomTypeMenu"
+                 class="offer-room-type-menu"
+                 data-offer-room-menu
+                 hidden
+                 role="listbox">
+                @foreach (var room in roomOptions)
+                {
+                    var id = room.RoomTypeId;
+                    var name = room.Name;
+                    var price = room.PricePerNight;
+                    var isChecked = selectedIds.Contains(id);
+                    <label class="offer-room-type-option">
+                        <input class="offer-room-type-check"
+                               type="checkbox"
+                               name="RoomTypeIds"
+                               value="@id"
+                               data-offer-room-check
+                               data-room-name="@name"
+                               data-room-price="@price.ToString("0.##")"
+                               @(isChecked ? "checked" : null) />
+                        <span class="offer-room-type-copy">
+                            <strong>@name</strong>
+                            <span class="text-muted">₱@price.ToString("N2") / night</span>
+                        </span>
+                    </label>
+                }
+            </div>
+            <span asp-validation-for="RoomTypeIds" class="text-danger"></span>
+        </div>
+    </div>
+</div>
+
+<div class="admin-offers-field">
+    <label asp-for="Description" class="form-label">Description <span class="text-muted fw-normal">(optional)</span></label>
+    <textarea asp-for="Description" class="form-control" rows="2" maxlength="1000" placeholder="Short note for guests"></textarea>
+    <span asp-validation-for="Description" class="text-danger"></span>
+</div>
+
+<div class="offer-kind-panel"
+     data-kind-panel="rate"
+     data-offer-pricing-block>
+    <p class="offer-kind-panel-title" data-rate-panel-title>Limited Time pricing</p>
+    <div class="admin-offers-pricing-row">
+        <div class="admin-offers-pricing-controls">
+            <div class="admin-offers-field" data-min-nights-wrap hidden>
+                <label asp-for="MinNights" class="form-label">Min nights</label>
+                <input name="MinNights"
+                       id="MinNights"
+                       class="form-control"
+                       type="number"
+                       inputmode="numeric"
+                       placeholder="5"
+                       min="2"
+                       max="365"
+                       step="1"
+                       value="@minNightsValue"
+                       data-offer-min-nights />
+                <span asp-validation-for="MinNights" class="text-danger"></span>
+            </div>
+            <div class="admin-offers-field" data-discount-wrap>
+                <label asp-for="DiscountPercent" class="form-label">Discount %</label>
+                <div class="input-group">
+                    <input name="DiscountPercent"
+                           id="DiscountPercent"
+                           class="form-control"
+                           type="number"
+                           inputmode="decimal"
+                           placeholder="25"
+                           min="0.01"
+                           max="99.99"
+                           step="0.01"
+                           value="@discountValue"
+                           data-offer-discount />
+                    <span class="input-group-text">%</span>
+                </div>
+                <span asp-validation-for="DiscountPercent" class="text-danger"></span>
+            </div>
+            <label class="admin-offers-cash-check" data-cash-only-wrap>
+                <input asp-for="CashOnly" class="admin-offers-toggle-input" data-offer-cash-only />
+                <span>Cash only</span>
+            </label>
+        </div>
+        <div class="admin-offers-field" data-summary-col>
+            <div class="offer-price-summary" data-offer-price-summary aria-live="polite">
+                <p class="offer-price-summary-title">Price summary</p>
+                <div data-summary-rows>
+                    <p class="offer-price-summary-empty mb-0" data-summary-empty>Select room types to preview.</p>
+                </div>
+                <p class="offer-price-summary-note mb-0" data-summary-note></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="admin-offers-fields-2">
+    <div class="admin-offers-field">
+        <label asp-for="StartsAtUtc" class="form-label">Starts (Manila)</label>
+        <input asp-for="StartsAtUtc"
+               class="form-control"
+               type="datetime-local"
+               value="@startsLocal"
+               data-offer-starts
+               data-original-value="@startsLocal" />
+        <span asp-validation-for="StartsAtUtc" class="text-danger"></span>
+    </div>
+    <div class="admin-offers-field">
+        <label asp-for="EndsAtUtc" class="form-label">Ends (Manila)</label>
+        <input asp-for="EndsAtUtc"
+               class="form-control"
+               type="datetime-local"
+               value="@endsLocal"
+               data-offer-ends
+               data-original-value="@endsLocal" />
+        <span asp-validation-for="EndsAtUtc" class="text-danger"></span>
+    </div>
+</div>
+<p class="text-danger small mb-0" data-offer-date-error hidden></p>
+
+<div class="admin-offers-field">
+    <label asp-for="Channels" class="form-label">Channels</label>
+    <select asp-for="Channels" class="form-select">
+        <option value="@((int)(SpecialOfferChannels.OnlineVisible | SpecialOfferChannels.WalkIn))">Online + Walk-in</option>
+        <option value="@((int)SpecialOfferChannels.OnlineVisible)">Online only</option>
+        <option value="@((int)SpecialOfferChannels.WalkIn)">Walk-in only</option>
+        <option value="@((int)(SpecialOfferChannels.OnlineVisible | SpecialOfferChannels.WalkIn | SpecialOfferChannels.FrontDesk))">Online + Walk-in + Front desk</option>
+    </select>
+    <span asp-validation-for="Channels" class="text-danger"></span>
+</div>
+
+<input type="hidden" asp-for="IsActive" />

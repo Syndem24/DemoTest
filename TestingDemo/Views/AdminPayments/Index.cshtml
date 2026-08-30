@@ -2,23 +2,35 @@
     ViewData["Title"] = "Payments";
 }
 
-<section class="hotel-page-hero">
-    <div>
-        <p class="hero-eyebrow">Company records</p>
-        <h1>Payments</h1>
-        <p>Review posted payments for bookings and walk-ins. Record new payments from a booking’s details.</p>
-    </div>
-</section>
-
-<section class="hotel-panel admin-bookings-panel admin-payments-page" data-admin-payments>
+<div class="admin-flush-page admin-payments-page" data-admin-payments>
     @Html.AntiForgeryToken()
 
+    <section class="admin-flush-hero admin-payments-hero" aria-labelledby="paymentsPageTitle">
+        <div class="admin-flush-hero-copy">
+            <p class="admin-flush-eyebrow">Company records</p>
+            <h1 id="paymentsPageTitle">Payments</h1>
+            <p class="admin-flush-lede">Review posted payments for bookings and walk-ins. Record new payments from a booking’s details.</p>
+        </div>
+        <ul class="admin-flush-kpis" data-payments-summary aria-label="Payment totals">
+            <li>
+                <span>Collected</span>
+                <strong>₱0.00</strong>
+            </li>
+            <li>
+                <span>Refunded</span>
+                <strong>₱0.00</strong>
+            </li>
+            <li>
+                <span>Records</span>
+                <strong>0</strong>
+                <em>all methods</em>
+            </li>
+        </ul>
+    </section>
+
+    <section class="hotel-panel admin-bookings-panel">
     <div class="admin-payments-panel">
         <div class="admin-payments-toolbar">
-            <div class="admin-payments-summary" data-payments-summary>
-                <span>Collected: ₱0.00</span>
-                <span>Refunded: ₱0.00</span>
-            </div>
             <label class="admin-booking-search">
                 <span class="visually-hidden">Search payments</span>
                 <input type="search" placeholder="Search receipt, booking, guest…" data-payments-search />
@@ -35,46 +47,7 @@
                     <option value="Other">Other (legacy)</option>
                 </select>
             </label>
-            <button type="button" class="admin-booking-refresh admin-payment-flush-btn" data-payments-flush>
-                Export payments to PDF
-            </button>
             <button type="button" class="admin-booking-refresh" data-payments-refresh>Refresh</button>
-        </div>
-        <div class="admin-payment-flush-log" data-payments-flush-log>
-            <button
-                type="button"
-                class="admin-payment-flush-toggle"
-                data-payments-flush-toggle
-                aria-expanded="false"
-                aria-controls="paymentFlushLogPanel">
-                <span class="admin-payment-flush-toggle-label">
-                    <strong>Payment export log</strong>
-                    <span data-payments-flush-count>Closed · audit of PDF exports &amp; deletes</span>
-                </span>
-                <span class="admin-payment-flush-chevron" aria-hidden="true"></span>
-            </button>
-            <div id="paymentFlushLogPanel" class="admin-payment-flush-log-body" data-payments-flush-body hidden>
-                <p class="admin-payment-flush-log-hint">
-                    Completed-stay payments are hard-deleted after data export. Export logs auto-clear after 7 days.
-                </p>
-                <div class="admin-payment-flush-table-wrap">
-                    <table class="admin-bookings-table admin-payment-flush-table">
-                        <thead>
-                            <tr>
-                                <th>When (PH)</th>
-                                <th>Staff</th>
-                                <th>Records</th>
-                                <th>PDF file</th>
-                                <th>Expires</th>
-                                <th><span class="visually-hidden">Actions</span></th>
-                            </tr>
-                        </thead>
-                        <tbody data-payments-flush-log-list>
-                            <tr><td colspan="6" class="admin-bookings-loading">No export actions yet.</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
         </div>
         <p class="admin-bookings-message" data-payments-message role="status" hidden></p>
         <div class="admin-bookings-table-wrap admin-payments-table-wrap">
@@ -108,17 +81,23 @@
             New payments are still recorded from a booking’s details.
         </p>
     </div>
-</section>
+    </section>
+</div>
 
 <div class="admin-booking-modal" data-payment-detail-modal hidden>
     <button type="button" class="admin-booking-modal-backdrop" data-payment-detail-close aria-label="Close payment details"></button>
     <section class="admin-booking-modal-dialog admin-payment-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentDetailTitle">
-        <header>
-            <div>
-                <span class="admin-booking-reference" data-payment-detail-receipt></span>
-                <h2 id="paymentDetailTitle">Payment details</h2>
+        <header class="admin-payment-detail-head">
+            <div class="admin-payment-detail-head-copy">
+                <p class="admin-payment-detail-kicker">Guest payment</p>
+                <h2 id="paymentDetailTitle" data-payment-detail-guest>Payment details</h2>
+                <div class="admin-payment-detail-stats">
+                    <span class="is-receipt" data-payment-detail-receipt></span>
+                    <span class="is-amount" data-payment-detail-amount-chip></span>
+                    <span class="is-status" data-payment-detail-status></span>
+                </div>
             </div>
-            <button type="button" class="admin-booking-modal-close" data-payment-detail-close aria-label="Close">&times;</button>
+            <button type="button" class="admin-payment-detail-close" data-payment-detail-close aria-label="Close">&times;</button>
         </header>
         <div class="admin-booking-detail-body" data-payment-detail-body>
             <p>Loading…</p>
@@ -126,55 +105,37 @@
         <footer class="admin-booking-detail-actions">
             <button type="button" data-payment-detail-close>Close</button>
             <button type="button" class="admin-payment-save-receipt" data-payment-save-receipt hidden>Save receipt details</button>
-            <button type="button" class="admin-booking-delete" data-payment-void hidden>Void payment</button>
+            <button type="button" class="admin-booking-delete" data-payment-void hidden>Refund payment</button>
         </footer>
     </section>
 </div>
 
-<div class="admin-booking-modal" data-payments-flush-detail-modal hidden>
-    <button type="button" class="admin-booking-modal-backdrop" data-payments-flush-detail-close aria-label="Close export details"></button>
-    <section class="admin-booking-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentFlushDetailTitle">
-        <header>
-            <div>
-                <span class="admin-booking-reference" data-payments-flush-detail-file></span>
-                <h2 id="paymentFlushDetailTitle">Payment export details</h2>
+<div class="admin-payment-refund-overlay" data-payment-refund-modal hidden>
+    <button type="button" class="admin-payment-refund-backdrop" data-payment-refund-cancel aria-label="Cancel refund"></button>
+    <section class="admin-payment-refund-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentRefundTitle">
+        <header class="admin-payment-refund-head">
+            <div class="admin-payment-refund-head-copy">
+                <p class="admin-payment-refund-kicker">Refund payment</p>
+                <h2 id="paymentRefundTitle" data-payment-refund-guest>Refund this payment?</h2>
+                <div class="admin-payment-refund-stats">
+                    <span class="is-receipt" data-payment-refund-receipt></span>
+                    <span class="is-amount" data-payment-refund-amount></span>
+                </div>
             </div>
-            <button type="button" class="admin-booking-modal-close" data-payments-flush-detail-close aria-label="Close">&times;</button>
+            <button type="button" class="admin-payment-refund-close" data-payment-refund-cancel aria-label="Close refund">&times;</button>
         </header>
-        <div class="admin-booking-detail-body" data-payments-flush-detail-body>
-            <p>Loading…</p>
-        </div>
-        <footer class="admin-booking-detail-actions">
-            <button type="button" data-payments-flush-detail-close>Close</button>
-        </footer>
-    </section>
-</div>
-
-<div class="admin-booking-modal" data-payments-flush-modal hidden>
-    <button type="button" class="admin-booking-modal-backdrop" data-payments-flush-close aria-label="Close export dialog"></button>
-    <section class="admin-booking-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentFlushTitle">
-        <header>
-            <div>
-                <span class="admin-booking-reference">Company records</span>
-                <h2 id="paymentFlushTitle">Export payments to PDF</h2>
-            </div>
-            <button type="button" class="admin-booking-modal-close" data-payments-flush-close aria-label="Close">&times;</button>
-        </header>
-        <div class="admin-booking-detail-body">
-            <p>
-                Export payments for checked-out, cancelled, and archived stays into a branded Mori PDF,
-                save it on this device, then permanently delete those payment rows.
-                Active stays keep their payment history.
-            </p>
-            <label class="admin-payment-flush-name">
-                Staff name performing this data export
-                <input type="text" maxlength="120" autocomplete="name" data-payments-flush-by placeholder="e.g. Ana Reyes" />
+        <div class="admin-payment-refund-body">
+            <p data-payment-refund-copy>This reverses the posted amount and restores the stay balance. The refund is recorded in the system audit log.</p>
+            <label class="admin-payment-refund-reason">
+                <span>Reason notes</span>
+                <textarea data-payment-refund-reason maxlength="500" rows="4" required minlength="8" placeholder="Why this payment is being refunded"></textarea>
+                <small>Required · at least 8 characters. Staff will see this in the audit log.</small>
             </label>
-            <p class="admin-payment-flush-warn" role="status">This cannot be undone. Export log entries clear after 7 days.</p>
+            <p class="admin-payment-refund-error" data-payment-refund-error role="alert" hidden></p>
         </div>
-        <footer class="admin-booking-detail-actions">
-            <button type="button" data-payments-flush-close>Cancel</button>
-            <button type="button" class="admin-booking-confirm admin-payment-flush-confirm" data-payments-flush-confirm>Export PDF &amp; delete payments</button>
+        <footer class="admin-payment-refund-actions">
+            <button type="button" class="admin-payment-refund-cancel" data-payment-refund-cancel>Cancel</button>
+            <button type="button" class="admin-payment-refund-submit" data-payment-refund-confirm>Refund payment</button>
         </footer>
     </section>
 </div>

@@ -3,12 +3,17 @@ using System.Globalization;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using FluentValidation;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using QuestPDF.Infrastructure;
 using TestingDemo.Data;
 using TestingDemo.Hubs;
+using TestingDemo.Middleware;
+using TestingDemo.Models;
 using TestingDemo.Services;
 using TestingDemo.Validators;
 
@@ -29,6 +34,9 @@ try
         options.SupportedUICultures = new[] { pesoCulture };
     });
 
+    builder.Services.Configure<IdentityBootstrapOptions>(
+        builder.Configuration.GetSection(IdentityBootstrapOptions.SectionName));
+
     builder.Services.AddControllersWithViews()
         .AddJsonOptions(options =>
         {
@@ -48,11 +56,22 @@ try
             options.PayloadSerializerOptions.Converters.Add(new UtcNullableDateTimeJsonConverter());
         });
 
+    builder.Services.AddMemoryCache();
     builder.Services.AddAntiforgery(options => options.HeaderName = "RequestVerificationToken");
     builder.Services.AddRateLimiter(options =>
     {
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
         options.AddPolicy("guest-bookings", context =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 5,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                    AutoReplenishment = true
+                }));
+        options.AddPolicy("staff-password-reset", context =>
             RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions
@@ -74,16 +93,102 @@ try
             warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
     });
 
+    builder.Services
+        .AddIdentity<ApplicationUser, IdentityRole>(options =>
+        {
+            options.Password.RequiredLength = 12;
+            options.Password.RequireDigit = true;
+            options.Password.RequireLowercase = true;
+            options.Password.RequireUppercase = true;
+            options.Password.RequireNonAlphanumeric = true;
+            options.User.RequireUniqueEmail = true;
+            options.Lockout.AllowedForNewUsers = true;
+            options.Lockout.MaxFailedAccessAttempts = 5;
+            options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+        })
+        .AddUserStore<StaffAccountStore>()
+        .AddRoleStore<StaffRoleStore>()
+        .AddDefaultTokenProviders();
+
+    builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
+        options.TokenLifespan = TimeSpan.FromHours(1));
+
+    builder.Services.ConfigureApplicationCookie(options =>
+    {
+        options.LoginPath = "/Account/Login";
+        options.AccessDeniedPath = "/Account/Login";
+        options.SlidingExpiration = true;
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.Cookie.HttpOnly = true;
+        options.Cookie.Name = "MoriHotel.Auth";
+        options.Events.OnRedirectToLogin = context =>
+        {
+            if (IsApiOrHub(context.Request.Path))
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return Task.CompletedTask;
+            }
+
+            context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            if (IsApiOrHub(context.Request.Path))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return Task.CompletedTask;
+            }
+
+            context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+        };
+    });
+
+    var googleClientId = builder.Configuration["Authentication:Google:ClientId"];
+    var googleClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+    if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(googleClientSecret))
+    {
+        builder.Services.AddAuthentication()
+            .AddGoogle(options =>
+            {
+                options.ClientId = googleClientId;
+                options.ClientSecret = googleClientSecret;
+                options.SaveTokens = false;
+                options.ClaimActions.MapJsonKey("email_verified", "email_verified");
+            });
+    }
+
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy("AdminManagerOnly", policy =>
+            policy.RequireRole(AppRoles.AdminManager));
+    });
+
     builder.Services.AddValidatorsFromAssemblyContaining<CreateRoomDtoValidator>();
     builder.Services.AddScoped<IRoomService, RoomService>();
     builder.Services.AddScoped<IBookingService, BookingService>();
+    builder.Services.AddHttpContextAccessor();
     builder.Services.AddScoped<IPaymentService, PaymentService>();
+    builder.Services.AddScoped<ISystemAuditRecorder, SystemAuditRecorder>();
+    builder.Services.AddScoped<ISystemAuditQuery>(sp => (SystemAuditRecorder)sp.GetRequiredService<ISystemAuditRecorder>());
+    builder.Services.AddScoped<ISystemFlushService, SystemFlushService>();
     builder.Services.AddSingleton<IPaymentReceiptStorage, LocalPaymentReceiptStorage>();
     builder.Services.Configure<AzureDocumentIntelligenceOptions>(
         builder.Configuration.GetSection(AzureDocumentIntelligenceOptions.SectionName));
     builder.Services.AddSingleton<OcrUsageTracker>();
     builder.Services.AddScoped<IReceiptOcrService, AzureReceiptOcrService>();
     builder.Services.AddHostedService<AutomaticCheckoutBackgroundService>();
+    builder.Services.AddHostedService<OfferExpiryWarningBackgroundService>();
+    builder.Services.AddScoped<IAdminManagerSeed, AdminManagerSeed>();
+    builder.Services.AddSingleton<IGoogleVerificationTokenService, GoogleVerificationTokenService>();
+    builder.Services.AddScoped<ISecureConfigStore, SecureConfigStore>();
+    builder.Services.AddScoped<IStaffEmailSender, SmtpStaffEmailSender>();
+    builder.Services.AddScoped<IStaffOnboardingEmailSender, SmtpStaffEmailSender>();
+    builder.Services.AddScoped<IGeminiChatClient, GeminiChatClient>();
+    builder.Services.AddScoped<IStaffAccountCreateService, StaffAccountCreateService>();
+    builder.Services.AddScoped<ISpecialOfferService, SpecialOfferService>();
+    builder.Services.AddScoped<IDashboardAnalyticsService, DashboardAnalyticsService>();
 
     builder.Services.AddResponseCompression(options =>
     {
@@ -100,6 +205,9 @@ try
         var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
             .CreateLogger("DatabaseBootstrap");
         DatabaseBootstrap.ApplyMigrations(db, logger);
+
+        var seed = scope.ServiceProvider.GetRequiredService<IAdminManagerSeed>();
+        seed.EnsureAsync().GetAwaiter().GetResult();
     }
 
     if (app.Environment.IsDevelopment())
@@ -116,6 +224,9 @@ try
     app.UseRequestLocalization();
     app.UseResponseCompression();
     app.UseRouting();
+    app.UseAuthentication();
+    app.UseAuthorization();
+    app.UseMiddleware<MustChangePasswordMiddleware>();
     app.UseStatusCodePagesWithReExecute("/Home/NotFoundPage");
     app.UseRateLimiter();
     app.MapStaticAssets();
@@ -126,20 +237,20 @@ try
             pattern: "{controller=Booking}/{action=Index}/{id?}")
         .WithStaticAssets();
 
-    const string siteUrl = "http://localhost:5288";
+    var publicBaseUrl = app.Configuration["PublicBaseUrl"]?.TrimEnd('/');
+    var siteUrl = string.IsNullOrWhiteSpace(publicBaseUrl) ? "http://localhost:5288" : publicBaseUrl;
 
     Console.WriteLine();
     Console.WriteLine("========================================");
     Console.WriteLine("  Mori International Hotel is running");
     Console.WriteLine($"  Guest site: {siteUrl}");
+    Console.WriteLine($"  Staff login: {siteUrl}/Account/Login");
+    Console.WriteLine($"  Staff dashboard: {siteUrl}/Dashboard");
     Console.WriteLine($"  Admin rooms: {siteUrl}/Rooms");
     Console.WriteLine("  Keep this window/debug session open.");
     Console.WriteLine("========================================");
     Console.WriteLine();
 
-    // Open the browser from the app (not Visual Studio's launchBrowser).
-    // VS "launchBrowser" ties the debugger to the browser window and often kills the
-    // process (0xffffffff / ERR_CONNECTION_REFUSED) after create or photo pick.
     if (ShouldOpenBrowser(app.Environment))
     {
         app.Lifetime.ApplicationStarted.Register(() => TryOpenBrowser(siteUrl));
@@ -147,7 +258,8 @@ try
 
     app.Run();
 }
-catch (Exception ex)
+catch (Exception ex) when (ex is not HostAbortedException
+    && ex.GetType().Name != "HostAbortedException")
 {
     Console.Error.WriteLine();
     Console.Error.WriteLine("FATAL: App failed to start.");
@@ -164,6 +276,9 @@ catch (Exception ex)
     Environment.ExitCode = 1;
 }
 
+static bool IsApiOrHub(PathString path) =>
+    path.StartsWithSegments("/api") || path.StartsWithSegments("/hubs");
+
 static bool ShouldOpenBrowser(IHostEnvironment environment)
 {
     var flag = Environment.GetEnvironmentVariable("HOTEL_OPEN_BROWSER");
@@ -173,7 +288,6 @@ static bool ShouldOpenBrowser(IHostEnvironment environment)
         return false;
     }
 
-    // Default to true so browser opens automatically when running the app
     return true;
 }
 
@@ -213,14 +327,12 @@ static CultureInfo CreatePesoCulture()
     {
         try
         {
-            var culture = CultureInfo.GetCultureInfo(name);
-            culture = (CultureInfo)culture.Clone();
+            var culture = (CultureInfo)CultureInfo.GetCultureInfo(name).Clone();
             culture.NumberFormat.CurrencySymbol = "₱";
             return culture;
         }
         catch (CultureNotFoundException)
         {
-            // Try next fallback — some Windows installs lack en-PH.
         }
     }
 

@@ -1,0 +1,822 @@
+@model TestingDemo.ViewModels.AccountSettingsViewModel
+@{
+    ViewData["Title"] = "Settings & Privacy";
+    var message = TempData["Message"] as string;
+    var error = TempData["Error"] as string;
+    var showPasswordSuccess = !string.IsNullOrWhiteSpace(message)
+        && string.Equals(Model.ActiveSection, "password", StringComparison.OrdinalIgnoreCase);
+    var showGlobalMessage = !string.IsNullOrWhiteSpace(message) && !showPasswordSuccess;
+    var currentPasswordError =
+        ViewData.ModelState["Password.CurrentPassword"]?.Errors.FirstOrDefault()?.ErrorMessage
+        ?? ViewData.ModelState["CurrentPassword"]?.Errors.FirstOrDefault()?.ErrorMessage;
+    var googlePasswordError =
+        ViewData.ModelState["Profile.CurrentPassword"]?.Errors.FirstOrDefault()?.ErrorMessage;
+    var googleEmailError =
+        ViewData.ModelState["Profile.GoogleEmail"]?.Errors.FirstOrDefault()?.ErrorMessage
+        ?? ViewData.ModelState["GoogleEmail"]?.Errors.FirstOrDefault()?.ErrorMessage;
+    var profileSectionHasErrors = string.Equals(Model.ActiveSection, "profile", StringComparison.OrdinalIgnoreCase)
+        && ViewData.ModelState.ErrorCount > 0;
+    var googleSectionHasErrors = string.Equals(Model.ActiveSection, "google", StringComparison.OrdinalIgnoreCase)
+        && ViewData.ModelState.ErrorCount > 0;
+    var profileBannerError = ViewData.ModelState
+        .Where(entry => entry.Value?.Errors.Count > 0)
+        .SelectMany(entry => entry.Value!.Errors)
+        .Select(err => err.ErrorMessage)
+        .FirstOrDefault(msg => !string.IsNullOrWhiteSpace(msg));
+}
+
+<section class="admin-account-settings">
+    <header class="admin-account-settings-hero">
+        <span class="admin-account-settings-eyebrow">Staff Account</span>
+        <h1>Settings & privacy</h1>
+        <p>Manage your profile details, password security, linked recovery accounts, and role permissions.</p>
+    </header>
+
+    @if (showGlobalMessage)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <svg class="alert-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+            </svg>
+            <span>@message</span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <svg class="alert-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+            </svg>
+            <span>@error</span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <div class="admin-settings-layout">
+        <!-- Left Sidebar Navigation -->
+        <aside class="admin-settings-sidebar" aria-label="Settings navigation">
+            <div class="admin-settings-sidebar-header">
+                <h2>Settings & privacy</h2>
+                <div class="admin-settings-search-box">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+                    </svg>
+                    <input type="search" id="settingsSidebarSearch" placeholder="Search settings..." aria-label="Search settings" />
+                </div>
+            </div>
+
+            <nav class="admin-settings-nav">
+                <div class="admin-settings-nav-group">
+                    <span class="admin-settings-nav-label">Navigation</span>
+                    <button type="button" class="admin-settings-nav-item" data-target="overview">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
+                        </svg>
+                        <span>Overview hub</span>
+                    </button>
+                </div>
+
+                <div class="admin-settings-nav-group">
+                    <span class="admin-settings-nav-label">Account & Security</span>
+                    <button type="button" class="admin-settings-nav-item" data-target="profile">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                        </svg>
+                        <span>Profile details</span>
+                    </button>
+                    <button type="button" class="admin-settings-nav-item" data-target="password">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
+                        </svg>
+                        <span>Security & Password</span>
+                    </button>
+                    <button type="button" class="admin-settings-nav-item" data-target="google">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+                        </svg>
+                        <span>Google Recovery</span>
+                    </button>
+                    <button type="button" class="admin-settings-nav-item" data-target="activity">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.25 2.52.77-1.28-3.52-2.09V8H12z" />
+                        </svg>
+                        <span>Account activity</span>
+                    </button>
+                </div>
+
+                <div class="admin-settings-nav-group">
+                    <span class="admin-settings-nav-label">System & Access</span>
+                    <button type="button" class="admin-settings-nav-item" data-target="access">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-5.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8s0 0 0 0z" />
+                        </svg>
+                        <span>Role & Permissions</span>
+                    </button>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Right Content Area -->
+        <main class="admin-settings-content">
+            <!-- Search bar header -->
+            <div class="admin-settings-find-card">
+                <h3>Find the setting you need</h3>
+                <div class="admin-settings-search-box is-large">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+                    </svg>
+                    <input type="search" id="settingsFindSearch" placeholder="Search settings (e.g. password, email, phone, role)..." aria-label="Find setting" />
+                </div>
+            </div>
+
+            <!-- SECTION 0: OVERVIEW HUB -->
+            <div class="admin-settings-section" id="section-overview">
+                <section class="admin-settings-hub-block">
+                    <h2>Most visited settings</h2>
+                    <div class="admin-settings-hub-grid">
+                        <article class="admin-settings-hub-card" data-trigger="profile">
+                            <div class="admin-settings-hub-icon is-teal">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                                </svg>
+                            </div>
+                            <h3>Profile details</h3>
+                            <p>Update your full name, username, phone number, birth date, and address.</p>
+                            <span class="admin-settings-hub-link">Edit profile &rarr;</span>
+                        </article>
+
+                        <article class="admin-settings-hub-card" data-trigger="password">
+                            <div class="admin-settings-hub-icon is-navy">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
+                                </svg>
+                            </div>
+                            <h3>Security & Password</h3>
+                            <p>Change your password regularly to keep your staff account secure.</p>
+                            <span class="admin-settings-hub-link">Update password &rarr;</span>
+                        </article>
+
+                        <article class="admin-settings-hub-card" data-trigger="google">
+                            <div class="admin-settings-hub-icon is-blue">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+                                </svg>
+                            </div>
+                            <h3>Google Recovery</h3>
+                            <p>Manage the email shown on your profile and used for account recovery.</p>
+                            <span class="admin-settings-hub-link">Manage Google email &rarr;</span>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="admin-settings-hub-block">
+                    <h2>Looking for something else?</h2>
+                    <div class="admin-settings-hub-grid is-two">
+                        <article class="admin-settings-hub-card" data-trigger="activity">
+                            <div class="admin-settings-hub-icon is-navy">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.25 2.52.77-1.28-3.52-2.09V8H12z" />
+                                </svg>
+                            </div>
+                            <h3>Account activity</h3>
+                            <p>Review profile, email, password, and access changes for this staff account.</p>
+                            <span class="admin-settings-hub-link">Open activity log &rarr;</span>
+                        </article>
+                        <article class="admin-settings-hub-card" data-trigger="access">
+                            <div class="admin-settings-hub-icon is-teal">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-5.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8s0 0 0 0z" />
+                                </svg>
+                            </div>
+                            <h3>Role &amp; Permissions</h3>
+                            <p>Review your assigned staff role (@Model.RoleName) and active system rights.</p>
+                            <span class="admin-settings-hub-link">View permissions &rarr;</span>
+                        </article>
+                    </div>
+                </section>
+            </div>
+
+            <!-- SECTION 1: PROFILE DETAILS -->
+            <div class="admin-settings-section" id="section-profile" hidden>
+                <article class="admin-settings-card">
+                    <header class="admin-settings-card-header">
+                        <h2>Profile details</h2>
+                        <p>Shown in hotel admin tools and used for your sign-in identity.</p>
+                    </header>
+
+                    <form asp-controller="Account" asp-action="UpdateProfile" method="post" class="admin-settings-form">
+                        @Html.AntiForgeryToken()
+                        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+                        @if (profileSectionHasErrors)
+                        {
+                            <div class="admin-settings-password-error" role="alert" aria-live="assertive">
+                                <h3>Profile could not be saved</h3>
+                                <p>@(profileBannerError ?? "Please check the highlighted fields and try again.")</p>
+                            </div>
+                        }
+
+                        <div class="admin-settings-fields">
+                            <div class="admin-settings-field">
+                                <label asp-for="Profile.FullName" class="form-label"></label>
+                                <input asp-for="Profile.FullName" class="form-control" placeholder="e.g. John Doe" />
+                                <span asp-validation-for="Profile.FullName" class="text-danger"></span>
+                            </div>
+                            <div class="admin-settings-field">
+                                <label asp-for="Profile.UserName" class="form-label"></label>
+                                <input asp-for="Profile.UserName" class="form-control" placeholder="e.g. jdoe" />
+                                <span asp-validation-for="Profile.UserName" class="text-danger"></span>
+                            </div>
+                            <div class="admin-settings-field">
+                                <label asp-for="Profile.PhoneNumber" class="form-label"></label>
+                                <input asp-for="Profile.PhoneNumber" class="form-control" placeholder="+63 900 000 0000" />
+                                <span asp-validation-for="Profile.PhoneNumber" class="text-danger"></span>
+                            </div>
+                            <div class="admin-settings-field">
+                                <label asp-for="Profile.BirthDate" class="form-label"></label>
+                                <input asp-for="Profile.BirthDate" type="date" class="form-control" />
+                                <span asp-validation-for="Profile.BirthDate" class="text-danger"></span>
+                            </div>
+                            <div class="admin-settings-field is-full">
+                                <label asp-for="Profile.Address" class="form-label"></label>
+                                <input asp-for="Profile.Address" class="form-control" placeholder="Street, City, Province" />
+                                <span asp-validation-for="Profile.Address" class="text-danger"></span>
+                            </div>
+                        </div>
+
+                        <div class="admin-settings-actions">
+                            <button type="submit" class="btn btn-primary">
+                                <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16" fill="currentColor">
+                                    <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z" />
+                                </svg>
+                                <span>Save profile details</span>
+                            </button>
+                        </div>
+                    </form>
+                </article>
+            </div>
+
+            <!-- SECTION 2: SECURITY & PASSWORD -->
+            <div class="admin-settings-section" id="section-password" hidden>
+                <article class="admin-settings-card">
+                    <header class="admin-settings-card-header">
+                        <h2>Security & Password</h2>
+                        <p class="admin-settings-security-copy">
+                            Keep your staff access secure. Use a strong password and update it regularly.
+                        </p>
+                    </header>
+
+                    <form asp-controller="Account" asp-action="UpdatePassword" method="post" class="admin-settings-form">
+                        @Html.AntiForgeryToken()
+                        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+                        @if (ViewData.ModelState.ErrorCount > 0)
+                        {
+                            <div class="admin-settings-password-error" role="alert" aria-live="assertive">
+                                <h3>Password update failed</h3>
+                                <p>@(currentPasswordError ?? "Please check the highlighted fields and try again.")</p>
+                            </div>
+                        }
+
+                        <div class="admin-settings-security-note" role="note">
+                            <h3>Password requirements</h3>
+                            <ul>
+                                <li>At least 12 characters</li>
+                                <li>Use upper/lower letters, a number, and a symbol</li>
+                                <li>Do not reuse your previous password</li>
+                            </ul>
+                        </div>
+
+                        <div class="admin-settings-fields is-single">
+                            <div class="admin-settings-field">
+                                <label asp-for="Password.CurrentPassword" class="form-label"></label>
+                                <div class="admin-settings-password-group">
+                                    <input asp-for="Password.CurrentPassword" id="Password_CurrentPassword" type="password" class="form-control" autocomplete="current-password" placeholder="Enter current password" />
+                                    <button type="button" class="admin-settings-password-toggle" data-password-toggle="Password_CurrentPassword" aria-label="Show password" aria-pressed="false" title="Show password">
+                                        <svg class="icon-eye-show" viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="18" height="18">
+                                            <path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                                        </svg>
+                                        <svg class="icon-eye-hide" viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="18" height="18" hidden>
+                                            <path fill="currentColor" d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.44-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-2.28 2.2 2.2c.08-.24.16-.48.16-.72 0-1.66-1.34-3-3-3-.24 0-.48.08-.72.16z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                                <span asp-validation-for="Password.CurrentPassword" class="text-danger"></span>
+                                @if (!string.IsNullOrWhiteSpace(currentPasswordError))
+                                {
+                                    <p class="admin-settings-inline-error">@currentPasswordError</p>
+                                }
+                            </div>
+                            <div class="admin-settings-field">
+                                <label asp-for="Password.NewPassword" class="form-label"></label>
+                                <div class="admin-settings-password-group">
+                                    <input asp-for="Password.NewPassword" id="Password_NewPassword" type="password" class="form-control" autocomplete="new-password" placeholder="Enter new password" />
+                                    <button type="button" class="admin-settings-password-toggle" data-password-toggle="Password_NewPassword" aria-label="Show password" aria-pressed="false" title="Show password">
+                                        <svg class="icon-eye-show" viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="18" height="18">
+                                            <path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                                        </svg>
+                                        <svg class="icon-eye-hide" viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="18" height="18" hidden>
+                                            <path fill="currentColor" d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.44-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-2.28 2.2 2.2c.08-.24.16-.48.16-.72 0-1.66-1.34-3-3-3-.24 0-.48.08-.72.16z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                                <span asp-validation-for="Password.NewPassword" class="text-danger"></span>
+                            </div>
+                            <div class="admin-settings-field">
+                                <label asp-for="Password.ConfirmPassword" class="form-label"></label>
+                                <div class="admin-settings-password-group">
+                                    <input asp-for="Password.ConfirmPassword" id="Password_ConfirmPassword" type="password" class="form-control" autocomplete="new-password" placeholder="Re-enter new password" />
+                                    <button type="button" class="admin-settings-password-toggle" data-password-toggle="Password_ConfirmPassword" aria-label="Show password" aria-pressed="false" title="Show password">
+                                        <svg class="icon-eye-show" viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="18" height="18">
+                                            <path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                                        </svg>
+                                        <svg class="icon-eye-hide" viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="18" height="18" hidden>
+                                            <path fill="currentColor" d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.44-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-2.28 2.2 2.2c.08-.24.16-.48.16-.72 0-1.66-1.34-3-3-3-.24 0-.48.08-.72.16z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                                <span asp-validation-for="Password.ConfirmPassword" class="text-danger"></span>
+                            </div>
+                        </div>
+
+                        <div class="admin-settings-actions">
+                            <button type="submit" class="btn btn-primary">
+                                <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16" fill="currentColor">
+                                    <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
+                                </svg>
+                                <span>Update password</span>
+                            </button>
+                        </div>
+                    </form>
+                </article>
+            </div>
+
+            <!-- SECTION 3: GOOGLE & RECOVERY -->
+            <div class="admin-settings-section" id="section-google" hidden>
+                <article class="admin-settings-card">
+                    <header class="admin-settings-card-header">
+                        <h2>Google Account & Recovery</h2>
+                        <p>This email is shown on your profile and used for sign-in recovery. It cannot be left empty.</p>
+                    </header>
+
+                    <form asp-controller="Account" asp-action="UpdateGoogleRecovery" method="post" class="admin-settings-form" id="google-recovery-form" data-original-google-email="@(Model.Profile.GoogleEmail ?? string.Empty)">
+                        @Html.AntiForgeryToken()
+                        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+                        @if (googleSectionHasErrors)
+                        {
+                            <div class="admin-settings-password-error" role="alert" aria-live="assertive">
+                                <h3>Recovery email could not be saved</h3>
+                                <p>@(googlePasswordError ?? googleEmailError ?? "Please check the details and try again.")</p>
+                            </div>
+                        }
+
+                        <div class="admin-settings-fields is-single">
+                            <div class="admin-settings-field">
+                                <label asp-for="Profile.GoogleEmail" class="form-label">Google recovery email</label>
+                                <input asp-for="Profile.GoogleEmail" class="form-control" placeholder="your.email@gmail.com" autocomplete="email" required />
+                                <span asp-validation-for="Profile.GoogleEmail" class="text-danger"></span>
+                            </div>
+                        </div>
+
+                        <div class="admin-settings-actions">
+                            <button type="submit" class="btn btn-primary" data-google-save>
+                                <span>Save recovery email</span>
+                            </button>
+                        </div>
+
+                        <div class="admin-settings-info-modal-backdrop" data-google-stepup-modal @(Model.ShowGoogleStepUp ? null : "hidden") role="presentation">
+                            <div class="admin-settings-info-modal is-stepup" role="dialog" aria-modal="true" aria-labelledby="googleStepUpTitle" aria-describedby="googleStepUpDesc">
+                                <h3 id="googleStepUpTitle">Confirm your identity</h3>
+                                <p id="googleStepUpDesc">Enter your current password to change the recovery email.</p>
+
+                                <div class="admin-settings-field">
+                                    <label asp-for="Profile.CurrentPassword" class="form-label"></label>
+                                    <div class="admin-settings-password-group">
+                                        <input asp-for="Profile.CurrentPassword" id="Profile_CurrentPassword" type="password" class="form-control" autocomplete="current-password" placeholder="Enter current password" value="" />
+                                        <button type="button" class="admin-settings-password-toggle" data-password-toggle="Profile_CurrentPassword" aria-label="Show password" aria-pressed="false" title="Show password">
+                                            <svg class="icon-eye-show" viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="18" height="18">
+                                                <path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                                            </svg>
+                                            <svg class="icon-eye-hide" viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="18" height="18" hidden>
+                                                <path fill="currentColor" d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.44-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-2.28 2.2 2.2c.08-.24.16-.48.16-.72 0-1.66-1.34-3-3-3-.24 0-.48.08-.72.16z"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <span asp-validation-for="Profile.CurrentPassword" class="text-danger"></span>
+                                    @if (!string.IsNullOrWhiteSpace(googlePasswordError))
+                                    {
+                                        <p class="admin-settings-inline-error" id="googleStepUpError">@googlePasswordError</p>
+                                    }
+                                    else
+                                    {
+                                        <p class="admin-settings-inline-error" id="googleStepUpError" hidden></p>
+                                    }
+                                </div>
+
+                                <div class="admin-settings-info-modal-actions">
+                                    <button type="button" class="btn btn-outline-secondary" data-google-stepup-cancel>Cancel</button>
+                                    <button type="submit" class="btn btn-primary" data-google-stepup-confirm>Confirm and save</button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </article>
+            </div>
+
+            <!-- SECTION 5: ACCOUNT ACTIVITY -->
+            <div class="admin-settings-section" id="section-activity" hidden>
+                <article class="admin-settings-card admin-settings-activity-page">
+                    <header class="admin-settings-card-header">
+                        <h2>Account activity</h2>
+                        <p>A dedicated log of this account’s profile, email, password, and access changes. Times are Manila (PH).</p>
+                    </header>
+
+                    <ul class="admin-settings-activity-kpis" aria-label="Activity summary">
+                        <li>
+                            <span>Events</span>
+                            <strong>@Model.ActivityTotal</strong>
+                        </li>
+                        <li>
+                            <span>This page</span>
+                            <strong>@Model.ActivityLog.Count</strong>
+                        </li>
+                        <li>
+                            <span>Time zone</span>
+                            <strong>PH</strong>
+                        </li>
+                    </ul>
+
+                    @if (Model.ActivityLog.Count == 0)
+                    {
+                        <p class="admin-settings-activity-empty">No changes have been recorded yet. New profile, email, and password updates will appear here.</p>
+                    }
+                    else
+                    {
+                        <div class="admin-settings-activity-table-wrap">
+                            <table class="admin-settings-activity-table">
+                                <thead>
+                                    <tr>
+                                        <th>When (PH)</th>
+                                        <th>Event</th>
+                                        <th>Detail</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                @foreach (var item in Model.ActivityLog)
+                                {
+                                    <tr>
+                                        <td data-label="When (PH)">
+                                            <time datetime="@item.WhenUtc">@item.WhenLocal</time>
+                                        </td>
+                                        <td data-label="Event" title="@item.Title">@item.Title</td>
+                                        <td data-label="Detail" title="@item.Detail">@item.Detail</td>
+                                    </tr>
+                                }
+                                </tbody>
+                            </table>
+                        </div>
+                        <nav class="admin-bookings-pagination admin-audit-pager" aria-label="Activity pages">
+                            @if (Model.ActivityPage > 1)
+                            {
+                                <a href="@Url.Action("Settings", new { section = "activity", activityPage = Model.ActivityPage - 1 })#activity">Previous</a>
+                            }
+                            else
+                            {
+                                <span aria-disabled="true">Previous</span>
+                            }
+                            <em>Page @Model.ActivityPage of @Model.ActivityTotalPages</em>
+                            @if (Model.ActivityPage < Model.ActivityTotalPages)
+                            {
+                                <a href="@Url.Action("Settings", new { section = "activity", activityPage = Model.ActivityPage + 1 })#activity">Next</a>
+                            }
+                            else
+                            {
+                                <span aria-disabled="true">Next</span>
+                            }
+                        </nav>
+                    }
+                </article>
+            </div>
+
+            <!-- SECTION 4: ROLE & PERMISSIONS -->
+            <div class="admin-settings-section" id="section-access" hidden>
+                <article class="admin-settings-card">
+                    <header class="admin-settings-card-header">
+                        <h2>Role & Permissions</h2>
+                        <p>Read-only summary of your assigned staff role, account status, and privileges.</p>
+                    </header>
+
+                    <div class="admin-settings-info-grid">
+                        <div class="admin-settings-info-tile">
+                            <span class="admin-settings-info-label">Assigned role</span>
+                            <strong class="admin-settings-info-value">@Model.RoleName</strong>
+                        </div>
+                        <div class="admin-settings-info-tile">
+                            <span class="admin-settings-info-label">Username</span>
+                            <strong class="admin-settings-info-value">@Model.Profile.UserName</strong>
+                        </div>
+                        <div class="admin-settings-info-tile">
+                            <span class="admin-settings-info-label">Primary email</span>
+                            <strong class="admin-settings-info-value">@Model.Profile.Email</strong>
+                        </div>
+                        <div class="admin-settings-info-tile">
+                            <span class="admin-settings-info-label">Account status</span>
+                            <strong class="admin-settings-info-value text-success">Active Staff Account</strong>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </main>
+    </div>
+
+    @if (showPasswordSuccess)
+    {
+        <div class="admin-settings-info-modal-backdrop" data-password-success-modal role="presentation">
+            <div class="admin-settings-info-modal" role="dialog" aria-modal="true" aria-labelledby="passwordSuccessTitle" aria-describedby="passwordSuccessDesc">
+                <div class="admin-settings-info-modal-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                        <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                    </svg>
+                </div>
+                <h3 id="passwordSuccessTitle">Password updated successfully</h3>
+                <p id="passwordSuccessDesc">Your password is now secured. Continue to Overview Hub.</p>
+                <button type="button" class="btn btn-primary admin-settings-info-modal-btn" data-proceed-overview>
+                    Proceed to overview hub
+                </button>
+            </div>
+        </div>
+    }
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const initialSection = '@Model.ActiveSection' || 'overview';
+            const navItems = document.querySelectorAll('.admin-settings-nav-item');
+            const sections = document.querySelectorAll('.admin-settings-section');
+            const hubTriggers = document.querySelectorAll('[data-trigger]');
+            const sidebarSearch = document.getElementById('settingsSidebarSearch');
+            const findSearch = document.getElementById('settingsFindSearch');
+
+            function switchSection(targetId) {
+                if (!targetId) return;
+
+                sections.forEach(sec => {
+                    if (sec.id === 'section-' + targetId) {
+                        sec.removeAttribute('hidden');
+                    } else {
+                        sec.setAttribute('hidden', '');
+                    }
+                });
+
+                navItems.forEach(item => {
+                    if (item.getAttribute('data-target') === targetId) {
+                        item.classList.add('is-active');
+                    } else {
+                        item.classList.remove('is-active');
+                    }
+                });
+
+                window.location.hash = targetId;
+            }
+
+            // Initial section load
+            const hash = window.location.hash.replace('#', '');
+            const targetSection = hash || initialSection;
+            switchSection(targetSection);
+
+            // Nav item click
+            navItems.forEach(item => {
+                item.addEventListener('click', function () {
+                    const target = this.getAttribute('data-target');
+                    switchSection(target);
+                });
+            });
+
+            // Hub card click
+            hubTriggers.forEach(card => {
+                card.addEventListener('click', function () {
+                    const target = this.getAttribute('data-trigger');
+                    switchSection(target);
+                });
+            });
+
+            // Search filter logic
+            function filterSettings(query) {
+                const term = query.toLowerCase().trim();
+                if (!term) {
+                    navItems.forEach(item => item.parentElement.removeAttribute('hidden'));
+                    document.querySelectorAll('.admin-settings-hub-card').forEach(c => c.removeAttribute('hidden'));
+                    return;
+                }
+
+                // Filter hub cards
+                document.querySelectorAll('.admin-settings-hub-card').forEach(card => {
+                    const text = card.textContent.toLowerCase();
+                    if (text.includes(term)) {
+                        card.removeAttribute('hidden');
+                    } else {
+                        card.setAttribute('hidden', '');
+                    }
+                });
+            }
+
+            if (sidebarSearch) {
+                sidebarSearch.addEventListener('input', function () {
+                    filterSettings(this.value);
+                    if (findSearch) findSearch.value = this.value;
+                });
+            }
+
+            if (findSearch) {
+                findSearch.addEventListener('input', function () {
+                    filterSettings(this.value);
+                    if (sidebarSearch) sidebarSearch.value = this.value;
+                });
+            }
+
+            // Password show/hide toggle in security section
+            document.querySelectorAll('[data-password-toggle]').forEach(function (toggleBtn) {
+                toggleBtn.addEventListener('click', function () {
+                    const targetId = this.getAttribute('data-password-toggle');
+                    const input = targetId ? document.getElementById(targetId) : null;
+                    if (!input || input.tagName !== 'INPUT') return;
+
+                    const showIcon = this.querySelector('.icon-eye-show');
+                    const hideIcon = this.querySelector('.icon-eye-hide');
+                    const nextVisible = input.type === 'password';
+
+                    input.type = nextVisible ? 'text' : 'password';
+                    this.setAttribute('aria-pressed', String(nextVisible));
+                    this.setAttribute('aria-label', nextVisible ? 'Hide password' : 'Show password');
+                    this.setAttribute('title', nextVisible ? 'Hide password' : 'Show password');
+
+                    if (showIcon) showIcon.hidden = nextVisible;
+                    if (hideIcon) hideIcon.hidden = !nextVisible;
+                });
+            });
+
+            const googleForm = document.getElementById('google-recovery-form');
+            const googleModal = document.querySelector('[data-google-stepup-modal]');
+            const googlePasswordInput = document.getElementById('Profile_CurrentPassword');
+            const googleSaveButton = document.querySelector('[data-google-save]');
+            const googleCancelButton = document.querySelector('[data-google-stepup-cancel]');
+            const googleConfirmButton = document.querySelector('[data-google-stepup-confirm]');
+            const googleStepUpError = document.getElementById('googleStepUpError');
+            let googleStepUpReady = false;
+            let googlePreviousFocus = null;
+
+            function googleEmailChanged() {
+                if (!googleForm) return false;
+                const original = (googleForm.getAttribute('data-original-google-email') || '').trim().toLowerCase();
+                const emailInput = googleForm.querySelector('[name="Profile.GoogleEmail"]');
+                const next = (emailInput && emailInput.value ? emailInput.value : '').trim().toLowerCase();
+                return original !== next;
+            }
+
+            function getGoogleFocusable() {
+                if (!googleModal) return [];
+                return Array.from(googleModal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+                    .filter(function (el) {
+                        return !el.hasAttribute('disabled') && !el.getAttribute('aria-hidden');
+                    });
+            }
+
+            function setGoogleStepUpError(message) {
+                if (!googleStepUpError) return;
+                if (!message) {
+                    googleStepUpError.textContent = '';
+                    googleStepUpError.hidden = true;
+                    return;
+                }
+                googleStepUpError.textContent = message;
+                googleStepUpError.hidden = false;
+            }
+
+            function openGoogleStepUp() {
+                if (!googleModal) return;
+                googlePreviousFocus = document.activeElement;
+                googleModal.removeAttribute('hidden');
+                document.body.style.overflow = 'hidden';
+                window.setTimeout(function () {
+                    if (googlePasswordInput) googlePasswordInput.focus();
+                }, 0);
+            }
+
+            function closeGoogleStepUp() {
+                if (!googleModal) return;
+                googleStepUpReady = false;
+                if (googlePasswordInput) {
+                    googlePasswordInput.value = '';
+                    googlePasswordInput.type = 'password';
+                }
+                setGoogleStepUpError('');
+                googleModal.setAttribute('hidden', '');
+                document.body.style.overflow = '';
+                const restore = googlePreviousFocus && document.contains(googlePreviousFocus)
+                    ? googlePreviousFocus
+                    : googleSaveButton;
+                if (restore && typeof restore.focus === 'function') restore.focus();
+            }
+
+            if (googleForm && googleModal) {
+                googleForm.addEventListener('submit', function (event) {
+                    if (!googleEmailChanged()) return;
+
+                    const emailInput = googleForm.querySelector('[name="Profile.GoogleEmail"]');
+                    if (emailInput && typeof emailInput.checkValidity === 'function' && !emailInput.checkValidity()) {
+                        return;
+                    }
+
+                    const modalOpen = !googleModal.hasAttribute('hidden');
+                    const password = googlePasswordInput ? googlePasswordInput.value.trim() : '';
+                    if (googleStepUpReady || (modalOpen && password)) {
+                        googleStepUpReady = true;
+                        return;
+                    }
+
+                    event.preventDefault();
+                    openGoogleStepUp();
+                });
+
+                if (googleCancelButton) {
+                    googleCancelButton.addEventListener('click', function () {
+                        closeGoogleStepUp();
+                    });
+                }
+
+                if (googleConfirmButton) {
+                    googleConfirmButton.addEventListener('click', function (event) {
+                        const password = googlePasswordInput ? googlePasswordInput.value : '';
+                        if (!password.trim()) {
+                            event.preventDefault();
+                            setGoogleStepUpError('Enter your current password to continue.');
+                            if (googlePasswordInput) googlePasswordInput.focus();
+                            return;
+                        }
+                        googleStepUpReady = true;
+                    });
+                }
+
+                googleModal.addEventListener('click', function (event) {
+                    if (event.target === googleModal) closeGoogleStepUp();
+                });
+
+                googleModal.addEventListener('keydown', function (event) {
+                    if (event.key !== 'Tab') return;
+                    const focusable = getGoogleFocusable();
+                    if (focusable.length === 0) return;
+                    const first = focusable[0];
+                    const last = focusable[focusable.length - 1];
+                    if (event.shiftKey && document.activeElement === first) {
+                        event.preventDefault();
+                        last.focus();
+                    } else if (!event.shiftKey && document.activeElement === last) {
+                        event.preventDefault();
+                        first.focus();
+                    }
+                });
+
+                if (!googleModal.hasAttribute('hidden')) {
+                    openGoogleStepUp();
+                }
+            }
+
+            function closeSuccessModalAndOpenOverview() {
+                const successModal = document.querySelector('[data-password-success-modal]');
+                if (successModal) successModal.remove();
+                switchSection('overview');
+            }
+
+            const proceedOverviewButtons = document.querySelectorAll('[data-proceed-overview]');
+            if (proceedOverviewButtons.length > 0) {
+                proceedOverviewButtons.forEach(function (btn) {
+                    btn.addEventListener('click', closeSuccessModalAndOpenOverview);
+                });
+            }
+
+            const successModalBackdrop = document.querySelector('[data-password-success-modal]');
+            if (successModalBackdrop) {
+                successModalBackdrop.addEventListener('click', function (event) {
+                    if (event.target === successModalBackdrop) {
+                        closeSuccessModalAndOpenOverview();
+                    }
+                });
+            }
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key !== 'Escape') return;
+                if (googleModal && !googleModal.hasAttribute('hidden')) {
+                    event.preventDefault();
+                    closeGoogleStepUp();
+                    return;
+                }
+                if (successModalBackdrop) closeSuccessModalAndOpenOverview();
+            });
+        });
+    </script>
+}

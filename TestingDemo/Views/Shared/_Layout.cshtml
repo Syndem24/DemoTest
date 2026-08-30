@@ -23,10 +23,25 @@
         && string.Equals(action, "Privacy", StringComparison.OrdinalIgnoreCase)
         ? "is-active"
         : string.Empty;
+    var adminUsersActive = string.Equals(controller, "AdminUsers", StringComparison.OrdinalIgnoreCase)
+        ? "is-active"
+        : string.Empty;
+    var adminFlushLogsActive = string.Equals(controller, "AdminFlushLogs", StringComparison.OrdinalIgnoreCase)
+        ? "is-active"
+        : string.Empty;
+    var adminOffersActive = string.Equals(controller, "AdminSpecialOffers", StringComparison.OrdinalIgnoreCase)
+        ? "is-active"
+        : string.Empty;
+    var dashboardActive = string.Equals(controller, "Dashboard", StringComparison.OrdinalIgnoreCase)
+        ? "is-active"
+        : string.Empty;
+    var isAdminManager = User.IsInRole("AdminManager");
     var isRoomsController = string.Equals(controller, "Rooms", StringComparison.OrdinalIgnoreCase);
     var needsPhotoZoom = !string.IsNullOrEmpty(adminBookingsActive)
         || !string.IsNullOrEmpty(adminPaymentsActive)
         || isRoomsController;
+    var userDisplayName = User.Identity?.Name ?? "Account";
+    var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? string.Empty;
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -40,23 +55,39 @@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/TestingDemo.styles.css" asp-append-version="true" />
-    @if (!string.IsNullOrEmpty(adminBookingsActive))
+    @if (!string.IsNullOrEmpty(adminBookingsActive)
+        || !string.IsNullOrEmpty(adminFlushLogsActive)
+        || !string.IsNullOrEmpty(adminPaymentsActive)
+        || !string.IsNullOrEmpty(dashboardActive))
     {
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    }
+    @if (!string.IsNullOrEmpty(adminBookingsActive))
+    {
         <link rel="stylesheet" href="~/css/booking.css" asp-append-version="true" />
     }
+    @await RenderSectionAsync("Styles", required: false)
 </head>
 <body class="hotel-shell">
     <div class="hotel-sidebar-backdrop" id="sidebarBackdrop" hidden></div>
 
     <aside class="hotel-sidebar" id="hotelSidebar" aria-label="Main navigation">
-        <a class="hotel-sidebar-brand" asp-controller="Rooms" asp-action="Index" title="Admin home">
+        <a class="hotel-sidebar-brand" asp-controller="Dashboard" asp-action="Index" title="Dashboard">
             <img src="~/Images/Logo.png" asp-append-version="true" alt="Mori International Hotel" class="hotel-sidebar-logo" />
         </a>
 
         <nav class="hotel-sidebar-nav">
+            <a class="hotel-sidebar-link @dashboardActive"
+               asp-controller="Dashboard"
+               asp-action="Index"
+               title="Business dashboard">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+                </svg>
+                <span>Dashboard</span>
+            </a>
             <a class="hotel-sidebar-link @roomsActive"
                asp-controller="Rooms"
                asp-action="Index"
@@ -84,6 +115,27 @@
                 </svg>
                 <span>Payments</span>
             </a>
+            @if (isAdminManager)
+            {
+            <a class="hotel-sidebar-link @adminFlushLogsActive"
+               asp-controller="AdminFlushLogs"
+               asp-action="Index"
+               title="System audit log">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M6 3h9l5 5v13H6V3zm8 1.5V9h4.5L14 4.5zM8 12h8v2H8v-2zm0 4h8v2H8v-2z"/>
+                </svg>
+                <span>Audit log</span>
+            </a>
+            }
+            <a class="hotel-sidebar-link @adminOffersActive"
+               asp-controller="AdminSpecialOffers"
+               asp-action="Index"
+               title="Special offers">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58s1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41s-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/>
+                </svg>
+                <span>Offers</span>
+            </a>
             <a class="hotel-sidebar-link @bookingActive"
                asp-controller="Booking"
                asp-action="Index"
@@ -92,16 +144,28 @@
                     <path d="M7 3h10a2 2 0 0 1 2 2v15l-7-3-7 3V5a2 2 0 0 1 2-2zm2 4v2h6V7H9zm0 4v2h6v-2H9z"/>
                 </svg>
                 <span>Guest</span>
-            </a>           
-            <a class="hotel-sidebar-link @privacyActive"
-               asp-controller="Home"
-               asp-action="Privacy"
-               title="Privacy">
-                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                    <path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3zm0 2.2 6 2.25V11c0 3.9-2.5 7.4-6 8.8-3.5-1.4-6-4.9-6-8.8V6.45l6-2.25zM11 10h2v5h-2v-5zm0-3h2v2h-2V7z"/>
-                </svg>
-                <span>Privacy</span>
             </a>
+            @if (isAdminManager)
+            {
+                <a class="hotel-sidebar-link @adminUsersActive"
+                   asp-controller="AdminUsers"
+                   asp-action="Index"
+                   title="Staff users">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-3.3 0-6 1.7-6 3.8V20h12v-2.2c0-2.1-2.7-3.8-6-3.8zM19 8h-2v2h-2v2h2v2h2v-2h2v-2h-2z"/>
+                    </svg>
+                    <span>Users</span>
+                </a>
+                <a class="hotel-sidebar-link @privacyActive"
+                   asp-controller="Home"
+                   asp-action="Privacy"
+                   title="Integration">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"/>
+                    </svg>
+                    <span>Integration</span>
+                </a>
+            }
         </nav>
     </aside>
 
@@ -149,6 +213,39 @@
                         </a>
                     </div>
                 </div>
+                @if (User.Identity?.IsAuthenticated == true)
+                {
+                    <div class="admin-profile-menu" data-profile-menu>
+                        <button type="button"
+                                class="admin-profile-toggle"
+                                data-profile-toggle
+                                aria-expanded="false"
+                                aria-label="Open account menu">
+                            <span class="admin-profile-avatar" aria-hidden="true">
+                                @(string.IsNullOrWhiteSpace(userDisplayName) ? "A" : userDisplayName[0].ToString().ToUpperInvariant())
+                            </span>
+                            <span class="admin-profile-text">
+                                <strong>@userDisplayName</strong>
+                                @if (!string.IsNullOrWhiteSpace(userEmail))
+                                {
+                                    <small>@userEmail</small>
+                                }
+                            </span>
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M7 10l5 5 5-5z" />
+                            </svg>
+                        </button>
+                        <div class="admin-profile-panel" data-profile-panel hidden>
+                            <a asp-controller="Account" asp-action="Settings" class="admin-profile-link">
+                                Edit profile &amp; security
+                            </a>
+                            <form asp-controller="Account" asp-action="Logout" method="post" class="admin-profile-logout">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="admin-profile-link admin-profile-link-danger">Log out</button>
+                            </form>
+                        </div>
+                    </div>
+                }
             </div>
         </header>
 
@@ -157,8 +254,12 @@
         </main>
 
         <footer class="hotel-footer">
-            &copy; 2026 - Mori International Hotel -
-            <a asp-controller="Home" asp-action="Privacy">Privacy</a>
+            &copy; 2026 - Mori International Hotel
+            @if (isAdminManager)
+            {
+                <text> - </text>
+                <a asp-controller="Home" asp-action="Privacy">Integration</a>
+            }
         </footer>
     </div>
 

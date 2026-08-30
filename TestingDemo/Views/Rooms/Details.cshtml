@@ -88,27 +88,36 @@
                 <div class="hotel-gallery-empty">
                     <strong>No photos yet</strong>
                     <p>Add images from the room type settings.</p>
-                    <a asp-action="EditType" asp-route-id="@room.RoomTypeId" class="btn btn-primary btn-sm">Add photos</a>
+                    @if (User.IsInRole("AdminManager"))
+                    {
+                        <a asp-action="EditType" asp-route-id="@room.RoomTypeId" class="btn btn-primary btn-sm">Add photos</a>
+                    }
                 </div>
             }
         </div>
 
         <div class="hotel-panel hotel-details-actions-bar">
             <div class="hotel-details-actions-main">
-                <a asp-action="Edit" asp-route-id="@room.Id" class="btn btn-primary">
-                    Edit this room
-                </a>
                 <a asp-action="Index" asp-route-view="list" class="btn btn-outline-secondary">
                     Back to room list
                 </a>
+                @if (User.IsInRole("AdminManager"))
+                {
+                    <a asp-action="Edit" asp-route-id="@room.Id" class="btn btn-primary">
+                        Edit this room
+                    </a>
+                }
             </div>
             <div class="hotel-details-actions-links">
-                <a asp-action="EditType" asp-route-id="@room.RoomTypeId" class="hotel-action-link">
-                    Edit room type (all @room.Name rooms)
-                </a>
-                <a asp-action="Delete" asp-route-id="@room.Id" class="hotel-action-link is-danger">
-                    Delete this room
-                </a>
+                @if (User.IsInRole("AdminManager"))
+                {
+                    <a asp-action="EditType" asp-route-id="@room.RoomTypeId" class="hotel-action-link">
+                        Edit room type (all @room.Name rooms)
+                    </a>
+                    <a asp-action="Delete" asp-route-id="@room.Id" class="hotel-action-link is-danger">
+                        Delete this room
+                    </a>
+                }
             </div>
         </div>
     </div>

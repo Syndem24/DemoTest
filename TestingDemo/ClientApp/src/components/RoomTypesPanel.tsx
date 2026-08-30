@@ -12,6 +12,7 @@ type Props = {
   data: RoomTypeSummary[]
   loading: boolean
   error: string | null
+  canManage?: boolean
 }
 
 function SortButton({
@@ -35,7 +36,7 @@ function SortButton({
   )
 }
 
-export function RoomTypesPanel({ data, loading, error }: Props) {
+export function RoomTypesPanel({ data, loading, error, canManage = true }: Props) {
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebouncedValue(search)
   const { sortKey, sortDir, toggleSort } = useSortState<TypeSortKey>('name')
@@ -129,7 +130,7 @@ export function RoomTypesPanel({ data, loading, error }: Props) {
                     />
                   </th>
                   <th>Inclusions</th>
-                  <th className="rm-col-actions">Actions</th>
+                  {canManage ? <th className="rm-col-actions">Actions</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -166,12 +167,14 @@ export function RoomTypesPanel({ data, loading, error }: Props) {
                         {item.inclusions.length ? item.inclusions.join(', ') : '—'}
                       </div>
                     </td>
+                    {canManage ? (
                     <td className="rm-col-actions">
                       <div className="rm-actions">
                         <EditIconLink href={`/Rooms/EditType/${item.roomTypeId}`} />
                         <DeleteIconLink href={`/Rooms/DeleteType/${item.roomTypeId}`} />
                       </div>
                     </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>

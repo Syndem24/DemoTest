@@ -1,0 +1,274 @@
+@model TestingDemo.ViewModels.AdminUserListViewModel
+@{
+    var rangeStart = Model.TotalCount == 0 ? 0 : ((Model.Page - 1) * Model.PageSize) + 1;
+    var rangeEnd = Model.TotalCount == 0 ? 0 : Math.Min(Model.TotalCount, Model.Page * Model.PageSize);
+    string BuildPageUrl(int targetPage) => Url.Action(
+        "Index",
+        "AdminUsers",
+        new
+        {
+            q = Model.SearchTerm,
+            sortBy = Model.SortBy,
+            page = targetPage
+        }) ?? "#";
+}
+
+<div class="admin-users-results-meta">
+    Showing <strong>@rangeStart</strong>-<strong>@rangeEnd</strong> of <strong>@Model.TotalCount</strong> users
+</div>
+
+<div class="admin-users-mobile-list" aria-label="Users list">
+    @if (Model.Users.Count == 0)
+    {
+        <p class="admin-users-empty">No users found.</p>
+    }
+    else
+    {
+        foreach (var user in Model.Users)
+        {
+            var roleClass = string.Equals(user.Role, "AdminManager", StringComparison.OrdinalIgnoreCase)
+                ? "is-admin-manager"
+                : string.Equals(user.Role, "Receptionist", StringComparison.OrdinalIgnoreCase)
+                    ? "is-receptionist"
+                    : "is-other";
+            <article class="admin-users-mobile-card">
+                <div class="admin-users-mobile-head">
+                    <div>
+                        <strong>@(string.IsNullOrWhiteSpace(user.FullName) ? user.UserName : user.FullName)</strong>
+                        <small>@user.Email</small>
+                    </div>
+                    <span class="admin-users-role @roleClass">@user.Role</span>
+                </div>
+                <p class="admin-users-status">
+                    Status:
+                    @if (user.IsDisabled)
+                    {
+                        <span class="admin-users-role is-disabled">Disabled</span>
+                        @if (user.DisabledAtUtc.HasValue)
+                        {
+                            <small>since @user.DisabledAtUtc.Value.ToString("yyyy-MM-dd HH:mm") UTC</small>
+                        }
+                    }
+                    else
+                    {
+                        <span class="admin-users-role is-active">Active</span>
+                    }
+                </p>
+                <dl class="admin-users-mobile-details">
+                    <div>
+                        <dt>Username</dt>
+                        <dd>@user.UserName</dd>
+                    </div>
+                    <div>
+                        <dt>Phone</dt>
+                        <dd>@(string.IsNullOrWhiteSpace(user.PhoneNumber) ? "—" : user.PhoneNumber)</dd>
+                    </div>
+                    <div>
+                        <dt>Birth date</dt>
+                        <dd>@(user.BirthDate?.ToString("yyyy-MM-dd") ?? "—")</dd>
+                    </div>
+                    <div>
+                        <dt>Address</dt>
+                        <dd>@(string.IsNullOrWhiteSpace(user.Address) ? "—" : user.Address)</dd>
+                    </div>
+                </dl>
+                <div class="admin-users-actions admin-users-actions-mobile">
+                    <a asp-action="Edit" asp-route-id="@user.Id" class="btn btn-sm btn-outline-secondary admin-users-action-btn">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path d="M15.2 5.3 18.7 8.8 9.2 18.3l-4.3.8.8-4.3 9.5-9.5zm1.4-1.4a2 2 0 0 1 2.8 0l.7.7a2 2 0 0 1 0 2.8l-.6.6-3.5-3.5.6-.6z"/>
+                        </svg>
+                        <span>Edit</span>
+                    </a>
+                    @if (!user.IsDisabled)
+                    {
+                        <form asp-action="Disable" asp-route-id="@user.Id" method="post" class="admin-users-action-form">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="q" value="@Model.SearchTerm" />
+                            <input type="hidden" name="sortBy" value="@Model.SortBy" />
+                            <input type="hidden" name="page" value="@Model.Page" />
+                            <button type="submit" class="btn btn-sm btn-outline-danger admin-users-action-btn">
+                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 2a7.9 7.9 0 0 1 5.2 1.9L5.9 17.2A8 8 0 0 1 12 4zm0 16a7.9 7.9 0 0 1-5.2-1.9L18.1 6.8A8 8 0 0 1 12 20z"/>
+                                </svg>
+                                <span>Disable</span>
+                            </button>
+                        </form>
+                    }
+                    else
+                    {
+                        <form asp-action="Enable" asp-route-id="@user.Id" method="post" class="admin-users-action-form">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="q" value="@Model.SearchTerm" />
+                            <input type="hidden" name="sortBy" value="@Model.SortBy" />
+                            <input type="hidden" name="page" value="@Model.Page" />
+                            <button type="submit" class="btn btn-sm btn-outline-primary admin-users-action-btn">
+                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8zm-1-13h2v5l4 2-1 1.7-5-2.7V7z"/>
+                                </svg>
+                                <span>Enable</span>
+                            </button>
+                        </form>
+                        <form asp-action="Delete" asp-route-id="@user.Id" method="post" class="admin-users-action-form">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="q" value="@Model.SearchTerm" />
+                            <input type="hidden" name="sortBy" value="@Model.SortBy" />
+                            <input type="hidden" name="page" value="@Model.Page" />
+                            <button type="submit"
+                                    class="btn btn-sm btn-danger admin-users-action-btn"
+                                    @(user.CanDeleteNow ? null : "disabled")
+                                    title="Permanent delete is enabled only after retention period."
+                                    onclick="return confirm('Permanently delete this account? This cannot be undone.');">
+                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"/>
+                                </svg>
+                                <span>Delete</span>
+                            </button>
+                        </form>
+                    }
+                </div>
+            </article>
+        }
+    }
+</div>
+
+<div class="admin-users-table-wrap">
+    <table class="table table-striped align-middle admin-users-table">
+        <thead>
+            <tr>
+                <th>Full name</th>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Birth date</th>
+                <th>Address</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (Model.Users.Count == 0)
+            {
+                <tr>
+                    <td colspan="9" class="text-center text-muted py-4">No users found.</td>
+                </tr>
+            }
+            else
+            {
+                foreach (var user in Model.Users)
+                {
+                    var roleClass = string.Equals(user.Role, "AdminManager", StringComparison.OrdinalIgnoreCase)
+                        ? "is-admin-manager"
+                        : string.Equals(user.Role, "Receptionist", StringComparison.OrdinalIgnoreCase)
+                            ? "is-receptionist"
+                            : "is-other";
+                    <tr>
+                        <td>
+                            <div class="admin-users-name-cell">
+                                <strong>@(string.IsNullOrWhiteSpace(user.FullName) ? "—" : user.FullName)</strong>
+                                <small>@user.Email</small>
+                            </div>
+                        </td>
+                        <td>@user.UserName</td>
+                        <td class="admin-users-cell-email">@user.Email</td>
+                        <td>@(string.IsNullOrWhiteSpace(user.PhoneNumber) ? "—" : user.PhoneNumber)</td>
+                        <td>
+                            <span class="admin-users-role @roleClass">@user.Role</span>
+                        </td>
+                        <td>
+                            @if (user.IsDisabled)
+                            {
+                                <div class="admin-users-status-cell">
+                                    <span class="admin-users-role is-disabled">Disabled</span>
+                                    @if (user.DisabledAtUtc.HasValue)
+                                    {
+                                        <small>@user.DisabledAtUtc.Value.ToString("yyyy-MM-dd HH:mm") UTC</small>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="admin-users-role is-active">Active</span>
+                            }
+                        </td>
+                        <td>@(user.BirthDate?.ToString("yyyy-MM-dd") ?? "—")</td>
+                        <td>@(string.IsNullOrWhiteSpace(user.Address) ? "—" : user.Address)</td>
+                        <td>
+                            <div class="admin-users-actions admin-users-actions-table">
+                                <a asp-action="Edit" asp-route-id="@user.Id" class="btn btn-sm btn-outline-secondary admin-users-action-btn">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                        <path d="M15.2 5.3 18.7 8.8 9.2 18.3l-4.3.8.8-4.3 9.5-9.5zm1.4-1.4a2 2 0 0 1 2.8 0l.7.7a2 2 0 0 1 0 2.8l-.6.6-3.5-3.5.6-.6z"/>
+                                    </svg>
+                                    <span>Edit</span>
+                                </a>
+                                @if (!user.IsDisabled)
+                                {
+                                    <form asp-action="Disable" asp-route-id="@user.Id" method="post" class="admin-users-action-form">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="q" value="@Model.SearchTerm" />
+                                        <input type="hidden" name="sortBy" value="@Model.SortBy" />
+                                        <input type="hidden" name="page" value="@Model.Page" />
+                                        <button type="submit" class="btn btn-sm btn-outline-danger admin-users-action-btn">
+                                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                                <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 2a7.9 7.9 0 0 1 5.2 1.9L5.9 17.2A8 8 0 0 1 12 4zm0 16a7.9 7.9 0 0 1-5.2-1.9L18.1 6.8A8 8 0 0 1 12 20z"/>
+                                            </svg>
+                                            <span>Disable</span>
+                                        </button>
+                                    </form>
+                                    <span class="admin-users-action-placeholder" aria-hidden="true"></span>
+                                }
+                                else
+                                {
+                                    <form asp-action="Enable" asp-route-id="@user.Id" method="post" class="admin-users-action-form">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="q" value="@Model.SearchTerm" />
+                                        <input type="hidden" name="sortBy" value="@Model.SortBy" />
+                                        <input type="hidden" name="page" value="@Model.Page" />
+                                        <button type="submit" class="btn btn-sm btn-outline-primary admin-users-action-btn">
+                                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                                <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8zm-1-13h2v5l4 2-1 1.7-5-2.7V7z"/>
+                                            </svg>
+                                            <span>Enable</span>
+                                        </button>
+                                    </form>
+                                    <form asp-action="Delete" asp-route-id="@user.Id" method="post" class="admin-users-action-form">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="q" value="@Model.SearchTerm" />
+                                        <input type="hidden" name="sortBy" value="@Model.SortBy" />
+                                        <input type="hidden" name="page" value="@Model.Page" />
+                                        <button type="submit"
+                                                class="btn btn-sm btn-danger admin-users-action-btn"
+                                                @(user.CanDeleteNow ? null : "disabled")
+                                                title="Permanent delete is enabled only after retention period."
+                                                onclick="return confirm('Permanently delete this account? This cannot be undone.');">
+                                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                                <path d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"/>
+                                            </svg>
+                                            <span>Delete</span>
+                                        </button>
+                                    </form>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+<nav class="admin-users-pagination" aria-label="Users pages">
+    <a class="btn btn-sm btn-outline-secondary @(Model.HasPreviousPage ? string.Empty : "disabled")"
+       href="@(Model.HasPreviousPage ? BuildPageUrl(Model.Page - 1) : "#")"
+       aria-disabled="@(!Model.HasPreviousPage)"
+       data-admin-users-page="@(Model.HasPreviousPage ? Model.Page - 1 : 0)">
+        Previous
+    </a>
+    <span class="admin-users-page-indicator">Page @Model.Page of @Model.TotalPages</span>
+    <a class="btn btn-sm btn-outline-secondary @(Model.HasNextPage ? string.Empty : "disabled")"
+       href="@(Model.HasNextPage ? BuildPageUrl(Model.Page + 1) : "#")"
+       aria-disabled="@(!Model.HasNextPage)"
+       data-admin-users-page="@(Model.HasNextPage ? Model.Page + 1 : 0)">
+        Next
+    </a>
+</nav>

@@ -1,42 +1,211 @@
-using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using TestingDemo.Data;
 using TestingDemo.Models;
+using TestingDemo.Services;
+using TestingDemo.ViewModels;
 
-namespace TestingDemo.Controllers
+namespace TestingDemo.Controllers;
+
+public class HomeController : Controller
 {
-    public class HomeController : Controller
+    private readonly ILogger<HomeController> _logger;
+    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ISecureConfigStore _vault;
+    private readonly IStaffEmailSender _email;
+    private readonly HotelBookingDbContext _db;
+    private readonly ISystemAuditRecorder _audit;
+
+    public HomeController(
+        ILogger<HomeController> logger,
+        UserManager<ApplicationUser> userManager,
+        ISecureConfigStore vault,
+        IStaffEmailSender email,
+        HotelBookingDbContext db,
+        ISystemAuditRecorder audit)
     {
-        private readonly ILogger<HomeController> _logger;
+        _logger = logger;
+        _userManager = userManager;
+        _vault = vault;
+        _email = email;
+        _db = db;
+        _audit = audit;
+    }
 
-        public HomeController(ILogger<HomeController> logger)
+    public IActionResult Index()
+    {
+        return RedirectToAction("Index", "Booking");
+    }
+
+    [HttpGet]
+    [Authorize(Policy = "AdminManagerOnly")]
+    public async Task<IActionResult> Privacy(CancellationToken cancellationToken)
+    {
+        return View(await BuildIntegrationModelAsync(cancellationToken));
+    }
+
+    [HttpPost]
+    [Authorize(Policy = "AdminManagerOnly")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Privacy(IntegrationSettingsViewModel model, CancellationToken cancellationToken)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+            return Challenge();
+
+        if (!ModelState.IsValid)
+            return View(await MergeIntegrationDisplayAsync(model, cancellationToken));
+
+        if (!await _userManager.CheckPasswordAsync(user, model.CurrentPassword))
         {
-            _logger = logger;
+            ModelState.AddModelError(nameof(model.CurrentPassword), "Current password is incorrect for this account.");
+            return View(await MergeIntegrationDisplayAsync(model, cancellationToken));
         }
 
-        public IActionResult Index()
+        var changedKeys = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(model.SenderEmail))
         {
-            // Public visitors land on the guest booking site.
-            return RedirectToAction("Index", "Booking");
+            var nextSender = model.SenderEmail.Trim();
+            var currentSender = await _vault.GetAsync(SecureSettingKeys.EmailSender, cancellationToken);
+            if (!string.Equals(currentSender, nextSender, StringComparison.OrdinalIgnoreCase))
+            {
+                await _vault.SetAsync(SecureSettingKeys.EmailSender, nextSender, cancellationToken);
+                changedKeys.Add("EmailSender");
+            }
         }
 
-        public IActionResult Privacy()
+        if (model.ClearSmtpPassword)
         {
-            return View();
+            await _vault.RemoveAsync(SecureSettingKeys.EmailPassword, cancellationToken);
+            changedKeys.Add("EmailPassword");
+        }
+        else if (!string.IsNullOrWhiteSpace(model.SmtpPassword))
+        {
+            await _vault.SetAsync(SecureSettingKeys.EmailPassword, model.SmtpPassword, cancellationToken);
+            changedKeys.Add("EmailPassword");
         }
 
-        [Route("Home/NotFoundPage")]
-        [Route("NotFound")]
-        [Route("404")]
-        public IActionResult NotFoundPage()
+        if (!string.IsNullOrWhiteSpace(model.GeminiKeyName))
         {
-            Response.StatusCode = 404;
-            return View("NotFound");
+            await _vault.SetAsync(SecureSettingKeys.GeminiKeyName, model.GeminiKeyName.Trim(), cancellationToken);
+            changedKeys.Add("GeminiKeyName");
         }
 
-        [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
-        public IActionResult Error()
+        if (model.ClearGeminiKey)
         {
-            return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+            await _vault.RemoveAsync(SecureSettingKeys.GeminiApiKey, cancellationToken);
+            changedKeys.Add("GeminiApiKey");
         }
+        else if (!string.IsNullOrWhiteSpace(model.GeminiApiKey))
+        {
+            await _vault.SetAsync(SecureSettingKeys.GeminiApiKey, model.GeminiApiKey.Trim(), cancellationToken);
+            changedKeys.Add("GeminiApiKey");
+        }
+
+        if (changedKeys.Count > 0)
+        {
+            _db.StaffAccountAudits.Add(new StaffAccountAudit
+            {
+                Action = "SecureConfig.Save",
+                TargetUserId = user.Id,
+                PerformedByUserId = user.Id,
+                RoleAssigned = string.Join(",", changedKeys),
+                AtUtc = DateTime.UtcNow
+            });
+            _audit.Record(
+                SystemAuditIntent.ConfigurationChange,
+                SystemAuditDomain.Configuration,
+                "SecureConfig.Save",
+                "SecureSetting",
+                string.Join(",", changedKeys),
+                "Integration vault",
+                summary: $"Integration keys updated: {string.Join(", ", changedKeys)}.");
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        _logger.LogInformation("Integration secrets updated by {User}. Keys={Keys}", user.UserName, string.Join(",", changedKeys));
+        TempData["Message"] = changedKeys.Count == 0
+            ? "No secret values were changed."
+            : "Integration settings saved.";
+        return RedirectToAction(nameof(Privacy));
+    }
+
+    [HttpPost]
+    [Authorize(Policy = "AdminManagerOnly")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> TestSmtp(IntegrationSettingsViewModel model, CancellationToken cancellationToken)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+            return Challenge();
+
+        if (string.IsNullOrWhiteSpace(model.CurrentPassword)
+            || !await _userManager.CheckPasswordAsync(user, model.CurrentPassword))
+        {
+            TempData["Error"] = "Enter your current password to send a test email.";
+            return RedirectToAction(nameof(Privacy));
+        }
+
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            TempData["Error"] = "Your account has no email address for the test message.";
+            return RedirectToAction(nameof(Privacy));
+        }
+
+        try
+        {
+            await _email.SendTestAsync(user.Email, cancellationToken);
+            TempData["Message"] = "Test email sent to your staff address.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "SMTP test failed for {User}.", user.UserName);
+            TempData["Error"] = "Could not send the test email. Check the Gmail sender and app password.";
+        }
+
+        return RedirectToAction(nameof(Privacy));
+    }
+
+    [Route("Home/NotFoundPage")]
+    [Route("NotFound")]
+    [Route("404")]
+    public IActionResult NotFoundPage()
+    {
+        Response.StatusCode = 404;
+        return View("NotFound");
+    }
+
+    [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+    public IActionResult Error()
+    {
+        return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+    }
+
+    private async Task<IntegrationSettingsViewModel> BuildIntegrationModelAsync(CancellationToken cancellationToken)
+    {
+        return new IntegrationSettingsViewModel
+        {
+            SenderEmail = await _vault.GetAsync(SecureSettingKeys.EmailSender, cancellationToken),
+            SmtpPasswordConfigured = await _vault.HasValueAsync(SecureSettingKeys.EmailPassword, cancellationToken),
+            GeminiConfigured = await _vault.HasValueAsync(SecureSettingKeys.GeminiApiKey, cancellationToken),
+            GeminiKeyName = await _vault.GetAsync(SecureSettingKeys.GeminiKeyName, cancellationToken)
+        };
+    }
+
+    private async Task<IntegrationSettingsViewModel> MergeIntegrationDisplayAsync(
+        IntegrationSettingsViewModel model,
+        CancellationToken cancellationToken)
+    {
+        model.SmtpPassword = null;
+        model.GeminiApiKey = null;
+        model.CurrentPassword = string.Empty;
+        model.SmtpPasswordConfigured = await _vault.HasValueAsync(SecureSettingKeys.EmailPassword, cancellationToken);
+        model.GeminiConfigured = await _vault.HasValueAsync(SecureSettingKeys.GeminiApiKey, cancellationToken);
+        model.SenderEmail ??= await _vault.GetAsync(SecureSettingKeys.EmailSender, cancellationToken);
+        model.GeminiKeyName ??= await _vault.GetAsync(SecureSettingKeys.GeminiKeyName, cancellationToken);
+        return model;
     }
 }

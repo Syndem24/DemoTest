@@ -29,6 +29,8 @@ public class RoomService : IRoomService
 
     public async Task<IReadOnlyList<RoomDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
+        await SyncOccupancyFromBookingsAsync(cancellationToken);
+
         var rooms = await _db.Rooms
             .AsNoTracking()
             .Include(r => r.RoomType)
@@ -188,7 +190,7 @@ public class RoomService : IRoomService
         _db.Entry(roomType).Property(t => t.Inclusions).IsModified = true;
 
         room.RoomNumber = dto.RoomNumber.Trim();
-        room.Status = RoomStatus.Available;
+        await SyncOccupancyFromBookingsAsync(cancellationToken);
 
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -257,10 +259,7 @@ public class RoomService : IRoomService
             }
         }
 
-        foreach (var room in rooms)
-        {
-            room.Status = RoomStatus.Available;
-        }
+        await SyncOccupancyFromBookingsAsync(cancellationToken);
 
         await _db.SaveChangesAsync(cancellationToken);
         return rooms.Count;
@@ -320,6 +319,51 @@ public class RoomService : IRoomService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Occupied follows confirmed, non-archived room assignments — not room-type edits.
+    /// </summary>
+    private async Task SyncOccupancyFromBookingsAsync(CancellationToken cancellationToken)
+    {
+        var assignedIds = await _db.BookingRoomAssignments
+            .AsNoTracking()
+            .Where(assignment =>
+                !assignment.BookingItem.Booking.IsArchived
+                && assignment.BookingItem.Booking.Status == BookingStatus.Confirmed)
+            .Select(assignment => assignment.RoomId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var assignedSet = assignedIds.ToHashSet();
+        var rooms = await _db.Rooms.ToListAsync(cancellationToken);
+        var changed = false;
+
+        foreach (var room in rooms)
+        {
+            var hasGuest = assignedSet.Contains(room.Id);
+            if (hasGuest)
+            {
+                if (room.Status != RoomStatus.Occupied)
+                {
+                    room.Status = RoomStatus.Occupied;
+                    changed = true;
+                }
+
+                continue;
+            }
+
+            if (room.Status == RoomStatus.Occupied)
+            {
+                room.Status = RoomStatus.Cleaning;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     public async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken = default)
@@ -422,7 +466,7 @@ public class RoomService : IRoomService
 
     /// <summary>
     /// Blocks delete when a room is occupied or on a confirmed booking.
-    /// Removes leftover AssignedRoom rows from finished/cancelled bookings so the FK does not block.
+    /// Removes leftover BookingRoomAssignment rows from finished/cancelled bookings so the FK does not block.
     /// </summary>
     private async Task PrepareRoomsForDeletionAsync(
         IReadOnlyCollection<int> roomIds,
@@ -446,7 +490,7 @@ public class RoomService : IRoomService
                 $"Cannot delete room(s) {string.Join(", ", occupiedNumbers)} while occupied. Check the guest out first.");
         }
 
-        var blockingNumbers = await _db.AssignedRooms
+        var blockingNumbers = await _db.BookingRoomAssignments
             .AsNoTracking()
             .Where(a => roomIds.Contains(a.RoomId)
                         && !a.BookingItem.Booking.IsArchived
@@ -462,13 +506,13 @@ public class RoomService : IRoomService
                 $"Cannot delete room(s) {string.Join(", ", blockingNumbers)} while assigned to a confirmed booking. Cancel or check out that stay first.");
         }
 
-        var leftoverAssignments = await _db.AssignedRooms
+        var leftoverAssignments = await _db.BookingRoomAssignments
             .Where(a => roomIds.Contains(a.RoomId))
             .ToListAsync(cancellationToken);
 
         if (leftoverAssignments.Count > 0)
         {
-            _db.AssignedRooms.RemoveRange(leftoverAssignments);
+            _db.BookingRoomAssignments.RemoveRange(leftoverAssignments);
         }
     }
 

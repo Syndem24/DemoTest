@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -6,7 +8,7 @@ using TestingDemo.Models;
 
 namespace TestingDemo.Data;
 
-public class HotelBookingDbContext : DbContext
+public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
 {
     private static readonly JsonSerializerOptions JsonOptions = new();
 
@@ -19,21 +21,72 @@ public class HotelBookingDbContext : DbContext
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<BookingItem> BookingItems => Set<BookingItem>();
     public DbSet<BookingCharge> BookingCharges => Set<BookingCharge>();
-    public DbSet<AssignedRoom> AssignedRooms => Set<AssignedRoom>();
-    public DbSet<StaffUser> StaffUsers => Set<StaffUser>();
-    public DbSet<BookingHistoryFlushLog> BookingHistoryFlushLogs => Set<BookingHistoryFlushLog>();
-    public DbSet<PaymentFlushLog> PaymentFlushLogs => Set<PaymentFlushLog>();
+    public DbSet<BookingRoomAssignment> BookingRoomAssignments => Set<BookingRoomAssignment>();
+    public DbSet<StaffAccountAudit> StaffAccountAudits => Set<StaffAccountAudit>();
+    public DbSet<SystemFlushLog> SystemFlushLogs => Set<SystemFlushLog>();
+    public DbSet<SystemAuditLog> SystemAuditLogs => Set<SystemAuditLog>();
     public DbSet<PaymentRecord> PaymentRecords => Set<PaymentRecord>();
+    public DbSet<SpecialOffer> SpecialOffers => Set<SpecialOffer>();
+    public DbSet<SecureSetting> SecureSettings => Set<SecureSetting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
+        modelBuilder.Ignore<IdentityUserRole<string>>();
+        modelBuilder.Ignore<IdentityUserClaim<string>>();
+        modelBuilder.Ignore<IdentityRoleClaim<string>>();
+
+        modelBuilder.Entity<IdentityRole>().ToTable("StaffRole");
+        modelBuilder.Entity<IdentityUserLogin<string>>().ToTable("StaffAccountLogin");
+        modelBuilder.Entity<IdentityUserToken<string>>().ToTable("StaffAccountToken");
+
+        modelBuilder.Entity<ApplicationUser>(entity =>
+        {
+            entity.ToTable("StaffAccount");
+            entity.Property(e => e.FullName).HasMaxLength(120);
+            entity.Property(e => e.Address).HasMaxLength(300);
+            entity.Property(e => e.GoogleEmail).HasMaxLength(256);
+            entity.Property(e => e.NormalizedGoogleEmail).HasMaxLength(256);
+            entity.Property(e => e.GoogleVerificationStatus)
+                .HasConversion<string>()
+                .HasMaxLength(40);
+            entity.HasIndex(e => e.NormalizedGoogleEmail)
+                .IsUnique()
+                .HasFilter("[NormalizedGoogleEmail] IS NOT NULL");
+            entity.Property(e => e.RoleId).HasMaxLength(450);
+            entity.HasIndex(e => e.RoleId);
+            entity.HasOne<IdentityRole>()
+                .WithMany()
+                .HasForeignKey(e => e.RoleId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.Property(e => e.DashboardLayoutJson).HasColumnType("nvarchar(max)");
+        });
+
+        modelBuilder.Entity<StaffAccountAudit>(entity =>
+        {
+            entity.ToTable("StaffAccountAudit");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Action).HasMaxLength(40).IsRequired();
+            entity.Property(e => e.TargetUserId).HasMaxLength(450).IsRequired();
+            entity.Property(e => e.PerformedByUserId).HasMaxLength(450).IsRequired();
+            entity.Property(e => e.RoleAssigned).HasMaxLength(64).IsRequired();
+            entity.HasIndex(e => e.AtUtc);
+        });
+
+        modelBuilder.Entity<SecureSetting>(entity =>
+        {
+            entity.ToTable("SecureSetting");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Key).HasMaxLength(80).IsRequired();
+            entity.Property(e => e.Ciphertext).IsRequired();
+            entity.HasIndex(e => e.Key).IsUnique();
+        });
+
         modelBuilder.Entity<RoomType>(entity =>
         {
             entity.ToTable("RoomType");
             entity.HasKey(e => e.RoomTypeId);
-            entity.Property(e => e.RoomTypeId).HasColumnName("RoomTypeID");
             entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
             entity.HasIndex(e => e.Name).IsUnique();
             entity.Property(e => e.Description).HasMaxLength(5000);
@@ -48,7 +101,6 @@ public class HotelBookingDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.RoomNumber).HasMaxLength(20).IsRequired();
             entity.HasIndex(e => e.RoomNumber).IsUnique();
-            entity.Property(e => e.RoomTypeId).HasColumnName("RoomTypeID");
             entity.Property(e => e.Status)
                 .HasConversion<string>()
                 .HasMaxLength(20)
@@ -83,10 +135,44 @@ public class HotelBookingDbContext : DbContext
                 .HasConversion<string>()
                 .HasMaxLength(20)
                 .IsRequired();
+            entity.Property(e => e.Channel)
+                .HasConversion<string>()
+                .HasMaxLength(30)
+                .IsRequired();
+            entity.Property(e => e.ArrivalDiscountRequest)
+                .HasConversion<string>()
+                .HasMaxLength(30)
+                .IsRequired();
             entity.Property(e => e.TotalAmount).HasPrecision(18, 2);
             entity.Property(e => e.AmountDueNow).HasPrecision(18, 2);
             entity.HasIndex(e => new { e.IsArchived, e.Status, e.CheckInAtUtc, e.CheckoutTimeUtc });
             entity.HasIndex(e => e.CreatedAtUtc);
+            entity.HasOne(e => e.SpecialOffer)
+                .WithMany()
+                .HasForeignKey(e => e.SpecialOfferId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .IsRequired(false);
+        });
+
+        modelBuilder.Entity<SpecialOffer>(entity =>
+        {
+            entity.ToTable("SpecialOffer");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).HasMaxLength(160).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.Kind)
+                .HasConversion<string>()
+                .HasMaxLength(40)
+                .IsRequired();
+            entity.Property(e => e.Channels).HasConversion<int>();
+            entity.Property(e => e.RegularPricePerNight).HasPrecision(18, 2);
+            entity.Property(e => e.PromoPricePerNight).HasPrecision(18, 2);
+            entity.HasIndex(e => new { e.RoomTypeId, e.IsActive, e.StartsAtUtc, e.EndsAtUtc });
+            entity.HasIndex(e => e.SortOrder);
+            entity.HasOne(e => e.RoomType)
+                .WithMany(t => t.SpecialOffers)
+                .HasForeignKey(e => e.RoomTypeId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<BookingItem>(entity =>
@@ -107,14 +193,14 @@ public class HotelBookingDbContext : DbContext
                 .IsRequired(false);
         });
 
-        modelBuilder.Entity<AssignedRoom>(entity =>
+        modelBuilder.Entity<BookingRoomAssignment>(entity =>
         {
-            entity.ToTable("AssignedRoom");
+            entity.ToTable("BookingRoomAssignment");
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.BookingItemId, e.RoomId }).IsUnique();
             entity.HasIndex(e => e.RoomId);
             entity.HasOne(e => e.BookingItem)
-                .WithMany(item => item.AssignedRooms)
+                .WithMany(item => item.RoomAssignments)
                 .HasForeignKey(e => e.BookingItemId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(e => e.Room)
@@ -141,34 +227,45 @@ public class HotelBookingDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<StaffUser>(entity =>
+        modelBuilder.Entity<SystemFlushLog>(entity =>
         {
-            entity.ToTable("StaffUser");
+            entity.ToTable("SystemFlushLog");
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Username).HasMaxLength(80).IsRequired();
-            entity.HasIndex(e => e.Username).IsUnique();
-            entity.Property(e => e.DisplayName).HasMaxLength(120).IsRequired();
-            entity.Property(e => e.PasswordHash).HasMaxLength(500).IsRequired();
-        });
-
-        modelBuilder.Entity<BookingHistoryFlushLog>(entity =>
-        {
-            entity.ToTable("BookingHistoryFlushLog");
-            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Kind)
+                .HasConversion<string>()
+                .HasMaxLength(40)
+                .IsRequired();
             entity.Property(e => e.PerformedBy).HasMaxLength(120).IsRequired();
             entity.Property(e => e.FileName).HasMaxLength(200).IsRequired();
             entity.Property(e => e.Summary).HasMaxLength(2000).IsRequired();
             entity.HasIndex(e => e.FlushedAtUtc);
+            entity.HasIndex(e => new { e.Kind, e.FlushedAtUtc });
         });
 
-        modelBuilder.Entity<PaymentFlushLog>(entity =>
+        modelBuilder.Entity<SystemAuditLog>(entity =>
         {
-            entity.ToTable("PaymentFlushLog");
+            entity.ToTable("SystemAuditLog");
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.PerformedBy).HasMaxLength(120).IsRequired();
-            entity.Property(e => e.FileName).HasMaxLength(200).IsRequired();
-            entity.Property(e => e.Summary).HasMaxLength(2000).IsRequired();
-            entity.HasIndex(e => e.FlushedAtUtc);
+            entity.Property(e => e.Intent)
+                .HasConversion<string>()
+                .HasMaxLength(40)
+                .IsRequired();
+            entity.Property(e => e.Domain)
+                .HasConversion<string>()
+                .HasMaxLength(40)
+                .IsRequired();
+            entity.Property(e => e.Action).HasMaxLength(80).IsRequired();
+            entity.Property(e => e.ActorUserId).HasMaxLength(450).IsRequired();
+            entity.Property(e => e.ActorDisplayName).HasMaxLength(120).IsRequired();
+            entity.Property(e => e.TargetType).HasMaxLength(40).IsRequired();
+            entity.Property(e => e.TargetId).HasMaxLength(80).IsRequired();
+            entity.Property(e => e.TargetLabel).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Reason).HasMaxLength(500);
+            entity.Property(e => e.Summary).HasMaxLength(500).IsRequired();
+            entity.HasIndex(e => e.AtUtc);
+            entity.HasIndex(e => new { e.Intent, e.AtUtc });
+            entity.HasIndex(e => new { e.Domain, e.AtUtc });
+            entity.HasIndex(e => new { e.TargetType, e.TargetId });
         });
 
         modelBuilder.Entity<PaymentRecord>(entity =>

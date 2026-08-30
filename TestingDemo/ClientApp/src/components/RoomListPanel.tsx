@@ -13,6 +13,7 @@ type Props = {
   data: RoomItem[]
   loading: boolean
   error: string | null
+  canManage?: boolean
 }
 
 type LayoutMode = 'grid' | 'list'
@@ -108,7 +109,7 @@ function RoomTypeSeparator({
   )
 }
 
-function RoomCard({ room }: { room: RoomItem }) {
+function RoomCard({ room, canManage }: { room: RoomItem; canManage: boolean }) {
   return (
     <article className="rm-card">
       <div className="rm-card-media">
@@ -145,8 +146,12 @@ function RoomCard({ room }: { room: RoomItem }) {
 
         <div className="rm-card-actions">
           <DetailsIconLink href={`/Rooms/Details/${room.id}`} />
-          <EditIconLink href={`/Rooms/Edit/${room.id}`} />
-          <DeleteIconLink href={`/Rooms/Delete/${room.id}`} />
+          {canManage ? (
+            <>
+              <EditIconLink href={`/Rooms/Edit/${room.id}`} />
+              <DeleteIconLink href={`/Rooms/Delete/${room.id}`} />
+            </>
+          ) : null}
         </div>
       </div>
     </article>
@@ -174,7 +179,7 @@ function groupByRoomType(rooms: RoomItem[]): RoomTypeGroup[] {
   return Array.from(map.values())
 }
 
-export function RoomListPanel({ data, loading, error }: Props) {
+export function RoomListPanel({ data, loading, error, canManage = true }: Props) {
   const [search, setSearch] = useState('')
   const [layout, setLayout] = useState<LayoutMode>('grid')
   const debouncedSearch = useDebouncedValue(search)
@@ -246,7 +251,7 @@ export function RoomListPanel({ data, loading, error }: Props) {
                 />
                 <div className="rm-grid">
                   {group.rooms.map((room) => (
-                    <RoomCard key={room.id} room={room} />
+                    <RoomCard key={room.id} room={room} canManage={canManage} />
                   ))}
                 </div>
               </section>
@@ -378,8 +383,12 @@ export function RoomListPanel({ data, loading, error }: Props) {
                         <td className="rm-col-actions">
                           <div className="rm-actions">
                             <DetailsIconLink href={`/Rooms/Details/${room.id}`} />
-                            <EditIconLink href={`/Rooms/Edit/${room.id}`} />
-                            <DeleteIconLink href={`/Rooms/Delete/${room.id}`} />
+                            {canManage ? (
+                              <>
+                                <EditIconLink href={`/Rooms/Edit/${room.id}`} />
+                                <DeleteIconLink href={`/Rooms/Delete/${room.id}`} />
+                              </>
+                            ) : null}
                           </div>
                         </td>
                       </tr>

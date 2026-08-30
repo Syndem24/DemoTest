@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using TestingDemo.DTOs;
 
@@ -9,8 +10,10 @@ public interface IBookingNotificationsClient
     Task BookingUpdated(BookingNotificationDto notification);
     Task BookingArchived(int bookingId);
     Task PaymentChanged(int bookingId);
+    Task OfferEndingSoon(SpecialOfferEndingSoonNotificationDto notification);
 }
 
+[Authorize(Roles = "AdminManager,Receptionist")]
 public sealed class BookingNotificationsHub : Hub<IBookingNotificationsClient>
 {
 }

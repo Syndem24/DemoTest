@@ -12,6 +12,9 @@ public enum BookingChargeType
     StayExtension = 6
 }
 
+/// <summary>
+/// Table <c>BookingCharge</c> — extra stay fee line (early check-in, late checkout, extra person, incidentals, snacks).
+/// </summary>
 public class BookingCharge
 {
     public int Id { get; set; }

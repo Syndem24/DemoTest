@@ -1,0 +1,214 @@
+@model TestingDemo.Services.DashboardSnapshot
+@using System.Globalization
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Dashboard";
+    var peso = CultureInfo.GetCultureInfo("en-PH");
+    string Money(decimal value) => value.ToString("C", peso);
+    var chartPayload = JsonSerializer.Serialize(new
+    {
+        days = Model.Last7Days.Select(d => new { d.Label, d.Revenue, d.Arrivals, d.OccupiedRooms }),
+        status = Model.StatusMix.Select(s => new { s.Label, s.Count }),
+        channels = Model.ChannelMix.Select(s => new { s.Label, s.Count })
+    });
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@11.3.0/dist/gridstack.min.css" />
+}
+
+<section class="admin-flush-page admin-dash-page">
+    <section class="admin-flush-hero" aria-labelledby="dashTitle">
+        <div class="admin-flush-hero-copy">
+            <p class="admin-flush-eyebrow">@Model.RoleName operations</p>
+            <h1 id="dashTitle">Business dashboard</h1>
+            <p class="admin-flush-lede">
+                Occupancy, cash, channel mix, and front-desk load for Mori International Hotel.
+                Drag a report frame by its header, or resize from the corner. Your layout is saved to your staff account.
+            </p>
+        </div>
+        <ul class="admin-flush-kpis" aria-label="Snapshot">
+            <li>
+                <span>Occupancy</span>
+                <strong>@Model.OccupancyPercent.ToString("0.#")%</strong>
+                <em>@Model.RoomsOccupied of @Model.RoomsTotal rooms</em>
+            </li>
+            <li>
+                <span>Taken in today</span>
+                <strong>@Money(Model.RevenueToday)</strong>
+                <em>posted payments</em>
+            </li>
+            <li>
+                <span>As of</span>
+                <strong>PH</strong>
+                <em>@Model.AsOfPh</em>
+            </li>
+        </ul>
+    </section>
+
+    <div class="admin-dash-toolbar">
+        <p>Rearrange frames for the decision you need first. Your layout follows you after sign-out. Reception and admin share the same house numbers; refunds stay on the money frame for managers.</p>
+        <button type="button" class="btn btn-outline-secondary" data-dash-reset>Reset layout</button>
+    </div>
+
+    <div class="grid-stack" id="dashGrid"
+         data-dash-user="@User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value"
+         data-dash-role="@Model.RoleName"
+         data-layout-url="@Url.Action("SaveLayout")">
+        <div class="grid-stack-item" gs-id="occupancy" gs-x="0" gs-y="0" gs-w="3" gs-h="2" gs-min-w="2" gs-min-h="2">
+            <article class="grid-stack-item-content dash-widget">
+                <header class="dash-widget-handle">
+                    <h2>Occupancy</h2>
+                    <a href="/Rooms">Rooms</a>
+                </header>
+                <p class="dash-widget-stat">@Model.OccupancyPercent.ToString("0.#")%</p>
+                <p class="dash-widget-meta">@Model.RoomsOccupied occupied · @Model.RoomsAvailable open</p>
+                <p class="dash-widget-note">@Model.RoomsCleaning maintaining · @Model.RoomsUnavailable unavailable</p>
+                <p class="dash-widget-note">ADR @Money(Model.Adr) · RevPAR @Money(Model.RevPar)</p>
+            </article>
+        </div>
+
+        <div class="grid-stack-item" gs-id="arrivals" gs-x="3" gs-y="0" gs-w="3" gs-h="2" gs-min-w="2" gs-min-h="2">
+            <article class="grid-stack-item-content dash-widget">
+                <header class="dash-widget-handle">
+                    <h2>Today’s board</h2>
+                    <a href="/AdminBookings">Bookings</a>
+                </header>
+                <dl class="dash-widget-dl">
+                    <div><dt>Arrivals</dt><dd>@Model.ArrivalsToday</dd></div>
+                    <div><dt>Departures</dt><dd>@Model.DeparturesToday</dd></div>
+                    <div><dt>In house</dt><dd>@Model.InHouseStays</dd></div>
+                    <div><dt>Pending</dt><dd>@Model.PendingStays</dd></div>
+                </dl>
+            </article>
+        </div>
+
+        <div class="grid-stack-item" gs-id="money" gs-x="6" gs-y="0" gs-w="3" gs-h="2" gs-min-w="2" gs-min-h="2">
+            <article class="grid-stack-item-content dash-widget">
+                <header class="dash-widget-handle">
+                    <h2>Money</h2>
+                    <a href="/AdminPayments">Payments</a>
+                </header>
+                <p class="dash-widget-stat">@Money(Model.RevenueMonth)</p>
+                <p class="dash-widget-meta">This month posted · today @Money(Model.RevenueToday)</p>
+                @if (Model.IsAdminManager)
+                {
+                    <p class="dash-widget-note">Refunded this month @Money(Model.RefundsMonth)</p>
+                }
+                <p class="dash-widget-note">Open stay value @Money(Model.PipelineValue) · avg @Money(Model.AverageStayValue)</p>
+            </article>
+        </div>
+
+        <div class="grid-stack-item" gs-id="offers" gs-x="9" gs-y="0" gs-w="3" gs-h="2" gs-min-w="2" gs-min-h="2">
+            <article class="grid-stack-item-content dash-widget">
+                <header class="dash-widget-handle">
+                    <h2>Offers &amp; books</h2>
+                    <a href="/AdminSpecialOffers">Offers</a>
+                </header>
+                <p class="dash-widget-stat">@Model.ActiveOffers</p>
+                <p class="dash-widget-meta">Active promotions now</p>
+                <p class="dash-widget-note">@Model.ConfirmedStays confirmed · @Model.BookedSharePercent.ToString("0.#")% of open stays confirmed</p>
+            </article>
+        </div>
+
+        <div class="grid-stack-item" gs-id="revenue-chart" gs-x="0" gs-y="2" gs-w="8" gs-h="4" gs-min-w="4" gs-min-h="3">
+            <article class="grid-stack-item-content dash-widget">
+                <header class="dash-widget-handle">
+                    <h2>Posted revenue &amp; arrivals · 7 days</h2>
+                </header>
+                <div class="dash-chart-wrap">
+                    <canvas id="dashRevenueChart" aria-label="Seven day posted revenue and arrivals"></canvas>
+                </div>
+            </article>
+        </div>
+
+        <div class="grid-stack-item" gs-id="status-chart" gs-x="8" gs-y="2" gs-w="4" gs-h="4" gs-min-w="3" gs-min-h="3">
+            <article class="grid-stack-item-content dash-widget">
+                <header class="dash-widget-handle">
+                    <h2>Stay mix</h2>
+                </header>
+                <div class="dash-chart-wrap dash-chart-wrap--pie">
+                    <canvas id="dashStatusChart" aria-label="Booking status mix"></canvas>
+                </div>
+            </article>
+        </div>
+
+        <div class="grid-stack-item" gs-id="signals" gs-x="0" gs-y="6" gs-w="6" gs-h="3" gs-min-w="3" gs-min-h="2">
+            <article class="grid-stack-item-content dash-widget">
+                <header class="dash-widget-handle">
+                    <h2>Decision signals</h2>
+                </header>
+                @if (Model.Signals.Count == 0)
+                {
+                    <p class="dash-widget-empty">No extra signals from today’s numbers.</p>
+                }
+                else
+                {
+                    <ul class="dash-signals">
+                        @foreach (var signal in Model.Signals)
+                        {
+                            <li class="dash-signal dash-signal--@signal.Level">
+                                <strong>@signal.Title</strong>
+                                <span>@signal.Detail</span>
+                            </li>
+                        }
+                    </ul>
+                }
+            </article>
+        </div>
+
+        <div class="grid-stack-item" gs-id="channels" gs-x="6" gs-y="6" gs-w="6" gs-h="3" gs-min-w="3" gs-min-h="2">
+            <article class="grid-stack-item-content dash-widget">
+                <header class="dash-widget-handle">
+                    <h2>Open-stay channels</h2>
+                </header>
+                @if (Model.ChannelMix.Count == 0)
+                {
+                    <p class="dash-widget-empty">No pending or confirmed stays to split by channel.</p>
+                }
+                else
+                {
+                    <div class="dash-chart-wrap dash-chart-wrap--pie">
+                        <canvas id="dashChannelChart" aria-label="Open stay channel mix"></canvas>
+                    </div>
+                }
+            </article>
+        </div>
+
+        <div class="grid-stack-item" gs-id="attention" gs-x="0" gs-y="9" gs-w="12" gs-h="3" gs-min-w="4" gs-min-h="2">
+            <article class="grid-stack-item-content dash-widget">
+                <header class="dash-widget-handle">
+                    <h2>Front desk attention</h2>
+                    <a href="/AdminBookings">Open list</a>
+                </header>
+                @if (Model.Attention.Count == 0)
+                {
+                    <p class="dash-widget-empty">No pending calls or same-day arrivals in the next window.</p>
+                }
+                else
+                {
+                    <ul class="dash-attention">
+                        @foreach (var item in Model.Attention)
+                        {
+                            <li>
+                                <a href="@item.Href">
+                                    <strong>@item.Title</strong>
+                                    <span>@item.Detail</span>
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                }
+            </article>
+        </div>
+    </div>
+</section>
+
+<script type="application/json" id="dashLayoutData">@(ViewBag.DashboardLayoutJson as string ?? "[]")</script>
+<script type="application/json" id="dashChartData">@Html.Raw(chartPayload)</script>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/gridstack@11.3.0/dist/gridstack-all.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script src="~/js/admin-dashboard.js" asp-append-version="true"></script>
+}

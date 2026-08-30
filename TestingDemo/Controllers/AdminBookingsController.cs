@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace TestingDemo.Controllers;
 
+[Authorize(Roles = "AdminManager,Receptionist")]
 public sealed class AdminBookingsController : Controller
 {
     [HttpGet]

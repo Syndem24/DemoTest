@@ -23,6 +23,31 @@
   const calendarPanel = bookingsRoot.querySelector('[data-booking-calendar-panel]');
   const calendarElement = bookingsRoot.querySelector('[data-reservation-calendar]');
   const calendarFallback = bookingsRoot.querySelector('[data-calendar-fallback]');
+  const calendarDayModal = document.querySelector('[data-calendar-day-modal]');
+  const calendarDayTitle = calendarDayModal?.querySelector('[data-calendar-day-title]');
+  const calendarDayStayCount = calendarDayModal?.querySelector('[data-calendar-day-stay-count]');
+  const calendarDayOutCount = calendarDayModal?.querySelector('[data-calendar-day-out-count]');
+  const calendarDayOccupied = calendarDayModal?.querySelector('[data-calendar-day-occupied]');
+  const calendarDayReserved = calendarDayModal?.querySelector('[data-calendar-day-reserved]');
+  const calendarDayAvailable = calendarDayModal?.querySelector('[data-calendar-day-available]');
+  const calendarDayOccupancy = calendarDayModal?.querySelector('[data-calendar-day-occupancy]');
+  const calendarDayOccupancyMeter = calendarDayModal?.querySelector('[data-calendar-day-occupancy-meter]');
+  const calendarDayOccupancyOccupiedFill = calendarDayModal?.querySelector('[data-calendar-day-occupancy-occupied-fill]');
+  const calendarDayOccupancyReservedFill = calendarDayModal?.querySelector('[data-calendar-day-occupancy-reserved-fill]');
+  const calendarDayOccupancyHint = calendarDayModal?.querySelector('[data-calendar-day-occupancy-hint]');
+  const calendarDayTypes = calendarDayModal?.querySelector('[data-calendar-day-types]');
+  const calendarDayFind = calendarDayModal?.querySelector('[data-calendar-day-find]');
+  const calendarDayFilter = calendarDayModal?.querySelector('[data-calendar-day-filter]');
+  const calendarDayOccupiedHeadingCount = calendarDayModal?.querySelector('[data-calendar-day-occupied-heading-count]');
+  const calendarDayReservedHeadingCount = calendarDayModal?.querySelector('[data-calendar-day-reserved-heading-count]');
+  const calendarDayOutHeadingCount = calendarDayModal?.querySelector('[data-calendar-day-out-heading-count]');
+  const calendarDayEmpty = calendarDayModal?.querySelector('[data-calendar-day-empty]');
+  const calendarDayOccupiedBlock = calendarDayModal?.querySelector('[data-calendar-day-occupied-block]');
+  const calendarDayReservedBlock = calendarDayModal?.querySelector('[data-calendar-day-reserved-block]');
+  const calendarDayOutBlock = calendarDayModal?.querySelector('[data-calendar-day-out-block]');
+  const calendarDayOccupiedList = calendarDayModal?.querySelector('[data-calendar-day-occupied-list]');
+  const calendarDayReservedList = calendarDayModal?.querySelector('[data-calendar-day-reserved-list]');
+  const calendarDayOutList = calendarDayModal?.querySelector('[data-calendar-day-out-list]');
   const paymentViewModal = document.querySelector('[data-payment-view-modal]');
   const paymentAddModal = document.querySelector('[data-payment-add-modal]');
   const paymentViewList = paymentViewModal?.querySelector('[data-payment-view-list]');
@@ -34,6 +59,13 @@
   const pendingCallsList = bookingsRoot.querySelector('[data-pending-calls-list]');
   const checkoutsPanel = bookingsRoot.querySelector('[data-checkouts-panel]');
   const checkoutsList = bookingsRoot.querySelector('[data-checkouts-list]');
+  const daytimeFlowOpenButton = document.querySelector('[data-daytime-flow-open]');
+  const daytimeFlowPanel = bookingsRoot.querySelector('[data-daytime-flow-panel]');
+  const daytimeFlowToolbar = bookingsRoot.querySelector('[data-daytime-flow-toolbar]');
+  const daytimeArrivalsList = bookingsRoot.querySelector('[data-daytime-arrivals-list]');
+  const daytimeCheckoutsList = bookingsRoot.querySelector('[data-daytime-checkouts-list]');
+  const daytimeArrivalsTitle = bookingsRoot.querySelector('[data-daytime-arrivals-title]');
+  const daytimeCheckoutsTitle = bookingsRoot.querySelector('[data-daytime-checkouts-title]');
   const detailModal = document.querySelector('[data-booking-modal]');
   const detailBody = detailModal?.querySelector('[data-booking-detail]');
   const detailActions = detailModal?.querySelector('[data-booking-detail-actions]');
@@ -51,6 +83,7 @@
   const flushDetailFile = flushDetailModal?.querySelector('[data-flush-detail-file]');
   const walkInOpenButton = bookingsRoot.querySelector('[data-walkin-open]');
   let flushLogsCache = [];
+  let isLeavingBookingsPage = false;
 
   const scriptLoadPromises = new Map();
 
@@ -141,6 +174,11 @@
   const paymentCameraGuideFrame = paymentCameraModal?.querySelector('[data-payment-camera-guide-frame]');
   const paymentCameraGuideLabel = paymentCameraModal?.querySelector('[data-payment-camera-guide-label]');
   let reservationCalendar = null;
+  let calendarStayCache = [];
+  const calendarStayingByDay = new Map();
+  const calendarCheckoutByDay = new Map();
+  const calendarOccupancyByDay = new Map();
+  let calendarDayLastFocus = null;
   let selectedBooking = null;
   /** When set to a booking id, reception flow is on Extras (incidental / snack) after Fees checkout CTA. */
   let receptionExtrasStageBookingId = null;
@@ -150,11 +188,34 @@
   let arrivalsFromUrlHandled = false;
   let pendingCallsFromUrlHandled = false;
   let checkoutsFromUrlHandled = false;
+  let daytimeFlowLocalDateIso = '';
   let pollTimer = null;
   let reconnectTimer = null;
   let audioContext = null;
   let audioUnlocked = false;
   let soundEnabled = localStorage.getItem('moriBookingSound') !== 'off';
+  const DAYTIME_CALL_STATE_KEY = 'moriDaytimeCallState:v1';
+
+  function readDaytimeCallState() {
+    try {
+      const raw = localStorage.getItem(DAYTIME_CALL_STATE_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function writeDaytimeCallState(state) {
+    try {
+      localStorage.setItem(DAYTIME_CALL_STATE_KEY, JSON.stringify(state));
+    } catch {
+      // Ignore storage failures (private mode/full quota).
+    }
+  }
+
+  let daytimeCallState = readDaytimeCallState();
 
   function setSoundLabel() {
     if (!soundButton) return;
@@ -173,21 +234,58 @@
   }
 
   function playChime() {
-    if (!soundEnabled || !audioUnlocked || !audioContext) return;
-    const now = audioContext.currentTime;
-    [660, 880].forEach((frequency, index) => {
-      const oscillator = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.value = frequency;
-      gain.gain.setValueAtTime(0.0001, now + index * 0.09);
-      gain.gain.exponentialRampToValueAtTime(0.13, now + index * 0.09 + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.09 + 0.22);
-      oscillator.connect(gain);
-      gain.connect(audioContext.destination);
-      oscillator.start(now + index * 0.09);
-      oscillator.stop(now + index * 0.09 + 0.24);
-    });
+    if (!soundEnabled) return;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    audioContext ||= new AudioContext();
+
+    const emit = () => {
+      if (!audioContext) return;
+      const now = audioContext.currentTime;
+      [660, 880].forEach((frequency, index) => {
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(0.0001, now + index * 0.09);
+        gain.gain.exponentialRampToValueAtTime(0.13, now + index * 0.09 + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.09 + 0.22);
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start(now + index * 0.09);
+        oscillator.stop(now + index * 0.09 + 0.24);
+      });
+    };
+
+    if (audioContext.state !== 'running') {
+      audioContext.resume()
+        .then(() => {
+          audioUnlocked = audioContext?.state === 'running';
+          if (audioUnlocked) emit();
+        })
+        .catch(() => {});
+      return;
+    }
+
+    audioUnlocked = true;
+    emit();
+  }
+
+  function showOfferEndingSoonAlert(notification) {
+    const mins = Math.max(1, Number(notification?.minutesRemaining || 0));
+    const title = String(notification?.title || 'Special offer');
+    const rooms = Array.isArray(notification?.roomTypes) ? notification.roomTypes.filter(Boolean).join(', ') : '';
+    const message = `${title} ends in about ${mins} minute${mins === 1 ? '' : 's'}${rooms ? ` (${rooms})` : ''}.`;
+    const host = document.body;
+    if (!host) return;
+    const alert = document.createElement('div');
+    alert.className = 'admin-live-alert is-warning';
+    alert.textContent = message;
+    host.append(alert);
+    window.setTimeout(() => {
+      alert.classList.add('is-leaving');
+      window.setTimeout(() => alert.remove(), 250);
+    }, 10000);
   }
 
   document.addEventListener('pointerdown', unlockAudio, { once: true });
@@ -2174,7 +2272,16 @@
     const hasIncidental = (booking.charges || []).some(
       (c) => String(c.chargeType) === 'Incidental' && Number(c.amount || 0) > 0
     );
-    if (methodSelect) methodSelect.value = 'Cash';
+    const cashOnlyPromo = Boolean(booking.cashOnlyPromo);
+    if (methodSelect) {
+      methodSelect.value = 'Cash';
+      Array.from(methodSelect.options).forEach((opt) => {
+        const lock = cashOnlyPromo && opt.value !== 'Cash';
+        opt.disabled = lock;
+        opt.hidden = lock;
+      });
+      methodSelect.disabled = cashOnlyPromo;
+    }
     if (hasIncidental && methodSelect) {
       methodSelect.value = 'Cash';
     }
@@ -2184,9 +2291,15 @@
     if (ext) ext.value = '';
     if (bank) bank.value = '';
     if (notes) {
-      notes.value = hasIncidental
-        ? 'Incidental (damage) on booking — collect in cash.'
-        : '';
+      if (cashOnlyPromo) {
+        notes.value = booking.specialOfferTitle
+          ? `Special offer (${booking.specialOfferTitle}) — cash on arrival only.`
+          : 'Special offer — cash on arrival only.';
+      } else if (hasIncidental) {
+        notes.value = 'Incidental (damage) on booking — collect in cash.';
+      } else {
+        notes.value = '';
+      }
     }
     resetPaymentOcrUi();
 
@@ -2201,6 +2314,14 @@
     closePaymentAddPopup();
     setPaymentAddBanner('');
     resetPaymentOcrUi();
+    const methodSelect = paymentAddModal?.querySelector('[data-payment-method]');
+    if (methodSelect) {
+      methodSelect.disabled = false;
+      Array.from(methodSelect.options).forEach((opt) => {
+        opt.disabled = false;
+        opt.hidden = false;
+      });
+    }
     if (paymentAddModal) paymentAddModal.hidden = true;
   }
 
@@ -2606,8 +2727,37 @@
       : '';
   }
 
+  function formatTime(value) {
+    if (!value) return '—';
+    const date = parseUtc(value);
+    return date
+      ? date.toLocaleTimeString(PH_LOCALE, {
+          timeZone: PH_TZ,
+          hour: 'numeric',
+          minute: '2-digit',
+        })
+      : '—';
+  }
+
   function formatStayRange(checkIn, checkOut) {
     return `${formatDateTime(checkIn) || formatDate(checkIn)} → ${formatDateTime(checkOut) || formatDate(checkOut)}`;
+  }
+
+  function daytimeCallStateKey(localDateIso, kind, bookingId) {
+    const date = String(localDateIso || '').slice(0, 10);
+    return `${date}|${kind}|${Number(bookingId || 0)}`;
+  }
+
+  function isDaytimeCallDone(localDateIso, kind, bookingId) {
+    const key = daytimeCallStateKey(localDateIso, kind, bookingId);
+    return Boolean(daytimeCallState[key]);
+  }
+
+  function setDaytimeCallDone(localDateIso, kind, bookingId, done) {
+    const key = daytimeCallStateKey(localDateIso, kind, bookingId);
+    if (done) daytimeCallState[key] = true;
+    else delete daytimeCallState[key];
+    writeDaytimeCallState(daytimeCallState);
   }
 
   function toManilaDateTimeIso(dateStr, timeStr) {
@@ -2744,6 +2894,7 @@
     if (active) {
       if (pendingCallsPanel) pendingCallsPanel.hidden = true;
       if (checkoutsPanel) checkoutsPanel.hidden = true;
+      if (daytimeFlowPanel) daytimeFlowPanel.hidden = true;
     }
     arrivalsPanel.hidden = !active;
     syncListChromeHidden();
@@ -2754,6 +2905,7 @@
     if (active) {
       if (arrivalsPanel) arrivalsPanel.hidden = true;
       if (checkoutsPanel) checkoutsPanel.hidden = true;
+      if (daytimeFlowPanel) daytimeFlowPanel.hidden = true;
     }
     pendingCallsPanel.hidden = !active;
     syncListChromeHidden();
@@ -2764,15 +2916,30 @@
     if (active) {
       if (arrivalsPanel) arrivalsPanel.hidden = true;
       if (pendingCallsPanel) pendingCallsPanel.hidden = true;
+      if (daytimeFlowPanel) daytimeFlowPanel.hidden = true;
     }
     checkoutsPanel.hidden = !active;
+    syncListChromeHidden();
+  }
+
+  function setDaytimeFlowMode(active) {
+    if (!daytimeFlowPanel) return;
+    if (active) {
+      if (arrivalsPanel) arrivalsPanel.hidden = true;
+      if (pendingCallsPanel) pendingCallsPanel.hidden = true;
+      if (checkoutsPanel) checkoutsPanel.hidden = true;
+    }
+    daytimeFlowPanel.hidden = !active;
+    if (daytimeFlowToolbar) daytimeFlowToolbar.hidden = !active;
     syncListChromeHidden();
   }
 
   function syncListChromeHidden() {
     const specialOpen = (arrivalsPanel && !arrivalsPanel.hidden)
       || (pendingCallsPanel && !pendingCallsPanel.hidden)
-      || (checkoutsPanel && !checkoutsPanel.hidden);
+      || (checkoutsPanel && !checkoutsPanel.hidden)
+      || (daytimeFlowPanel && !daytimeFlowPanel.hidden);
+    if (daytimeFlowToolbar) daytimeFlowToolbar.hidden = !daytimeFlowPanel || daytimeFlowPanel.hidden;
     bookingsRoot?.querySelector('.admin-bookings-toolbar')?.toggleAttribute('hidden', specialOpen);
     bookingsRoot?.querySelector('.admin-bookings-table-wrap')?.toggleAttribute('hidden', specialOpen);
     bookingsRoot?.querySelector('.admin-bookings-pagination')?.toggleAttribute('hidden', specialOpen);
@@ -2848,6 +3015,71 @@
     return button;
   }
 
+  function daytimeFlowCard(booking, kind, localDateIso) {
+    const card = document.createElement('article');
+    card.className = 'admin-arrival-card admin-daytime-card';
+    const rooms = (booking.items || [])
+      .flatMap((line) => {
+        const assigned = (line.assignedRooms || []).map((room) => room.roomNumber).filter(Boolean);
+        return assigned.length
+          ? assigned
+          : [`${line.quantity}× ${line.roomTypeName}`];
+      })
+      .join(', ');
+    const calledDone = isDaytimeCallDone(localDateIso, kind, booking.id);
+    card.classList.toggle('is-needs-call', !calledDone);
+    card.classList.toggle('is-call-done', calledDone);
+
+    const topRow = document.createElement('div');
+    topRow.className = 'admin-daytime-top';
+    const title = document.createElement('strong');
+    title.textContent = `${booking.reference} · ${booking.guestName}`;
+    const timeBadge = document.createElement('span');
+    timeBadge.className = 'admin-daytime-time-badge';
+    timeBadge.textContent = kind === 'arrival'
+      ? `Arrive at ${formatTime(booking.checkInAtUtc || booking.checkIn)}`
+      : `Checkout at ${formatTime(booking.checkoutTimeUtc || booking.checkOut)}`;
+
+    topRow.append(title, timeBadge);
+
+    const callLine = document.createElement('span');
+    callLine.className = 'admin-daytime-call-line';
+    callLine.textContent = booking.guestPhone
+      ? `Call ${booking.guestPhone}`
+      : 'No phone number on file';
+
+    const status = document.createElement('span');
+    status.textContent = `Status: ${displayEnum(booking.status)}`;
+    const meta = document.createElement('span');
+    meta.textContent = rooms || 'Rooms pending assignment';
+    const time = document.createElement('small');
+    time.textContent = kind === 'arrival'
+      ? `Check-in ${formatDateTime(booking.checkInAtUtc || booking.checkIn)}`
+      : `Checkout ${formatDateTime(booking.checkoutTimeUtc || booking.checkOut)}`;
+
+    const actions = document.createElement('div');
+    actions.className = 'admin-daytime-actions';
+    const detailsBtn = document.createElement('button');
+    detailsBtn.type = 'button';
+    detailsBtn.className = 'admin-daytime-action';
+    detailsBtn.textContent = 'Open details';
+    detailsBtn.addEventListener('click', () => {
+      setDaytimeCallDone(localDateIso, kind, booking.id, true);
+      syncMarkVisual(true);
+      openBookingDetails(booking.id, booking);
+    });
+
+    const syncMarkVisual = (done) => {
+      card.classList.toggle('is-needs-call', !done);
+      card.classList.toggle('is-call-done', done);
+    };
+    syncMarkVisual(calledDone);
+
+    actions.append(detailsBtn);
+    card.append(topRow, callLine, status, meta, time, actions);
+    return card;
+  }
+
   async function refreshArrivals() {
     if (!arrivalsList) return;
     arrivalsList.innerHTML = '<p class="admin-bookings-loading">Loading arrivals…</p>';
@@ -2905,6 +3137,62 @@
     }
   }
 
+  function formatDaytimeDateLabel(localDateIso) {
+    if (!localDateIso) return 'today';
+    const dt = new Date(`${localDateIso}T00:00:00`);
+    return Number.isNaN(dt.getTime())
+      ? localDateIso
+      : dt.toLocaleDateString(PH_LOCALE, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  async function refreshDaytimeFlow() {
+    if (!daytimeArrivalsList || !daytimeCheckoutsList) return;
+    daytimeArrivalsList.innerHTML = '<p class="admin-bookings-loading">Loading daytime arrivals…</p>';
+    daytimeCheckoutsList.innerHTML = '<p class="admin-bookings-loading">Loading daytime checkouts…</p>';
+    try {
+      const payload = await apiFetch('/api/admin/bookings/daytime-flow?startHour=6&endHour=18');
+      const arrivals = payload?.arrivals || [];
+      const checkouts = payload?.checkouts || [];
+      const dateLabel = formatDaytimeDateLabel(payload?.localDateIso);
+      const startHour = Number(payload?.startHour ?? 6);
+      const endHour = Number(payload?.endHour ?? 18);
+      daytimeFlowLocalDateIso = String(payload?.localDateIso || '');
+
+      if (daytimeArrivalsTitle) {
+        daytimeArrivalsTitle.textContent = `Arrivals · ${dateLabel} (${startHour}:00-${endHour}:59)`;
+      }
+      if (daytimeCheckoutsTitle) {
+        daytimeCheckoutsTitle.textContent = `Checkouts · ${dateLabel} (${startHour}:00-${endHour}:59)`;
+      }
+
+      daytimeArrivalsList.replaceChildren();
+      const visibleArrivals = arrivals.filter((booking) => booking.status === 'Pending');
+      if (!visibleArrivals.length) {
+        const empty = document.createElement('p');
+        empty.className = 'admin-bookings-empty';
+        empty.textContent = 'No daytime arrivals for today.';
+        daytimeArrivalsList.append(empty);
+      } else {
+        visibleArrivals.forEach((booking) => daytimeArrivalsList.append(daytimeFlowCard(booking, 'arrival', daytimeFlowLocalDateIso)));
+      }
+
+      daytimeCheckoutsList.replaceChildren();
+      const visibleCheckouts = checkouts.filter((booking) => booking.status === 'Pending');
+      if (!visibleCheckouts.length) {
+        const empty = document.createElement('p');
+        empty.className = 'admin-bookings-empty';
+        empty.textContent = 'No daytime checkouts for today.';
+        daytimeCheckoutsList.append(empty);
+      } else {
+        visibleCheckouts.forEach((booking) => daytimeCheckoutsList.append(daytimeFlowCard(booking, 'checkout', daytimeFlowLocalDateIso)));
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to load daytime flow.';
+      daytimeArrivalsList.textContent = message;
+      daytimeCheckoutsList.textContent = message;
+    }
+  }
+
   async function openArrivalsSoon() {
     setArrivalsMode(true);
     await refreshArrivals();
@@ -2918,6 +3206,11 @@
   async function openCheckoutsSoon() {
     setCheckoutsMode(true);
     await refreshCheckouts();
+  }
+
+  async function openDaytimeFlow() {
+    setDaytimeFlowMode(true);
+    await refreshDaytimeFlow();
   }
 
   function closeArrivalsSoon() {
@@ -2945,6 +3238,19 @@
       url.searchParams.delete('checkouts');
       window.history.replaceState({}, '', url.pathname + (url.search || ''));
     }
+  }
+
+  function closeDaytimeFlow() {
+    setDaytimeFlowMode(false);
+  }
+
+  function refreshActiveBookingPanel() {
+    if (isLeavingBookingsPage) return Promise.resolve();
+    if (!arrivalsPanel?.hidden) return refreshArrivals();
+    if (!pendingCallsPanel?.hidden) return refreshPendingCalls();
+    if (!checkoutsPanel?.hidden) return refreshCheckouts();
+    if (!daytimeFlowPanel?.hidden) return refreshDaytimeFlow();
+    return refreshBookings();
   }
 
   async function processAutoCheckout() {
@@ -3086,7 +3392,23 @@
     ].forEach(([label, value], index) => {
       const cell = document.createElement('td');
       cell.dataset.label = label;
-      cell.textContent = value;
+      if (label === 'Guest') {
+        cell.className = 'admin-booking-guest-cell';
+        const name = document.createElement('span');
+        name.textContent = value;
+        cell.append(name);
+        if (booking.specialOfferId || booking.cashOnlyPromo) {
+          const tag = document.createElement('span');
+          tag.className = 'admin-booking-status is-special-offer';
+          tag.textContent = booking.cashOnlyPromo ? 'Special offer · Cash' : 'Special offer';
+          tag.title = booking.specialOfferTitle
+            ? `Special offer: ${booking.specialOfferTitle}`
+            : 'Guest booked a special offer';
+          cell.append(tag);
+        }
+      } else {
+        cell.textContent = value;
+      }
       if (index === 0) cell.className = 'admin-booking-reference';
       if (label === 'Rooms' && needsRooms) {
         cell.classList.add('is-needs-rooms-cell');
@@ -3134,6 +3456,7 @@
     hideCheckoutConfirmModal();
     hideExtrasStageIntro();
     document.body.classList.remove('admin-booking-modal-open');
+    calendarDayModal?.removeAttribute('inert');
   }
 
   /** Field row for guest details — plain label/value blocks (never dl/dt/dd). */
@@ -3419,6 +3742,9 @@
     if (!detailModal || !detailBody) return;
     detailModal.hidden = false;
     document.body.classList.add('admin-booking-modal-open');
+    if (calendarDayModal && !calendarDayModal.hidden) {
+      calendarDayModal.setAttribute('inert', '');
+    }
     const refEl = detailModal.querySelector('[data-detail-reference]');
     const guestEl = detailModal.querySelector('[data-detail-guest]');
     if (refEl) refEl.textContent = hint?.reference || 'Loading…';
@@ -3508,6 +3834,15 @@
         ? 'Confirmed — open booking to finish payment check, rooms, and check-in'
         : arrivalAssignMessage(booking);
       statusGroup.append(flag);
+    }
+    if (booking.specialOfferId || booking.cashOnlyPromo) {
+      const offerFlag = document.createElement('span');
+      offerFlag.className = 'admin-booking-status is-special-offer';
+      offerFlag.textContent = booking.cashOnlyPromo ? 'Special offer · Cash only' : 'Special offer';
+      offerFlag.title = booking.specialOfferTitle
+        ? `Special offer: ${booking.specialOfferTitle}`
+        : 'Guest booked a special offer';
+      statusGroup.append(offerFlag);
     }
 
     const balanceBlock = document.createElement('div');
@@ -3634,6 +3969,9 @@
     if (extensionNights > 0) {
       stayBadges.push(`+${extensionNights} night${extensionNights === 1 ? '' : 's'}`);
     }
+    const arrivalDiscountLabel = displayEnum(booking.arrivalDiscountRequest);
+    if (arrivalDiscountLabel === 'SeniorCitizen') stayBadges.push('Senior Citizen');
+    if (arrivalDiscountLabel === 'Pwd') stayBadges.push('PWD');
     const staySummary =
       stayBadges.length > 0
         ? `${checkInLabel} → ${checkOutLabel} (${stayBadges.join(' · ')})`
@@ -3653,6 +3991,21 @@
       detailField('Rooms', roomSummary),
       detailField('Request type', displayEnum(booking.kind) || '—'),
       detailField('Payment option', displayEnum(booking.paymentOption) || '—'),
+      detailField(
+        'Special offer',
+        booking.specialOfferId
+          ? `${booking.specialOfferTitle || 'Yes'}${booking.cashOnlyPromo ? ' · Cash only' : ''}`
+          : '—'
+      ),
+      detailField(
+        'Senior / PWD',
+        (() => {
+          const v = displayEnum(booking.arrivalDiscountRequest);
+          if (v === 'SeniorCitizen') return 'Senior Citizen (verify ID)';
+          if (v === 'Pwd') return 'PWD (verify ID)';
+          return 'None';
+        })()
+      ),
       detailField('Stay total', money(stayTotal)),
       detailField('Reference', booking.reference || '—'),
       detailField('Submitted', formatDateTime(booking.createdAtUtc) || formatDate(booking.createdAtUtc) || '—')
@@ -3719,8 +4072,8 @@
       : extrasStage
         ? 'Record incidental damages (multiple allowed) or more snacks. Settle any balance under Price & payments, then Archive when fully paid.'
         : occupyingGuest
-          ? 'Add early / late / extra person / extend stay and snack & beverage here. Continue to Checkout for incidental damages.'
-          : 'Add early / late / extra person / extend stay and snack & beverage here. Incidental damages unlock at Checkout.';
+          ? 'Add early / late / extra person / extend stay, Senior/PWD, and snack & beverage here. Continue to Checkout for incidental damages.'
+          : 'Add early / late / extra person / extend stay, Senior/PWD, and snack & beverage here. Incidental damages unlock at Checkout.';
     feesHeadText.append(feesTitle, feesLede);
 
     const feesManageBtn = document.createElement('button');
@@ -3907,6 +4260,28 @@
     extraInput.checked = extraPersons > 0;
     extraInput.disabled = true;
     if (!allowsExtraPerson) extraInput.dataset.keepDisabled = '1';
+
+    const onSpecialOffer = Boolean(booking.specialOfferId || booking.cashOnlyPromo);
+    const arrivalSelect = document.createElement('select');
+    arrivalSelect.dataset.feeArrivalDiscount = '1';
+    arrivalSelect.disabled = true;
+    [
+      ['None', 'None'],
+      ['SeniorCitizen', 'Senior Citizen (20% · verify ID on arrival)'],
+      ['Pwd', 'PWD (20% · verify ID on arrival)'],
+    ].forEach(([value, text]) => {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = text;
+      arrivalSelect.append(opt);
+    });
+    const arrivalCurrent = displayEnum(booking.arrivalDiscountRequest) || 'None';
+    arrivalSelect.value =
+      arrivalCurrent === 'SeniorCitizen' || arrivalCurrent === 'Pwd' ? arrivalCurrent : 'None';
+    if (onSpecialOffer) {
+      arrivalSelect.value = 'None';
+      arrivalSelect.dataset.keepDisabled = '1';
+    }
 
     const incidentalAmountInput = Object.assign(document.createElement('input'), {
       type: 'text',
@@ -4404,6 +4779,31 @@
       },
     });
 
+    registerFeeCategory({
+      id: 'arrivalDiscount',
+      title: 'Senior / PWD',
+      hint: onSpecialOffer
+        ? 'Unavailable while special offer is active'
+        : '20% claim flag · verify ID · not auto-applied to total',
+      locked: onSpecialOffer,
+      showTrigger: !extrasStage,
+      buildBody: () => {
+        const hint = Object.assign(document.createElement('p'), {
+          className: 'admin-booking-fees-hint',
+          textContent: onSpecialOffer
+            ? 'This stay has a special offer. Senior Citizen / PWD cannot be combined with the promo rate.'
+            : 'Marks the booking for front desk. Reception verifies ID and applies the discount at arrival — totals are not changed automatically.',
+        });
+        return [makeFeeField('Discount claim', arrivalSelect), hint];
+      },
+      getMeta: () => {
+        const value = arrivalSelect.value || 'None';
+        if (value === 'SeniorCitizen') return { active: true, text: 'Senior · verify ID' };
+        if (value === 'Pwd') return { active: true, text: 'PWD · verify ID' };
+        return { active: false, text: '' };
+      },
+    });
+
     const syncSnackPreview = () => {
       const draft = readSnackDraft();
       snackPreview.textContent = `Draft line: ${money(Math.max(0, draft.total))}`;
@@ -4432,6 +4832,9 @@
         extendInput.value = '';
         pendingRevertExtend = extensionNights > 0;
         syncExtendPreview();
+      }
+      if (id === 'arrivalDiscount' && !arrivalSelect.dataset.keepDisabled) {
+        arrivalSelect.value = 'None';
       }
     };
 
@@ -4530,6 +4933,7 @@
       earlyInput,
       lateSelect,
       extraInput,
+      arrivalSelect,
       incidentalAmountInput,
       incidentalNoteInput,
       snackProductInput,
@@ -4588,6 +4992,7 @@
         snackBeverageProduct: null,
         extendStayNights: Math.min(30, parseIntInput(extendInput.value)),
         revertStayExtension: Boolean(pendingRevertExtend),
+        arrivalDiscountRequest: onSpecialOffer ? 'None' : String(arrivalSelect.value || 'None'),
       };
     };
 
@@ -4618,6 +5023,17 @@
         lines.push({
           label: 'Extra person',
           amount: charge ? Number(charge.amount || 0) : 200 * nights,
+        });
+      }
+      if (payload.arrivalDiscountRequest === 'SeniorCitizen') {
+        lines.push({
+          label: 'Senior Citizen (verify ID · flag only)',
+          amount: 0,
+        });
+      } else if (payload.arrivalDiscountRequest === 'Pwd') {
+        lines.push({
+          label: 'PWD (verify ID · flag only)',
+          amount: 0,
         });
       }
       if (Array.isArray(payload.incidentals) && payload.incidentals.length) {
@@ -4764,9 +5180,15 @@
       const qty = Number(line.quantity || 0);
       const rate = Number(line.pricePerNight || 0);
       const lineTotal = qty * rate * nights;
+      const regular = Number(booking.specialOfferRegularPricePerNight || 0);
+      const showCompare =
+        (booking.specialOfferId || booking.cashOnlyPromo) && regular > rate;
+      const rateHtml = showCompare
+        ? `<small>(<s>${money(regular)}</s> → ${money(rate)}/night × ${nights} night${nights === 1 ? '' : 's'})</small>`
+        : `<small>(${money(rate)}/night × ${nights} night${nights === 1 ? '' : 's'})</small>`;
       itemLinesHtml += `
         <div class="admin-breakdown-row">
-          <span>${qty}× ${escapeHtml(line.roomTypeName || 'Room')} <small>(${money(rate)}/night × ${nights} night${nights === 1 ? '' : 's'})</small></span>
+          <span>${qty}× ${escapeHtml(line.roomTypeName || 'Room')} ${rateHtml}</span>
           <strong>${money(lineTotal)}</strong>
         </div>
       `;
@@ -4920,7 +5342,13 @@
         ? `${line.quantity}× ${line.roomTypeName} → ${assigned.join(', ')}`
         : `${line.quantity}× ${line.roomTypeName}${status === 'Confirmed' ? ' · rooms not assigned yet' : ''}`;
       const rate = document.createElement('strong');
-      rate.textContent = `${money(line.pricePerNight)} / night`;
+      const promo = Number(line.pricePerNight || 0);
+      const regular = Number(booking.specialOfferRegularPricePerNight || 0);
+      if ((booking.specialOfferId || booking.cashOnlyPromo) && regular > promo) {
+        rate.innerHTML = `<s class="admin-rate-was">${money(regular)}</s> → ${money(promo)} / night`;
+      } else {
+        rate.textContent = `${money(promo)} / night`;
+      }
       item.append(name, rate);
       lines.append(item);
     });
@@ -5419,8 +5847,9 @@
     });
   }
 
-  function editField(label, name, type, value) {
+  function editField(label, name, type, value, fullWidth = false) {
     const field = document.createElement('label');
+    if (fullWidth) field.className = 'is-full-width';
     const caption = document.createElement('span');
     const input = document.createElement('input');
     caption.textContent = label;
@@ -5430,6 +5859,79 @@
     input.required = true;
     field.append(caption, input);
     return field;
+  }
+
+  function editSelectField(label, name, options, selectedValue) {
+    const field = document.createElement('label');
+    const caption = document.createElement('span');
+    const select = document.createElement('select');
+    caption.textContent = label;
+    select.name = name;
+    select.required = true;
+    options.forEach((option) => {
+      const node = document.createElement('option');
+      node.value = option.value;
+      node.textContent = option.label;
+      if (String(option.value) === String(selectedValue)) node.selected = true;
+      select.append(node);
+    });
+    field.append(caption, select);
+    return field;
+  }
+
+  function parseClockToMinutes(timeText) {
+    const text = String(timeText || '').trim();
+    const match = /^(\d{1,2}):(\d{2})$/.exec(text);
+    if (!match) return null;
+    const hh = Number(match[1]);
+    const mm = Number(match[2]);
+    if (Number.isNaN(hh) || Number.isNaN(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) {
+      return null;
+    }
+    return hh * 60 + mm;
+  }
+
+  function minutesToClock(totalMinutes) {
+    const safe = Math.max(0, Math.min(23 * 60 + 59, Number(totalMinutes) || 0));
+    const hh = String(Math.floor(safe / 60)).padStart(2, '0');
+    const mm = String(safe % 60).padStart(2, '0');
+    return `${hh}:${mm}`;
+  }
+
+  function checkInTimeOptions() {
+    const list = [{ value: '11:30', label: '11:30 — early check-in' }];
+    for (let mins = 14 * 60; mins <= 23 * 60 + 30; mins += 30) {
+      const value = minutesToClock(mins);
+      list.push({ value, label: `${value} — free of charge` });
+    }
+    return list;
+  }
+
+  function checkOutTimeOptions() {
+    return [
+      { value: '12:00', label: '12:00 — free of charge' },
+      { value: '13:00', label: '13:00 — late checkout (+1h)' },
+      { value: '14:00', label: '14:00 — late checkout (+2h)' },
+      { value: '15:00', label: '15:00 — late checkout (+3h max)' },
+    ];
+  }
+
+  function normalizeCheckInTime(value) {
+    const mins = parseClockToMinutes(value);
+    if (mins == null) return '14:00';
+    if (mins <= 11 * 60 + 30) return '11:30';
+    if (mins < 14 * 60) return '14:00';
+    const rounded = Math.round(mins / 30) * 30;
+    return minutesToClock(Math.max(14 * 60, Math.min(23 * 60 + 30, rounded)));
+  }
+
+  function normalizeCheckOutTime(value) {
+    const mins = parseClockToMinutes(value);
+    if (mins == null) return '12:00';
+    if (mins <= 12 * 60) return '12:00';
+    if (mins <= 13 * 60) return '13:00';
+    if (mins <= 14 * 60) return '14:00';
+    return '15:00';
   }
 
   function renderBookingEdit(booking, options = {}) {
@@ -5457,14 +5959,16 @@
     fields.className = 'admin-booking-edit-grid';
     const checkInParts = manilaParts(booking.checkInAtUtc || booking.checkIn) || { date: '', time: '14:00' };
     const checkOutParts = manilaParts(booking.checkoutTimeUtc || booking.checkOut) || { date: '', time: '12:00' };
+    const checkInTime = normalizeCheckInTime(checkInParts.time);
+    const checkOutTime = normalizeCheckOutTime(checkOutParts.time);
     fields.append(
       editField('Guest name', 'guestName', 'text', booking.guestName),
       editField('Email', 'guestEmail', 'email', booking.guestEmail),
-      editField('Phone', 'guestPhone', 'tel', booking.guestPhone),
+      editField('Phone', 'guestPhone', 'tel', booking.guestPhone, true),
       editField('Check-in date', 'checkIn', 'date', checkInParts.date),
-      editField('Check-in time', 'checkInTime', 'time', checkInParts.time),
       editField('Check-out date', 'checkOut', 'date', checkOutParts.date),
-      editField('Check-out time', 'checkOutTime', 'time', checkOutParts.time)
+      editSelectField('Check-in time', 'checkInTime', checkInTimeOptions(), checkInTime),
+      editSelectField('Check-out time', 'checkOutTime', checkOutTimeOptions(), checkOutTime)
     );
 
     const availPanel = document.createElement('div');
@@ -5797,14 +6301,19 @@
 
   function notificationTargetForItem(item) {
     const message = String(item?.message || '');
+    const bookingId = Number(item?.id || 0);
+    const pendingCallsUrl = bookingId > 0
+      ? `/AdminBookings?pendingCalls=soon&booking=${bookingId}`
+      : '/AdminBookings?pendingCalls=soon';
+
     if (/call guest: checkout|checkout in 20/i.test(message)) {
-      return { type: 'filter', url: '/AdminBookings?checkouts=soon' };
+      return { type: 'filter', url: pendingCallsUrl };
     }
     if (/call guest/i.test(message)) {
-      return { type: 'filter', url: '/AdminBookings?pendingCalls=soon' };
+      return { type: 'filter', url: pendingCallsUrl };
     }
     if (/arrival/i.test(message)) {
-      return { type: 'filter', url: '/AdminBookings?arrivals=soon' };
+      return { type: 'filter', url: pendingCallsUrl };
     }
     return { type: 'booking', id: Number(item.id) };
   }
@@ -5871,6 +6380,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assignments }),
       });
+      isLeavingBookingsPage = true;
       window.location.href = '/Rooms?view=list';
     } catch (error) {
       showBookingMessage(error instanceof Error ? error.message : 'Unable to assign rooms.', true);
@@ -6090,6 +6600,7 @@
 
   async function refreshBookings() {
     if (!bookingList) return;
+    if (isLeavingBookingsPage) return;
     renderBookingsTableSkeleton();
     showBookingMessage('');
     try {
@@ -6143,80 +6654,403 @@
     }
   }
 
-  function mapCalendarEvents(items) {
-    return (items || []).map((item) => {
-      const bookingId = Number(item.id);
-      const isReservation = item.kind === 'Reservation' || item.kind === 1;
-      const extensionNights = Math.max(0, Number(item.extensionNights || 0));
-      const primaryBg = isReservation ? '#1aa6a6' : '#3d7ea6';
-      const primaryBorder = isReservation ? '#0f6e6e' : '#2f6488';
-      const title =
-        extensionNights > 0
-          ? `${item.title} · +${extensionNights} night${extensionNights === 1 ? '' : 's'} extended`
-          : item.title;
+  function addIsoDays(iso, days) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    if (!match) return '';
+    const dt = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+    dt.setUTCDate(dt.getUTCDate() + days);
+    return dt.toISOString().slice(0, 10);
+  }
 
+  function stayBounds(item) {
+    const start = manilaParts(item?.start)?.date || '';
+    const end = manilaParts(item?.end)?.date || start;
+    return { start, end: end || start };
+  }
+
+  function stayingDayKeys(item) {
+    const { start, end } = stayBounds(item);
+    if (!start) return [];
+    if (!end || end <= start) return [start];
+    const keys = [];
+    let cursor = start;
+    while (cursor && cursor < end) {
+      keys.push(cursor);
+      cursor = addIsoDays(cursor, 1);
+      if (!cursor || keys.length > 400) break;
+    }
+    return keys;
+  }
+
+  function checkoutDayKey(item) {
+    const { start, end } = stayBounds(item);
+    return end || start || '';
+  }
+
+  function pushGuestDay(map, key, item) {
+    if (!key) return;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(item);
+  }
+
+  function parseCalendarPayload(payload) {
+    if (Array.isArray(payload)) {
+      return { stays: payload, occupancy: [] };
+    }
       return {
-        id: String(bookingId),
-        title,
-        start: item.start,
-        end: item.end,
-        allDay: true,
-        backgroundColor: primaryBg,
-        borderColor: primaryBorder,
-        classNames: [
-          isReservation ? 'is-reservation' : 'is-booking',
-          extensionNights > 0 ? 'has-extension' : '',
-        ].filter(Boolean),
-        extendedProps: {
-          ...item,
-          bookingId,
-          extensionNights,
-          isReservation,
-          primaryBg,
-          // Same hue family, lighter — reads as continuation, not a second guest.
-          extensionBg: isReservation ? '#7dcccc' : '#7aaec8',
-          primaryBorder,
-        },
-      };
+      stays: payload?.stays || payload?.Stays || [],
+      occupancy: payload?.occupancy || payload?.Occupancy || [],
+    };
+  }
+
+  function occupancyDateKey(item) {
+    return String(item?.date || item?.Date || '').slice(0, 10);
+  }
+
+  function indexCalendarOccupancy(items) {
+    calendarOccupancyByDay.clear();
+    (Array.isArray(items) ? items : []).forEach((item) => {
+      const key = occupancyDateKey(item);
+      if (!key) return;
+      const reserved = Math.max(0, Number(item.reserved ?? item.Reserved) || 0);
+      const occupied = Math.max(0, Number(item.occupied ?? item.Occupied) || 0);
+      const available = Math.max(0, Number(item.available ?? item.Available) || 0);
+      const capacity = Math.max(0, Number(item.capacity ?? item.Capacity) || 0);
+      const types = Array.isArray(item.types || item.Types) ? (item.types || item.Types) : [];
+      calendarOccupancyByDay.set(key, {
+        reserved,
+        occupied,
+        available,
+        capacity,
+        types: types.map((row) => ({
+          name: String(row.roomTypeName || row.RoomTypeName || ''),
+          reserved: Math.max(0, Number(row.reserved ?? row.Reserved) || 0),
+          occupied: Math.max(0, Number(row.occupied ?? row.Occupied) || 0),
+          available: Math.max(0, Number(row.available ?? row.Available) || 0),
+          capacity: Math.max(0, Number(row.capacity ?? row.Capacity) || 0),
+        })),
+      });
     });
   }
 
-  function paintCalendarExtension(info) {
-    const props = info.event.extendedProps || {};
-    const extensionNights = Math.max(0, Number(props.extensionNights || 0));
-    const el = info.el;
-    if (!el) return;
+  function occupancyForDay(dayKey) {
+    return calendarOccupancyByDay.get(dayKey) || null;
+  }
 
-    el.title = info.event.title || props.title || '';
+  function indexCalendarStays(items) {
+    calendarStayCache = Array.isArray(items) ? items : [];
+    calendarStayingByDay.clear();
+    calendarCheckoutByDay.clear();
+    calendarStayCache.forEach((item) => {
+      stayingDayKeys(item).forEach((key) => pushGuestDay(calendarStayingByDay, key, item));
+      pushGuestDay(calendarCheckoutByDay, checkoutDayKey(item), item);
+    });
+  }
 
-    if (extensionNights <= 0) return;
+  function guestsStayingOnDay(dayKey) {
+    return calendarStayingByDay.get(dayKey) || [];
+  }
 
-    const start = info.event.start;
-    const end = info.event.end;
-    if (!start || !end) return;
+  function guestsCheckingOutOnDay(dayKey) {
+    return calendarCheckoutByDay.get(dayKey) || [];
+  }
 
-    const dayMs = 24 * 60 * 60 * 1000;
-    const totalDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / dayMs));
-    const primaryDays = Math.max(1, totalDays - extensionNights);
-    const primaryPct = Math.min(99, Math.max(1, (primaryDays / totalDays) * 100));
-    const primaryBg = props.primaryBg || (props.isReservation ? '#1aa6a6' : '#3d7ea6');
-    const extensionBg = props.extensionBg || (props.isReservation ? '#7dcccc' : '#7aaec8');
-    const border = props.primaryBorder || primaryBg;
+  function sortGuestsByName(items) {
+    return items
+      .slice()
+      .sort((a, b) => String(a.guestName || '').localeCompare(String(b.guestName || ''), PH_LOCALE));
+  }
 
-    el.style.backgroundColor = primaryBg;
-    el.style.backgroundImage = `linear-gradient(90deg, ${primaryBg} 0%, ${primaryBg} ${primaryPct}%, ${extensionBg} ${primaryPct}%, ${extensionBg} 100%)`;
-    el.style.borderColor = border;
-    el.style.color = '#ffffff';
-    el.classList.add('has-extension');
+  function occupancyBarEl(occ) {
+    const wrap = document.createElement('div');
+    wrap.className = 'admin-cal-occ';
+    wrap.setAttribute('data-cal-occ', '');
+    const occupiedPct = occ.capacity > 0
+      ? Math.min(100, Math.round((occ.occupied / occ.capacity) * 100))
+      : 0;
+    const reservedPct = occ.capacity > 0
+      ? Math.min(100 - occupiedPct, Math.round((occ.reserved / occ.capacity) * 100))
+      : 0;
+    wrap.classList.toggle('is-open', occ.available > 0);
+    wrap.classList.toggle('is-full', occ.available === 0 && occ.capacity > 0);
+    wrap.title = occ.capacity > 0
+      ? `${occ.reserved} reserved · ${occ.occupied} occupied · ${occ.available} available of ${occ.capacity}`
+      : 'No sellable rooms';
 
-    // One clear “extended” cue without a second event bar.
-    if (!el.querySelector('.admin-calendar-ext-mark')) {
-      const mark = document.createElement('span');
-      mark.className = 'admin-calendar-ext-mark';
-      mark.setAttribute('aria-hidden', 'true');
-      mark.textContent = `+${extensionNights}`;
-      el.append(mark);
+    const bar = document.createElement('span');
+    bar.className = 'admin-cal-occ-bar';
+    const occupiedFill = document.createElement('i');
+    occupiedFill.className = 'is-occupied';
+    occupiedFill.style.width = `${occupiedPct}%`;
+    const reservedFill = document.createElement('i');
+    reservedFill.className = 'is-reserved';
+    reservedFill.style.width = `${reservedPct}%`;
+    bar.append(occupiedFill, reservedFill);
+
+    const label = document.createElement('span');
+    label.className = 'admin-cal-occ-label';
+    label.textContent = occ.capacity > 0
+      ? `${occ.available} avail`
+      : '—';
+
+    wrap.append(bar, label);
+    return wrap;
+  }
+
+  function refreshCalendarDayCounts() {
+    if (!calendarElement) return;
+    calendarElement.querySelectorAll('.fc-daygrid-day[data-date]').forEach((cell) => {
+      const dayKey = cell.getAttribute('data-date') || '';
+      const staying = guestsStayingOnDay(dayKey);
+      const leaving = guestsCheckingOutOnDay(dayKey);
+      const occ = occupancyForDay(dayKey);
+      cell.classList.toggle('has-guests', staying.length > 0 || leaving.length > 0);
+      if (cell.classList.contains('fc-day-today')) {
+        cell.setAttribute('aria-current', 'date');
+      } else {
+        cell.removeAttribute('aria-current');
+      }
+      const frame = cell.querySelector('.fc-daygrid-day-frame') || cell;
+      let mount = frame.querySelector('[data-cal-count-mount]');
+      if (!mount) {
+        mount = document.createElement('div');
+        mount.className = 'admin-cal-count-mount';
+        mount.setAttribute('data-cal-count-mount', '');
+        frame.append(mount);
+      }
+      mount.replaceChildren();
+      if (!dayKey) return;
+
+      if (staying.length > 0 || leaving.length > 0) {
+        const pair = document.createElement('button');
+        pair.type = 'button';
+        pair.className = 'admin-cal-counts';
+        pair.setAttribute('data-cal-count', '');
+        pair.setAttribute('data-day', dayKey);
+        pair.setAttribute(
+          'aria-label',
+          `${staying.length} staying, ${leaving.length} checking out on ${formatCalendarDayHeading(dayKey)}`
+        );
+
+        const stayEl = document.createElement('span');
+        stayEl.className = 'admin-cal-count is-stay';
+        const stayNum = document.createElement('b');
+        stayNum.textContent = String(staying.length);
+        const stayLbl = document.createElement('small');
+        stayLbl.textContent = 'stay';
+        stayEl.append(stayNum, stayLbl);
+
+        const outEl = document.createElement('span');
+        outEl.className = 'admin-cal-count is-out';
+        const outNum = document.createElement('b');
+        outNum.textContent = String(leaving.length);
+        const outLbl = document.createElement('small');
+        outLbl.textContent = 'out';
+        outEl.append(outNum, outLbl);
+
+        pair.append(stayEl, outEl);
+        mount.append(pair);
+      }
+
+      if (occ) {
+        mount.append(occupancyBarEl(occ));
+      }
+    });
+  }
+
+  function formatCalendarDayHeading(dayKey) {
+    const date = parseUtc(`${dayKey}T00:00:00Z`);
+    if (!date) return dayKey || 'Guests';
+    return date.toLocaleDateString(PH_LOCALE, {
+      timeZone: 'UTC',
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }
+
+  function isCalendarDayModalOpen() {
+    return Boolean(calendarDayModal && !calendarDayModal.hidden);
+  }
+
+  function closeCalendarDayModal() {
+    if (!calendarDayModal || calendarDayModal.hidden) return;
+    calendarDayModal.hidden = true;
+    document.body.classList.remove('admin-cal-day-open');
+    const restore = calendarDayLastFocus;
+    calendarDayLastFocus = null;
+    if (restore && typeof restore.focus === 'function' && document.contains(restore)) {
+      restore.focus();
     }
+  }
+
+  function calendarGuestRow(item, leavingToday) {
+    const bookingId = Number(item.id);
+    const extensionNights = Math.max(0, Number(item.extensionNights || 0));
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'admin-cal-guest-row';
+    if (leavingToday) row.classList.add('is-checkout');
+    row.setAttribute('data-calendar-guest', String(bookingId));
+    if (Number.isFinite(bookingId) && bookingId > 0) {
+      row.setAttribute(
+        'aria-label',
+        `Open booking for ${item.guestName || 'guest'} ${item.reference || ''}`
+      );
+    }
+
+    const name = document.createElement('strong');
+    name.className = 'admin-cal-guest-name';
+    name.textContent = item.guestName || 'Guest';
+
+    const meta = document.createElement('span');
+    meta.className = 'admin-cal-guest-meta';
+    const bits = [
+      item.reference,
+      displayEnum(item.kind),
+      item.roomSummary,
+    ].filter(Boolean);
+    if (extensionNights > 0) bits.push(`+${extensionNights} extended`);
+    meta.textContent = bits.join(' · ');
+
+    const stay = document.createElement('span');
+    stay.className = 'admin-cal-guest-stay';
+    stay.textContent = formatStayRange(item.start, item.end);
+
+    row.append(name, meta, stay);
+    row.addEventListener('click', () => {
+      if (!Number.isFinite(bookingId) || bookingId <= 0) return;
+      openBookingDetails(bookingId);
+    });
+    return row;
+  }
+
+  function fillGuestGroup(block, list, items, leavingToday, headingCount) {
+    if (!block || !list) return;
+    list.replaceChildren();
+    const guests = sortGuestsByName(items);
+    block.hidden = guests.length === 0;
+    if (headingCount) {
+      headingCount.textContent = guests.length > 0 ? `(${guests.length})` : '';
+    }
+    guests.forEach((item) => list.append(calendarGuestRow(item, leavingToday)));
+  }
+
+  function applyCalendarGuestFilter() {
+    const query = String(calendarDayFilter?.value || '').trim().toLowerCase();
+    calendarDayModal?.querySelectorAll('[data-calendar-guest]').forEach((row) => {
+      if (!(row instanceof HTMLElement)) return;
+      if (!query) {
+        row.hidden = false;
+        return;
+      }
+      row.hidden = !String(row.textContent || '').toLowerCase().includes(query);
+    });
+  }
+
+  function stayRoomsAssigned(item) {
+    const requested = Math.max(0, Number(item.requestedRooms ?? item.RequestedRooms) || 0);
+    const assigned = Math.max(0, Number(item.assignedRooms ?? item.AssignedRooms) || 0);
+    return requested > 0 && assigned >= requested;
+  }
+
+  function renderDayOccupancy(dayKey) {
+    const occ = occupancyForDay(dayKey);
+    if (!calendarDayOccupancy) return;
+    if (!occ) {
+      calendarDayOccupancy.hidden = true;
+      return;
+    }
+
+    calendarDayOccupancy.hidden = false;
+    calendarDayOccupancy.classList.toggle('is-full', occ.available === 0 && occ.capacity > 0);
+    if (calendarDayReserved) calendarDayReserved.textContent = String(occ.reserved);
+    if (calendarDayOccupied) calendarDayOccupied.textContent = String(occ.occupied);
+    if (calendarDayAvailable) calendarDayAvailable.textContent = String(occ.available);
+    const occupiedPct = occ.capacity > 0
+      ? Math.min(100, (occ.occupied / occ.capacity) * 100)
+      : 0;
+    const reservedPct = occ.capacity > 0
+      ? Math.min(100 - occupiedPct, (occ.reserved / occ.capacity) * 100)
+      : 0;
+    if (calendarDayOccupancyOccupiedFill instanceof HTMLElement) {
+      calendarDayOccupancyOccupiedFill.style.width = `${occupiedPct}%`;
+    }
+    if (calendarDayOccupancyReservedFill instanceof HTMLElement) {
+      calendarDayOccupancyReservedFill.style.width = `${reservedPct}%`;
+    }
+    if (calendarDayOccupancyMeter instanceof HTMLElement) {
+      calendarDayOccupancyMeter.setAttribute('aria-valuemin', '0');
+      calendarDayOccupancyMeter.setAttribute('aria-valuemax', String(occ.capacity));
+      calendarDayOccupancyMeter.setAttribute('aria-valuenow', String(occ.occupied));
+    }
+    if (calendarDayOccupancyHint) {
+      if (occ.capacity <= 0) {
+        calendarDayOccupancyHint.textContent = 'No sellable rooms in inventory.';
+      } else {
+        calendarDayOccupancyHint.textContent =
+          `${occ.reserved} reserved, ${occ.occupied} occupied, ${occ.available} available.`;
+      }
+    }
+    if (calendarDayTypes) {
+      calendarDayTypes.replaceChildren();
+      (occ.types || []).forEach((row) => {
+        if (!row.name) return;
+        const li = document.createElement('li');
+        li.className = row.available > 0 ? 'is-open' : 'is-full';
+        const name = document.createElement('span');
+        name.textContent = row.name;
+        const count = document.createElement('strong');
+        count.textContent =
+          `${row.reserved} reserved · ${row.occupied} occupied · ${row.available} available`;
+        li.append(name, count);
+        calendarDayTypes.append(li);
+      });
+    }
+  }
+
+  function openCalendarDayModal(dayKey) {
+    if (!calendarDayModal || !dayKey) return;
+    const staying = guestsStayingOnDay(dayKey);
+    const leaving = guestsCheckingOutOnDay(dayKey);
+    const occupiedGuests = staying.filter(stayRoomsAssigned);
+    const reservedGuests = staying.filter((item) => !stayRoomsAssigned(item));
+    if (calendarDayTitle) calendarDayTitle.textContent = formatCalendarDayHeading(dayKey);
+    if (calendarDayStayCount) calendarDayStayCount.textContent = String(staying.length);
+    if (calendarDayOutCount) calendarDayOutCount.textContent = String(leaving.length);
+    fillGuestGroup(calendarDayOccupiedBlock, calendarDayOccupiedList, occupiedGuests, false, calendarDayOccupiedHeadingCount);
+    fillGuestGroup(calendarDayReservedBlock, calendarDayReservedList, reservedGuests, false, calendarDayReservedHeadingCount);
+    fillGuestGroup(calendarDayOutBlock, calendarDayOutList, leaving, true, calendarDayOutHeadingCount);
+    renderDayOccupancy(dayKey);
+    if (calendarDayEmpty) {
+      calendarDayEmpty.hidden =
+        occupiedGuests.length > 0 || reservedGuests.length > 0 || leaving.length > 0;
+    }
+    const guestTotal = occupiedGuests.length + reservedGuests.length + leaving.length;
+    if (calendarDayFind) {
+      calendarDayFind.hidden = guestTotal < 8;
+    }
+    if (calendarDayFilter) {
+      calendarDayFilter.value = '';
+    }
+    applyCalendarGuestFilter();
+
+    calendarDayLastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    calendarDayModal.hidden = false;
+    document.body.classList.add('admin-cal-day-open');
+    calendarDayModal.querySelector('.admin-cal-day-close')?.focus();
+  }
+
+  function calendarFitHeight() {
+    return 'auto';
+  }
+
+  function sizeReservationCalendar() {
+    if (!reservationCalendar || calendarPanel?.hidden) return;
+    reservationCalendar.setOption('height', 'auto');
+    reservationCalendar.updateSize();
+    requestAnimationFrame(refreshCalendarDayCounts);
   }
 
   async function initReservationCalendar() {
@@ -6235,19 +7069,20 @@
     }
 
     reservationCalendar = new window.FullCalendar.Calendar(calendarElement, {
-      initialView: window.innerWidth < 720 ? 'listMonth' : 'dayGridMonth',
+      timeZone: PH_TZ,
+      initialView: 'dayGridMonth',
       height: 'auto',
-      dayMaxEvents: 3,
+      expandRows: false,
+      navLinks: false,
+      eventDisplay: 'none',
       displayEventTime: false,
       headerToolbar: {
         left: 'prev,next today',
         center: 'title',
-        right: 'dayGridMonth,listMonth',
+        right: '',
       },
       buttonText: {
         today: 'Today',
-        month: 'Month',
-        list: 'List',
       },
       events: async (info, success, failure) => {
         try {
@@ -6255,33 +7090,62 @@
             start: info.startStr.slice(0, 10),
             end: info.endStr.slice(0, 10),
           });
-          const items = await apiFetch(`/api/admin/bookings/calendar?${query}`);
-          success(mapCalendarEvents(items));
+          const payload = await apiFetch(`/api/admin/bookings/calendar?${query}`);
+          const parsed = parseCalendarPayload(payload);
+          indexCalendarStays(parsed.stays);
+          indexCalendarOccupancy(parsed.occupancy);
+          success([]);
           if (calendarFallback) calendarFallback.hidden = true;
+          requestAnimationFrame(refreshCalendarDayCounts);
         } catch (error) {
+          indexCalendarStays([]);
+          indexCalendarOccupancy([]);
+          requestAnimationFrame(refreshCalendarDayCounts);
           if (calendarFallback) calendarFallback.hidden = false;
           failure(error);
         }
       },
-      eventDidMount: paintCalendarExtension,
-      eventClick: (info) => {
-        const bookingId = Number(
-          info.event.extendedProps?.bookingId || info.event.id
-        );
-        if (Number.isFinite(bookingId) && bookingId > 0) {
-          openBookingDetails(bookingId);
-        }
+      datesSet: () => {
+        calendarElement.querySelector('.fc-col-header')?.classList.add('admin-cal-header');
+        requestAnimationFrame(refreshCalendarDayCounts);
+      },
+      dateClick: (info) => {
+        const dayKey = String(info.dateStr || '').slice(0, 10);
+        if (dayKey) openCalendarDayModal(dayKey);
       },
     });
+    calendarElement.addEventListener('click', (event) => {
+      const pill = event.target.closest('[data-cal-count]');
+      if (!pill || !calendarElement.contains(pill)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const dayKey = pill.getAttribute('data-day') || '';
+      if (dayKey) openCalendarDayModal(dayKey);
+    });
     reservationCalendar.render();
+    sizeReservationCalendar();
   }
+
+  window.addEventListener('resize', () => {
+    if (!reservationCalendar || calendarPanel?.hidden) return;
+    sizeReservationCalendar();
+  });
 
   detailModal?.querySelectorAll('[data-booking-modal-close]').forEach((button) => {
     button.addEventListener('click', closeBookingDetails);
   });
+  calendarDayModal?.querySelectorAll('[data-calendar-day-close]').forEach((button) => {
+    button.addEventListener('click', closeCalendarDayModal);
+  });
+  calendarDayFilter?.addEventListener('input', applyCalendarGuestFilter);
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !isPhotoZoomOpen() && detailModal && !detailModal.hidden) {
+    if (event.key !== 'Escape' || isPhotoZoomOpen()) return;
+    if (detailModal && !detailModal.hidden) {
       closeBookingDetails();
+      return;
+    }
+    if (isCalendarDayModalOpen()) {
+      closeCalendarDayModal();
     }
   });
 
@@ -6302,9 +7166,10 @@
       });
       if (showCalendar) {
         void initReservationCalendar().then(() => {
-          reservationCalendar?.updateSize();
+          sizeReservationCalendar();
         });
       } else {
+        closeCalendarDayModal();
         if (history) {
           filter = '';
           bookingsRoot.querySelectorAll('[data-booking-filter]').forEach(
@@ -6485,8 +7350,14 @@
       refreshCheckouts();
       return;
     }
+    if (!daytimeFlowPanel?.hidden) {
+      refreshDaytimeFlow();
+      return;
+    }
     refreshBookings();
   });
+  daytimeFlowOpenButton?.addEventListener('click', openDaytimeFlow);
+  bookingsRoot?.querySelector('[data-daytime-flow-close]')?.addEventListener('click', closeDaytimeFlow);
   bookingsRoot?.querySelector('[data-arrivals-close]')?.addEventListener('click', closeArrivalsSoon);
   bookingsRoot?.querySelector('[data-pending-calls-close]')?.addEventListener('click', closePendingCallsSoon);
   bookingsRoot?.querySelector('[data-checkouts-close]')?.addEventListener('click', closeCheckoutsSoon);
@@ -6508,15 +7379,7 @@
     pollTimer = window.setInterval(async () => {
       await processAutoCheckout();
       await refreshNotifications();
-      if (!arrivalsPanel?.hidden) {
-        await refreshArrivals();
-      } else if (!pendingCallsPanel?.hidden) {
-        await refreshPendingCalls();
-      } else if (!checkoutsPanel?.hidden) {
-        await refreshCheckouts();
-      } else {
-        await refreshBookings();
-      }
+      await refreshActiveBookingPanel();
       reservationCalendar?.refetchEvents();
     }, 30000);
   }
@@ -6541,27 +7404,27 @@
 
     connection.on('BookingCreated', async () => {
       playChime();
-      await Promise.all([refreshNotifications(), refreshBookings()]);
+      await Promise.all([refreshNotifications(), refreshActiveBookingPanel()]);
       reservationCalendar?.refetchEvents();
     });
     connection.on('BookingUpdated', async () => {
-      const listRefresh = !arrivalsPanel?.hidden
-        ? refreshArrivals()
-        : !pendingCallsPanel?.hidden
-          ? refreshPendingCalls()
-          : !checkoutsPanel?.hidden
-            ? refreshCheckouts()
-            : refreshBookings();
+      playChime();
+      const listRefresh = refreshActiveBookingPanel();
       await Promise.all([refreshNotifications(), listRefresh]);
       reservationCalendar?.refetchEvents();
     });
+    connection.on('OfferEndingSoon', async (notification) => {
+      playChime();
+      showOfferEndingSoonAlert(notification);
+      await refreshNotifications();
+    });
     connection.on('BookingArchived', async () => {
       closeBookingDetails();
-      await Promise.all([refreshNotifications(), refreshBookings()]);
+      await Promise.all([refreshNotifications(), refreshActiveBookingPanel()]);
       reservationCalendar?.refetchEvents();
     });
     connection.on('PaymentChanged', async (bookingId) => {
-      await refreshBookings();
+      await refreshActiveBookingPanel();
       await refreshOpenBookingDetails(bookingId);
       if (
         paymentViewModal &&
@@ -6576,7 +7439,7 @@
     connection.onreconnecting(beginPolling);
     connection.onreconnected(async () => {
       stopPolling();
-      await Promise.all([refreshNotifications(), refreshBookings()]);
+      await Promise.all([refreshNotifications(), refreshActiveBookingPanel()]);
       reservationCalendar?.refetchEvents();
     });
     connection.onclose(() => {
@@ -6598,9 +7461,14 @@
   }
 
   window.addEventListener('beforeunload', () => {
+    isLeavingBookingsPage = true;
     if (pollTimer) window.clearInterval(pollTimer);
     if (reconnectTimer) window.clearTimeout(reconnectTimer);
     if (searchTimer) window.clearTimeout(searchTimer);
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden || isLeavingBookingsPage) return;
+    void refreshActiveBookingPanel();
   });
 
   const params = new URLSearchParams(window.location.search);
@@ -6626,17 +7494,20 @@
     window.history.replaceState({}, '', url.pathname + (url.search || ''));
   }
 
+  const openPendingCallsByUrl =
+    params.get('pendingCalls') === 'soon'
+    || params.get('arrivals') === 'soon'
+    || params.get('checkouts') === 'soon';
+  if (openPendingCallsByUrl && !pendingCallsFromUrlHandled) {
+    pendingCallsFromUrlHandled = true;
+    filter = 'Pending';
+    page = 1;
+    bookingsRoot?.querySelectorAll('[data-booking-filter]').forEach((item) => {
+      item.classList.toggle('is-active', (item.dataset.bookingFilter || '') === 'Pending');
+    });
+  }
+
   void refreshNotifications();
   void refreshBookings();
-  if (params.get('pendingCalls') === 'soon' && !pendingCallsFromUrlHandled) {
-    pendingCallsFromUrlHandled = true;
-    openPendingCallsSoon();
-  } else if (params.get('arrivals') === 'soon' && !arrivalsFromUrlHandled) {
-    arrivalsFromUrlHandled = true;
-    openArrivalsSoon();
-  } else if (params.get('checkouts') === 'soon' && !checkoutsFromUrlHandled) {
-    checkoutsFromUrlHandled = true;
-    openCheckoutsSoon();
-  }
   void startSignalR();
 })();

@@ -13,11 +13,16 @@ public sealed class PaymentService : IPaymentService
 
     private readonly HotelBookingDbContext _db;
     private readonly IWebHostEnvironment _environment;
+    private readonly ISystemAuditRecorder _audit;
 
-    public PaymentService(HotelBookingDbContext db, IWebHostEnvironment environment)
+    public PaymentService(
+        HotelBookingDbContext db,
+        IWebHostEnvironment environment,
+        ISystemAuditRecorder audit)
     {
         _db = db;
         _environment = environment;
+        _audit = audit;
     }
 
     public async Task<PaymentRecordDto> RecordAsync(
@@ -59,6 +64,14 @@ public sealed class PaymentService : IPaymentService
         {
             throw new ArgumentException(
                 "Confirm the booking first. Payments can only be recorded after confirmation.");
+        }
+
+        if (booking.CashOnlyPromo
+            && request.EventType is not PaymentEventType.Refund and not PaymentEventType.Adjustment
+            && request.Method != PaymentMethod.Cash)
+        {
+            throw new ArgumentException(
+                "This stay used a cash-only promo. Record payment as Cash.");
         }
 
         var postedPaid = booking.PaymentRecords
@@ -116,6 +129,17 @@ public sealed class PaymentService : IPaymentService
 
         _db.PaymentRecords.Add(record);
         booking.UpdatedAtUtc = now;
+        var postedAction = request.EventType == PaymentEventType.Refund
+            ? "Payment.RefundPosted"
+            : "Payment.Posted";
+        _audit.Record(
+            SystemAuditIntent.AdministrativeAction,
+            SystemAuditDomain.Payment,
+            postedAction,
+            "Payment",
+            record.ReceiptNumber,
+            record.ReceiptNumber,
+            summary: $"{postedAction.Replace("Payment.", string.Empty)} {record.ReceiptNumber} on {booking.Reference} · ₱{amount:N2}.");
         await _db.SaveChangesAsync(cancellationToken);
 
         return Map(record, booking);
@@ -126,16 +150,11 @@ public sealed class PaymentService : IPaymentService
         VoidPaymentRequest request,
         CancellationToken cancellationToken = default)
     {
-        var voidedBy = request.VoidedBy?.Trim() ?? string.Empty;
+        var actor = _audit.CurrentActor();
         var reason = request.Reason?.Trim() ?? string.Empty;
-        if (voidedBy.Length < 2)
+        if (reason.Length < 8)
         {
-            throw new ArgumentException("Enter who is voiding this payment.");
-        }
-
-        if (reason.Length < 2)
-        {
-            throw new ArgumentException("Enter a void reason.");
+            throw new ArgumentException("Enter a refund reason (at least 8 characters).");
         }
 
         var record = await _db.PaymentRecords
@@ -145,15 +164,24 @@ public sealed class PaymentService : IPaymentService
 
         if (record.Status == PaymentRecordStatus.Voided)
         {
-            throw new InvalidOperationException("Payment is already voided.");
+            throw new InvalidOperationException("Payment is already refunded.");
         }
 
         var now = DateTime.UtcNow;
         record.Status = PaymentRecordStatus.Voided;
         record.VoidedAtUtc = now;
-        record.VoidedBy = voidedBy;
+        record.VoidedBy = actor.DisplayName;
         record.VoidReason = reason.Length > 500 ? reason[..500] : reason;
         record.Booking.UpdatedAtUtc = now;
+        _audit.Record(
+            SystemAuditIntent.AdministrativeAction,
+            SystemAuditDomain.Payment,
+            "Payment.Refund",
+            "Payment",
+            record.Id.ToString(),
+            record.ReceiptNumber,
+            reason,
+            $"Refunded {record.ReceiptNumber} on {record.Booking.Reference} · ₱{record.Amount:N2}.");
 
         await RecalculateBalancesAsync(record.BookingId, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
@@ -173,7 +201,7 @@ public sealed class PaymentService : IPaymentService
 
         if (record.Status == PaymentRecordStatus.Voided)
         {
-            throw new InvalidOperationException("Voided payments cannot be edited.");
+            throw new InvalidOperationException("Refunded payments cannot be edited.");
         }
 
         record.ExternalReference = TrimOrNull(request.ExternalReference, 120);
@@ -283,7 +311,13 @@ public sealed class PaymentService : IPaymentService
         var total = await query.CountAsync(cancellationToken);
         var posted = query.Where(p => p.Status == PaymentRecordStatus.Posted);
         var totalCollected = await posted.Where(p => p.Amount > 0).SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0m;
-        var totalRefunded = await posted.Where(p => p.Amount < 0).SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0m;
+        // Staff refunds mark the original receipt Voided (positive amount). Negative posted
+        // rows are PaymentEventType.Refund. Both belong in the Refunded KPI.
+        var postedRefundEvents = await posted.Where(p => p.Amount < 0).SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0m;
+        var voidedReceipts = await query
+            .Where(p => p.Status == PaymentRecordStatus.Voided)
+            .SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0m;
+        var totalRefunded = Math.Abs(postedRefundEvents) + Math.Abs(voidedReceipts);
 
         var items = await query
             .OrderByDescending(p => p.PaidAtUtc)
@@ -298,7 +332,7 @@ public sealed class PaymentService : IPaymentService
             pageSize,
             total,
             totalCollected,
-            Math.Abs(totalRefunded));
+            totalRefunded);
     }
 
     public async Task<BookingPaymentSummaryDto?> GetBookingSummaryAsync(
@@ -395,15 +429,24 @@ public sealed class PaymentService : IPaymentService
 
         _db.PaymentRecords.RemoveRange(payments);
 
-        var log = new PaymentFlushLog
+        var log = new SystemFlushLog
         {
+            Kind = SystemFlushKind.Payments,
             FlushedAtUtc = flushedAtUtc,
             PerformedBy = performedBy,
             RecordCount = payments.Count,
             FileName = fileName,
             Summary = summary.Length > 2000 ? summary[..2000] : summary
         };
-        _db.PaymentFlushLogs.Add(log);
+        _db.SystemFlushLogs.Add(log);
+        _audit.Record(
+            SystemAuditIntent.FileModification,
+            SystemAuditDomain.File,
+            "Payment.FlushExport",
+            "Flush",
+            log.FileName,
+            log.FileName,
+            summary: $"{payments.Count} completed-stay payment row(s) exported to {fileName}, then deleted.");
 
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -421,8 +464,9 @@ public sealed class PaymentService : IPaymentService
     {
         await PurgeExpiredFlushLogsAsync(cancellationToken);
 
-        return await _db.PaymentFlushLogs
+        return await _db.SystemFlushLogs
             .AsNoTracking()
+            .Where(log => log.Kind == SystemFlushKind.Payments)
             .OrderByDescending(log => log.FlushedAtUtc)
             .Take(50)
             .Select(log => new PaymentFlushLogDto(
@@ -439,8 +483,8 @@ public sealed class PaymentService : IPaymentService
     private async Task PurgeExpiredFlushLogsAsync(CancellationToken cancellationToken)
     {
         var cutoff = DateTime.UtcNow.Subtract(FlushLogRetention);
-        var expired = await _db.PaymentFlushLogs
-            .Where(log => log.FlushedAtUtc < cutoff)
+        var expired = await _db.SystemFlushLogs
+            .Where(log => log.Kind == SystemFlushKind.Payments && log.FlushedAtUtc < cutoff)
             .ToListAsync(cancellationToken);
 
         if (expired.Count == 0)
@@ -448,7 +492,7 @@ public sealed class PaymentService : IPaymentService
             return;
         }
 
-        _db.PaymentFlushLogs.RemoveRange(expired);
+        _db.SystemFlushLogs.RemoveRange(expired);
         await _db.SaveChangesAsync(cancellationToken);
     }
 
@@ -477,7 +521,7 @@ public sealed class PaymentService : IPaymentService
         }
     }
 
-    private static PaymentFlushLogDto MapFlushLog(PaymentFlushLog log)
+    private static PaymentFlushLogDto MapFlushLog(SystemFlushLog log)
     {
         return new PaymentFlushLogDto(
             log.Id,

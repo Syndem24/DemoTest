@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using TestingDemo.DTOs;
@@ -10,6 +11,7 @@ namespace TestingDemo.Controllers;
 
 [ApiController]
 [Route("api/rooms")]
+[Authorize(Roles = "AdminManager,Receptionist")]
 public class RoomsApiController : ControllerBase
 {
     private readonly IRoomService _roomService;

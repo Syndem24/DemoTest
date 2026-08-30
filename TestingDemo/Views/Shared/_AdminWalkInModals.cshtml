@@ -148,7 +148,7 @@
                     <span class="guest-book-section-num">4</span>
                     <div>
                         <h3>Confirm walk-in</h3>
-                        <p>Creates a confirmed booking and assigns the selected rooms.</p>
+                        <p>Creates a confirmed booking and assigns the selected rooms. Limited Time walk-in promos apply automatically when active (cash only).</p>
                     </div>
                 </div>
                 <div class="guest-booking-cart" aria-live="polite">
@@ -157,6 +157,27 @@
                         <strong id="walkInConfirmTotal">₱0.00</strong>
                     </div>
                     <div class="admin-walkin-fees" id="walkInFeeBreakdown"></div>
+                </div>
+                <div class="guest-field mt-3">
+                    <label for="walkInChannel" class="form-label">Booking channel</label>
+                    <select id="walkInChannel" class="form-select">
+                        <option value="WalkIn" selected>Walk-in / front desk</option>
+                        <option value="FrontDeskExtension">Stay extension (front desk)</option>
+                        <option value="Agoda">Agoda (third-party — regular rate)</option>
+                        <option value="Expedia">Expedia (third-party — regular rate)</option>
+                        <option value="RedDoorz">RedDoorz (third-party — regular rate)</option>
+                        <option value="OtherThirdParty">Other OTA (regular rate)</option>
+                    </select>
+                    <div class="form-text">Third-party channels always use standard RoomType rates (no walk-in Limited Time promo).</div>
+                </div>
+                <div class="guest-field mt-3">
+                    <label for="walkInArrivalDiscount" class="form-label">Senior / PWD (flag for arrival)</label>
+                    <select id="walkInArrivalDiscount" class="form-select">
+                        <option value="None" selected>None</option>
+                        <option value="SeniorCitizen">Senior Citizen — verify ID on arrival</option>
+                        <option value="Pwd">PWD — verify ID on arrival</option>
+                    </select>
+                    <div class="form-text" id="walkInArrivalDiscountHint">Cannot combine with an active walk-in promo rate.</div>
                 </div>
             </section>
 

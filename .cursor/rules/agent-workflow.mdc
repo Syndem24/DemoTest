@@ -15,9 +15,10 @@ Assume hotel-system context. Expand vague asks using project conventions:
 
 ## Execution order
 1. Find the existing controller/view/CSS/JS pattern before creating new stacks
-2. Implement the smallest change that satisfies the ask
-3. Build/check only when C#/project structure changed
-4. Reply with what changed + where to click/test (1 short block)
+2. Backend/API/jobs/schema: consult `backend-systems-architect` and pick 1–3 patterns before coding
+3. Implement the smallest change that satisfies the ask
+4. Build/check only when C#/project structure changed
+5. Reply with what changed + where to click/test (1 short block)
 
 ## Clarifications
 Ask only if blocked by a real choice (e.g. persist vs UI-only, admin vs customer).

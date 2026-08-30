@@ -1,5 +1,7 @@
 using System.Data;
+using System.Globalization;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using TestingDemo.Data;
 using TestingDemo.DTOs;
@@ -29,11 +31,38 @@ public sealed class BookingService : IBookingService
 
     private readonly HotelBookingDbContext _db;
     private readonly IWebHostEnvironment _environment;
+    private readonly ISystemAuditRecorder _audit;
 
-    public BookingService(HotelBookingDbContext db, IWebHostEnvironment environment)
+    public BookingService(
+        HotelBookingDbContext db,
+        IWebHostEnvironment environment,
+        ISystemAuditRecorder audit)
     {
         _db = db;
         _environment = environment;
+        _audit = audit;
+    }
+
+    private void AuditBooking(
+        Booking booking,
+        string action,
+        string? summary = null,
+        string? actorUserId = null,
+        string? actorDisplayName = null)
+    {
+        var label = string.IsNullOrWhiteSpace(booking.Reference)
+            ? $"Booking #{booking.Id}"
+            : booking.Reference;
+        _audit.Record(
+            SystemAuditIntent.AdministrativeAction,
+            SystemAuditDomain.Booking,
+            action,
+            "Booking",
+            booking.Id.ToString(),
+            label,
+            summary: summary ?? action,
+            actorUserId: actorUserId,
+            actorDisplayName: actorDisplayName);
     }
 
     public async Task<IReadOnlyList<RoomAvailabilityDto>> GetAvailabilityAsync(
@@ -148,6 +177,43 @@ public sealed class BookingService : IBookingService
         }
 
         var nowUtc = DateTime.UtcNow;
+        var arrivalDiscount = request.ArrivalDiscountRequest;
+
+        SpecialOffer? appliedOffer = null;
+        var roomTypeIds = requestedItems.Select(i => i.RoomTypeId).Distinct().ToList();
+        var nights = StayNights(checkInAtUtc, checkoutTimeUtc);
+        var offersByType = await ResolveActiveOnlineRateOffersAsync(roomTypeIds, nights, cancellationToken);
+
+        if (request.SpecialOfferId is > 0)
+        {
+            appliedOffer = await ResolveOnlineOfferAsync(
+                request.SpecialOfferId.Value,
+                roomTypeIds,
+                nights,
+                cancellationToken);
+            if (appliedOffer is null)
+            {
+                throw new ArgumentException(
+                    "That special offer is no longer available for online booking.");
+            }
+
+            offersByType[appliedOffer.RoomTypeId] = appliedOffer;
+        }
+        else if (offersByType.Count > 0)
+        {
+            // Eligible rate offers replace the sellable rate automatically — no guest choice required.
+            appliedOffer = offersByType.Values
+                .OrderBy(o => o.PromoPricePerNight)
+                .First();
+        }
+
+        var onLimitedPromo = offersByType.Count > 0;
+        if (onLimitedPromo && arrivalDiscount != ArrivalDiscountRequest.None)
+        {
+            throw new ArgumentException(
+                "Senior Citizen / PWD discount cannot be combined with an active special offer promo.");
+        }
+
         var booking = new Booking
         {
             Reference = CreateReference(),
@@ -159,6 +225,11 @@ public sealed class BookingService : IBookingService
             PaymentOption = PaymentOption.Full,
             Kind = BookingKind.Booking,
             Status = BookingStatus.Pending,
+            Channel = BookingChannel.Online,
+            SpecialOfferId = appliedOffer?.Id,
+            ArrivalDiscountRequest = arrivalDiscount,
+            // Online Limited Time promo stays are cash on arrival only.
+            CashOnlyPromo = onLimitedPromo,
             CreatedAtUtc = nowUtc,
             UpdatedAtUtc = nowUtc
         };
@@ -166,12 +237,19 @@ public sealed class BookingService : IBookingService
         foreach (var requested in requestedItems)
         {
             var roomType = availabilityByType[requested.RoomTypeId];
+            var price = roomType.PricePerNight;
+            if (offersByType.TryGetValue(requested.RoomTypeId, out var typeOffer)
+                && typeOffer.PromoPricePerNight is decimal promo)
+            {
+                price = promo;
+            }
+
             booking.Items.Add(new BookingItem
             {
                 RoomTypeId = requested.RoomTypeId,
                 RoomTypeName = roomType.RoomTypeName,
                 Quantity = requested.Quantity,
-                PricePerNight = roomType.PricePerNight
+                PricePerNight = price
             });
         }
 
@@ -187,9 +265,11 @@ public sealed class BookingService : IBookingService
         RecalculateTotals(booking);
 
         _db.Bookings.Add(booking);
+        AuditBooking(booking, "Booking.Created", "Online booking created.");
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
+        booking.SpecialOffer = appliedOffer;
         return MapBooking(booking);
     }
 
@@ -284,6 +364,43 @@ public sealed class BookingService : IBookingService
             }
         }
 
+        var channel = request.Channel;
+        if (channel == BookingChannel.Online)
+            channel = BookingChannel.WalkIn;
+
+        var isThirdParty = channel is BookingChannel.Agoda
+            or BookingChannel.Expedia
+            or BookingChannel.RedDoorz
+            or BookingChannel.OtherThirdParty;
+
+        var nights = StayNights(checkInAtUtc, checkoutTimeUtc);
+        var offersByType = new Dictionary<int, SpecialOffer>();
+        if (!isThirdParty
+            && channel is BookingChannel.WalkIn or BookingChannel.FrontDeskExtension)
+        {
+            foreach (var roomTypeId in assignments.Select(a => a.RoomTypeId).Distinct())
+            {
+                var offer = await ResolveWalkInOfferAsync(
+                    roomTypeId,
+                    request.SpecialOfferId,
+                    nights,
+                    cancellationToken);
+                if (offer is not null)
+                    offersByType[roomTypeId] = offer;
+            }
+        }
+
+        var appliedOffer = offersByType.Values
+            .OrderBy(o => o.PromoPricePerNight)
+            .FirstOrDefault();
+
+        var arrivalDiscount = request.ArrivalDiscountRequest;
+        if (offersByType.Count > 0 && arrivalDiscount != ArrivalDiscountRequest.None)
+        {
+            throw new ArgumentException(
+                "Senior Citizen / PWD discount cannot be combined with an active walk-in promo. Apply it when regular rates resume, or verify at arrival without promo.");
+        }
+
         var nowUtc = DateTime.UtcNow;
         var booking = new Booking
         {
@@ -296,6 +413,10 @@ public sealed class BookingService : IBookingService
             PaymentOption = PaymentOption.Full,
             Kind = BookingKind.Booking,
             Status = BookingStatus.Confirmed,
+            Channel = channel,
+            SpecialOfferId = appliedOffer?.Id,
+            ArrivalDiscountRequest = arrivalDiscount,
+            CashOnlyPromo = offersByType.Count > 0,
             CreatedAtUtc = nowUtc,
             UpdatedAtUtc = nowUtc,
             IsNotificationCleared = false
@@ -304,12 +425,19 @@ public sealed class BookingService : IBookingService
         foreach (var assignment in assignments)
         {
             var sample = roomsById[assignment.RoomIds[0]];
+            var price = sample.RoomType.PricePerNight;
+            if (offersByType.TryGetValue(assignment.RoomTypeId, out var typeOffer)
+                && typeOffer.PromoPricePerNight is decimal promo)
+            {
+                price = promo;
+            }
+
             booking.Items.Add(new BookingItem
             {
                 RoomTypeId = assignment.RoomTypeId,
                 RoomTypeName = sample.RoomType.Name,
                 Quantity = assignment.RoomIds.Count,
-                PricePerNight = sample.RoomType.PricePerNight
+                PricePerNight = price
             });
         }
 
@@ -328,6 +456,7 @@ public sealed class BookingService : IBookingService
         await _db.SaveChangesAsync(cancellationToken);
 
         await AssignAndOccupyRoomsAsync(booking, assignments, cancellationToken);
+        AuditBooking(booking, "Booking.WalkInCreated", "Walk-in stay created and rooms assigned.");
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
@@ -336,7 +465,7 @@ public sealed class BookingService : IBookingService
             .Include(item => item.Items)
                 .ThenInclude(line => line.RoomType)
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .Include(item => item.Charges)
             .FirstAsync(item => item.Id == booking.Id, cancellationToken);
@@ -357,12 +486,6 @@ public sealed class BookingService : IBookingService
 
         var query = _db.Bookings
             .AsNoTracking()
-            .Include(booking => booking.Items)
-                .ThenInclude(line => line.RoomType)
-            .Include(booking => booking.Items)
-                .ThenInclude(line => line.AssignedRooms)
-                    .ThenInclude(assignment => assignment.Room)
-            .Include(booking => booking.Charges)
             .Where(booking => booking.IsArchived == history)
             .AsQueryable();
 
@@ -381,18 +504,55 @@ public sealed class BookingService : IBookingService
                 || booking.GuestPhone.Contains(term));
         }
 
-        var total = await query.CountAsync(cancellationToken);
-        var bookings = await query
-            .OrderByDescending(booking => booking.CreatedAtUtc)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync(cancellationToken);
+        try
+        {
+            var total = await query.CountAsync(cancellationToken);
+            if (total == 0)
+            {
+                return new PagedBookingsDto(new List<BookingDto>(), page, pageSize, 0);
+            }
 
-        return new PagedBookingsDto(
-            bookings.Select(MapBooking).ToList(),
-            page,
-            pageSize,
-            total);
+            var pageBookingIds = await query
+                .OrderByDescending(booking => booking.CreatedAtUtc)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(booking => booking.Id)
+                .ToListAsync(cancellationToken);
+
+            if (pageBookingIds.Count == 0)
+            {
+                return new PagedBookingsDto(new List<BookingDto>(), page, pageSize, total);
+            }
+
+            var indexById = pageBookingIds
+                .Select((id, index) => new { id, index })
+                .ToDictionary(item => item.id, item => item.index);
+
+            var bookings = await _db.Bookings
+                .AsNoTracking()
+                .AsSplitQuery()
+                .Include(booking => booking.Items)
+                    .ThenInclude(line => line.RoomType)
+                .Include(booking => booking.Items)
+                    .ThenInclude(line => line.RoomAssignments)
+                        .ThenInclude(assignment => assignment.Room)
+                .Include(booking => booking.Charges)
+                .Include(booking => booking.SpecialOffer)
+                .Where(booking => pageBookingIds.Contains(booking.Id))
+                .ToListAsync(cancellationToken);
+
+            var mapped = bookings
+                .OrderBy(booking => indexById[booking.Id])
+                .Select(MapBooking)
+                .ToList();
+
+            return new PagedBookingsDto(mapped, page, pageSize, total);
+        }
+        catch (SqlException ex) when (cancellationToken.IsCancellationRequested
+            || ex.Message.Contains("Operation cancelled by user", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new OperationCanceledException("Booking list query was cancelled.", ex, cancellationToken);
+        }
     }
 
     public async Task<BookingDto?> GetByIdAsync(
@@ -405,9 +565,10 @@ public sealed class BookingService : IBookingService
             .Include(item => item.Items)
                 .ThenInclude(line => line.RoomType)
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .Include(item => item.Charges)
+            .Include(item => item.SpecialOffer)
             .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         return booking == null ? null : MapBooking(booking);
     }
@@ -416,7 +577,7 @@ public sealed class BookingService : IBookingService
         int roomId,
         CancellationToken cancellationToken = default)
     {
-        var bookingId = await _db.AssignedRooms
+        var bookingId = await _db.BookingRoomAssignments
             .AsNoTracking()
             .Where(assignment =>
                 assignment.RoomId == roomId
@@ -440,7 +601,7 @@ public sealed class BookingService : IBookingService
             return new Dictionary<int, BookingDto>();
         }
 
-        var bookingIdsByRoom = await _db.AssignedRooms
+        var bookingIdsByRoom = await _db.BookingRoomAssignments
             .AsNoTracking()
             .Where(assignment =>
                 ids.Contains(assignment.RoomId)
@@ -462,7 +623,7 @@ public sealed class BookingService : IBookingService
         var bookings = await _db.Bookings
             .AsNoTracking()
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .Where(booking => bookingIds.Contains(booking.Id))
             .ToListAsync(cancellationToken);
@@ -480,7 +641,7 @@ public sealed class BookingService : IBookingService
         return result;
     }
 
-    public async Task<IReadOnlyList<ReservationCalendarEventDto>> GetReservationCalendarAsync(
+    public async Task<ReservationCalendarDto> GetReservationCalendarAsync(
         DateTime start,
         DateTime end,
         CancellationToken cancellationToken = default)
@@ -490,22 +651,25 @@ public sealed class BookingService : IBookingService
             throw new ArgumentException("Choose a calendar range of one year or less.");
         }
 
+        start = PhilippinesTime.ToUtc(start);
+        end = PhilippinesTime.ToUtc(end);
+
         var stays = await _db.Bookings
             .AsNoTracking()
             .Include(booking => booking.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .Include(booking => booking.Charges)
             .Where(booking =>
                 !booking.IsArchived
-                && booking.Status != BookingStatus.Rejected
+                && booking.Status == BookingStatus.Confirmed
                 && booking.CheckInAtUtc < end
                 && booking.CheckoutTimeUtc > start)
             .OrderBy(booking => booking.CheckInAtUtc)
             .ThenBy(booking => booking.GuestName)
             .ToListAsync(cancellationToken);
 
-        return stays
+        var events = stays
             .Select(booking =>
             {
                 var kindLabel = booking.Kind == BookingKind.Reservation
@@ -517,6 +681,16 @@ public sealed class BookingService : IBookingService
                 var totalNights = StayNights(booking.CheckInAtUtc, booking.CheckoutTimeUtc);
                 // Keep at least one primary night so the original stay remains visible.
                 extensionNights = Math.Clamp(extensionNights, 0, Math.Max(0, totalNights - 1));
+
+                var requestedRooms = 0;
+                var assignedRooms = 0;
+                foreach (var line in booking.Items)
+                {
+                    var requested = Math.Max(0, line.Quantity);
+                    var assigned = Math.Min(requested, AssignedRoomCount(line));
+                    requestedRooms += requested;
+                    assignedRooms += assigned;
+                }
 
                 return new ReservationCalendarEventDto(
                     booking.Id,
@@ -532,7 +706,7 @@ public sealed class BookingService : IBookingService
                     booking.AmountDueNow,
                     string.Join(", ", booking.Items.Select(line =>
                     {
-                        var assigned = (line.AssignedRooms ?? Array.Empty<AssignedRoom>())
+                        var assigned = (line.RoomAssignments ?? Array.Empty<BookingRoomAssignment>())
                             .Select(assignment => assignment.Room?.RoomNumber)
                             .Where(number => !string.IsNullOrWhiteSpace(number))
                             .ToList();
@@ -540,9 +714,118 @@ public sealed class BookingService : IBookingService
                             ? $"{line.RoomTypeName}: {string.Join(", ", assigned)}"
                             : $"{line.Quantity}× {line.RoomTypeName}";
                     })),
-                    extensionNights);
+                    extensionNights,
+                    requestedRooms,
+                    assignedRooms);
             })
             .ToList();
+
+        var capacities = await GetPhysicalCapacityByTypeAsync(cancellationToken);
+
+        return new ReservationCalendarDto(
+            events,
+            BuildDailyOccupancy(stays, start, end, capacities));
+    }
+
+    /// <summary>
+    /// Reserved = confirmed rooms not yet assigned a door.
+    /// Occupied = confirmed rooms with an assignment.
+    /// Available = sellable rooms that are not occupied.
+    /// Pending stays stay off this calendar until reception confirms.
+    /// Checkout day is open: hotel nights are [check-in date, checkout date).
+    /// </summary>
+    private static IReadOnlyList<DayRoomOccupancyDto> BuildDailyOccupancy(
+        IReadOnlyList<Booking> stays,
+        DateTime rangeStart,
+        DateTime rangeEnd,
+        IReadOnlyList<RoomTypeCapacity> capacities)
+    {
+        var startUtc = PhilippinesTime.ToUtc(rangeStart);
+        var endUtc = PhilippinesTime.ToUtc(rangeEnd);
+        var cursor = PhilippinesTime.ToManila(startUtc).Date;
+        var last = PhilippinesTime.ToManila(endUtc).Date;
+        if (last <= cursor)
+        {
+            last = cursor.AddDays(1);
+        }
+
+        var holders = new List<(DateTime CheckInDate, DateTime CheckoutDate, int RoomTypeId, int Reserved, int Occupied)>();
+        foreach (var booking in stays.Where(item => item.Status == BookingStatus.Confirmed))
+        {
+            var checkInDate = PhilippinesTime.ToManila(booking.CheckInAtUtc).Date;
+            var checkoutDate = PhilippinesTime.ToManila(booking.CheckoutTimeUtc).Date;
+            if (checkoutDate <= checkInDate)
+            {
+                checkoutDate = checkInDate.AddDays(1);
+            }
+
+            foreach (var line in booking.Items)
+            {
+                if (line.RoomTypeId is not int roomTypeId || line.Quantity <= 0)
+                {
+                    continue;
+                }
+
+                var requested = line.Quantity;
+                var occupied = Math.Min(requested, AssignedRoomCount(line));
+                holders.Add((checkInDate, checkoutDate, roomTypeId, requested - occupied, occupied));
+            }
+        }
+
+        var capacityTotal = capacities.Sum(item => item.Capacity);
+        var days = new List<DayRoomOccupancyDto>();
+        var guard = 0;
+        while (cursor < last && guard++ < 400)
+        {
+            var reservedByType = new Dictionary<int, int>();
+            var occupiedByType = new Dictionary<int, int>();
+            foreach (var hold in holders)
+            {
+                if (cursor < hold.CheckInDate || cursor >= hold.CheckoutDate)
+                {
+                    continue;
+                }
+
+                reservedByType[hold.RoomTypeId] =
+                    reservedByType.GetValueOrDefault(hold.RoomTypeId) + hold.Reserved;
+                occupiedByType[hold.RoomTypeId] =
+                    occupiedByType.GetValueOrDefault(hold.RoomTypeId) + hold.Occupied;
+            }
+
+            var types = capacities
+                .Select(item =>
+                {
+                    reservedByType.TryGetValue(item.RoomTypeId, out var reserved);
+                    occupiedByType.TryGetValue(item.RoomTypeId, out var occupied);
+                    return new DayRoomTypeOccupancyDto(
+                        item.RoomTypeName,
+                        reserved,
+                        occupied,
+                        Math.Max(0, item.Capacity - occupied),
+                        item.Capacity);
+                })
+                .OrderBy(item => item.RoomTypeName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var occupiedTotal = occupiedByType.Values.Sum();
+            var reservedTotal = reservedByType.Values.Sum();
+            days.Add(new DayRoomOccupancyDto(
+                cursor.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                reservedTotal,
+                occupiedTotal,
+                Math.Max(0, capacityTotal - occupiedTotal),
+                capacityTotal,
+                types));
+            cursor = cursor.AddDays(1);
+        }
+
+        return days;
+    }
+
+    private static int AssignedRoomCount(BookingItem line)
+    {
+        return (line.RoomAssignments ?? Array.Empty<BookingRoomAssignment>())
+            .Count(assignment => assignment.RoomId > 0);
     }
 
     public async Task<IReadOnlyList<BookingNotificationDto>> GetRecentNotificationsAsync(
@@ -554,7 +837,7 @@ public sealed class BookingService : IBookingService
             .AsNoTracking()
             .AsSplitQuery()
             .Include(b => b.Items)
-                .ThenInclude(i => i.AssignedRooms)
+                .ThenInclude(i => i.RoomAssignments)
                     .ThenInclude(a => a.Room)
             .Where(booking =>
                 !booking.IsNotificationCleared
@@ -568,7 +851,7 @@ public sealed class BookingService : IBookingService
         {
             string? message = null;
             var roomNumbers = booking.Items
-                .SelectMany(i => i.AssignedRooms)
+                .SelectMany(i => i.RoomAssignments)
                 .Select(a => a.Room?.RoomNumber)
                 .Where(num => !string.IsNullOrWhiteSpace(num))
                 .ToList();
@@ -620,7 +903,7 @@ public sealed class BookingService : IBookingService
         var now = DateTime.UtcNow;
         var activeConfirmedBookings = await _db.Bookings
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .Where(b => !b.IsArchived && b.Status == BookingStatus.Confirmed && b.CheckoutTimeUtc <= now)
             .ToListAsync(cancellationToken);
@@ -635,6 +918,12 @@ public sealed class BookingService : IBookingService
             booking.UpdatedAtUtc = DateTime.UtcNow;
 
             ReleaseAssignedRooms(booking);
+            AuditBooking(
+                booking,
+                "Booking.AutoCheckout",
+                "Automatic checkout after stay end.",
+                actorUserId: "system",
+                actorDisplayName: "System");
             autoCheckedOutBookings.Add(MapBooking(booking));
         }
 
@@ -651,7 +940,7 @@ public sealed class BookingService : IBookingService
         var now = DateTime.UtcNow;
         var candidates = await _db.Bookings
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .Where(b =>
                 !b.IsArchived
@@ -686,7 +975,7 @@ public sealed class BookingService : IBookingService
         var now = DateTime.UtcNow;
         var candidates = await _db.Bookings
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .Where(b =>
                 !b.IsArchived
@@ -725,7 +1014,7 @@ public sealed class BookingService : IBookingService
         var bookings = await _db.Bookings
             .AsNoTracking()
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .Where(b =>
                 !b.IsArchived
@@ -744,7 +1033,7 @@ public sealed class BookingService : IBookingService
         var now = DateTime.UtcNow;
         var candidates = await _db.Bookings
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .Where(b =>
                 !b.IsArchived
@@ -783,7 +1072,7 @@ public sealed class BookingService : IBookingService
         var bookings = await _db.Bookings
             .AsNoTracking()
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .Where(b =>
                 !b.IsArchived
@@ -807,7 +1096,7 @@ public sealed class BookingService : IBookingService
         var bookings = await _db.Bookings
             .AsNoTracking()
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .Where(b =>
                 !b.IsArchived
@@ -821,6 +1110,56 @@ public sealed class BookingService : IBookingService
         return bookings.Select(MapBooking).ToList();
     }
 
+    public async Task<DaytimeBookingFlowDto> GetDaytimeBookingFlowAsync(
+        int startHour = 6,
+        int endHour = 18,
+        CancellationToken cancellationToken = default)
+    {
+        startHour = Math.Clamp(startHour, 0, 23);
+        endHour = Math.Clamp(endHour, startHour, 23);
+
+        var localDate = PhilippinesTime.NowManila().Date;
+        var localStart = DateTime.SpecifyKind(localDate.AddHours(startHour), DateTimeKind.Unspecified);
+        var localEndExclusive = DateTime.SpecifyKind(localDate.AddHours(endHour + 1), DateTimeKind.Unspecified);
+        var startUtc = PhilippinesTime.ToUtc(localStart);
+        var endUtcExclusive = PhilippinesTime.ToUtc(localEndExclusive);
+
+        var arrivals = await _db.Bookings
+            .AsNoTracking()
+            .Include(item => item.Items)
+                .ThenInclude(line => line.RoomAssignments)
+                    .ThenInclude(assignment => assignment.Room)
+            .Where(b =>
+                !b.IsArchived
+                && b.Status == BookingStatus.Pending
+                && b.CheckInAtUtc >= startUtc
+                && b.CheckInAtUtc < endUtcExclusive)
+            .OrderBy(b => b.CreatedAtUtc)
+            .ThenBy(b => b.CheckInAtUtc)
+            .ToListAsync(cancellationToken);
+
+        var checkouts = await _db.Bookings
+            .AsNoTracking()
+            .Include(item => item.Items)
+                .ThenInclude(line => line.RoomAssignments)
+                    .ThenInclude(assignment => assignment.Room)
+            .Where(b =>
+                !b.IsArchived
+                && b.Status == BookingStatus.Pending
+                && b.CheckoutTimeUtc >= startUtc
+                && b.CheckoutTimeUtc < endUtcExclusive)
+            .OrderBy(b => b.CreatedAtUtc)
+            .ThenBy(b => b.CheckoutTimeUtc)
+            .ToListAsync(cancellationToken);
+
+        return new DaytimeBookingFlowDto(
+            localDate.ToString("yyyy-MM-dd"),
+            startHour,
+            endHour,
+            arrivals.Select(MapBooking).ToList(),
+            checkouts.Select(MapBooking).ToList());
+    }
+
     public async Task<IReadOnlyList<BookingDto>> AutoCancelExpiredPendingAsync(
         CancellationToken cancellationToken = default)
     {
@@ -828,7 +1167,7 @@ public sealed class BookingService : IBookingService
         // Past scheduled check-in only — never cancel before arrival time.
         var candidates = await _db.Bookings
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .Where(b =>
                 !b.IsArchived
@@ -854,6 +1193,12 @@ public sealed class BookingService : IBookingService
             booking.IsNotificationCleared = false;
             booking.UpdatedAtUtc = now;
             ReleaseAssignedRooms(booking);
+            AuditBooking(
+                booking,
+                "Booking.AutoCancel",
+                "Pending stay auto-cancelled after unverified grace.",
+                actorUserId: "system",
+                actorDisplayName: "System");
             cancelled.Add(MapBooking(booking));
         }
 
@@ -889,7 +1234,7 @@ public sealed class BookingService : IBookingService
     {
         var booking = await _db.Bookings
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
         if (booking is null)
@@ -937,7 +1282,7 @@ public sealed class BookingService : IBookingService
         var booking = await _db.Bookings
             .AsNoTracking()
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
             .FirstOrDefaultAsync(item => item.Id == bookingId, cancellationToken)
             ?? throw new KeyNotFoundException("Booking was not found.");
 
@@ -952,7 +1297,7 @@ public sealed class BookingService : IBookingService
         }
 
         if (booking.Status == BookingStatus.Confirmed
-            && booking.Items.Any(line => line.AssignedRooms.Count > 0))
+            && booking.Items.Any(line => line.RoomAssignments.Count > 0))
         {
             throw new BookingConcurrencyException("This booking already has rooms assigned.");
         }
@@ -1021,7 +1366,7 @@ public sealed class BookingService : IBookingService
 
         var booking = await _db.Bookings
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .FirstOrDefaultAsync(item => item.Id == id, cancellationToken)
             ?? throw new KeyNotFoundException("Booking was not found.");
@@ -1057,6 +1402,10 @@ public sealed class BookingService : IBookingService
             booking.ArrivalWarningSentAtUtc = now;
         }
 
+        AuditBooking(
+            booking,
+            status == BookingStatus.Confirmed ? "Booking.Confirmed" : "Booking.Rejected",
+            status == BookingStatus.Confirmed ? "Booking confirmed." : "Booking rejected.");
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return MapBooking(booking);
@@ -1078,7 +1427,7 @@ public sealed class BookingService : IBookingService
 
         var booking = await _db.Bookings
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .FirstOrDefaultAsync(item => item.Id == id, cancellationToken)
             ?? throw new KeyNotFoundException("Booking was not found.");
@@ -1093,7 +1442,7 @@ public sealed class BookingService : IBookingService
             throw new BookingConcurrencyException("Confirm the booking before assigning rooms, or confirm with rooms in one step.");
         }
 
-        if (booking.Items.Any(line => line.AssignedRooms.Count > 0))
+        if (booking.Items.Any(line => line.RoomAssignments.Count > 0))
         {
             throw new BookingConcurrencyException("This booking already has rooms assigned.");
         }
@@ -1112,6 +1461,7 @@ public sealed class BookingService : IBookingService
         await AssignAndOccupyRoomsAsync(booking, assignments, cancellationToken);
         booking.IsNotificationCleared = false;
         booking.UpdatedAtUtc = DateTime.UtcNow;
+        AuditBooking(booking, "Booking.RoomsAssigned", "Rooms assigned to the stay.");
 
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -1142,7 +1492,7 @@ public sealed class BookingService : IBookingService
 
         var booking = await _db.Bookings
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .Include(item => item.Items)
                 .ThenInclude(line => line.RoomType)
@@ -1161,7 +1511,7 @@ public sealed class BookingService : IBookingService
                 "Only pending or confirmed bookings can be edited.");
         }
 
-        var hasAssignments = booking.Items.Any(line => line.AssignedRooms.Count > 0);
+        var hasAssignments = booking.Items.Any(line => line.RoomAssignments.Count > 0);
         ValidateDates(checkInAtUtc, checkoutTimeUtc, allowPastCheckIn: hasAssignments);
 
         if (hasAssignments)
@@ -1209,7 +1559,7 @@ public sealed class BookingService : IBookingService
 
             foreach (var line in booking.Items)
             {
-                foreach (var assignment in line.AssignedRooms)
+                foreach (var assignment in line.RoomAssignments)
                 {
                     var roomNumber = assignment.Room?.RoomNumber ?? $"#{assignment.RoomId}";
                     if (blockedRoomIds.Contains(assignment.RoomId))
@@ -1312,6 +1662,7 @@ public sealed class BookingService : IBookingService
             cancellationToken);
         ReplaceTimeFees(booking, early, lateHours, extraPersons, typeMeta);
         RecalculateTotals(booking);
+        AuditBooking(booking, "Booking.Updated", "Stay details updated.");
 
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -1331,9 +1682,10 @@ public sealed class BookingService : IBookingService
             .Include(item => item.Items)
                 .ThenInclude(line => line.RoomType)
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .Include(item => item.Charges)
+            .Include(item => item.SpecialOffer)
             .FirstOrDefaultAsync(item => item.Id == id, cancellationToken)
             ?? throw new KeyNotFoundException("Booking was not found.");
 
@@ -1347,6 +1699,19 @@ public sealed class BookingService : IBookingService
             throw new BookingConcurrencyException(
                 "Confirm the booking before adding stay fees / service charges.");
         }
+
+        var onSpecialOffer = booking.SpecialOfferId is > 0 || booking.CashOnlyPromo;
+        var arrivalDiscount = request.ArrivalDiscountRequest;
+        if (onSpecialOffer && arrivalDiscount != ArrivalDiscountRequest.None)
+        {
+            throw new ArgumentException(
+                "Senior Citizen / PWD cannot be combined with an active special offer. Clear the promo first, or apply the discount when regular rates resume.");
+        }
+
+        if (onSpecialOffer)
+            arrivalDiscount = ArrivalDiscountRequest.None;
+
+        booking.ArrivalDiscountRequest = arrivalDiscount;
 
         var extendNights = Math.Max(0, request.ExtendStayNights);
         if (extendNights > 30)
@@ -1383,6 +1748,7 @@ public sealed class BookingService : IBookingService
         UpsertReceptionExtras(booking, request, extendNights);
         booking.UpdatedAtUtc = DateTime.UtcNow;
         RecalculateTotals(booking);
+        AuditBooking(booking, "Booking.ChargesUpdated", "Stay fees or charges updated.");
 
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -1399,7 +1765,7 @@ public sealed class BookingService : IBookingService
 
         var booking = await _db.Bookings
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .FirstOrDefaultAsync(item => item.Id == id, cancellationToken)
             ?? throw new KeyNotFoundException("Booking was not found.");
@@ -1414,6 +1780,7 @@ public sealed class BookingService : IBookingService
         booking.ArchivedAtUtc = DateTime.UtcNow;
         booking.UpdatedAtUtc = DateTime.UtcNow;
         ReleaseAssignedRooms(booking);
+        AuditBooking(booking, "Booking.Cancelled", "Booking cancelled.");
 
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -1430,7 +1797,7 @@ public sealed class BookingService : IBookingService
 
         var booking = await _db.Bookings
             .Include(item => item.Items)
-                .ThenInclude(line => line.AssignedRooms)
+                .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .FirstOrDefaultAsync(item => item.Id == id, cancellationToken)
             ?? throw new KeyNotFoundException("Booking was not found.");
@@ -1445,7 +1812,7 @@ public sealed class BookingService : IBookingService
             throw new BookingConcurrencyException("Only confirmed bookings with assigned rooms can be checked out.");
         }
 
-        if (!booking.Items.SelectMany(i => i.AssignedRooms).Any())
+        if (!booking.Items.SelectMany(i => i.RoomAssignments).Any())
         {
             throw new BookingConcurrencyException("Assign rooms before checking out this guest.");
         }
@@ -1455,6 +1822,7 @@ public sealed class BookingService : IBookingService
         booking.ArchivedAtUtc = DateTime.UtcNow;
         booking.UpdatedAtUtc = DateTime.UtcNow;
         ReleaseAssignedRooms(booking);
+        AuditBooking(booking, "Booking.CheckedOut", "Guest checked out.");
 
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -1479,7 +1847,7 @@ public sealed class BookingService : IBookingService
 
         var archived = await _db.Bookings
             .Include(booking => booking.Items)
-                .ThenInclude(item => item.AssignedRooms)
+                .ThenInclude(item => item.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
             .Where(booking => booking.IsArchived)
             .OrderByDescending(booking => booking.ArchivedAtUtc ?? booking.UpdatedAtUtc)
@@ -1500,15 +1868,24 @@ public sealed class BookingService : IBookingService
 
         _db.Bookings.RemoveRange(archived);
 
-        var log = new BookingHistoryFlushLog
+        var log = new SystemFlushLog
         {
+            Kind = SystemFlushKind.BookingHistory,
             FlushedAtUtc = flushedAtUtc,
             PerformedBy = performedBy,
             RecordCount = archived.Count,
             FileName = fileName,
             Summary = summary.Length > 2000 ? summary[..2000] : summary
         };
-        _db.BookingHistoryFlushLogs.Add(log);
+        _db.SystemFlushLogs.Add(log);
+        _audit.Record(
+            SystemAuditIntent.FileModification,
+            SystemAuditDomain.File,
+            "Booking.FlushExport",
+            "Flush",
+            fileName,
+            fileName,
+            summary: $"{archived.Count} archived stay(s) exported to {fileName}, then deleted.");
 
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -1524,8 +1901,9 @@ public sealed class BookingService : IBookingService
     {
         await PurgeExpiredHistoryFlushLogsAsync(cancellationToken);
 
-        return await _db.BookingHistoryFlushLogs
+        return await _db.SystemFlushLogs
             .AsNoTracking()
+            .Where(log => log.Kind == SystemFlushKind.BookingHistory)
             .OrderByDescending(log => log.FlushedAtUtc)
             .Take(50)
             .Select(log => new BookingHistoryFlushLogDto(
@@ -1542,8 +1920,8 @@ public sealed class BookingService : IBookingService
     private async Task PurgeExpiredHistoryFlushLogsAsync(CancellationToken cancellationToken)
     {
         var cutoff = DateTime.UtcNow.Subtract(FlushLogRetention);
-        var expired = await _db.BookingHistoryFlushLogs
-            .Where(log => log.FlushedAtUtc < cutoff)
+        var expired = await _db.SystemFlushLogs
+            .Where(log => log.Kind == SystemFlushKind.BookingHistory && log.FlushedAtUtc < cutoff)
             .ToListAsync(cancellationToken);
 
         if (expired.Count == 0)
@@ -1551,11 +1929,11 @@ public sealed class BookingService : IBookingService
             return;
         }
 
-        _db.BookingHistoryFlushLogs.RemoveRange(expired);
+        _db.SystemFlushLogs.RemoveRange(expired);
         await _db.SaveChangesAsync(cancellationToken);
     }
 
-    private static BookingHistoryFlushLogDto MapHistoryFlushLog(BookingHistoryFlushLog log)
+    private static BookingHistoryFlushLogDto MapHistoryFlushLog(SystemFlushLog log)
     {
         return new BookingHistoryFlushLogDto(
             log.Id,
@@ -1691,7 +2069,7 @@ public sealed class BookingService : IBookingService
                 }
 
                 room.Status = RoomStatus.Occupied;
-                line.AssignedRooms.Add(new AssignedRoom
+                line.RoomAssignments.Add(new BookingRoomAssignment
                 {
                     RoomId = room.Id
                 });
@@ -1703,7 +2081,7 @@ public sealed class BookingService : IBookingService
     {
         foreach (var line in booking.Items)
         {
-            foreach (var assignment in line.AssignedRooms)
+            foreach (var assignment in line.RoomAssignments)
             {
                 if (assignment.Room != null && assignment.Room.Status == RoomStatus.Occupied)
                 {
@@ -1840,7 +2218,7 @@ public sealed class BookingService : IBookingService
         int? excludeBookingId,
         CancellationToken cancellationToken)
     {
-        var query = _db.AssignedRooms
+        var query = _db.BookingRoomAssignments
             .AsNoTracking()
             .Where(assignment =>
                 !assignment.BookingItem.Booking.IsArchived
@@ -1976,9 +2354,20 @@ public sealed class BookingService : IBookingService
             extraPersons = 0;
         }
 
+        var checkInLocal = PhilippinesTime.ToManila(booking.CheckInAtUtc);
+        var preservedCheckInTime = new TimeSpan(
+            checkInLocal.Hour,
+            checkInLocal.Minute,
+            0);
+        var checkInTime = earlyCheckIn
+            ? StayTimeFees.EarlyCheckInTime
+            : (preservedCheckInTime >= StayTimeFees.DefaultCheckInTime
+                ? preservedCheckInTime
+                : StayTimeFees.DefaultCheckInTime);
+
         booking.CheckInAtUtc = StayTimeFees.WithManilaTimeOfDay(
             booking.CheckInAtUtc,
-            earlyCheckIn ? StayTimeFees.EarlyCheckInTime : StayTimeFees.DefaultCheckInTime);
+            checkInTime);
         booking.CheckoutTimeUtc = StayTimeFees.WithManilaTimeOfDay(
             booking.CheckoutTimeUtc,
             StayTimeFees.DefaultCheckOutTime + TimeSpan.FromHours(lateCheckoutHours));
@@ -2416,7 +2805,7 @@ public sealed class BookingService : IBookingService
                     line.PricePerNight,
                     line.RoomType?.MaxOccupancy
                         ?? (StayTimeFees.IsSingleRoomType(0, line.RoomTypeName) ? 1 : 0),
-                    (line.AssignedRooms ?? Array.Empty<AssignedRoom>())
+                    (line.RoomAssignments ?? Array.Empty<BookingRoomAssignment>())
                         .OrderBy(assignment => assignment.Room?.RoomNumber ?? string.Empty, StringComparer.OrdinalIgnoreCase)
                         .Select(assignment => new AssignedRoomDto(
                             assignment.RoomId,
@@ -2434,7 +2823,89 @@ public sealed class BookingService : IBookingService
                     charge.Nights,
                     charge.UnitAmount,
                     charge.Amount))
-                .ToList());
+                .ToList(),
+            booking.Channel,
+            booking.SpecialOfferId,
+            booking.ArrivalDiscountRequest,
+            booking.CashOnlyPromo,
+            booking.SpecialOffer?.Title,
+            booking.SpecialOffer?.RegularPricePerNight);
+    }
+
+    private async Task<SpecialOffer?> ResolveWalkInOfferAsync(
+        int roomTypeId,
+        int? requestedOfferId,
+        int nights,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        IQueryable<SpecialOffer> query = _db.SpecialOffers
+            .Where(o => o.RoomTypeId == roomTypeId
+                && o.IsActive
+                && o.StartsAtUtc <= now
+                && o.EndsAtUtc >= now
+                && o.PromoPricePerNight != null
+                && (o.Kind == SpecialOfferKind.LimitedTime
+                    || o.Kind == SpecialOfferKind.StayLongerSaveMore)
+                && (o.Channels & SpecialOfferChannels.WalkIn) != 0);
+
+        if (requestedOfferId is > 0)
+            query = query.Where(o => o.Id == requestedOfferId);
+
+        var candidates = await query
+            .OrderBy(o => o.PromoPricePerNight)
+            .ToListAsync(cancellationToken);
+
+        return candidates.FirstOrDefault(o => SpecialOfferService.IsEligibleForStay(o, nights));
+    }
+
+    private async Task<Dictionary<int, SpecialOffer>> ResolveActiveOnlineRateOffersAsync(
+        IReadOnlyList<int> roomTypeIds,
+        int nights,
+        CancellationToken cancellationToken)
+    {
+        if (roomTypeIds.Count == 0)
+            return new Dictionary<int, SpecialOffer>();
+
+        var now = DateTime.UtcNow;
+        var offers = await _db.SpecialOffers
+            .AsNoTracking()
+            .Where(o => roomTypeIds.Contains(o.RoomTypeId)
+                && o.IsActive
+                && o.StartsAtUtc <= now
+                && o.EndsAtUtc >= now
+                && o.PromoPricePerNight != null
+                && (o.Kind == SpecialOfferKind.LimitedTime
+                    || o.Kind == SpecialOfferKind.StayLongerSaveMore)
+                && (o.Channels & SpecialOfferChannels.OnlineVisible) != 0)
+            .OrderBy(o => o.PromoPricePerNight)
+            .ToListAsync(cancellationToken);
+
+        return offers
+            .Where(o => SpecialOfferService.IsEligibleForStay(o, nights))
+            .GroupBy(o => o.RoomTypeId)
+            .ToDictionary(g => g.Key, g => g.First());
+    }
+
+    private async Task<SpecialOffer?> ResolveOnlineOfferAsync(
+        int offerId,
+        IReadOnlyList<int> roomTypeIds,
+        int nights,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var offer = await _db.SpecialOffers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(o => o.Id == offerId, cancellationToken);
+        if (offer is null) return null;
+        if (!offer.IsActive || offer.StartsAtUtc > now || offer.EndsAtUtc < now) return null;
+        if ((offer.Channels & SpecialOfferChannels.OnlineVisible) == 0) return null;
+        if (offer.Kind is not (SpecialOfferKind.LimitedTime or SpecialOfferKind.StayLongerSaveMore)
+            || offer.PromoPricePerNight is null)
+            return null;
+        if (!SpecialOfferService.IsEligibleForStay(offer, nights)) return null;
+        if (!roomTypeIds.Contains(offer.RoomTypeId)) return null;
+        return offer;
     }
 }
 

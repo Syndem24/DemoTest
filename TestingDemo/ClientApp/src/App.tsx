@@ -25,12 +25,17 @@ function setViewQuery(view: ViewMode) {
   window.history.replaceState({}, '', url.toString())
 }
 
+function canManageRoomTypes(): boolean {
+  return document.getElementById('room-management-root')?.dataset.canManageTypes === 'true'
+}
+
 export default function App() {
   const [view, setView] = useState<ViewMode>(readInitialView)
   const [types, setTypes] = useState<RoomTypeSummary[]>([])
   const [rooms, setRooms] = useState<RoomItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const manageTypes = canManageRoomTypes()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -63,11 +68,13 @@ export default function App() {
           <h1>Room Management</h1>
           <p className="rm-subtitle">Browse room types and individual rooms with fast search and sorting.</p>
         </div>
+        {manageTypes ? (
         <div className="rm-header-actions">
           <a className="rm-btn rm-btn-accent" href="/Rooms/Create">
             Create Room Type
           </a>
         </div>
+        ) : null}
       </header>
 
       <div className="rm-tabs" role="tablist" aria-label="Room views">
@@ -93,9 +100,9 @@ export default function App() {
 
       <div className="rm-content" key={view}>
         {view === 'types' ? (
-          <RoomTypesPanel data={types} loading={loading} error={error} />
+          <RoomTypesPanel data={types} loading={loading} error={error} canManage={manageTypes} />
         ) : (
-          <RoomListPanel data={rooms} loading={loading} error={error} />
+          <RoomListPanel data={rooms} loading={loading} error={error} canManage={manageTypes} />
         )}
       </div>
     </div>

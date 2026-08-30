@@ -50,6 +50,45 @@
                 input.select();
             });
 
+            // Digits + one decimal only (blocks letters like "abc" / "e").
+            input.addEventListener('beforeinput', (event) => {
+                if (event.inputType && event.inputType.startsWith('delete')) {
+                    return;
+                }
+                const data = event.data;
+                if (data == null) {
+                    return;
+                }
+                if (!/^[0-9.]+$/.test(data)) {
+                    event.preventDefault();
+                    return;
+                }
+                if (data.includes('.') && String(input.value).includes('.')) {
+                    event.preventDefault();
+                }
+            });
+
+            input.addEventListener('input', () => {
+                const cleaned = String(input.value)
+                    .replace(/[^\d.]/g, '')
+                    .replace(/(\..*)\./g, '$1');
+                if (cleaned !== input.value) {
+                    input.value = cleaned;
+                }
+            });
+
+            input.addEventListener('paste', (event) => {
+                event.preventDefault();
+                const text = (event.clipboardData || window.clipboardData)?.getData('text') || '';
+                const cleaned = String(text)
+                    .replace(/[^\d.]/g, '')
+                    .replace(/(\..*)\./g, '$1');
+                const start = input.selectionStart ?? input.value.length;
+                const end = input.selectionEnd ?? input.value.length;
+                const next = input.value.slice(0, start) + cleaned + input.value.slice(end);
+                input.value = next.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
+            });
+
             input.addEventListener('blur', () => {
                 const number = parseMoney(input.value);
                 if (number != null) {

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -10,6 +11,7 @@ namespace TestingDemo.Controllers;
 
 [ApiController]
 [Route("api/admin/bookings")]
+[Authorize(Roles = "AdminManager,Receptionist")]
 public sealed class AdminBookingsApiController : ControllerBase
 {
     private readonly IBookingService _bookingService;
@@ -84,13 +86,20 @@ public sealed class AdminBookingsApiController : ControllerBase
         [FromQuery] int pageSize = 25,
         CancellationToken cancellationToken = default)
     {
-        return Ok(await _bookingService.GetPagedAsync(
-            status,
-            search,
-            history,
-            page,
-            pageSize,
-            cancellationToken));
+        try
+        {
+            return Ok(await _bookingService.GetPagedAsync(
+                status,
+                search,
+                history,
+                page,
+                pageSize,
+                cancellationToken));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return new EmptyResult();
+        }
     }
 
     [HttpGet("{id:int}")]
@@ -103,7 +112,7 @@ public sealed class AdminBookingsApiController : ControllerBase
     }
 
     [HttpGet("calendar")]
-    public async Task<ActionResult<IReadOnlyList<ReservationCalendarEventDto>>> GetCalendar(
+    public async Task<ActionResult<ReservationCalendarDto>> GetCalendar(
         [FromQuery] DateTime start,
         [FromQuery] DateTime end,
         CancellationToken cancellationToken)
@@ -233,6 +242,15 @@ public sealed class AdminBookingsApiController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         return Ok(await _bookingService.GetCheckoutsSoonAsync(windowMinutes, cancellationToken));
+    }
+
+    [HttpGet("daytime-flow")]
+    public async Task<ActionResult<DaytimeBookingFlowDto>> GetDaytimeFlow(
+        [FromQuery] int startHour = 6,
+        [FromQuery] int endHour = 18,
+        CancellationToken cancellationToken = default)
+    {
+        return Ok(await _bookingService.GetDaytimeBookingFlowAsync(startHour, endHour, cancellationToken));
     }
 
     [HttpGet("{id:int}/assignable-rooms")]

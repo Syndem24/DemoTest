@@ -1,0 +1,18 @@
+@{
+    ViewData["Title"] = "Create staff user";
+    var message = TempData["Message"] as string;
+    var error = TempData["Error"] as string;
+}
+
+@section Scripts {
+    <script type="module" src="~/room-management/room-app.js" asp-append-version="true"></script>
+}
+
+<link rel="stylesheet" href="~/room-management/room-app.css" asp-append-version="true" />
+<div class="admin-create-staff-toolbar">
+    <a asp-action="Index" class="btn btn-outline-secondary">Back to users</a>
+</div>
+<div id="staff-create-root"
+     data-list-url="@Url.Action("Index", "AdminUsers")"
+     data-message="@message"
+     data-error="@error"></div>

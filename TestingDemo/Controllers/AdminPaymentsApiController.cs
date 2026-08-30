@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using TestingDemo.DTOs;
@@ -9,23 +10,27 @@ namespace TestingDemo.Controllers;
 
 [ApiController]
 [Route("api/admin/payments")]
+[Authorize(Roles = "AdminManager,Receptionist")]
 public sealed class AdminPaymentsApiController : ControllerBase
 {
     private readonly IPaymentService _paymentService;
     private readonly IPaymentReceiptStorage _receiptStorage;
     private readonly IReceiptOcrService _receiptOcr;
     private readonly IHubContext<BookingNotificationsHub, IBookingNotificationsClient> _hub;
+    private readonly ISystemAuditRecorder _audit;
 
     public AdminPaymentsApiController(
         IPaymentService paymentService,
         IPaymentReceiptStorage receiptStorage,
         IReceiptOcrService receiptOcr,
-        IHubContext<BookingNotificationsHub, IBookingNotificationsClient> hub)
+        IHubContext<BookingNotificationsHub, IBookingNotificationsClient> hub,
+        ISystemAuditRecorder audit)
     {
         _paymentService = paymentService;
         _receiptStorage = receiptStorage;
         _receiptOcr = receiptOcr;
         _hub = hub;
+        _audit = audit;
     }
 
     [HttpGet]
@@ -79,9 +84,10 @@ public sealed class AdminPaymentsApiController : ControllerBase
         }
     }
 
+    [HttpPost("{id:int}/refund")]
     [HttpPost("{id:int}/void")]
     [ValidateAntiForgeryToken]
-    public async Task<ActionResult<PaymentRecordDto>> VoidPayment(
+    public async Task<ActionResult<PaymentRecordDto>> RefundPayment(
         int id,
         [FromBody] VoidPaymentRequest request,
         CancellationToken cancellationToken)
@@ -160,6 +166,15 @@ public sealed class AdminPaymentsApiController : ControllerBase
                 file.FileName,
                 file.ContentType,
                 cancellationToken);
+            await _audit.RecordCommittedAsync(
+                SystemAuditIntent.FileModification,
+                SystemAuditDomain.File,
+                "Receipt.Uploaded",
+                "Receipt",
+                path,
+                Path.GetFileName(path),
+                summary: $"Receipt image stored for booking {bookingId}.",
+                cancellationToken: cancellationToken);
             return Ok(new { path });
         }
         catch (ArgumentException ex)

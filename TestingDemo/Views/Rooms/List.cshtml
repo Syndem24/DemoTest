@@ -8,7 +8,10 @@
     <h1 class="h3 mb-0">Room List</h1>
     <div class="d-flex gap-2">
         <a asp-action="Index" class="btn btn-outline-secondary">Back to Room Types</a>
-        <a asp-action="Create" class="btn btn-primary">Create Room Type</a>
+        @if (User.IsInRole("AdminManager"))
+        {
+            <a asp-action="Create" class="btn btn-primary">Create Room Type</a>
+        }
     </div>
 </div>
 
@@ -69,8 +72,11 @@ else
                                 </td>
                                 <td class="text-end text-nowrap">
                                     <a asp-action="Details" asp-route-id="@room.Id" class="btn btn-sm btn-outline-secondary">Details</a>
-                                    <a asp-action="Edit" asp-route-id="@room.Id" class="btn btn-sm btn-outline-primary">Edit</a>
-                                    <a asp-action="Delete" asp-route-id="@room.Id" class="btn btn-sm btn-outline-danger">Delete</a>
+                                    @if (User.IsInRole("AdminManager"))
+                                    {
+                                        <a asp-action="Edit" asp-route-id="@room.Id" class="btn btn-sm btn-outline-primary">Edit</a>
+                                        <a asp-action="Delete" asp-route-id="@room.Id" class="btn btn-sm btn-outline-danger">Delete</a>
+                                    }
                                 </td>
                             </tr>
                         }

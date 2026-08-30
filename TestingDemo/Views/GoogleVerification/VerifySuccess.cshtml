@@ -1,0 +1,25 @@
+@{
+    Layout = "~/Views/Shared/_CustomerLayout.cshtml";
+    ViewData["Title"] = "Google verified";
+    ViewData["GuestAuthPage"] = true;
+}
+
+<section class="guest-auth guest-auth--status" aria-labelledby="guestAuthTitle">
+    <div class="guest-auth-media" aria-hidden="true">
+        <img src="~/Images/ReceptionArea/Reception1.jpg"
+             asp-append-version="true"
+             alt=""
+             decoding="async" />
+        <div class="guest-auth-media-veil"></div>
+    </div>
+    <div class="guest-auth-panel">
+        <p class="guest-eyebrow" data-i18n="auth.googleEyebrow">Google account</p>
+        <h1 id="guestAuthTitle" data-i18n="auth.googleVerifiedTitle">Verified</h1>
+        <p class="guest-section-copy guest-auth-lede" data-i18n="auth.googleVerifiedLede">
+            Your Google account is linked and eligible for future 2FA and password reset.
+        </p>
+        <div class="guest-auth-actions">
+            <a class="guest-btn guest-btn-primary" asp-controller="Account" asp-action="Login" data-i18n="auth.signIn">Sign in</a>
+        </div>
+    </div>
+</section>

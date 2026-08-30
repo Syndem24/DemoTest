@@ -1,0 +1,46 @@
+@model TestingDemo.DTOs.UpsertSpecialOfferRequest
+@using TestingDemo.Models
+@{
+    ViewData["Title"] = "Create special offer";
+    var pricesJson = ViewBag.RoomTypePricesJson as string ?? "{}";
+}
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/admin-special-offer-form.js" asp-append-version="true"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            initOfferPricingForm(
+                document.getElementById('createOfferForm'),
+                @Html.Raw(pricesJson)
+            );
+        });
+    </script>
+}
+
+<div class="admin-offers-page">
+<section class="admin-offers-hero">
+    <div>
+        <p class="admin-offers-eyebrow">Special offers</p>
+        <h1>Create offer</h1>
+        <p class="admin-offers-lede">Choose rooms, discount, and schedule.</p>
+    </div>
+    <a class="admin-offers-back" asp-action="Index">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M15 18l-6-6 6-6" />
+        </svg>
+        <span>Back to list</span>
+    </a>
+</section>
+
+<div class="admin-offers-form-panel">
+    <form asp-action="Create" method="post" class="admin-offers-form" id="createOfferForm">
+        @Html.AntiForgeryToken()
+        <partial name="_OfferForm" model="Model" />
+        <div class="admin-offers-form-actions">
+            <button type="submit" class="admin-offers-btn-primary">Create offer</button>
+            <a class="admin-offers-btn-ghost" asp-action="Index">Cancel</a>
+        </div>
+    </form>
+</div>
+</div>

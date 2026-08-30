@@ -1,0 +1,403 @@
+@model TestingDemo.ViewModels.AdminFlushLogsViewModel
+@using TestingDemo.Models
+@using TestingDemo.Services
+@{
+    ViewData["Title"] = "System audit log";
+    var historyReady = Model.HistoryPending > 0;
+    var paymentsReady = Model.PaymentsPending > 0;
+    var staffReady = Model.StaffAuditPending > 0;
+}
+
+<div class="admin-flush-page admin-audit-page">
+    <section class="admin-flush-hero" aria-labelledby="auditPageTitle">
+        <div class="admin-flush-hero-copy">
+            <p class="admin-flush-eyebrow">Integrity</p>
+            <h1 id="auditPageTitle">System audit log</h1>
+            <p class="admin-flush-lede">
+                Track administrative actions, configuration changes, and file modifications.
+                Rows are append-only and are not deleted by data retention.
+            </p>
+        </div>
+        <ul class="admin-flush-kpis" aria-label="Audit coverage">
+            <li>
+                <span>Events</span>
+                <strong>@Model.AuditTotal</strong>
+                <em>@(Model.AuditTotal == 1 ? "recorded change" : "recorded changes")</em>
+            </li>
+            <li>
+                <span>This page</span>
+                <strong>@Model.AuditRows.Count</strong>
+                <em>newest first</em>
+            </li>
+            <li>
+                <span>Retention</span>
+                <strong>Keep</strong>
+                <em>not auto-deleted</em>
+            </li>
+        </ul>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(Model.Message))
+    {
+        <p class="admin-flush-banner is-ok" role="status">@Model.Message</p>
+    }
+    @if (!string.IsNullOrWhiteSpace(Model.Error))
+    {
+        <p class="admin-flush-banner is-error" role="alert">@Model.Error</p>
+    }
+
+    <section class="admin-flush-card admin-audit-panel" aria-labelledby="auditFilterTitle">
+        <header class="admin-flush-card-head">
+            <h2 id="auditFilterTitle">Find what changed</h2>
+            <p>Filter by hotel area. Search receipt numbers, booking references, staff names, or reasons.</p>
+        </header>
+
+        <form method="get" asp-action="Index" class="admin-audit-filters">
+            @if (Model.Domain.HasValue)
+            {
+                <input type="hidden" name="domain" value="@Model.Domain" />
+            }
+            <div
+                class="admin-audit-search"
+                data-audit-search
+                data-suggest-url="@Url.Action("Suggestions", "AdminFlushLogs")">
+                <label for="auditSearch">Search</label>
+                <div class="admin-audit-search-field">
+                    <svg class="admin-audit-search-icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+                        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+                    </svg>
+                    <input
+                        id="auditSearch"
+                        type="search"
+                        name="q"
+                        value="@Model.Search"
+                        placeholder="Search receipt, booking, staff, reason…"
+                        autocomplete="off"
+                        spellcheck="false"
+                        role="combobox"
+                        aria-autocomplete="list"
+                        aria-expanded="false"
+                        aria-controls="auditSearchList"
+                        aria-haspopup="listbox"
+                        data-audit-search-input />
+                    <button
+                        type="button"
+                        class="admin-audit-search-clear"
+                        data-audit-search-clear
+                        hidden
+                        aria-label="Clear search">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+                            <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                        </svg>
+                    </button>
+                </div>
+                <ul
+                    id="auditSearchList"
+                    class="admin-audit-suggestions"
+                    role="listbox"
+                    data-audit-search-list
+                    hidden></ul>
+            </div>
+            <fieldset class="admin-audit-chips">
+                <legend>Area</legend>
+                <a class="admin-audit-chip @(Model.Domain is null ? "is-active" : null)" href="@Url.Action("Index", new { q = Model.Search })">All areas</a>
+                <a class="admin-audit-chip @(Model.Domain == SystemAuditDomain.Payment ? "is-active" : null)" href="@Url.Action("Index", new { q = Model.Search, domain = SystemAuditDomain.Payment })">Payments</a>
+                <a class="admin-audit-chip @(Model.Domain == SystemAuditDomain.Account ? "is-active" : null)" href="@Url.Action("Index", new { q = Model.Search, domain = SystemAuditDomain.Account })">Accounts</a>
+                <a class="admin-audit-chip @(Model.Domain == SystemAuditDomain.Booking ? "is-active" : null)" href="@Url.Action("Index", new { q = Model.Search, domain = SystemAuditDomain.Booking })">Bookings</a>
+                <a class="admin-audit-chip @(Model.Domain == SystemAuditDomain.SpecialOffer ? "is-active" : null)" href="@Url.Action("Index", new { q = Model.Search, domain = SystemAuditDomain.SpecialOffer })">Special offers</a>
+                <a class="admin-audit-chip @(Model.Domain == SystemAuditDomain.Configuration ? "is-active" : null)" href="@Url.Action("Index", new { q = Model.Search, domain = SystemAuditDomain.Configuration })">Vault / config</a>
+                <a class="admin-audit-chip @(Model.Domain == SystemAuditDomain.File ? "is-active" : null)" href="@Url.Action("Index", new { q = Model.Search, domain = SystemAuditDomain.File })">Files</a>
+            </fieldset>
+            <noscript>
+                <button type="submit" class="admin-flush-submit">Apply filters</button>
+            </noscript>
+        </form>
+
+        @if (Model.AuditRows.Count == 0)
+        {
+            <div class="admin-flush-empty">
+                <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7">
+                    <path d="M6 3h9l5 5v13H6V3z" />
+                    <path d="M14 3v6h6" />
+                    <path d="M8 13h8M8 17h5" />
+                </svg>
+                <strong>No matching events</strong>
+                <span>Refunds, account edits, bookings, offers, vault saves, and file exports appear here as they happen.</span>
+            </div>
+        }
+        else
+        {
+            <div class="admin-flush-table-wrap admin-audit-table-wrap">
+                <table class="admin-flush-table admin-audit-table">
+                    <colgroup>
+                        <col class="admin-audit-col-when" />
+                        <col class="admin-audit-col-area" />
+                        <col class="admin-audit-col-action" />
+                        <col class="admin-audit-col-actor" />
+                        <col class="admin-audit-col-target" />
+                        <col class="admin-audit-col-reason" />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th>When (PH)</th>
+                            <th>Area</th>
+                            <th>Action</th>
+                            <th>Actor</th>
+                            <th>Target</th>
+                            <th>Reason / summary</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var row in Model.AuditRows)
+                    {
+                        var reasonText = string.IsNullOrWhiteSpace(row.Reason) ? row.Summary : row.Reason;
+                        <tr>
+                            <td data-label="When (PH)">
+                                <time datetime="@DateTime.SpecifyKind(row.AtUtc, DateTimeKind.Utc).ToString("o")">@PhilippinesTime.FormatStamp(row.AtUtc)</time>
+                            </td>
+                            <td data-label="Area" title="@row.DomainLabel">@row.DomainLabel</td>
+                            <td data-label="Action" title="@row.Action">@row.Action</td>
+                            <td data-label="Actor" title="@row.ActorDisplayName">@row.ActorDisplayName</td>
+                            <td data-label="Target" title="@row.TargetLabel">
+                                <strong>@row.TargetLabel</strong>
+                                <small>@row.TargetType</small>
+                            </td>
+                            <td data-label="Reason / summary" title="@reasonText">@reasonText</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+            <nav class="admin-bookings-pagination admin-audit-pager" aria-label="Audit pages">
+                @if (Model.Page > 1)
+                {
+                    <a href="@Url.Action("Index", new { q = Model.Search, domain = Model.Domain, page = Model.Page - 1 })">Previous</a>
+                }
+                else
+                {
+                    <span aria-disabled="true">Previous</span>
+                }
+                <em>Page @Model.Page of @Model.AuditTotalPages</em>
+                @if (Model.Page < Model.AuditTotalPages)
+                {
+                    <a href="@Url.Action("Index", new { q = Model.Search, domain = Model.Domain, page = Model.Page + 1 })">Next</a>
+                }
+                else
+                {
+                    <span aria-disabled="true">Next</span>
+                }
+            </nav>
+        }
+    </section>
+
+    <details class="admin-audit-retention">
+        <summary>
+            <span>Data retention export</span>
+        </summary>
+        <div class="admin-flush-grid">
+            <form asp-action="Flush" method="post" class="admin-flush-card admin-flush-form" id="adminFlushForm">
+                @Html.AntiForgeryToken()
+                <header class="admin-flush-card-head">
+                    <h2>Export operational records</h2>
+                    <p>Booking history and completed-stay payments are deleted after PDF export. Staff account history is exported and kept.</p>
+                </header>
+
+                <fieldset class="admin-flush-kinds">
+                    <legend>Log type</legend>
+                    <label class="admin-flush-kind">
+                        <input type="checkbox" name="kinds" value="@SystemFlushKind.BookingHistory" @(Model.Kinds.Contains(SystemFlushKind.BookingHistory) ? "checked" : null) />
+                        <span class="admin-flush-kind-box" aria-hidden="true"></span>
+                        <span class="admin-flush-kind-copy">
+                            <strong>Booking history</strong>
+                            <small>@Model.HistoryPending archived stay@(Model.HistoryPending == 1 ? "" : "s")@(historyReady ? "" : " — nothing waiting")</small>
+                        </span>
+                    </label>
+                    <label class="admin-flush-kind">
+                        <input type="checkbox" name="kinds" value="@SystemFlushKind.Payments" @(Model.Kinds.Contains(SystemFlushKind.Payments) ? "checked" : null) />
+                        <span class="admin-flush-kind-box" aria-hidden="true"></span>
+                        <span class="admin-flush-kind-copy">
+                            <strong>Payments</strong>
+                            <small>@Model.PaymentsPending completed-stay payment@(Model.PaymentsPending == 1 ? "" : "s")@(paymentsReady ? "" : " — nothing waiting")</small>
+                        </span>
+                    </label>
+                    <label class="admin-flush-kind">
+                        <input type="checkbox" name="kinds" value="@SystemFlushKind.StaffAudit" @(Model.Kinds.Contains(SystemFlushKind.StaffAudit) ? "checked" : null) />
+                        <span class="admin-flush-kind-box" aria-hidden="true"></span>
+                        <span class="admin-flush-kind-copy">
+                            <strong>Staff audit PDF</strong>
+                            <small>@Model.StaffAuditPending account row@(Model.StaffAuditPending == 1 ? "" : "s") — export only@(staffReady ? "" : "")</small>
+                        </span>
+                    </label>
+                </fieldset>
+
+                <div class="admin-flush-name">
+                    <label for="performedBy">Staff name</label>
+                    <input id="performedBy" name="performedBy" maxlength="120" required minlength="2" value="@Model.PerformedBy" placeholder="e.g. Ana Reyes" autocomplete="name" />
+                </div>
+
+                <p class="admin-flush-warn">Booking history and payments cannot be restored after export. The system audit log above is not deleted.</p>
+                <button type="submit" class="admin-flush-submit">Export selected</button>
+            </form>
+
+            <section class="admin-flush-card admin-flush-log-panel" aria-labelledby="flushHistoryTitle">
+                <div class="admin-flush-log-head">
+                    <div>
+                        <h2 id="flushHistoryTitle">Export actions</h2>
+                        <p>Who exported what. These operational rows expire after 7 days.</p>
+                    </div>
+                    <form method="get" asp-action="Index" class="admin-flush-filter">
+                        @if (!string.IsNullOrWhiteSpace(Model.Search))
+                        {
+                            <input type="hidden" name="q" value="@Model.Search" />
+                        }
+                        @if (Model.Domain.HasValue)
+                        {
+                            <input type="hidden" name="domain" value="@Model.Domain" />
+                        }
+                        <label for="kind">Show</label>
+                        <select id="kind" name="kind" onchange="this.form.submit()">
+                            <option value="">All types</option>
+                            @if (Model.FilterKind == SystemFlushKind.BookingHistory)
+                            {
+                                <option value="@SystemFlushKind.BookingHistory" selected>Booking history</option>
+                            }
+                            else
+                            {
+                                <option value="@SystemFlushKind.BookingHistory">Booking history</option>
+                            }
+                            @if (Model.FilterKind == SystemFlushKind.Payments)
+                            {
+                                <option value="@SystemFlushKind.Payments" selected>Payments</option>
+                            }
+                            else
+                            {
+                                <option value="@SystemFlushKind.Payments">Payments</option>
+                            }
+                            @if (Model.FilterKind == SystemFlushKind.StaffAudit)
+                            {
+                                <option value="@SystemFlushKind.StaffAudit" selected>Staff audit</option>
+                            }
+                            else
+                            {
+                                <option value="@SystemFlushKind.StaffAudit">Staff audit</option>
+                            }
+                        </select>
+                    </form>
+                </div>
+
+                @if (Model.Logs.Count == 0)
+                {
+                    <div class="admin-flush-empty">
+                        <strong>No export actions yet</strong>
+                        <span>They appear here after you export a log type.</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="admin-flush-table-wrap">
+                        <table class="admin-flush-table">
+                            <thead>
+                                <tr>
+                                    <th>When</th>
+                                    <th>Type</th>
+                                    <th>By</th>
+                                    <th>Rows</th>
+                                    <th>File</th>
+                                    <th>Summary</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            @foreach (var log in Model.Logs)
+                            {
+                                var expires = PhilippinesTime.ToManila(log.ExpiresAtUtc);
+                                var kindClass = log.KindLabel == "Payments"
+                                    ? "is-payments"
+                                    : log.KindLabel == "Staff audit"
+                                        ? "is-staff"
+                                        : "is-history";
+                                <tr>
+                                    <td data-label="When">
+                                        <time datetime="@log.FlushedAtUtc.ToString("o")">@PhilippinesTime.FormatStamp(log.FlushedAtUtc)</time>
+                                        <small>Expires @expires.ToString("dd MMM")</small>
+                                    </td>
+                                    <td data-label="Type"><span class="admin-flush-badge @kindClass">@log.KindLabel</span></td>
+                                    <td data-label="By">@log.PerformedBy</td>
+                                    <td data-label="Rows">@log.RecordCount</td>
+                                    <td data-label="File">@log.FileName</td>
+                                    <td data-label="Summary">@log.Summary</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+        </div>
+    </details>
+</div>
+
+<div class="admin-flush-confirm" id="adminFlushConfirm" hidden>
+    <button type="button" class="admin-flush-confirm-backdrop" data-flush-confirm-cancel aria-label="Cancel export"></button>
+    <section class="admin-flush-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="flushConfirmTitle">
+        <h2 id="flushConfirmTitle">Export selected records?</h2>
+        <p id="flushConfirmBody">Export the selected types. Booking history and payments are deleted after the PDF is created.</p>
+        <div class="admin-flush-confirm-actions">
+            <button type="button" class="admin-flush-ghost" data-flush-confirm-cancel>Cancel</button>
+            <button type="button" class="admin-flush-submit" id="adminFlushConfirmOk">Export now</button>
+        </div>
+    </section>
+</div>
+
+@section Scripts {
+    <script src="~/js/admin-audit-search.js" asp-append-version="true"></script>
+    <script>
+        (() => {
+            const form = document.getElementById('adminFlushForm');
+            const overlay = document.getElementById('adminFlushConfirm');
+            const confirmBody = document.getElementById('flushConfirmBody');
+            const nameInput = document.getElementById('performedBy');
+            const stored = localStorage.getItem('moriSystemFlushBy');
+            if (nameInput && stored && !nameInput.value) nameInput.value = stored;
+            let confirmed = false;
+
+            const closeConfirm = () => {
+                confirmed = false;
+                if (overlay) overlay.hidden = true;
+            };
+
+            form?.addEventListener('submit', (event) => {
+                const checked = [...form.querySelectorAll('input[name="kinds"]:checked')];
+                if (checked.length === 0) {
+                    event.preventDefault();
+                    form.querySelector('input[name="kinds"]')?.focus();
+                    return;
+                }
+                if (!confirmed) {
+                    event.preventDefault();
+                    const labels = checked
+                        .map((input) => input.closest('label')?.querySelector('strong')?.textContent?.trim())
+                        .filter(Boolean);
+                    if (confirmBody) {
+                        confirmBody.textContent = `Export ${labels.join(', ')}. Booking history and payments are deleted after export. Staff audit PDF keeps account history.`;
+                    }
+                    if (overlay) overlay.hidden = false;
+                    document.getElementById('adminFlushConfirmOk')?.focus();
+                }
+            });
+
+            document.getElementById('adminFlushConfirmOk')?.addEventListener('click', () => {
+                confirmed = true;
+                if (nameInput?.value) localStorage.setItem('moriSystemFlushBy', nameInput.value.trim());
+                form?.requestSubmit();
+            });
+
+            overlay?.querySelectorAll('[data-flush-confirm-cancel]').forEach((btn) => {
+                btn.addEventListener('click', closeConfirm);
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && overlay && !overlay.hidden) closeConfirm();
+            });
+        })();
+    </script>
+}

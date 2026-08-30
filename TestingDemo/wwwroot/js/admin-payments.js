@@ -27,6 +27,13 @@
   const paymentDetailBody = paymentDetailModal?.querySelector('[data-payment-detail-body]');
   const paymentVoidButton = paymentDetailModal?.querySelector('[data-payment-void]');
   const paymentSaveReceiptButton = paymentDetailModal?.querySelector('[data-payment-save-receipt]');
+  const paymentRefundModal = document.querySelector('[data-payment-refund-modal]');
+  const paymentRefundReason = paymentRefundModal?.querySelector('[data-payment-refund-reason]');
+  const paymentRefundError = paymentRefundModal?.querySelector('[data-payment-refund-error]');
+  const paymentRefundGuest = paymentRefundModal?.querySelector('[data-payment-refund-guest]');
+  const paymentRefundReceipt = paymentRefundModal?.querySelector('[data-payment-refund-receipt]');
+  const paymentRefundAmount = paymentRefundModal?.querySelector('[data-payment-refund-amount]');
+  const paymentRefundCopy = paymentRefundModal?.querySelector('[data-payment-refund-copy]');
 
   let paymentsPage = 1;
   let paymentsTotalPages = 1;
@@ -138,6 +145,14 @@
     paymentsMessage.classList.toggle('is-error', isError);
   }
 
+  function isRefunded(payment) {
+    return payment?.status === 'Voided' || payment?.status === 1;
+  }
+
+  function formatPaymentStatus(status) {
+    return status === 'Voided' ? 'Refunded' : (status || 'Posted');
+  }
+
   function formatPaymentEvent(value) {
     const map = {
       Deposit: 'Deposit',
@@ -183,10 +198,21 @@
         paymentsPage >= paymentsTotalPages
       );
       if (paymentsSummary) {
+        const total = Number(payload.total || 0);
         paymentsSummary.innerHTML = `
-          <span>Collected: ${money(payload.totalCollected)}</span>
-          <span>Refunded: ${money(payload.totalRefunded)}</span>
-          <span>${Number(payload.total || 0)} record${Number(payload.total || 0) === 1 ? '' : 's'}</span>
+          <li>
+            <span>Collected</span>
+            <strong>${money(payload.totalCollected)}</strong>
+          </li>
+          <li>
+            <span>Refunded</span>
+            <strong>${money(payload.totalRefunded)}</strong>
+          </li>
+          <li>
+            <span>Records</span>
+            <strong>${total}</strong>
+            <em>${total === 1 ? 'payment' : 'payments'}</em>
+          </li>
         `;
       }
       paymentsList.replaceChildren();
@@ -202,24 +228,36 @@
       }
       payload.items.forEach((payment) => {
         const row = document.createElement('tr');
-        if (payment.status === 'Voided') row.classList.add('is-voided');
-        [
-          formatDateTime(payment.paidAtUtc),
-          payment.receiptNumber,
-          payment.bookingReference,
-          payment.guestName,
-          formatPaymentEvent(payment.eventType),
-          formatPaymentMethod(payment.method),
-          money(payment.amount),
-          money(payment.balanceAfter),
-          payment.receivedBy,
-        ].forEach((text) => {
+        if (isRefunded(payment)) row.classList.add('is-voided');
+        const cells = [
+          { label: 'When (PH)', text: formatDateTime(payment.paidAtUtc) },
+          { label: 'Receipt', text: payment.receiptNumber },
+          { label: 'Booking', text: payment.bookingReference },
+          { label: 'Guest', text: payment.guestName },
+          { label: 'Event', text: formatPaymentEvent(payment.eventType), refunded: isRefunded(payment) },
+          { label: 'Method', text: formatPaymentMethod(payment.method) },
+          { label: 'Amount', text: money(payment.amount) },
+          { label: 'Balance', text: money(payment.balanceAfter) },
+          { label: 'Staff', text: payment.receivedBy },
+        ];
+        cells.forEach((cell) => {
           const td = document.createElement('td');
-          td.textContent = text;
+          td.dataset.label = cell.label;
+          td.textContent = cell.text;
+          if (cell.refunded) {
+            td.textContent = '';
+            const event = document.createElement('span');
+            event.textContent = cell.text;
+            const badge = document.createElement('span');
+            badge.className = 'admin-payments-status-badge';
+            badge.textContent = 'Refunded';
+            td.append(event, badge);
+          }
           row.appendChild(td);
         });
         const action = document.createElement('td');
         action.className = 'admin-booking-table-actions';
+        action.dataset.label = 'Actions';
         const view = document.createElement('button');
         view.type = 'button';
         view.textContent = 'View';
@@ -270,7 +308,7 @@
       ? Number(ocr.receiptAmount).toFixed(2)
       : Number(payment.amount || 0).toFixed(2);
     const channelLabel = ocr.channel || formatPaymentMethod(payment.method) || 'Digital';
-    const canEdit = payment.status !== 'Voided';
+    const canEdit = !isRefunded(payment);
 
     const compare = document.createElement('div');
     compare.className = 'admin-payment-ocr-compare admin-payment-detail-compare';
@@ -337,7 +375,7 @@
           <p class="admin-payment-prices-hint">
             ${canEdit
               ? 'Edit fields to correct OCR, then Save receipt details. Posted payment amount is unchanged.'
-              : 'Voided — receipt details are locked.'}
+              : 'Refunded — receipt details are locked.'}
           </p>
         </div>
       </div>
@@ -367,8 +405,17 @@
   function openPaymentDetail(payment) {
     selectedPayment = payment;
     if (!paymentDetailModal || !paymentDetailBody) return;
+    const guestTitle = paymentDetailModal.querySelector('[data-payment-detail-guest]');
+    if (guestTitle) guestTitle.textContent = payment.guestName || 'Payment details';
     const receipt = paymentDetailModal.querySelector('[data-payment-detail-receipt]');
-    if (receipt) receipt.textContent = payment.receiptNumber;
+    if (receipt) receipt.textContent = payment.receiptNumber || '—';
+    const amountChip = paymentDetailModal.querySelector('[data-payment-detail-amount-chip]');
+    if (amountChip) amountChip.textContent = money(payment.amount);
+    const statusChip = paymentDetailModal.querySelector('[data-payment-detail-status]');
+    if (statusChip) {
+      statusChip.textContent = formatPaymentStatus(payment.status);
+      statusChip.classList.toggle('is-voided', isRefunded(payment));
+    }
 
     const hasReceipt = Boolean(payment.receiptImagePath);
     paymentDetailModal.classList.toggle('has-receipt-proof', hasReceipt);
@@ -383,7 +430,7 @@
       ['Stay total at posting', money(payment.stayTotalAtPosting)],
       ['Balance after', money(payment.balanceAfter)],
       ['Received by', payment.receivedBy],
-      ['Status', payment.status],
+      ['Status', formatPaymentStatus(payment.status)],
     ];
     if (!hasReceipt) {
       fields.splice(
@@ -394,11 +441,11 @@
         ['Notes', payment.notes || '—']
       );
     }
-    if (payment.status === 'Voided') {
+    if (isRefunded(payment)) {
       fields.push(
-        ['Voided at', formatDateTime(payment.voidedAtUtc)],
-        ['Voided by', payment.voidedBy || '—'],
-        ['Void reason', payment.voidReason || '—']
+        ['Refunded at', formatDateTime(payment.voidedAtUtc)],
+        ['Refunded by', payment.voidedBy || '—'],
+        ['Refund reason', payment.voidReason || '—']
       );
     }
 
@@ -413,10 +460,10 @@
     }
 
     if (paymentVoidButton) {
-      paymentVoidButton.hidden = payment.status === 'Voided';
+      paymentVoidButton.hidden = isRefunded(payment);
     }
     if (paymentSaveReceiptButton) {
-      paymentSaveReceiptButton.hidden = !hasReceipt || payment.status === 'Voided';
+      paymentSaveReceiptButton.hidden = !hasReceipt || isRefunded(payment);
     }
     paymentDetailModal.hidden = false;
   }
@@ -461,23 +508,89 @@
     }
   }
 
-  async function voidSelectedPayment() {
+  function refundFocusables() {
+    if (!paymentRefundModal) return [];
+    return [...paymentRefundModal.querySelectorAll(
+      'button:not(.admin-payment-refund-backdrop), textarea'
+    )].filter((el) => !el.disabled && !el.hidden);
+  }
+
+  function setPaymentDetailInert(inert) {
+    if (!paymentDetailModal) return;
+    paymentDetailModal.toggleAttribute('inert', inert);
+    paymentDetailModal.setAttribute('aria-hidden', inert ? 'true' : 'false');
+  }
+
+  function closeRefundModal() {
+    if (!paymentRefundModal) return;
+    paymentRefundModal.hidden = true;
+    setPaymentDetailInert(false);
+    if (paymentRefundReason) paymentRefundReason.value = '';
+    if (paymentRefundError) {
+      paymentRefundError.hidden = true;
+      paymentRefundError.textContent = '';
+    }
+    paymentVoidButton?.focus();
+  }
+
+  function openRefundModal() {
+    if (!selectedPayment || !paymentRefundModal) return;
+    if (paymentRefundModal.parentElement !== document.body) {
+      document.body.appendChild(paymentRefundModal);
+    }
+    if (paymentRefundGuest) {
+      paymentRefundGuest.textContent = selectedPayment.guestName || 'Refund this payment?';
+    }
+    if (paymentRefundReceipt) {
+      paymentRefundReceipt.textContent = selectedPayment.receiptNumber || '—';
+    }
+    if (paymentRefundAmount) {
+      paymentRefundAmount.textContent = money(selectedPayment.amount);
+    }
+    if (paymentRefundCopy) {
+      paymentRefundCopy.textContent =
+        `This reverses ${money(selectedPayment.amount)} on ${selectedPayment.bookingReference || 'the stay'} and restores the balance. The reason is stored in the system audit log.`;
+    }
+    if (paymentRefundReason) paymentRefundReason.value = '';
+    if (paymentRefundError) {
+      paymentRefundError.hidden = true;
+      paymentRefundError.textContent = '';
+    }
+    setPaymentDetailInert(true);
+    paymentRefundModal.hidden = false;
+    paymentRefundReason?.focus();
+  }
+
+  async function confirmRefundPayment() {
     if (!selectedPayment) return;
-    const voidedBy = window.prompt('Staff name voiding this payment:');
-    if (!voidedBy || voidedBy.trim().length < 2) return;
-    const reason = window.prompt('Void reason:');
-    if (!reason || reason.trim().length < 2) return;
+    const reason = paymentRefundReason?.value?.trim() || '';
+    if (reason.length < 8) {
+      if (paymentRefundError) {
+        paymentRefundError.hidden = false;
+        paymentRefundError.textContent = 'Enter reason notes (at least 8 characters).';
+      }
+      paymentRefundReason?.focus();
+      return;
+    }
+    const confirmButton = paymentRefundModal?.querySelector('[data-payment-refund-confirm]');
+    if (confirmButton) confirmButton.disabled = true;
     try {
-      await apiFetch(`/api/admin/payments/${selectedPayment.id}/void`, {
+      await apiFetch(`/api/admin/payments/${selectedPayment.id}/refund`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ voidedBy: voidedBy.trim(), reason: reason.trim() }),
+        body: JSON.stringify({ reason }),
       });
+      closeRefundModal();
       closePaymentDetail();
-      showPaymentsMessage('Payment voided.');
+      showPaymentsMessage('Payment refunded.');
       await refreshPayments();
     } catch (error) {
-      showPaymentsMessage(error instanceof Error ? error.message : 'Unable to void payment.', true);
+      if (paymentRefundError) {
+        paymentRefundError.hidden = false;
+        paymentRefundError.textContent = error instanceof Error ? error.message : 'Unable to refund payment.';
+      }
+    } finally {
+      if (confirmButton) confirmButton.disabled = false;
     }
   }
 
@@ -727,12 +840,34 @@
   paymentDetailModal?.querySelectorAll('[data-payment-detail-close]').forEach((button) => {
     button.addEventListener('click', closePaymentDetail);
   });
-  paymentVoidButton?.addEventListener('click', voidSelectedPayment);
+  paymentVoidButton?.addEventListener('click', openRefundModal);
   paymentSaveReceiptButton?.addEventListener('click', saveReceiptDetails);
+  paymentRefundModal?.querySelectorAll('[data-payment-refund-cancel]').forEach((button) => {
+    button.addEventListener('click', closeRefundModal);
+  });
+  paymentRefundModal?.querySelector('[data-payment-refund-confirm]')?.addEventListener('click', confirmRefundPayment);
+  paymentRefundModal?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Tab' || paymentRefundModal.hidden) return;
+    const items = refundFocusables();
+    if (items.length < 2) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     if (document.body.classList.contains('is-exporting')) {
       event.preventDefault();
+      return;
+    }
+    if (paymentRefundModal && !paymentRefundModal.hidden) {
+      closeRefundModal();
       return;
     }
     if (flushDetailModal && !flushDetailModal.hidden) {

@@ -25,3 +25,31 @@ window.setAdminExportLoading = function setAdminExportLoading(visible, options =
     overlay.querySelector('.admin-export-loading-card')?.focus?.();
   }
 };
+
+document.addEventListener('DOMContentLoaded', () => {
+  const menu = document.querySelector('[data-profile-menu]');
+  if (!menu) return;
+
+  const toggle = menu.querySelector('[data-profile-toggle]');
+  const panel = menu.querySelector('[data-profile-panel]');
+  if (!toggle || !panel) return;
+
+  const setOpen = (open) => {
+    panel.hidden = !open;
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+
+  toggle.addEventListener('click', (event) => {
+    event.preventDefault();
+    setOpen(panel.hidden);
+  });
+
+  document.addEventListener('click', (event) => {
+    if (menu.contains(event.target)) return;
+    setOpen(false);
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') setOpen(false);
+  });
+});
