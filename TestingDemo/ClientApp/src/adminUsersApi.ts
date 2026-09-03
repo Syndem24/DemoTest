@@ -1,4 +1,8 @@
-import type { AdminUserStatusFilter, AdminUsersListResponse } from './adminUsersTypes'
+import type {
+  AdminGuestsListResponse,
+  AdminUserStatusFilter,
+  AdminUsersListResponse,
+} from './adminUsersTypes'
 
 function readAntiForgeryToken(root: HTMLElement | null): string {
   return (
@@ -31,6 +35,27 @@ export async function fetchAdminUsers(
   })
 
   const data = await readJson<AdminUsersListResponse & { message?: string }>(response)
+  if (!response.ok) throw new Error(data.message || `Request failed (${response.status})`)
+  return data
+}
+
+export async function fetchAdminGuests(
+  listUrl: string,
+  params: { q: string; status: AdminUserStatusFilter; page: number },
+): Promise<AdminGuestsListResponse> {
+  const url = new URL(listUrl, window.location.origin)
+  url.searchParams.set('q', params.q)
+  url.searchParams.set('status', params.status)
+  url.searchParams.set('page', String(params.page))
+  url.searchParams.set('pageSize', '15')
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json' },
+  })
+
+  const data = await readJson<AdminGuestsListResponse & { message?: string }>(response)
   if (!response.ok) throw new Error(data.message || `Request failed (${response.status})`)
   return data
 }

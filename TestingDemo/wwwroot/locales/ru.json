@@ -20,7 +20,11 @@
     "login": "Войти или создать",
     "signInJoin": "Войти или создать",
     "bookStay": "Забронировать",
-    "brand": "Mori International Hotel"
+    "brand": "Mori International Hotel",
+    "reviews": "Отзывы",
+    "bookingHistory": "История бронирований",
+    "logOut": "Выйти",
+    "staffPanel": "Панель персонала"
   },
   "auth": {
     "eyebrow": "С возвращением",

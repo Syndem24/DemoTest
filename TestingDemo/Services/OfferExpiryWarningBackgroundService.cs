@@ -37,16 +37,32 @@ public sealed class OfferExpiryWarningBackgroundService : BackgroundService
         _logger.LogInformation("Offer expiry warning service started.");
 
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
-        while (!stoppingToken.IsCancellationRequested && await timer.WaitForNextTickAsync(stoppingToken))
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                await ProcessAsync(stoppingToken);
+                try
+                {
+                    await timer.WaitForNextTickAsync(stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                try
+                {
+                    await ProcessAsync(stoppingToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogError(ex, "Error while processing offer expiry warnings.");
+                }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogError(ex, "Error while processing offer expiry warnings.");
-            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown — PeriodicTimer cancels WaitForNextTickAsync.
         }
     }
 
@@ -57,6 +73,9 @@ public sealed class OfferExpiryWarningBackgroundService : BackgroundService
         PruneSent(now);
 
         using var scope = _scopeFactory.CreateScope();
+        var offers = scope.ServiceProvider.GetRequiredService<ISpecialOfferService>();
+        await offers.ExpireEndedOffersAsync(cancellationToken);
+
         var db = scope.ServiceProvider.GetRequiredService<HotelBookingDbContext>();
 
         var rows = await db.SpecialOffers.AsNoTracking()

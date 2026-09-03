@@ -4,12 +4,14 @@ import App from './App'
 import { CreateStaffUserApp } from './components/CreateStaffUserApp'
 import { SpecialOffersApp } from './components/SpecialOffersApp'
 import { AdminUsersApp } from './components/AdminUsersApp'
+import { AdminGuestUsersApp } from './components/AdminGuestUsersApp'
 import './styles.css'
 
 const roomRoot = document.getElementById('room-management-root')
 const staffRoot = document.getElementById('staff-create-root')
 const offersRoot = document.getElementById('special-offers-root')
 const adminUsersRoot = document.getElementById('admin-users-root')
+const adminGuestUsersRoot = document.getElementById('admin-guest-users-root')
 
 if (roomRoot) {
   createRoot(roomRoot).render(
@@ -39,6 +41,14 @@ if (adminUsersRoot) {
   createRoot(adminUsersRoot).render(
     <StrictMode>
       <AdminUsersApp />
+    </StrictMode>,
+  )
+}
+
+if (adminGuestUsersRoot) {
+  createRoot(adminGuestUsersRoot).render(
+    <StrictMode>
+      <AdminGuestUsersApp />
     </StrictMode>,
   )
 }

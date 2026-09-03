@@ -31,17 +31,23 @@ public interface ISpecialOfferService
         DateTime stayEndUtc,
         int nights,
         CancellationToken cancellationToken = default);
+    Task ExpireEndedOffersAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed class SpecialOfferService : ISpecialOfferService
 {
     private readonly HotelBookingDbContext _db;
     private readonly ISystemAuditRecorder _audit;
+    private readonly IGuestCatalogNotifier _guestCatalog;
 
-    public SpecialOfferService(HotelBookingDbContext db, ISystemAuditRecorder audit)
+    public SpecialOfferService(
+        HotelBookingDbContext db,
+        ISystemAuditRecorder audit,
+        IGuestCatalogNotifier guestCatalog)
     {
         _db = db;
         _audit = audit;
+        _guestCatalog = guestCatalog;
     }
 
     private void AuditOffer(string action, string targetId, string targetLabel, string summary)
@@ -56,8 +62,42 @@ public sealed class SpecialOfferService : ISpecialOfferService
             summary: summary);
     }
 
+    public async Task ExpireEndedOffersAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        var ended = await _db.SpecialOffers
+            .Where(o => o.IsActive && o.EndsAtUtc < now)
+            .ToListAsync(cancellationToken);
+        if (ended.Count == 0)
+            return;
+
+        foreach (var offer in ended)
+        {
+            offer.IsActive = false;
+            offer.UpdatedAtUtc = now;
+        }
+
+        var campaigns = ended
+            .GroupBy(o => $"{o.Kind}|{o.Title}|{o.StartsAtUtc:O}|{o.EndsAtUtc:O}");
+
+        foreach (var campaign in campaigns)
+        {
+            var first = campaign.First();
+            AuditOffer(
+                "Offer.Expired",
+                first.Id.ToString(),
+                first.Title,
+                "Special offer ended and was deactivated automatically.");
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        await _guestCatalog.NotifyChangedAsync("offers", cancellationToken);
+    }
+
     public async Task<IReadOnlyList<SpecialOfferDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
+        await ExpireEndedOffersAsync(cancellationToken);
+
         var now = DateTime.UtcNow;
         var rows = await _db.SpecialOffers.AsNoTracking()
             .Include(o => o.RoomType)
@@ -212,6 +252,7 @@ public sealed class SpecialOfferService : ISpecialOfferService
             $"Special offer created ({created.Count} room type row(s)).");
         await _db.SaveChangesAsync(cancellationToken);
 
+        await _guestCatalog.NotifyChangedAsync("offers", cancellationToken);
         return created.Select(e => Map(e, now)).ToList();
     }
 
@@ -308,6 +349,8 @@ public sealed class SpecialOfferService : ISpecialOfferService
             "Special offer configuration updated.");
         await _db.SaveChangesAsync(cancellationToken);
 
+        await _guestCatalog.NotifyChangedAsync("offers", cancellationToken);
+
         // Prefer the edited row even when inactive (deactivate → edit → save must not 404).
         var primary = await _db.SpecialOffers.AsNoTracking()
             .Include(o => o.RoomType)
@@ -354,6 +397,7 @@ public sealed class SpecialOfferService : ISpecialOfferService
             entity.Title,
             "Special offer deactivated.");
         await _db.SaveChangesAsync(cancellationToken);
+        await _guestCatalog.NotifyChangedAsync("offers", cancellationToken);
         return true;
     }
 
@@ -376,6 +420,7 @@ public sealed class SpecialOfferService : ISpecialOfferService
             entity.Title,
             "Special offer deleted.");
         await _db.SaveChangesAsync(cancellationToken);
+        await _guestCatalog.NotifyChangedAsync("offers", cancellationToken);
         return true;
     }
 
@@ -424,6 +469,8 @@ public sealed class SpecialOfferService : ISpecialOfferService
             entity.Title,
             "Special offer reactivated.");
         await _db.SaveChangesAsync(cancellationToken);
+
+        await _guestCatalog.NotifyChangedAsync("offers", cancellationToken);
 
         var primary = await _db.SpecialOffers.AsNoTracking()
             .Include(o => o.RoomType)

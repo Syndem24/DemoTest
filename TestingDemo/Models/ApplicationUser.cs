@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Identity;
 namespace TestingDemo.Models;
 
 /// <summary>
-/// Table <c>StaffAccount</c> — staff login (Identity). Role is stored on <see cref="RoleId"/> (StaffRole).
+/// Table <c>StaffUser</c> — staff login profile (ASP.NET Identity). Role is stored on <see cref="RoleId"/> (<c>StaffRole</c>).
 /// </summary>
 public class ApplicationUser : IdentityUser
 {
@@ -33,4 +33,8 @@ public class ApplicationUser : IdentityUser
     public static bool CanUseGoogleForAuthOrRecovery(ApplicationUser user) =>
         user.GoogleVerificationStatus == GoogleVerificationStatus.GoogleVerified
         && !string.IsNullOrWhiteSpace(user.GoogleEmail);
+
+    /// <summary>Staff recovery Gmail is verified and ready for Google sign-in elevation.</summary>
+    public static bool HasVerifiedGoogleRecovery(ApplicationUser user) =>
+        CanUseGoogleForAuthOrRecovery(user);
 }

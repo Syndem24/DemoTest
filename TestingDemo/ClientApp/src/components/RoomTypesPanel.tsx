@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { formatMoney } from '../format'
 import { compareValues, useDebouncedValue, usePagination, useSortState } from '../hooks'
+import { notifyMori } from '../moriNotice'
 import type { RoomTypeSummary, TypeSortKey } from '../types'
 import { DeleteIconLink, EditIconLink } from './ActionIcons'
 import { ZoomableImage } from './PhotoZoom'
@@ -62,12 +63,16 @@ export function RoomTypesPanel({ data, loading, error, canManage = true }: Props
 
   const { page, setPage, totalPages, pageItems, total } = usePagination(filtered, 8)
 
+  useEffect(() => {
+    if (error) notifyMori(error, 'error')
+  }, [error])
+
   if (loading) {
     return <SkeletonRows rows={6} />
   }
 
   if (error) {
-    return <div className="rm-alert">{error}</div>
+    return <div className="rm-empty">Room types could not be loaded. Try refreshing the page.</div>
   }
 
   return (

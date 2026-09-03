@@ -115,7 +115,7 @@
                 <input type="search" placeholder="Search reference or guest…" data-booking-search />
             </label>
             <button type="button" class="guest-btn guest-btn-primary admin-walkin-open-btn" data-walkin-open>
-                Walk-in
+                Create booking
             </button>
             <button type="button" class="admin-booking-refresh" data-booking-refresh>Refresh</button>
         </div>
@@ -410,12 +410,6 @@
                     </select>
                 </label>
 
-                <label>
-                    <span>Received by (staff) *</span>
-                    <input type="text" maxlength="120" autocomplete="name" data-payment-received-by
-                        placeholder="e.g. Ana Reyes" />
-                </label>
-
                 <div class="admin-payment-cash-panel" data-payment-cash-panel>
                     <p class="admin-payment-panel-title">Cash tender</p>
                     <label>
@@ -425,7 +419,7 @@
                     <label>
                         <span>Cash from guest (₱)</span>
                         <input type="text" inputmode="decimal" data-payment-cash-tendered placeholder="0.00"
-                            autocomplete="off" />
+                            autocomplete="off" data-mori-filter="decimal" name="paymentCashTendered" />
                     </label>
                     <div class="admin-payment-change" data-payment-change-box>
                         <span>Change</span>
@@ -485,7 +479,7 @@
                                 <label>
                                     <span>Detected amount (₱)</span>
                                     <input type="text" inputmode="decimal" data-payment-ocr-amount placeholder="0.00"
-                                        autocomplete="off" />
+                                        autocomplete="off" data-mori-filter="decimal" name="paymentOcrAmount" />
                                 </label>
                                 <label>
                                     <span>Transfer from / sender</span>

@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@11.3.0/dist/gridstack.min.css" />
 }
 
-<section class="admin-flush-page admin-dash-page">
+<section class="admin-flush-page admin-dash-page admin-dash-page--neumo">
     <section class="admin-flush-hero" aria-labelledby="dashTitle">
         <div class="admin-flush-hero-copy">
             <p class="admin-flush-eyebrow">@Model.RoleName operations</p>
@@ -27,21 +27,21 @@
                 Drag a report frame by its header, or resize from the corner. Your layout is saved to your staff account.
             </p>
         </div>
-        <ul class="admin-flush-kpis" aria-label="Snapshot">
+        <ul class="admin-flush-kpis" aria-label="Snapshot" data-dash-hero-kpis>
             <li>
                 <span>Occupancy</span>
-                <strong>@Model.OccupancyPercent.ToString("0.#")%</strong>
-                <em>@Model.RoomsOccupied of @Model.RoomsTotal rooms</em>
+                <strong data-dash-field="occupancyPercent">@Model.OccupancyPercent.ToString("0.#")%</strong>
+                <em data-dash-field="occupancyRooms">@Model.RoomsOccupied of @Model.RoomsTotal rooms</em>
             </li>
             <li>
                 <span>Taken in today</span>
-                <strong>@Money(Model.RevenueToday)</strong>
+                <strong data-dash-field="revenueToday">@Money(Model.RevenueToday)</strong>
                 <em>posted payments</em>
             </li>
             <li>
                 <span>As of</span>
                 <strong>PH</strong>
-                <em>@Model.AsOfPh</em>
+                <em data-dash-field="asOfPh">@Model.AsOfPh</em>
             </li>
         </ul>
     </section>
@@ -54,64 +54,65 @@
     <div class="grid-stack" id="dashGrid"
          data-dash-user="@User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value"
          data-dash-role="@Model.RoleName"
-         data-layout-url="@Url.Action("SaveLayout")">
-        <div class="grid-stack-item" gs-id="occupancy" gs-x="0" gs-y="0" gs-w="3" gs-h="2" gs-min-w="2" gs-min-h="2">
+         data-layout-url="@Url.Action("SaveLayout")"
+         data-dash-snapshot-url="@Url.Content("~/api/admin/dashboard/snapshot")">
+        <div class="grid-stack-item" gs-id="occupancy" gs-x="0" gs-y="0" gs-w="3" gs-h="3" gs-min-w="2" gs-min-h="2">
             <article class="grid-stack-item-content dash-widget">
                 <header class="dash-widget-handle">
                     <h2>Occupancy</h2>
                     <a href="/Rooms">Rooms</a>
                 </header>
-                <p class="dash-widget-stat">@Model.OccupancyPercent.ToString("0.#")%</p>
-                <p class="dash-widget-meta">@Model.RoomsOccupied occupied · @Model.RoomsAvailable open</p>
-                <p class="dash-widget-note">@Model.RoomsCleaning maintaining · @Model.RoomsUnavailable unavailable</p>
-                <p class="dash-widget-note">ADR @Money(Model.Adr) · RevPAR @Money(Model.RevPar)</p>
+                <p class="dash-widget-stat" data-dash-widget="occupancy-stat">@Model.OccupancyPercent.ToString("0.#")%</p>
+                <p class="dash-widget-meta" data-dash-widget="occupancy-meta">@Model.RoomsOccupied occupied · @Model.RoomsAvailable open</p>
+                <p class="dash-widget-note" data-dash-widget="occupancy-note">@Model.RoomsCleaning maintaining · @Model.RoomsUnavailable unavailable</p>
+                <p class="dash-widget-note" data-dash-widget="occupancy-rates">ADR @Money(Model.Adr) · RevPAR @Money(Model.RevPar)</p>
             </article>
         </div>
 
-        <div class="grid-stack-item" gs-id="arrivals" gs-x="3" gs-y="0" gs-w="3" gs-h="2" gs-min-w="2" gs-min-h="2">
+        <div class="grid-stack-item" gs-id="arrivals" gs-x="3" gs-y="0" gs-w="3" gs-h="3" gs-min-w="2" gs-min-h="2">
             <article class="grid-stack-item-content dash-widget">
                 <header class="dash-widget-handle">
                     <h2>Today’s board</h2>
                     <a href="/AdminBookings">Bookings</a>
                 </header>
-                <dl class="dash-widget-dl">
-                    <div><dt>Arrivals</dt><dd>@Model.ArrivalsToday</dd></div>
-                    <div><dt>Departures</dt><dd>@Model.DeparturesToday</dd></div>
-                    <div><dt>In house</dt><dd>@Model.InHouseStays</dd></div>
-                    <div><dt>Pending</dt><dd>@Model.PendingStays</dd></div>
+                <dl class="dash-widget-dl" data-dash-widget="arrivals">
+                    <div><dt>Arrivals</dt><dd data-dash-arrivals>@Model.ArrivalsToday</dd></div>
+                    <div><dt>Departures</dt><dd data-dash-departures>@Model.DeparturesToday</dd></div>
+                    <div><dt>In house</dt><dd data-dash-inhouse>@Model.InHouseStays</dd></div>
+                    <div><dt>Pending</dt><dd data-dash-pending>@Model.PendingStays</dd></div>
                 </dl>
             </article>
         </div>
 
-        <div class="grid-stack-item" gs-id="money" gs-x="6" gs-y="0" gs-w="3" gs-h="2" gs-min-w="2" gs-min-h="2">
+        <div class="grid-stack-item" gs-id="money" gs-x="6" gs-y="0" gs-w="3" gs-h="3" gs-min-w="2" gs-min-h="2">
             <article class="grid-stack-item-content dash-widget">
                 <header class="dash-widget-handle">
                     <h2>Money</h2>
                     <a href="/AdminPayments">Payments</a>
                 </header>
-                <p class="dash-widget-stat">@Money(Model.RevenueMonth)</p>
-                <p class="dash-widget-meta">This month posted · today @Money(Model.RevenueToday)</p>
+                <p class="dash-widget-stat" data-dash-widget="money-stat">@Money(Model.RevenueMonth)</p>
+                <p class="dash-widget-meta" data-dash-widget="money-meta">This month posted · today <span data-dash-revenue-today>@Money(Model.RevenueToday)</span></p>
                 @if (Model.IsAdminManager)
                 {
-                    <p class="dash-widget-note">Refunded this month @Money(Model.RefundsMonth)</p>
+                    <p class="dash-widget-note" data-dash-widget="money-refunds">Refunded this month @Money(Model.RefundsMonth)</p>
                 }
-                <p class="dash-widget-note">Open stay value @Money(Model.PipelineValue) · avg @Money(Model.AverageStayValue)</p>
+                <p class="dash-widget-note" data-dash-widget="money-pipeline">Open stay value @Money(Model.PipelineValue) · avg @Money(Model.AverageStayValue)</p>
             </article>
         </div>
 
-        <div class="grid-stack-item" gs-id="offers" gs-x="9" gs-y="0" gs-w="3" gs-h="2" gs-min-w="2" gs-min-h="2">
+        <div class="grid-stack-item" gs-id="offers" gs-x="9" gs-y="0" gs-w="3" gs-h="3" gs-min-w="2" gs-min-h="2">
             <article class="grid-stack-item-content dash-widget">
                 <header class="dash-widget-handle">
                     <h2>Offers &amp; books</h2>
                     <a href="/AdminSpecialOffers">Offers</a>
                 </header>
-                <p class="dash-widget-stat">@Model.ActiveOffers</p>
+                <p class="dash-widget-stat" data-dash-widget="offers-stat">@Model.ActiveOffers</p>
                 <p class="dash-widget-meta">Active promotions now</p>
-                <p class="dash-widget-note">@Model.ConfirmedStays confirmed · @Model.BookedSharePercent.ToString("0.#")% of open stays confirmed</p>
+                <p class="dash-widget-note" data-dash-widget="offers-note">@Model.ConfirmedStays confirmed · @Model.BookedSharePercent.ToString("0.#")% of open stays confirmed</p>
             </article>
         </div>
 
-        <div class="grid-stack-item" gs-id="revenue-chart" gs-x="0" gs-y="2" gs-w="8" gs-h="4" gs-min-w="4" gs-min-h="3">
+        <div class="grid-stack-item" gs-id="revenue-chart" gs-x="0" gs-y="4" gs-w="8" gs-h="4" gs-min-w="4" gs-min-h="3">
             <article class="grid-stack-item-content dash-widget">
                 <header class="dash-widget-handle">
                     <h2>Posted revenue &amp; arrivals · 7 days</h2>
@@ -122,7 +123,7 @@
             </article>
         </div>
 
-        <div class="grid-stack-item" gs-id="status-chart" gs-x="8" gs-y="2" gs-w="4" gs-h="4" gs-min-w="3" gs-min-h="3">
+        <div class="grid-stack-item" gs-id="status-chart" gs-x="8" gs-y="4" gs-w="4" gs-h="4" gs-min-w="3" gs-min-h="3">
             <article class="grid-stack-item-content dash-widget">
                 <header class="dash-widget-handle">
                     <h2>Stay mix</h2>
@@ -133,7 +134,7 @@
             </article>
         </div>
 
-        <div class="grid-stack-item" gs-id="signals" gs-x="0" gs-y="6" gs-w="6" gs-h="3" gs-min-w="3" gs-min-h="2">
+        <div class="grid-stack-item" gs-id="signals" gs-x="0" gs-y="9" gs-w="6" gs-h="3" gs-min-w="3" gs-min-h="2">
             <article class="grid-stack-item-content dash-widget">
                 <header class="dash-widget-handle">
                     <h2>Decision signals</h2>
@@ -144,7 +145,7 @@
                 }
                 else
                 {
-                    <ul class="dash-signals">
+                    <ul class="dash-signals" data-dash-widget="signals">
                         @foreach (var signal in Model.Signals)
                         {
                             <li class="dash-signal dash-signal--@signal.Level">
@@ -157,7 +158,7 @@
             </article>
         </div>
 
-        <div class="grid-stack-item" gs-id="channels" gs-x="6" gs-y="6" gs-w="6" gs-h="3" gs-min-w="3" gs-min-h="2">
+        <div class="grid-stack-item" gs-id="channels" gs-x="6" gs-y="9" gs-w="6" gs-h="3" gs-min-w="3" gs-min-h="2">
             <article class="grid-stack-item-content dash-widget">
                 <header class="dash-widget-handle">
                     <h2>Open-stay channels</h2>
@@ -175,7 +176,7 @@
             </article>
         </div>
 
-        <div class="grid-stack-item" gs-id="attention" gs-x="0" gs-y="9" gs-w="12" gs-h="3" gs-min-w="4" gs-min-h="2">
+        <div class="grid-stack-item" gs-id="attention" gs-x="0" gs-y="13" gs-w="12" gs-h="3" gs-min-w="4" gs-min-h="2">
             <article class="grid-stack-item-content dash-widget">
                 <header class="dash-widget-handle">
                     <h2>Front desk attention</h2>
@@ -187,7 +188,7 @@
                 }
                 else
                 {
-                    <ul class="dash-attention">
+                    <ul class="dash-attention" data-dash-widget="attention">
                         @foreach (var item in Model.Attention)
                         {
                             <li>

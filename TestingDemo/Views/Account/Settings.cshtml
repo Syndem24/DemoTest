@@ -1,11 +1,12 @@
 @model TestingDemo.ViewModels.AccountSettingsViewModel
 @{
     ViewData["Title"] = "Settings & Privacy";
-    var message = TempData["Message"] as string;
-    var error = TempData["Error"] as string;
-    var showPasswordSuccess = !string.IsNullOrWhiteSpace(message)
-        && string.Equals(Model.ActiveSection, "password", StringComparison.OrdinalIgnoreCase);
-    var showGlobalMessage = !string.IsNullOrWhiteSpace(message) && !showPasswordSuccess;
+    var showPasswordSuccess = TempData["PasswordSuccess"] is string;
+    var profileBannerError = ViewData.ModelState
+        .Where(entry => entry.Value?.Errors.Count > 0)
+        .SelectMany(entry => entry.Value!.Errors)
+        .Select(err => err.ErrorMessage)
+        .FirstOrDefault(msg => !string.IsNullOrWhiteSpace(msg));
     var currentPasswordError =
         ViewData.ModelState["Password.CurrentPassword"]?.Errors.FirstOrDefault()?.ErrorMessage
         ?? ViewData.ModelState["CurrentPassword"]?.Errors.FirstOrDefault()?.ErrorMessage;
@@ -18,41 +19,19 @@
         && ViewData.ModelState.ErrorCount > 0;
     var googleSectionHasErrors = string.Equals(Model.ActiveSection, "google", StringComparison.OrdinalIgnoreCase)
         && ViewData.ModelState.ErrorCount > 0;
-    var profileBannerError = ViewData.ModelState
-        .Where(entry => entry.Value?.Errors.Count > 0)
-        .SelectMany(entry => entry.Value!.Errors)
-        .Select(err => err.ErrorMessage)
-        .FirstOrDefault(msg => !string.IsNullOrWhiteSpace(msg));
 }
 
 <section class="admin-account-settings">
     <header class="admin-account-settings-hero">
-        <span class="admin-account-settings-eyebrow">Staff Account</span>
-        <h1>Settings & privacy</h1>
-        <p>Manage your profile details, password security, linked recovery accounts, and role permissions.</p>
+        <div class="admin-settings-hero-brand">
+            <img src="~/Images/Logo.png" asp-append-version="true" alt="" class="admin-settings-hero-logo" />
+            <div>
+                <span class="admin-account-settings-eyebrow">Staff Account</span>
+                <h1>Settings & privacy</h1>
+            </div>
+        </div>
+        <p>Manage your profile details, password security, linked recovery accounts, and role permissions for <strong>Mori International Hotel™</strong>.</p>
     </header>
-
-    @if (showGlobalMessage)
-    {
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            <svg class="alert-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-            </svg>
-            <span>@message</span>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(error))
-    {
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            <svg class="alert-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
-            </svg>
-            <span>@error</span>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    }
 
     <div class="admin-settings-layout">
         <!-- Left Sidebar Navigation -->
@@ -221,17 +200,17 @@
                         <div class="admin-settings-fields">
                             <div class="admin-settings-field">
                                 <label asp-for="Profile.FullName" class="form-label"></label>
-                                <input asp-for="Profile.FullName" class="form-control" placeholder="e.g. John Doe" />
+                                <input asp-for="Profile.FullName" class="form-control" placeholder="e.g. John Doe" autocomplete="name" data-mori-filter="person-name" maxlength="120" />
                                 <span asp-validation-for="Profile.FullName" class="text-danger"></span>
                             </div>
                             <div class="admin-settings-field">
                                 <label asp-for="Profile.UserName" class="form-label"></label>
-                                <input asp-for="Profile.UserName" class="form-control" placeholder="e.g. jdoe" />
+                                <input asp-for="Profile.UserName" class="form-control" placeholder="e.g. jdoe" autocomplete="username" data-mori-filter="username" maxlength="64" />
                                 <span asp-validation-for="Profile.UserName" class="text-danger"></span>
                             </div>
                             <div class="admin-settings-field">
                                 <label asp-for="Profile.PhoneNumber" class="form-label"></label>
-                                <input asp-for="Profile.PhoneNumber" class="form-control" placeholder="+63 900 000 0000" />
+                                <input asp-for="Profile.PhoneNumber" class="form-control" type="tel" inputmode="tel" placeholder="+63 900 000 0000" autocomplete="tel" data-mori-filter="phone" maxlength="40" />
                                 <span asp-validation-for="Profile.PhoneNumber" class="text-danger"></span>
                             </div>
                             <div class="admin-settings-field">
@@ -376,7 +355,7 @@
                         <div class="admin-settings-fields is-single">
                             <div class="admin-settings-field">
                                 <label asp-for="Profile.GoogleEmail" class="form-label">Google recovery email</label>
-                                <input asp-for="Profile.GoogleEmail" class="form-control" placeholder="your.email@gmail.com" autocomplete="email" required />
+                                <input asp-for="Profile.GoogleEmail" class="form-control" type="email" placeholder="your.email@gmail.com" autocomplete="email" required data-mori-filter="email" maxlength="254" />
                                 <span asp-validation-for="Profile.GoogleEmail" class="text-danger"></span>
                             </div>
                         </div>

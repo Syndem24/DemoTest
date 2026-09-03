@@ -32,6 +32,7 @@ public static class DatabaseBootstrap
 
             db.Database.Migrate();
             EnsureSecureSettingTable(db);
+            EnsureStaffPasswordResetCodeTable(db);
             EnsureSystemAuditLogTable(db);
             EnsureStaffDashboardLayoutColumn(db);
 
@@ -42,6 +43,7 @@ public static class DatabaseBootstrap
                 EnsureReadableAssignmentNames(db);
                 EnsureReadableIdentityNames(db);
                 EnsureStaffJoinTablesMerged(db);
+                EnsureConsolidatedStaffAuthSchema(db);
                 EnsureSystemFlushLogTable(db);
                 EnsurePaymentRecordTable(db);
                 EnsureBookingChargeTable(db);
@@ -391,6 +393,9 @@ public static class DatabaseBootstrap
                         OR OBJECT_ID(N'[dbo].[StaffAccountRole]', N'U') IS NOT NULL
                         OR OBJECT_ID(N'[dbo].[StaffAccountClaim]', N'U') IS NOT NULL
                         OR OBJECT_ID(N'[dbo].[StaffRoleClaim]', N'U') IS NOT NULL
+                        OR OBJECT_ID(N'[dbo].[StaffAccountAudit]', N'U') IS NOT NULL
+                        OR OBJECT_ID(N'[dbo].[StaffAccount]', N'U') IS NOT NULL
+                        OR COL_LENGTH(N'dbo.StaffUser', N'RoleId') IS NULL
                         OR COL_LENGTH(N'dbo.StaffAccount', N'RoleId') IS NULL
                         OR OBJECT_ID(N'[dbo].[SystemFlushLog]', N'U') IS NULL
                         OR OBJECT_ID(N'[dbo].[SystemAuditLog]', N'U') IS NULL
@@ -620,6 +625,147 @@ public static class DatabaseBootstrap
         }
     }
 
+    private static void EnsureStaffPasswordResetCodeTable(HotelBookingDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(
+                """
+                IF OBJECT_ID(N'[dbo].[StaffPasswordResetCode]', N'U') IS NULL
+                   AND OBJECT_ID(N'[dbo].[StaffPasswordResetOtp]', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[StaffPasswordResetCode] (
+                        [Id] int NOT NULL IDENTITY,
+                        [UserId] nvarchar(450) NOT NULL,
+                        [NormalizedEmail] nvarchar(256) NOT NULL,
+                        [CodeHash] nvarchar(128) NOT NULL,
+                        [CreatedAtUtc] datetime2 NOT NULL,
+                        [ExpiresAtUtc] datetime2 NOT NULL,
+                        [ConsumedAtUtc] datetime2 NULL,
+                        [FailedAttempts] int NOT NULL DEFAULT 0,
+                        CONSTRAINT [PK_StaffPasswordResetCode] PRIMARY KEY ([Id])
+                    );
+                    CREATE INDEX [IX_StaffPasswordResetCode_UserId_CreatedAtUtc]
+                        ON [dbo].[StaffPasswordResetCode] ([UserId], [CreatedAtUtc]);
+                    CREATE INDEX [IX_StaffPasswordResetCode_NormalizedEmail_ExpiresAtUtc]
+                        ON [dbo].[StaffPasswordResetCode] ([NormalizedEmail], [ExpiresAtUtc]);
+                END
+                """);
+        }
+        catch (Exception)
+        {
+            // Next EF migrate / explicit reset still applies the named migration.
+        }
+    }
+
+    private static void EnsureConsolidatedStaffAuthSchema(HotelBookingDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(
+                """
+                IF OBJECT_ID(N'[dbo].[StaffAccountAudit]', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'[dbo].[SystemAuditLog]', N'U') IS NOT NULL
+                BEGIN
+                    INSERT INTO [dbo].[SystemAuditLog] (
+                        [AtUtc], [Intent], [Domain], [Action], [ActorUserId], [ActorDisplayName],
+                        [TargetType], [TargetId], [TargetLabel], [Reason], [Summary])
+                    SELECT
+                        s.[AtUtc],
+                        'AdministrativeAction',
+                        'Account',
+                        CASE
+                            WHEN s.[Action] LIKE 'Account.%' THEN LEFT(s.[Action], 80)
+                            ELSE LEFT('Account.' + s.[Action], 80)
+                        END,
+                        LEFT(s.[PerformedByUserId], 450),
+                        '',
+                        'StaffUser',
+                        LEFT(s.[TargetUserId], 80),
+                        '',
+                        NULL,
+                        LEFT(ISNULL(s.[RoleAssigned], s.[Action]), 500)
+                    FROM [dbo].[StaffAccountAudit] s
+                    WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM [dbo].[SystemAuditLog] l
+                        WHERE l.[Domain] = 'Account'
+                          AND l.[TargetId] = s.[TargetUserId]
+                          AND ABS(DATEDIFF(second, l.[AtUtc], s.[AtUtc])) <= 2
+                          AND (
+                              l.[Action] = CASE
+                                  WHEN s.[Action] LIKE 'Account.%' THEN LEFT(s.[Action], 80)
+                                  ELSE LEFT('Account.' + s.[Action], 80)
+                              END
+                              OR l.[Summary] = LEFT(ISNULL(s.[RoleAssigned], s.[Action]), 500)
+                          )
+                    );
+                    DROP TABLE [dbo].[StaffAccountAudit];
+                END
+
+                IF OBJECT_ID(N'[dbo].[FK_StaffAccountLogin_StaffAccount_UserId]', N'F') IS NOT NULL
+                    ALTER TABLE [dbo].[StaffAccountLogin] DROP CONSTRAINT [FK_StaffAccountLogin_StaffAccount_UserId];
+                IF OBJECT_ID(N'[dbo].[FK_StaffAccountToken_StaffAccount_UserId]', N'F') IS NOT NULL
+                    ALTER TABLE [dbo].[StaffAccountToken] DROP CONSTRAINT [FK_StaffAccountToken_StaffAccount_UserId];
+                IF OBJECT_ID(N'[dbo].[FK_StaffAccount_StaffRole_RoleId]', N'F') IS NOT NULL
+                    ALTER TABLE [dbo].[StaffAccount] DROP CONSTRAINT [FK_StaffAccount_StaffRole_RoleId];
+
+                IF OBJECT_ID(N'[dbo].[StaffAccount]', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'[dbo].[StaffUser]', N'U') IS NULL
+                    EXEC sp_rename N'[dbo].[StaffAccount]', N'StaffUser';
+                IF OBJECT_ID(N'PK_StaffAccount', N'OBJECT') IS NOT NULL
+                    EXEC sp_rename N'PK_StaffAccount', N'PK_StaffUser', N'OBJECT';
+
+                IF OBJECT_ID(N'[dbo].[StaffAccountLogin]', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'[dbo].[StaffExternalLogin]', N'U') IS NULL
+                    EXEC sp_rename N'[dbo].[StaffAccountLogin]', N'StaffExternalLogin';
+                IF OBJECT_ID(N'PK_StaffAccountLogin', N'OBJECT') IS NOT NULL
+                    EXEC sp_rename N'PK_StaffAccountLogin', N'PK_StaffExternalLogin', N'OBJECT';
+
+                IF OBJECT_ID(N'[dbo].[StaffAccountToken]', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'[dbo].[StaffAuthToken]', N'U') IS NULL
+                    EXEC sp_rename N'[dbo].[StaffAccountToken]', N'StaffAuthToken';
+                IF OBJECT_ID(N'PK_StaffAccountToken', N'OBJECT') IS NOT NULL
+                    EXEC sp_rename N'PK_StaffAccountToken', N'PK_StaffAuthToken', N'OBJECT';
+
+                IF OBJECT_ID(N'[dbo].[StaffPasswordResetOtp]', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'[dbo].[StaffPasswordResetCode]', N'U') IS NULL
+                BEGIN
+                    EXEC sp_rename N'[dbo].[StaffPasswordResetOtp]', N'StaffPasswordResetCode';
+                    IF OBJECT_ID(N'PK_StaffPasswordResetOtp', N'OBJECT') IS NOT NULL
+                        EXEC sp_rename N'PK_StaffPasswordResetOtp', N'PK_StaffPasswordResetCode', N'OBJECT';
+                END
+
+                IF OBJECT_ID(N'[dbo].[StaffUser]', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'[dbo].[FK_StaffUser_StaffRole_RoleId]', N'F') IS NULL
+                   AND COL_LENGTH(N'dbo.StaffUser', N'RoleId') IS NOT NULL
+                    ALTER TABLE [dbo].[StaffUser] WITH CHECK
+                    ADD CONSTRAINT [FK_StaffUser_StaffRole_RoleId]
+                    FOREIGN KEY ([RoleId]) REFERENCES [dbo].[StaffRole] ([Id]) ON DELETE SET NULL;
+
+                IF OBJECT_ID(N'[dbo].[StaffExternalLogin]', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'[dbo].[FK_StaffExternalLogin_StaffUser_UserId]', N'F') IS NULL
+                    ALTER TABLE [dbo].[StaffExternalLogin] WITH CHECK
+                    ADD CONSTRAINT [FK_StaffExternalLogin_StaffUser_UserId]
+                    FOREIGN KEY ([UserId]) REFERENCES [dbo].[StaffUser] ([Id]) ON DELETE CASCADE;
+
+                IF OBJECT_ID(N'[dbo].[StaffAuthToken]', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'[dbo].[FK_StaffAuthToken_StaffUser_UserId]', N'F') IS NULL
+                    ALTER TABLE [dbo].[StaffAuthToken] WITH CHECK
+                    ADD CONSTRAINT [FK_StaffAuthToken_StaffUser_UserId]
+                    FOREIGN KEY ([UserId]) REFERENCES [dbo].[StaffUser] ([Id]) ON DELETE CASCADE;
+
+                UPDATE [dbo].[SystemAuditLog]
+                SET [TargetType] = 'StaffUser'
+                WHERE [TargetType] = 'StaffAccount';
+                """);
+        }
+        catch (Exception)
+        {
+            // Next EF migrate / explicit reset still applies the named migration.
+        }
+    }
+
     private static void EnsureSystemAuditLogTable(HotelBookingDbContext db)
     {
         try
@@ -666,7 +812,11 @@ public static class DatabaseBootstrap
         {
             db.Database.ExecuteSqlRaw(
                 """
-                IF COL_LENGTH(N'dbo.StaffAccount', N'DashboardLayoutJson') IS NULL
+                IF OBJECT_ID(N'[dbo].[StaffUser]', N'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.StaffUser', N'DashboardLayoutJson') IS NULL
+                    ALTER TABLE [dbo].[StaffUser] ADD [DashboardLayoutJson] nvarchar(max) NULL;
+                ELSE IF OBJECT_ID(N'[dbo].[StaffAccount]', N'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.StaffAccount', N'DashboardLayoutJson') IS NULL
                     ALTER TABLE [dbo].[StaffAccount] ADD [DashboardLayoutJson] nvarchar(max) NULL;
                 """);
         }

@@ -12,6 +12,7 @@ export type AdminUserItem = {
   isDisabled: boolean
   disabledAtUtc: string | null
   canDeleteNow: boolean
+  hasGoogleLogin?: boolean
 }
 
 export type AdminUserListSummary = {
@@ -28,4 +29,18 @@ export type AdminUsersListResponse = {
   totalPages: number
   retentionDays: number
   summary: AdminUserListSummary
+}
+
+export type AdminGuestsListSummary = {
+  total: number
+  googleLinked: number
+}
+
+export type AdminGuestsListResponse = {
+  items: AdminUserItem[]
+  page: number
+  pageSize: number
+  totalCount: number
+  totalPages: number
+  summary: AdminGuestsListSummary
 }

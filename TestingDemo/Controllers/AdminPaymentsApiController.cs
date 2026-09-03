@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using TestingDemo.DTOs;
@@ -18,19 +19,22 @@ public sealed class AdminPaymentsApiController : ControllerBase
     private readonly IReceiptOcrService _receiptOcr;
     private readonly IHubContext<BookingNotificationsHub, IBookingNotificationsClient> _hub;
     private readonly ISystemAuditRecorder _audit;
+    private readonly UserManager<ApplicationUser> _userManager;
 
     public AdminPaymentsApiController(
         IPaymentService paymentService,
         IPaymentReceiptStorage receiptStorage,
         IReceiptOcrService receiptOcr,
         IHubContext<BookingNotificationsHub, IBookingNotificationsClient> hub,
-        ISystemAuditRecorder audit)
+        ISystemAuditRecorder audit,
+        UserManager<ApplicationUser> userManager)
     {
         _paymentService = paymentService;
         _receiptStorage = receiptStorage;
         _receiptOcr = receiptOcr;
         _hub = hub;
         _audit = audit;
+        _userManager = userManager;
     }
 
     [HttpGet]
@@ -70,6 +74,8 @@ public sealed class AdminPaymentsApiController : ControllerBase
     {
         try
         {
+            var user = await _userManager.GetUserAsync(User);
+            request.ReceivedBy = StaffDisplayName.FromUser(user, User);
             var payment = await _paymentService.RecordAsync(request, cancellationToken);
             await _hub.Clients.All.PaymentChanged(payment.BookingId);
             return Ok(payment);

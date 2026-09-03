@@ -30,19 +30,20 @@
                         <input asp-for="PricePerNight"
                                class="form-control money-input"
                                inputmode="decimal"
-                               placeholder="0.00" />
+                               placeholder="0.00"
+                               data-mori-filter="decimal" />
                     </div>
                     <div class="form-text">Philippine peso (₱).</div>
                     <span asp-validation-for="PricePerNight" class="text-danger"></span>
                 </div>
                 <div class="col-md-4">
                     <label asp-for="MaxOccupancy" class="form-label"></label>
-                    <input asp-for="MaxOccupancy" class="form-control" />
+                    <input asp-for="MaxOccupancy" class="form-control" inputmode="numeric" data-mori-filter="integer" />
                     <span asp-validation-for="MaxOccupancy" class="text-danger"></span>
                 </div>
                 <div class="col-md-4">
                     <label asp-for="BedCount" class="form-label"></label>
-                    <input asp-for="BedCount" class="form-control" />
+                    <input asp-for="BedCount" class="form-control" inputmode="numeric" data-mori-filter="integer" />
                     <span asp-validation-for="BedCount" class="text-danger"></span>
                 </div>
             </div>

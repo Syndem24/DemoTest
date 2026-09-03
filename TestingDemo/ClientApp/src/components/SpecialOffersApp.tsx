@@ -6,6 +6,7 @@ import {
   reactivateSpecialOffer,
 } from '../offersApi'
 import type { SpecialOfferDto } from '../offerTypes'
+import { notifyMori } from '../moriNotice'
 
 function money(amount: number): string {
   return `₱${Number(amount || 0).toLocaleString('en-PH', {
@@ -97,6 +98,30 @@ type OfferGroup = {
 
 function groupKey(o: SpecialOfferDto): string {
   return `${o.title}|${o.kind}|${o.startsAtUtc}|${o.endsAtUtc}`
+}
+
+function offerHasEnded(offer: SpecialOfferDto): boolean {
+  const end = Date.parse(offer.endsAtUtc)
+  return !Number.isNaN(end) && end < Date.now()
+}
+
+function offerStartsInFuture(offer: SpecialOfferDto): boolean {
+  const start = Date.parse(offer.startsAtUtc)
+  return !Number.isNaN(start) && start > Date.now()
+}
+
+function groupStatus(group: OfferGroup): 'live' | 'scheduled' | 'off' {
+  if (group.isCurrentlyActive) return 'live'
+  if (group.isActive && offerStartsInFuture(group.primary)) return 'scheduled'
+  return 'off'
+}
+
+function groupAllowsEditDeactivate(group: OfferGroup): boolean {
+  return group.isActive && !offerHasEnded(group.primary)
+}
+
+function groupIsEffectivelyActive(group: OfferGroup): boolean {
+  return group.isActive && !offerHasEnded(group.primary)
 }
 
 function groupOffers(rows: SpecialOfferDto[]): OfferGroup[] {
@@ -246,12 +271,9 @@ export function SpecialOffersApp() {
   const canManage = root?.dataset.canManage === 'true'
   const createUrl = root?.dataset.createUrl || '/AdminSpecialOffers/Create'
   const editBase = root?.dataset.editBase || '/AdminSpecialOffers/Edit'
-  const initialMessage = root?.dataset.message || ''
 
   const [offers, setOffers] = useState<SpecialOfferDto[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [banner, setBanner] = useState<string | null>(initialMessage || null)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [filter, setFilter] = useState<'all' | 'live' | 'off'>('all')
   const [reactivateId, setReactivateId] = useState<number | null>(null)
@@ -264,12 +286,11 @@ export function SpecialOffersApp() {
 
   const load = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true)
-    setError(null)
     try {
       const data = await fetchSpecialOffers()
       setOffers(Array.isArray(data) ? data : [])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load offers.')
+      notifyMori(err instanceof Error ? err.message : 'Unable to load offers.', 'error')
     } finally {
       if (showSpinner) setLoading(false)
     }
@@ -280,21 +301,14 @@ export function SpecialOffersApp() {
   }, [load])
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      void load(false)
-    }, 15000)
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
+    const handler = (event: Event) => {
+      const scopes = (event as CustomEvent<{ scopes?: string[] }>).detail?.scopes || []
+      if (scopes.includes('all') || scopes.includes('offers')) {
         void load(false)
       }
     }
-
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    return () => {
-      window.clearInterval(timer)
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-    }
+    window.addEventListener('mori:admin-refresh', handler)
+    return () => window.removeEventListener('mori:admin-refresh', handler)
   }, [load])
 
   const groups = useMemo(() => groupOffers(offers), [offers])
@@ -308,10 +322,20 @@ export function SpecialOffersApp() {
 
   const discountWarning = useMemo(() => {
     const activeLimited = groups
-      .filter((g) => g.isActive && String(g.primary.kind) === 'LimitedTime' && g.discountPct != null)
+      .filter(
+        (g) =>
+          groupIsEffectivelyActive(g) &&
+          String(g.primary.kind) === 'LimitedTime' &&
+          g.discountPct != null,
+      )
       .map((g) => g.discountPct as number)
     const activeStayLonger = groups
-      .filter((g) => g.isActive && String(g.primary.kind) === 'StayLongerSaveMore' && g.discountPct != null)
+      .filter(
+        (g) =>
+          groupIsEffectivelyActive(g) &&
+          String(g.primary.kind) === 'StayLongerSaveMore' &&
+          g.discountPct != null,
+      )
       .map((g) => g.discountPct as number)
 
     if (!activeLimited.length || !activeStayLonger.length) return null
@@ -330,13 +354,12 @@ export function SpecialOffersApp() {
   const onDeactivate = async (id: number) => {
     if (!window.confirm('Deactivate this offer for all selected room types?')) return
     setBusyId(id)
-    setError(null)
     try {
       await deactivateSpecialOffer(id, root)
-      setBanner('Offer deactivated.')
+      notifyMori('Offer deactivated.', 'success')
       await load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to deactivate.')
+      notifyMori(err instanceof Error ? err.message : 'Unable to deactivate.', 'error')
     } finally {
       setBusyId(null)
     }
@@ -351,13 +374,12 @@ export function SpecialOffersApp() {
       return
     }
     setBusyId(id)
-    setError(null)
     try {
       await deleteSpecialOffer(id, root)
-      setBanner('Offer deleted.')
+      notifyMori('Offer deleted.', 'success')
       await load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to delete.')
+      notifyMori(err instanceof Error ? err.message : 'Unable to delete.', 'error')
     } finally {
       setBusyId(null)
     }
@@ -419,13 +441,13 @@ export function SpecialOffersApp() {
 
     setBusyId(reactivateId)
     setReactivateError(null)
-    setError(null)
     try {
       const startUtcIso = manilaLocalToUtcIso(reactivateStart)
       const endUtcIso = manilaLocalToUtcIso(reactivateEnd)
       await reactivateSpecialOffer(reactivateId, startUtcIso, endUtcIso, root)
-      setBanner(
+      notifyMori(
         'Offer reactivated successfully. Status will switch to Live automatically at the selected Manila start time.',
+        'success',
       )
       setReactivateId(null)
       await load()
@@ -460,24 +482,9 @@ export function SpecialOffersApp() {
         ) : null}
       </header>
 
-      {banner ? (
-        <div className="so-banner" role="status">
-          {banner}
-          <button type="button" className="so-banner-dismiss" onClick={() => setBanner(null)} aria-label="Dismiss">
-            ×
-          </button>
-        </div>
-      ) : null}
-
-      {error ? (
-        <div className="so-banner is-error" role="alert">
-          {error}
-        </div>
-      ) : null}
-
       {discountWarning ? (
-        <div className="so-warning-banner" role="alert">
-          <strong>Pricing warning:</strong> Limited Time discount is {formatPercent(discountWarning.limitedPct)},
+        <div className="so-warning-banner" role="status">
+          <strong>Pricing note:</strong> Limited Time discount is {formatPercent(discountWarning.limitedPct)},
           higher than Stay Longer, Save More at {formatPercent(discountWarning.stayLongerPct)} (gap{' '}
           {formatPercent(discountWarning.gapPct)}). This can reduce the long-stay offer appeal.
         </div>
@@ -535,11 +542,7 @@ export function SpecialOffersApp() {
             {visible.map((group) => {
               const offer = group.primary
               const pct = group.discountPct
-              const status = group.isCurrentlyActive
-                ? 'live'
-                : group.isActive
-                  ? 'scheduled'
-                  : 'off'
+              const status = groupStatus(group)
               const roomsLabel = group.roomTypeNames.join(', ') || '—'
               const hasPromo = group.promoFrom != null
               const promoSame = group.promoFrom === group.promoTo
@@ -605,7 +608,7 @@ export function SpecialOffersApp() {
                   </div>
                   <div className="so-card-actions">
                     {canManage ? (
-                      group.isActive ? (
+                      groupAllowsEditDeactivate(group) ? (
                         <>
                           <EditAction href={`${editBase}/${offer.id}`} />
                           <DeactivateAction
@@ -647,7 +650,12 @@ export function SpecialOffersApp() {
           >
             <h2 id="so-view-title">{kindLabel(String(viewGroup.primary.kind))}</h2>
             <p className="so-modal-lede">
-              {viewGroup.isCurrentlyActive ? 'Live now' : viewGroup.isActive ? 'Scheduled' : 'Not active'} ·{' '}
+              {groupStatus(viewGroup) === 'live'
+                ? 'Live now'
+                : groupStatus(viewGroup) === 'scheduled'
+                  ? 'Scheduled'
+                  : 'Not active'}{' '}
+              ·{' '}
               {formatWindow(viewGroup.primary.startsAtUtc, viewGroup.primary.endsAtUtc)}
             </p>
             <dl className="so-view-dl">

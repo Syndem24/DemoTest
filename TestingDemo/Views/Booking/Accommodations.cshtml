@@ -1,4 +1,5 @@
 @model TestingDemo.ViewModels.BookingPageViewModel
+@using TestingDemo.Services
 @{
     Layout = "~/Views/Shared/_CustomerLayout.cshtml";
     ViewData["Title"] = "Accommodations";
@@ -45,6 +46,7 @@
 </section>
 
 <div class="guest-rooms-page" id="rooms">
+    <div class="guest-hallway-atrium" aria-hidden="true"></div>
     <header class="guest-section guest-rooms-intro guest-reveal guest-reveal--ink" data-reveal>
         <p class="guest-intro-kana guest-rooms-kana" aria-hidden="true">宿</p>
         <p class="guest-eyebrow" data-i18n="rooms.ourRooms">Our rooms</p>
@@ -116,7 +118,7 @@
                 @foreach (var type in Model.RoomTypes)
                 {
                 var images = type.Images ?? new List<string>();
-                var inclusions = type.Inclusions ?? new List<string>();
+                var inclusions = InclusionCatalog.OrderForGuestDisplay(type.Inclusions);
                 var image = images.FirstOrDefault();
                 var description = string.IsNullOrWhiteSpace(type.Description)
                     ? null
@@ -272,6 +274,7 @@
 
     <section class="guest-section guest-rooms-frame guest-reveal guest-reveal--shoji"
              data-reveal
+             data-reveal-scroll
              data-reveal-stagger
              aria-labelledby="roomsFrameTitle">
         <div class="guest-rooms-frame-shell">
@@ -489,6 +492,7 @@
             </div>
             <p class="guest-modal-lede guest-offers-lede" id="offerSelectLede" data-i18n="booking.offerLede">Add room types to your stay. Prices shown are per night.</p>
             <p class="guest-offers-party" id="offerPartySummary"></p>
+            <p class="guest-availability-notice" id="offerDatesAvailabilityMsg" role="status" hidden></p>
             <p class="guest-capacity-banner guest-offers-capacity-banner" id="offerCapacityBanner" role="status" hidden></p>
         </header>
 
@@ -605,15 +609,15 @@
                 <div class="guest-form-grid">
                     <label>
                         <span data-i18n="booking.fullName">Full name</span>
-                        <input type="text" name="guestName" id="guestName" placeholder="Guest full name" required data-i18n="booking.fullNamePlaceholder" data-i18n-attr="placeholder" data-i18n-attr-only />
+                        <input type="text" name="guestName" id="guestName" placeholder="Guest full name" required autocomplete="name" data-mori-filter="person-name" maxlength="120" data-i18n="booking.fullNamePlaceholder" data-i18n-attr="placeholder" data-i18n-attr-only />
                     </label>
                     <label>
                         <span data-i18n="booking.email">Email</span>
-                        <input type="email" name="guestEmail" id="guestEmail" placeholder="name@email.com" required data-i18n="booking.emailPlaceholder" data-i18n-attr="placeholder" data-i18n-attr-only />
+                        <input type="email" name="guestEmail" id="guestEmail" placeholder="name@email.com" required autocomplete="email" data-mori-filter="email" maxlength="254" data-i18n="booking.emailPlaceholder" data-i18n-attr="placeholder" data-i18n-attr-only />
                     </label>
                     <label>
                         <span data-i18n="booking.phone">Phone</span>
-                        <input type="tel" name="guestPhone" id="guestPhone" placeholder="+63 9XX XXX XXXX" autocomplete="tel" required data-i18n="booking.phonePlaceholder" data-i18n-attr="placeholder" data-i18n-attr-only />
+                        <input type="tel" name="guestPhone" id="guestPhone" placeholder="+63 9XX XXX XXXX" autocomplete="tel" required maxlength="40" inputmode="tel" data-mori-filter="phone" data-i18n="booking.phonePlaceholder" data-i18n-attr="placeholder" data-i18n-attr-only />
                     </label>
                 </div>
             </section>
@@ -630,6 +634,7 @@
                     </div>
                 </div>
                 <p class="guest-room-capacity-msg" id="stayDatesRequiredMsg" hidden></p>
+                <p class="guest-availability-notice" id="stayDatesAvailabilityMsg" role="status" hidden></p>
                 <p class="guest-stay-min-banner" id="stayLongerMinBanner" role="status" hidden></p>
                 <div class="guest-stay-suggest-banner" id="stayLongerSuggestBanner" role="status" hidden>
                     <span id="stayLongerSuggestText"></span>

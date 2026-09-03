@@ -1,0 +1,121 @@
+@{
+    Layout = "~/Views/Shared/_CustomerLayout.cshtml";
+    ViewData["Title"] = "Enter verification code";
+    ViewData["GuestAuthPage"] = true;
+}
+@model TestingDemo.ViewModels.VerifyResetOtpViewModel
+@using TestingDemo.Services
+
+<section class="guest-auth-login" aria-labelledby="guestAuthTitle">
+    <div class="guest-auth-login-bg" aria-hidden="true">
+        <img src="~/Images/Lounge/Lounge1.jpg"
+             asp-append-version="true"
+             alt=""
+             decoding="async"
+             fetchpriority="high" />
+        <div class="guest-auth-login-veil"></div>
+    </div>
+
+    <div class="guest-auth-login-stage">
+        <div class="guest-auth-card guest-auth-card-otp">
+            <div class="guest-auth-card-accent" aria-hidden="true"></div>
+            <header class="guest-auth-card-header">
+                <h1 id="guestAuthTitle" data-i18n="auth.otpTitle">Enter verification code</h1>
+                <p class="guest-auth-card-lede" data-i18n="auth.otpLede">
+                    We emailed a 6-digit code to your staff account. Enter it below within 15 minutes. Each code works once.
+                </p>
+            </header>
+
+            <form asp-controller="Account"
+                  asp-action="VerifyResetOtp"
+                  method="post"
+                  class="guest-auth-card-form guest-auth-otp-form"
+                  id="staffResetOtpForm"
+                  novalidate>
+                @Html.AntiForgeryToken()
+
+                @if (!ViewData.ModelState.IsValid && ViewData.ModelState.ErrorCount > 0)
+                {
+                    <div asp-validation-summary="ModelOnly" class="guest-form-message is-error" role="alert"></div>
+                }
+
+                <div class="guest-auth-field">
+                    <label asp-for="Email" class="guest-auth-field-label">
+                        <span data-i18n="auth.emailAddress">EMAIL ADDRESS</span>
+                    </label>
+                    <input asp-for="Email"
+                           autocomplete="email"
+                           inputmode="email"
+                           placeholder="name@example.com"
+                           aria-required="true"
+                           data-mori-filter="email"
+                           maxlength="254" />
+                    <span asp-validation-for="Email" class="guest-form-message is-error"></span>
+                </div>
+
+                @if (Model.RemainingAttempts is int attempts && attempts > 0)
+                {
+                    <p class="guest-auth-otp-attempts" role="status" id="otpAttemptsStatus">
+                        <span data-i18n="auth.otpAttemptsLabel">Attempts remaining</span>:
+                        <strong id="otpAttemptsCount">@attempts</strong>
+                        <span data-i18n="auth.otpAttemptsOf">of</span>
+                        <span>@StaffPasswordResetCodeService.MaxFailedAttempts</span>
+                        <span data-i18n="auth.otpAttemptsBeforeFail">before this code is cancelled.</span>
+                    </p>
+                }
+                else if (Model.RemainingAttempts == 0)
+                {
+                    <p class="guest-auth-otp-attempts is-exhausted" role="alert">
+                        <span data-i18n="auth.otpAttemptsExhausted">No attempts left on this code. Send a new code to try again.</span>
+                    </p>
+                }
+
+                <div class="guest-auth-field guest-auth-otp-field">
+                    <label for="OtpDigit0" class="guest-auth-field-label">
+                        <span data-i18n="auth.otpCodeLabel">VERIFICATION CODE</span>
+                    </label>
+                    <div class="guest-auth-otp-row" id="staffOtpDigits" role="group" aria-labelledby="guestAuthTitle">
+                        @for (var i = 0; i < 6; i++)
+                        {
+                            <input type="text"
+                                   class="guest-auth-otp-digit"
+                                   id="OtpDigit@(i)"
+                                   maxlength="1"
+                                   inputmode="numeric"
+                                   pattern="[0-9]"
+                                   autocomplete="one-time-code"
+                                   aria-label="Digit @(i + 1) of 6"
+                                   data-otp-index="@i"
+                                   data-mori-filter="otp"
+                                   name="OtpDigit@(i)" />
+                        }
+                    </div>
+                    <input asp-for="Otp" type="hidden" id="Otp" />
+                    <span asp-validation-for="Otp" class="guest-form-message is-error"></span>
+                    <p class="guest-auth-otp-hint" data-i18n="auth.otpHint">Codes expire after 15 minutes, work once, and are cancelled after three wrong attempts.</p>
+                </div>
+
+                <button type="submit" class="guest-auth-submit">
+                    <span data-i18n="auth.otpSubmit">Verify code</span>
+                </button>
+            </form>
+
+            <a class="guest-auth-back"
+               asp-controller="Account"
+               asp-action="ForgotPassword"
+               data-i18n="auth.otpResend">
+                Send a new code
+            </a>
+            <a class="guest-auth-back"
+               asp-controller="Account"
+               asp-action="Login"
+               data-i18n="auth.backToSignIn">
+                Back to sign in
+            </a>
+        </div>
+    </div>
+</section>
+
+@section Scripts {
+    <script src="~/js/staff-reset-otp.js" asp-append-version="true"></script>
+}

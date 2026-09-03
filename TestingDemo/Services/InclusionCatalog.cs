@@ -52,6 +52,33 @@ public static class InclusionCatalog
 
         return null;
     }
+
+    /// <summary>Custom inclusions first, then catalog items in default checklist order.</summary>
+    public static List<string> OrderForGuestDisplay(IEnumerable<string>? inclusions)
+    {
+        var normalized = RoomMappings.NormalizeInclusions(inclusions);
+        if (normalized.Count == 0)
+        {
+            return normalized;
+        }
+
+        var catalogSet = new HashSet<string>(DefaultItems, StringComparer.OrdinalIgnoreCase);
+        var custom = normalized
+            .Where(i => !catalogSet.Contains(i))
+            .OrderBy(i => i, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var selectedCatalog = new HashSet<string>(
+            normalized.Where(catalogSet.Contains),
+            StringComparer.OrdinalIgnoreCase);
+        var catalogOrdered = DefaultItems
+            .Where(i => selectedCatalog.Contains(i))
+            .Select(i => normalized.First(l => l.Equals(i, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        custom.AddRange(catalogOrdered);
+        return custom;
+    }
 }
 
 public sealed record InclusionCategory(string Name, IReadOnlyList<string> Items);

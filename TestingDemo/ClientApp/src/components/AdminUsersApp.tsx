@@ -6,6 +6,7 @@ import {
   fetchAdminUsers,
 } from '../adminUsersApi'
 import type { AdminUserStatusFilter, AdminUsersListResponse } from '../adminUsersTypes'
+import { notifyMori } from '../moriNotice'
 
 type Suggestion = { value: string; label: string }
 
@@ -61,9 +62,7 @@ export function AdminUsersApp() {
   const suggestUrl = root?.dataset.suggestUrl || '/api/admin/users/suggestions'
   const actionBaseUrl = root?.dataset.actionBaseUrl || '/api/admin/users'
   const createUrl = root?.dataset.createUrl || '/AdminUsers/Create'
-  const initialMessage = root?.dataset.message || ''
-  const initialError = root?.dataset.error || ''
-  const flashMessage = consumeAdminUsersFlash()
+  const guestsPageUrl = root?.dataset.guestsPageUrl || '/AdminUsers/Guests'
 
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<AdminUserStatusFilter>('all')
@@ -71,8 +70,6 @@ export function AdminUsersApp() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [result, setResult] = useState<AdminUsersListResponse | null>(null)
-  const [message, setMessage] = useState<string | null>(initialMessage || flashMessage || null)
-  const [error, setError] = useState<string | null>(initialError || null)
   const [searchDraft, setSearchDraft] = useState('')
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [suggestionOpen, setSuggestionOpen] = useState(false)
@@ -86,24 +83,43 @@ export function AdminUsersApp() {
     setSuggestionOpen(false)
   }
 
-  const load = async (nextPage = page, nextQuery = query, nextStatus = status) => {
-    setLoading(true)
-    setError(null)
+  const load = async (nextPage = page, nextQuery = query, nextStatus = status, silent = false) => {
+    if (!silent) {
+      setLoading(true)
+    }
     try {
       const data = await fetchAdminUsers(listUrl, { q: nextQuery, status: nextStatus, page: nextPage })
       setResult(data)
       setPage(data.page)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load users.')
+      notifyMori(err instanceof Error ? err.message : 'Unable to load users.', 'error')
     } finally {
-      setLoading(false)
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }
+
+  useEffect(() => {
+    const flash = consumeAdminUsersFlash()
+    if (flash) notifyMori(flash, 'success')
+  }, [])
 
   useEffect(() => {
     void load(1, query, status)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, status])
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const scopes = (event as CustomEvent<{ scopes?: string[] }>).detail?.scopes || []
+      if (scopes.includes('all') || scopes.includes('audit') || scopes.includes('users')) {
+        void load(page, query, status, true)
+      }
+    }
+    window.addEventListener('mori:admin-refresh', handler)
+    return () => window.removeEventListener('mori:admin-refresh', handler)
+  }, [page, query, status])
 
   useEffect(() => {
     const term = searchDraft.trim()
@@ -131,22 +147,18 @@ export function AdminUsersApp() {
 
   const onAction = async (work: () => Promise<string>) => {
     setSaving(true)
-    setError(null)
-    setMessage(null)
     try {
       const text = await work()
-      setMessage(text)
+      notifyMori(text, 'success')
       await load(page)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Action failed.')
+      notifyMori(err instanceof Error ? err.message : 'Action failed.', 'error')
     } finally {
       setSaving(false)
     }
   }
 
   const requestDelete = (user: { id: string; userName: string; fullName: string | null }) => {
-    setError(null)
-    setMessage(null)
     setDeleteModal({
       id: user.id,
       userName: user.userName,
@@ -180,20 +192,21 @@ export function AdminUsersApp() {
             Manage staff authorization, account statuses, and system access rights.
           </p>
         </div>
-        <a className="au-btn au-btn-primary" href={createUrl}>
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path d="M12 5a1 1 0 0 1 1 1v5h5a1 1 0 1 1 0 2h-5v5a1 1 0 1 1-2 0v-5H6a1 1 0 1 1 0-2h5V6a1 1 0 0 1 1-1z" />
-          </svg>
-          <span>Create staff user</span>
-        </a>
-      </header>
-
-      {message ? (
-        <div className="au-banner is-info" role="status" aria-live="polite">
-          {message}
+        <div className="au-header-actions">
+          <a className="au-btn au-btn-primary" href={guestsPageUrl}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.28 2.01.2 5.97 1.29 6 3.28-1.29 1.94-3.5 3.22-6 3.22z" />
+            </svg>
+            <span>Guest Google accounts</span>
+          </a>
+          <a className="au-btn au-btn-primary" href={createUrl}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 5a1 1 0 0 1 1 1v5h5a1 1 0 1 1 0 2h-5v5a1 1 0 1 1-2 0v-5H6a1 1 0 1 1 0-2h5V6a1 1 0 0 1 1-1z" />
+            </svg>
+            <span>Create staff user</span>
+          </a>
         </div>
-      ) : null}
-      {error ? <div className="au-banner is-error">{error}</div> : null}
+      </header>
 
       <section className="au-kpis" aria-label="Users overview">
         <article className="au-kpi">
@@ -308,7 +321,7 @@ export function AdminUsersApp() {
 
       <div className="au-range-bar">
         <p className="au-range">
-          Showing <strong>{range.start}–{range.end}</strong> of{' '}
+          Showing <strong>{range.start}â€“{range.end}</strong> of{' '}
           <strong>{result?.totalCount ?? 0}</strong> staff accounts
         </p>
       </div>
@@ -363,7 +376,7 @@ export function AdminUsersApp() {
                     <code className="au-code">{user.userName}</code>
                   </td>
                   <td>{user.email}</td>
-                  <td>{user.phoneNumber || '—'}</td>
+                  <td>{user.phoneNumber || 'â€”'}</td>
                   <td>
                     <span className={`au-role ${roleClass(user.role)}`}>{user.role}</span>
                   </td>
@@ -380,8 +393,8 @@ export function AdminUsersApp() {
                       </span>
                     )}
                   </td>
-                  <td>{user.birthDate || '—'}</td>
-                  <td className="au-cell-address">{user.address || '—'}</td>
+                  <td>{user.birthDate || 'â€”'}</td>
+                  <td className="au-cell-address">{user.address || 'â€”'}</td>
                   <td>
                     <div className="au-actions">
                       <a className="au-btn au-btn-ghost" href={`/AdminUsers/Edit/${encodeURIComponent(user.id)}`}>
@@ -488,7 +501,7 @@ export function AdminUsersApp() {
                 </div>
                 <div className="au-card-field">
                   <span>Phone:</span>
-                  <strong>{user.phoneNumber || '—'}</strong>
+                  <strong>{user.phoneNumber || 'â€”'}</strong>
                 </div>
                 {user.birthDate ? (
                   <div className="au-card-field">
@@ -561,33 +574,6 @@ export function AdminUsersApp() {
         )}
       </section>
 
-      {deleteModal ? (
-        <div className="au-delete-modal-backdrop" role="presentation" onClick={() => setDeleteModal(null)}>
-          <div
-            className="au-delete-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="auDeleteModalTitle"
-            aria-describedby="auDeleteModalBody"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h2 id="auDeleteModalTitle">Delete staff account?</h2>
-            <p id="auDeleteModalBody">
-              You are about to permanently remove <strong>{deleteModal.displayName}</strong> (
-              <code>@{deleteModal.userName}</code>). This cannot be undone.
-            </p>
-            <div className="au-delete-modal-actions">
-              <button type="button" className="au-btn au-btn-ghost" onClick={() => setDeleteModal(null)}>
-                Cancel
-              </button>
-              <button type="button" className="au-btn au-btn-danger" onClick={() => void confirmDelete()}>
-                Yes, delete user
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <nav className="au-pagination" aria-label="Users pages">
         <button
           type="button"
@@ -623,6 +609,34 @@ export function AdminUsersApp() {
           </svg>
         </button>
       </nav>
+
+
+      {deleteModal ? (
+        <div className="au-delete-modal-backdrop" role="presentation" onClick={() => setDeleteModal(null)}>
+          <div
+            className="au-delete-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="auDeleteModalTitle"
+            aria-describedby="auDeleteModalBody"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="auDeleteModalTitle">Delete account?</h2>
+            <p id="auDeleteModalBody">
+              You are about to permanently remove <strong>{deleteModal.displayName}</strong> (
+              <code>@{deleteModal.userName}</code>). This cannot be undone.
+            </p>
+            <div className="au-delete-modal-actions">
+              <button type="button" className="au-btn au-btn-ghost" onClick={() => setDeleteModal(null)}>
+                Cancel
+              </button>
+              <button type="button" className="au-btn au-btn-danger" onClick={() => void confirmDelete()}>
+                Yes, delete user
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

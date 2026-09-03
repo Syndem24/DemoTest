@@ -25,12 +25,23 @@ public sealed class AutomaticCheckoutBackgroundService : BackgroundService
         _logger.LogInformation("Automatic Checkout & 10-Minute Warning Background Service started.");
 
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
-        while (!stoppingToken.IsCancellationRequested && await timer.WaitForNextTickAsync(stoppingToken))
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                using var scope = _scopeFactory.CreateScope();
-                var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
+                try
+                {
+                    await timer.WaitForNextTickAsync(stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
 
                 // 0. Pending call-guest warnings (check-in − 20m)
                 var pendingCalls = await bookingService.ProcessPendingCallWarningsAsync(stoppingToken);
@@ -96,11 +107,16 @@ public sealed class AutomaticCheckoutBackgroundService : BackgroundService
 
                     await _hubContext.Clients.All.BookingUpdated(ToNotification(booking, "Auto-Checkout Completed: Client duration done"));
                 }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogError(ex, "Error processing automatic checkouts / warnings in background service.");
+                }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogError(ex, "Error processing automatic checkouts / warnings in background service.");
-            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown — PeriodicTimer cancels WaitForNextTickAsync.
         }
     }
 

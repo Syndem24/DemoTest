@@ -1,16 +1,21 @@
 @model TestingDemo.ViewModels.EditAdminUserViewModel
 @{
-    ViewData["Title"] = "Edit staff user";
+    ViewData["Title"] = ViewBag.IsGuestAccount == true ? "Edit guest user" : "Edit staff user";
     var roleOptions = (string[])(ViewBag.RoleOptions ?? Array.Empty<string>());
+    var isGuest = ViewBag.IsGuestAccount == true;
 }
 
 <section class="admin-users-page">
     <header class="admin-users-hero">
         <span class="admin-users-eyebrow">Admin users</span>
-        <h1>Edit staff account</h1>
-        <p>Update profile details and role for this user account.</p>
+        <h1>@(isGuest ? "Edit guest account" : "Edit staff account")</h1>
+        <p>@(isGuest
+            ? "Update guest profile details. Role stays Guest (Google login accounts)."
+            : "Update profile details and role for this user account.")</p>
         <div class="admin-users-hero-actions">
-            <a asp-action="Index" class="btn btn-outline-secondary">Back to users</a>
+            <a asp-action="@(isGuest ? "Guests" : "Index")" class="btn btn-outline-secondary">
+                @(isGuest ? "Back to guest accounts" : "Back to staff accounts")
+            </a>
         </div>
     </header>
 
@@ -18,27 +23,31 @@
         <form asp-action="Edit" method="post" class="admin-users-edit-form">
             @Html.AntiForgeryToken()
             <input asp-for="Id" type="hidden" />
+            @if (isGuest)
+            {
+                <input asp-for="Role" type="hidden" />
+            }
             <div asp-validation-summary="ModelOnly" class="text-danger"></div>
 
             <div class="admin-users-edit-grid">
                 <div class="admin-users-edit-field">
                     <label asp-for="FullName" class="form-label"></label>
-                    <input asp-for="FullName" class="form-control" />
+                    <input asp-for="FullName" class="form-control" autocomplete="name" data-mori-filter="person-name" maxlength="120" />
                     <span asp-validation-for="FullName" class="text-danger"></span>
                 </div>
                 <div class="admin-users-edit-field">
                     <label asp-for="UserName" class="form-label"></label>
-                    <input asp-for="UserName" class="form-control" />
+                    <input asp-for="UserName" class="form-control" autocomplete="username" data-mori-filter="username" maxlength="64" />
                     <span asp-validation-for="UserName" class="text-danger"></span>
                 </div>
                 <div class="admin-users-edit-field">
                     <label asp-for="Email" class="form-label"></label>
-                    <input asp-for="Email" class="form-control" />
+                    <input asp-for="Email" class="form-control" type="email" autocomplete="email" data-mori-filter="email" maxlength="254" />
                     <span asp-validation-for="Email" class="text-danger"></span>
                 </div>
                 <div class="admin-users-edit-field">
                     <label asp-for="PhoneNumber" class="form-label"></label>
-                    <input asp-for="PhoneNumber" class="form-control" />
+                    <input asp-for="PhoneNumber" class="form-control" type="tel" inputmode="tel" autocomplete="tel" data-mori-filter="phone" maxlength="40" />
                     <span asp-validation-for="PhoneNumber" class="text-danger"></span>
                 </div>
                 <div class="admin-users-edit-field">
@@ -46,16 +55,26 @@
                     <input asp-for="BirthDate" type="date" class="form-control" />
                     <span asp-validation-for="BirthDate" class="text-danger"></span>
                 </div>
-                <div class="admin-users-edit-field">
-                    <label asp-for="Role" class="form-label"></label>
-                    <select asp-for="Role" class="form-select">
-                        @foreach (var role in roleOptions)
-                        {
-                            <option value="@role">@role</option>
-                        }
-                    </select>
-                    <span asp-validation-for="Role" class="text-danger"></span>
-                </div>
+                @if (!isGuest)
+                {
+                    <div class="admin-users-edit-field">
+                        <label asp-for="Role" class="form-label"></label>
+                        <select asp-for="Role" class="form-select">
+                            @foreach (var role in roleOptions)
+                            {
+                                <option value="@role">@role</option>
+                            }
+                        </select>
+                        <span asp-validation-for="Role" class="text-danger"></span>
+                    </div>
+                }
+                else
+                {
+                    <div class="admin-users-edit-field">
+                        <label class="form-label">Role</label>
+                        <input class="form-control" value="Guest" readonly />
+                    </div>
+                }
                 <div class="admin-users-edit-field admin-users-edit-field-full">
                     <label asp-for="Address" class="form-label"></label>
                     <input asp-for="Address" class="form-control" />

@@ -14,15 +14,18 @@ public class GoogleVerificationController : Controller
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IGoogleVerificationTokenService _tokens;
+    private readonly IGoogleAuthSettings _googleAuth;
     private readonly ILogger<GoogleVerificationController> _logger;
 
     public GoogleVerificationController(
         UserManager<ApplicationUser> userManager,
         IGoogleVerificationTokenService tokens,
+        IGoogleAuthSettings googleAuth,
         ILogger<GoogleVerificationController> logger)
     {
         _userManager = userManager;
         _tokens = tokens;
+        _googleAuth = googleAuth;
         _logger = logger;
     }
 
@@ -32,11 +35,10 @@ public class GoogleVerificationController : Controller
         if (!_tokens.TryValidate(token, out var userId))
             return View("VerifyFailed");
 
-        var googleId = HttpContext.RequestServices
-            .GetRequiredService<IConfiguration>()["Authentication:Google:ClientId"];
-        if (string.IsNullOrWhiteSpace(googleId))
+        if (!await _googleAuth.HasCredentialsAsync()
+            || !await _googleAuth.TryApplyToOptionsAsync())
         {
-            _logger.LogWarning("Google verification requested but Authentication:Google:ClientId is not configured.");
+            _logger.LogWarning("Google verification requested but Google Client ID/Secret are not configured in Integration.");
             return View("VerifyFailed");
         }
 
@@ -90,7 +92,7 @@ public class GoogleVerificationController : Controller
             || !string.Equals(email, expected, StringComparison.OrdinalIgnoreCase)
             || string.Equals(emailVerified, "false", StringComparison.OrdinalIgnoreCase))
         {
-            await HttpContext.SignOutAsync(GoogleDefaults.AuthenticationScheme);
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
             _logger.LogWarning("Google verification email mismatch for user {UserId}.", userId);
             return View("VerifyFailed");
         }
@@ -116,14 +118,14 @@ public class GoogleVerificationController : Controller
                 "AddLogin failed during Google verify for {UserId}: {Errors}",
                 userId,
                 string.Join("; ", link.Errors.Select(e => e.Description)));
-            await HttpContext.SignOutAsync(GoogleDefaults.AuthenticationScheme);
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
             return View("VerifyFailed");
         }
 
         user.GoogleVerificationStatus = GoogleVerificationStatus.GoogleVerified;
         await _userManager.UpdateAsync(user);
 
-        await HttpContext.SignOutAsync(GoogleDefaults.AuthenticationScheme);
+        await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
         _logger.LogInformation("Google account verified for user {UserId}.", userId);
         return View("VerifySuccess");
     }

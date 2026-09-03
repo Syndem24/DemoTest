@@ -104,7 +104,8 @@
                        max="365"
                        step="1"
                        value="@minNightsValue"
-                       data-offer-min-nights />
+                       data-offer-min-nights
+                       data-mori-filter="integer" />
                 <span asp-validation-for="MinNights" class="text-danger"></span>
             </div>
             <div class="admin-offers-field" data-discount-wrap>
@@ -120,7 +121,8 @@
                            max="99.99"
                            step="0.01"
                            value="@discountValue"
-                           data-offer-discount />
+                           data-offer-discount
+                           data-mori-filter="decimal" />
                     <span class="input-group-text">%</span>
                 </div>
                 <span asp-validation-for="DiscountPercent" class="text-danger"></span>

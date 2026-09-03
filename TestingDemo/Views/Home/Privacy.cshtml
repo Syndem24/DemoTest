@@ -1,37 +1,19 @@
 @model TestingDemo.ViewModels.IntegrationSettingsViewModel
 @{
     ViewData["Title"] = "Integration";
-    var message = TempData["Message"] as string;
-    var error = TempData["Error"] as string;
 }
 
 <section class="admin-account-settings admin-integration">
-    <header class="admin-account-settings-hero">
-        <span class="admin-account-settings-eyebrow">Admin connections</span>
-        <h1>Integration</h1>
-        <p>Store Gmail SMTP and Gemini credentials encrypted in the hotel vault. Leave a secret blank to keep the current value.</p>
+    <header class="admin-account-settings-hero admin-integration-hero">
+        <div class="admin-integration-hero-brand">
+            <img src="~/Images/Logo.png" asp-append-version="true" alt="" class="admin-integration-hero-logo" />
+            <div>
+                <span class="admin-account-settings-eyebrow">Admin connections</span>
+                <h1>Integration</h1>
+            </div>
+        </div>
+        <p>Store Gmail SMTP, Gemini, and Google OAuth credentials encrypted in the hotel vault. Outbound mail uses the <strong>Mori International Hotel™</strong> brand and logo. Leave a secret blank to keep the current value.</p>
     </header>
-
-    @if (!string.IsNullOrWhiteSpace(message))
-    {
-        <div class="alert alert-success alert-dismissible fade show" role="status">
-            <svg class="alert-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-            </svg>
-            <span>@message</span>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    }
-    @if (!string.IsNullOrWhiteSpace(error))
-    {
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            <svg class="alert-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
-            </svg>
-            <span>@error</span>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    }
 
     <form asp-controller="Home" asp-action="Privacy" method="post" class="admin-integration-form">
         @Html.AntiForgeryToken()
@@ -47,7 +29,7 @@
                     </div>
                     <div class="admin-integration-card-copy">
                         <h2>Email delivery</h2>
-                        <p>Gmail sender used for staff onboarding and password reset mail.</p>
+                        <p>Gmail sender for staff onboarding and password reset OTP. Messages show the Mori International Hotel™ logo and trademark.</p>
                     </div>
                     @if (Model.SmtpPasswordConfigured)
                     {
@@ -62,7 +44,7 @@
                 <div class="admin-settings-fields is-single admin-integration-fields">
                     <div class="admin-settings-field">
                         <label asp-for="SenderEmail" class="form-label"></label>
-                        <input asp-for="SenderEmail" class="form-control" autocomplete="off" placeholder="hotel@gmail.com" />
+                        <input asp-for="SenderEmail" class="form-control" type="email" autocomplete="off" placeholder="hotel@gmail.com" data-mori-filter="email" maxlength="254" />
                         <span asp-validation-for="SenderEmail" class="text-danger"></span>
                     </div>
                     <div class="admin-settings-field">
@@ -140,6 +122,67 @@
                         <label class="admin-settings-check">
                             <input asp-for="ClearGeminiKey" data-clear-configured-secret="GeminiApiKey" />
                             <span>Remove stored Gemini API key</span>
+                        </label>
+                    </div>
+                </div>
+            </article>
+
+            <article class="admin-settings-card admin-integration-card">
+                <header class="admin-integration-card-head">
+                    <div class="admin-settings-hub-icon is-teal" aria-hidden="true">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.28 2.01.2 5.97 1.29 6 3.28-1.29 1.94-3.5 3.22-6 3.22z"/>
+                        </svg>
+                    </div>
+                    <div class="admin-integration-card-copy">
+                        <h2>Google sign-in</h2>
+                        <p>OAuth Client ID and Client Secret for guest/staff Google login.</p>
+                    </div>
+                    @if (Model.GoogleClientSecretConfigured && !string.IsNullOrWhiteSpace(Model.GoogleClientId))
+                    {
+                        <span class="admin-integration-status is-on">Configured</span>
+                    }
+                    else
+                    {
+                        <span class="admin-integration-status is-off">Not set</span>
+                    }
+                </header>
+
+                <div class="admin-settings-fields is-single admin-integration-fields">
+                    <div class="admin-settings-field">
+                        <label class="admin-settings-check">
+                            <input asp-for="GoogleLoginEnabled" />
+                            <span>Show “Continue with Google” on the login page</span>
+                        </label>
+                        <p class="admin-integration-secret-hint">When off, the Google button is hidden even if credentials are saved.</p>
+                    </div>
+                    <div class="admin-settings-field">
+                        <label asp-for="GoogleClientId" class="form-label"></label>
+                        <input asp-for="GoogleClientId" class="form-control" autocomplete="off" placeholder="….apps.googleusercontent.com" />
+                        <span asp-validation-for="GoogleClientId" class="text-danger"></span>
+                    </div>
+                    <div class="admin-settings-field">
+                        <label asp-for="GoogleClientSecret" class="form-label"></label>
+                        <div class="admin-settings-password-group @(Model.GoogleClientSecretConfigured ? "is-configured-secret" : null)">
+                            @if (Model.GoogleClientSecretConfigured)
+                            {
+                                <span class="admin-integration-secret-mask" aria-hidden="true">••••••••••••</span>
+                            }
+                            <input asp-for="GoogleClientSecret"
+                                   id="GoogleClientSecret"
+                                   class="form-control"
+                                   type="password"
+                                   autocomplete="new-password"
+                                   placeholder="@(Model.GoogleClientSecretConfigured ? "Leave blank to keep" : "Google Client Secret")"
+                                   aria-describedby="@(Model.GoogleClientSecretConfigured ? "google-secret-hint" : null)" />
+                        </div>
+                        @if (Model.GoogleClientSecretConfigured)
+                        {
+                            <p id="google-secret-hint" class="admin-integration-secret-hint">A Google Client Secret is already stored. Leave blank to keep it.</p>
+                        }
+                        <label class="admin-settings-check">
+                            <input asp-for="ClearGoogleClientSecret" data-clear-configured-secret="GoogleClientSecret" />
+                            <span>Remove stored Google Client Secret</span>
                         </label>
                     </div>
                 </div>

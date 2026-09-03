@@ -15,19 +15,22 @@ public sealed class SystemFlushService : ISystemFlushService
     private readonly IPaymentService _paymentService;
     private readonly IWebHostEnvironment _environment;
     private readonly ISystemAuditRecorder _audit;
+    private readonly ISystemAuditQuery _auditQuery;
 
     public SystemFlushService(
         HotelBookingDbContext db,
         IBookingService bookingService,
         IPaymentService paymentService,
         IWebHostEnvironment environment,
-        ISystemAuditRecorder audit)
+        ISystemAuditRecorder audit,
+        ISystemAuditQuery auditQuery)
     {
         _db = db;
         _bookingService = bookingService;
         _paymentService = paymentService;
         _environment = environment;
         _audit = audit;
+        _auditQuery = auditQuery;
     }
 
     public async Task<IReadOnlyList<SystemFlushLogDto>> GetLogsAsync(
@@ -65,8 +68,8 @@ public sealed class SystemFlushService : ISystemFlushService
                     || p.Booking.Status == BookingStatus.Rejected,
                 cancellationToken);
 
-        var staffAudit = await _db.StaffAccountAudits.AsNoTracking()
-            .CountAsync(cancellationToken);
+        var staffAudit = await _db.SystemAuditLogs.AsNoTracking()
+            .CountAsync(row => row.Domain == SystemAuditDomain.Account, cancellationToken);
 
         return new SystemFlushPendingCountsDto(history, payments, staffAudit);
     }
@@ -162,7 +165,7 @@ public sealed class SystemFlushService : ISystemFlushService
             IsolationLevel.Serializable,
             cancellationToken);
 
-        var rows = await _db.StaffAccountAudits.ToListAsync(cancellationToken);
+        var rows = await _auditQuery.GetStaffAccountAuditExportRowsAsync(cancellationToken);
         if (rows.Count == 0)
         {
             throw new ArgumentException("Staff audit is empty — nothing to flush.");

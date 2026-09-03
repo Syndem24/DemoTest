@@ -253,9 +253,9 @@ public class RoomsController : Controller
             }
 
             TempData["Success"] = open
-                ? $"Room {room.RoomNumber} is Available and can take guests."
+                ? $"Room {room.RoomNumber} will be available for guests."
                 : $"Room {room.RoomNumber} is Maintaining — closed until ready.";
-            return RedirectToAction(nameof(Details), new { id });
+            return RedirectToAction(nameof(Index), new { view = "list" });
         }
         catch (InvalidOperationException ex)
         {

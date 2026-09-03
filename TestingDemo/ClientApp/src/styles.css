@@ -686,17 +686,19 @@
   opacity: 0.8;
 }
 
-.rm-empty,
-.rm-alert {
-  padding: 1.25rem;
-  border-radius: 12px;
+.rm-empty {
+  padding: 1.25rem 1.35rem;
+  border-radius: 14px;
   border: 1px solid var(--navy-line);
-  background: var(--navy-soft);
+  border-left: 3px solid var(--teal);
+  background: #ffffff;
+  color: var(--navy);
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(11, 31, 58, 0.08);
 }
 
 .rm-alert {
-  border-color: var(--teal);
-  background: var(--teal-soft);
+  display: none;
 }
 
 .rm-skeleton {
@@ -1098,7 +1100,8 @@ body.rm-photo-zoom-open {
   border-radius: 16px;
   background: var(--white);
   color: var(--navy);
-  border: 1px solid rgba(176, 42, 55, 0.28);
+  border: 1px solid var(--navy-line);
+  border-left: 3px solid var(--teal);
   box-shadow: 0 16px 40px rgb(8 18 36 / 0.28);
 }
 
@@ -1508,17 +1511,19 @@ body.rm-photo-zoom-open {
 
 .so-warning-banner {
   margin-bottom: 0.9rem;
-  padding: 0.72rem 0.95rem;
-  border-radius: 10px;
-  border: 1px solid rgba(180, 50, 50, 0.35);
-  background: rgba(180, 50, 50, 0.08);
-  color: #6e1515;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid var(--navy-line);
+  border-left: 3px solid var(--navy);
+  background: #ffffff;
+  color: var(--navy);
   font-size: 0.88rem;
-  line-height: 1.4;
+  line-height: 1.45;
+  box-shadow: 0 8px 24px rgba(11, 31, 58, 0.08);
 }
 
 .so-warning-banner strong {
-  color: #5b1010;
+  color: var(--navy);
   font-weight: 800;
 }
 
@@ -2014,6 +2019,13 @@ body.rm-photo-zoom-open {
   color: rgba(255, 255, 255, 0.88);
 }
 
+.au-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
 .au-header .au-btn-primary {
   background: rgba(255, 255, 255, 0.18);
   color: #ffffff;
@@ -2150,6 +2162,11 @@ body.rm-photo-zoom-open {
 .au-kpi-icon.is-receptionist {
   background: #f0fdf4;
   color: #15803d;
+}
+
+.au-kpi-icon.is-guest {
+  background: #eef2ff;
+  color: #3730a3;
 }
 
 .au-kpi span {
@@ -2495,6 +2512,11 @@ body.rm-photo-zoom-open {
   color: #172554;
 }
 
+.au-role.is-guest {
+  background: #e0e7ff;
+  color: #312e81;
+}
+
 .au-role.is-other {
   background: #e2e8f0;
   color: #334155;
@@ -2736,8 +2758,12 @@ body.rm-photo-zoom-open {
     flex-direction: column;
     align-items: flex-start;
   }
+  .au-header-actions {
+    width: 100%;
+  }
   .au-header .au-btn {
     width: 100%;
+    justify-content: center;
   }
 }
 

@@ -1,6 +1,5 @@
 @{
     ViewData["Title"] = "Special offers";
-    var message = TempData["Success"] as string ?? "";
 }
 
 @section Scripts {
@@ -11,5 +10,4 @@
 <div id="special-offers-root"
      data-create-url="@Url.Action("Create")"
      data-edit-base="@Url.Action("Edit")"
-     data-can-manage="@(User.IsInRole("AdminManager") ? "true" : "false")"
-     data-message="@message"></div>
+     data-can-manage="@(User.IsInRole("AdminManager") ? "true" : "false")"></div>

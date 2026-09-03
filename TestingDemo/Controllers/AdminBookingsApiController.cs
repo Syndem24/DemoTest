@@ -136,8 +136,8 @@ public sealed class AdminBookingsApiController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var items = await _bookingService.GetRecentNotificationsAsync(limit, cancellationToken);
-        var unread = await _bookingService.GetUnreadCountAsync(cancellationToken);
-        return Ok(new { unread, items });
+        var unreadCount = await _bookingService.GetUnreadCountAsync(cancellationToken);
+        return Ok(new { unread = unreadCount, items });
     }
 
     [HttpPost("{id:int}/read")]
@@ -346,7 +346,7 @@ public sealed class AdminBookingsApiController : ControllerBase
     [ValidateAntiForgeryToken]
     public async Task<ActionResult<BookingDto>> AssignRooms(
         int id,
-        [FromBody] UpdateBookingStatusRequest request,
+        [FromBody] AssignRoomsRequest request,
         CancellationToken cancellationToken)
     {
         try

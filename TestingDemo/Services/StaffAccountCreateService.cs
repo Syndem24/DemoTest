@@ -198,19 +198,11 @@ public sealed class StaffAccountCreateService : IStaffAccountCreateService
 
         await _userManager.AddToRoleAsync(user, dto.Role);
 
-        _db.StaffAccountAudits.Add(new StaffAccountAudit
-        {
-            Action = "Created",
-            TargetUserId = user.Id,
-            PerformedByUserId = actor.Id,
-            RoleAssigned = dto.Role,
-            AtUtc = DateTime.UtcNow
-        });
         _audit.Record(
             SystemAuditIntent.AdministrativeAction,
             SystemAuditDomain.Account,
-            "Account.Created",
-            "StaffAccount",
+            StaffAccountActivityMapper.ToAccountAction("Created"),
+            StaffAuthSchema.AuditTargetType,
             user.Id,
             string.IsNullOrWhiteSpace(user.FullName) ? user.UserName ?? user.Id : user.FullName,
             summary: $"Staff account created · role {dto.Role}.",

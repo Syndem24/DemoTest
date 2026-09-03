@@ -1,5 +1,6 @@
 using FluentValidation;
 using TestingDemo.DTOs;
+using TestingDemo.Models;
 using TestingDemo.Services;
 
 namespace TestingDemo.Validators;
@@ -39,6 +40,10 @@ public sealed class CreateWalkInRequestValidator : AbstractValidator<CreateWalkI
         RuleFor(x => x.ExtraPersons)
             .InclusiveBetween(0, 1)
             .WithMessage("Only one extra guest is allowed (₱200 / night).");
+
+        RuleFor(x => x.Channel)
+            .Must(c => c is BookingChannel.WalkIn or BookingChannel.Agoda or BookingChannel.RedDoorz)
+            .WithMessage("Select a booking channel: Walk-in, Agoda, or RedDoorz.");
 
         RuleForEach(x => x.Assignments).ChildRules(assignment =>
         {

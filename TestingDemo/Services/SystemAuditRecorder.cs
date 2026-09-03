@@ -53,6 +53,19 @@ public interface ISystemAuditQuery
         SystemAuditDomain? domain,
         int take = 8,
         CancellationToken cancellationToken = default);
+
+    Task<(IReadOnlyList<SystemAuditLog> Items, int Total)> GetStaffAccountActivityAsync(
+        string userId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
+    Task<Dictionary<string, DateTime?>> GetStaffDisabledStateMapAsync(
+        IReadOnlyCollection<string> userIds,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<SystemAuditLog>> GetStaffAccountAuditExportRowsAsync(
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class SystemAuditRecorder : ISystemAuditRecorder, ISystemAuditQuery
@@ -267,6 +280,78 @@ public sealed class SystemAuditRecorder : ISystemAuditRecorder, ISystemAuditQuer
         return results;
     }
 
+    public async Task<(IReadOnlyList<SystemAuditLog> Items, int Total)> GetStaffAccountActivityAsync(
+        string userId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var query = _db.SystemAuditLogs.AsNoTracking()
+            .Where(row => row.Domain == SystemAuditDomain.Account && row.TargetId == userId);
+
+        var rows = await query
+            .OrderByDescending(row => row.AtUtc)
+            .ThenByDescending(row => row.Id)
+            .ToListAsync(cancellationToken);
+
+        var filtered = rows
+            .Where(row => StaffAccountActivityMapper.IsAccountActivityAction(row.Action))
+            .ToList();
+
+        var total = filtered.Count;
+        var items = filtered
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        return (items, total);
+    }
+
+    public async Task<Dictionary<string, DateTime?>> GetStaffDisabledStateMapAsync(
+        IReadOnlyCollection<string> userIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (userIds.Count == 0)
+            return new Dictionary<string, DateTime?>(StringComparer.Ordinal);
+
+        var logs = await _db.SystemAuditLogs.AsNoTracking()
+            .Where(row =>
+                row.Domain == SystemAuditDomain.Account
+                && userIds.Contains(row.TargetId)
+                && (row.Action == "Account.Disabled"
+                    || row.Action == "Account.Enabled"
+                    || row.Action == "Disabled"
+                    || row.Action == "Enabled"))
+            .OrderByDescending(row => row.AtUtc)
+            .Select(row => new { row.TargetId, row.Action, row.AtUtc })
+            .ToListAsync(cancellationToken);
+
+        var result = new Dictionary<string, DateTime?>(StringComparer.Ordinal);
+        foreach (var log in logs)
+        {
+            if (result.ContainsKey(log.TargetId))
+                continue;
+
+            var key = StaffAccountActivityMapper.NormalizeActionKey(log.Action);
+            result[log.TargetId] = key == "Disabled" ? log.AtUtc : null;
+        }
+
+        return result;
+    }
+
+    public async Task<IReadOnlyList<SystemAuditLog>> GetStaffAccountAuditExportRowsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await _db.SystemAuditLogs.AsNoTracking()
+            .Where(row => row.Domain == SystemAuditDomain.Account)
+            .OrderByDescending(row => row.AtUtc)
+            .ThenByDescending(row => row.Id)
+            .ToListAsync(cancellationToken);
+    }
+
     private string ResolveDisplayName(string userId, string? fallback)
     {
         var local = _db.Users.Local.FirstOrDefault(u => u.Id == userId);
@@ -317,7 +402,7 @@ public sealed class SystemAuditRecorder : ISystemAuditRecorder, ISystemAuditQuer
         CancellationToken cancellationToken)
     {
         var staffIds = rows
-            .Where(row => string.Equals(row.TargetType, "StaffAccount", StringComparison.Ordinal))
+            .Where(row => IsStaffUserTarget(row.TargetType))
             .Select(row => row.TargetId)
             .Concat(rows.Where(row => LooksLikeUserId(row.ActorDisplayName) || LooksLikeUserId(row.ActorUserId))
                 .Select(row => row.ActorUserId))
@@ -349,7 +434,7 @@ public sealed class SystemAuditRecorder : ISystemAuditRecorder, ISystemAuditQuer
             }
 
             var targetLabel = row.TargetLabel;
-            if (string.Equals(row.TargetType, "StaffAccount", StringComparison.Ordinal)
+            if (IsStaffUserTarget(row.TargetType)
                 && names.TryGetValue(row.TargetId, out var resolvedTarget)
                 && (string.IsNullOrWhiteSpace(targetLabel) || LooksLikeUserId(targetLabel)))
             {
@@ -362,6 +447,10 @@ public sealed class SystemAuditRecorder : ISystemAuditRecorder, ISystemAuditQuer
 
     private static bool LooksLikeUserId(string? value) =>
         Guid.TryParse(value, out _);
+
+    private static bool IsStaffUserTarget(string? targetType) =>
+        string.Equals(targetType, StaffAuthSchema.AuditTargetType, StringComparison.Ordinal)
+        || string.Equals(targetType, "StaffAccount", StringComparison.Ordinal);
 
     private static SystemAuditLogDto Map(
         SystemAuditLog row,

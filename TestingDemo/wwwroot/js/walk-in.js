@@ -23,6 +23,7 @@
   const roomsIntro = document.getElementById('walkInRoomsIntro');
   const roomSlots = document.getElementById('walkInRoomSlots');
   const capacityWarn = document.getElementById('walkInCapacityWarn');
+  const availabilityNotice = document.getElementById('walkInAvailabilityNotice');
   const confirmLabel = document.getElementById('walkInConfirmLabel');
   const confirmTotal = document.getElementById('walkInConfirmTotal');
   const feeBreakdown = document.getElementById('walkInFeeBreakdown');
@@ -31,6 +32,17 @@
   const submitBtn = document.getElementById('walkInSubmitBtn');
   const successMessage = document.getElementById('walkInSuccessMessage');
   const successDoneBtn = document.getElementById('walkInSuccessDoneBtn');
+  const paymentMethod = document.getElementById('walkInPaymentMethod');
+  const paymentDue = document.getElementById('walkInPaymentDue');
+  const paymentTendered = document.getElementById('walkInPaymentTendered');
+  const paymentDigitalAmount = document.getElementById('walkInPaymentDigitalAmount');
+  const paymentChange = document.getElementById('walkInPaymentChange');
+  const paymentCashDueWrap = document.getElementById('walkInPaymentCashDueWrap');
+  const paymentCashTenderWrap = document.getElementById('walkInPaymentCashTenderWrap');
+  const paymentDigitalWrap = document.getElementById('walkInPaymentDigitalWrap');
+  const paymentDigitalHint = document.getElementById('walkInPaymentDigitalHint');
+  const roomTypePicker = document.getElementById('walkInRoomTypePicker');
+  const typesLede = document.getElementById('walkInTypesLede');
   const stepTabs = Array.from(document.querySelectorAll('[data-walkin-step-tab]'));
 
   const token = document.querySelector(
@@ -56,7 +68,8 @@
     '20:00', '20:30', '21:00', '21:30', '22:00', '22:30',
     '23:00', '23:30',
   ];
-  const STEPS = ['guest', 'dates', 'rooms', 'confirm'];
+  const STEPS = ['guest', 'dates', 'types', 'payment', 'rooms'];
+  const WALK_IN_ARRIVAL_DISCOUNT_RATE = 0.2;
 
   /** @type {{ adults: number, children: number, childAges: (number|null)[] }[]} */
   let guestRooms = [{ adults: 2, children: 0, childAges: [] }];
@@ -70,7 +83,11 @@
   let walkInOfferCandidates = [];
   /** @type {Map<number, number>} */
   let remainingByType = new Map();
+  /** @type {Map<number, string[]>} */
+  let soldOutByType = new Map();
   let wizardStep = 'guest';
+  /** @type {number[]} */
+  let walkInTypeSelections = [];
   let lastFocused = null;
   let guestsHintTimer = null;
   let inventoryReady = false;
@@ -83,8 +100,335 @@
   }
 
   function isThirdPartyChannel() {
-    const channel = String(document.getElementById('walkInChannel')?.value || 'WalkIn');
-    return ['Agoda', 'Expedia', 'RedDoorz', 'OtherThirdParty'].includes(channel);
+    const channel = String(document.getElementById('walkInChannel')?.value || '');
+    return channel === 'Agoda' || channel === 'RedDoorz';
+  }
+
+  function syncWalkInTypeSelectionLength() {
+    const count = roomsNeeded();
+    while (walkInTypeSelections.length < count) walkInTypeSelections.push(0);
+    walkInTypeSelections.length = count;
+  }
+
+  function getWalkInTypeSelections() {
+    return walkInTypeSelections.slice(0, roomsNeeded());
+  }
+
+  function allWalkInTypesSelected() {
+    const needed = roomsNeeded();
+    const selections = getWalkInTypeSelections();
+    return selections.length >= needed && selections.every((id) => id > 0);
+  }
+
+  function clearUnavailableTypeSelections() {
+    const count = roomsNeeded();
+    for (let i = 0; i < count; i += 1) {
+      const current = Number(walkInTypeSelections[i] || 0);
+      if (current > 0 && typeRemaining(current) < 1) {
+        walkInTypeSelections[i] = 0;
+      }
+    }
+  }
+
+  function walkInSelectButtonLabel(roomIndex, roomCount, isSelected, soldOut) {
+    if (soldOut) return 'Fully booked';
+    if (!isSelected) return 'Select room';
+    return roomCount > 1 ? `Selected · Room ${roomIndex + 1}` : 'In your stay';
+  }
+
+  function selectWalkInType(roomIndex, typeId) {
+    syncWalkInTypeSelectionLength();
+    walkInTypeSelections[roomIndex] = Number(typeId) || 0;
+    renderWalkInTypePicker();
+    refreshTotals();
+    syncWalkInTypesStepState();
+  }
+
+  function walkInDiscountPercent(regular, promo) {
+    const r = Number(regular || 0);
+    const p = Number(promo || 0);
+    if (!(r > p) || !(p > 0)) return 0;
+    return Math.max(1, Math.round((1 - p / r) * 100));
+  }
+
+  function walkInLimitedOfferForType(roomTypeId) {
+    if (isThirdPartyChannel()) return null;
+    return walkInOfferCandidates.find(
+      (offer) =>
+        Number(offer.roomTypeId) === Number(roomTypeId)
+        && offer.kind === 'LimitedTime'
+        && Number(offer.promoPrice) > 0
+    ) || null;
+  }
+
+  function walkInStayLongerOffersForType(roomTypeId) {
+    if (isThirdPartyChannel()) return [];
+    const nights = nightCount();
+    return walkInOfferCandidates
+      .filter(
+        (offer) =>
+          Number(offer.roomTypeId) === Number(roomTypeId)
+          && offer.kind === 'StayLongerSaveMore'
+          && Number(offer.promoPrice) > 0
+          && Number(offer.minNights || 0) >= 2
+      )
+      .sort((a, b) => Number(a.promoPrice) - Number(b.promoPrice));
+  }
+
+  function walkInOfferRatePriceHtml(effective, regular, showCompare) {
+    const pct = showCompare ? walkInDiscountPercent(regular, effective) : 0;
+    if (showCompare) {
+      return `
+        <span class="guest-offer-price-compare">
+          ${pct > 0 ? `<span class="guest-room-discount-badge">-${pct}%</span>` : ''}
+          <s class="guest-offer-price-was">${money(regular)}</s>
+        </span>
+        <strong class="guest-offer-price is-promo">${money(effective)}</strong>
+      `;
+    }
+    return `<strong class="guest-offer-price">${money(effective)}</strong>`;
+  }
+
+  function renderWalkInStayLongerRows(item) {
+    const offers = walkInStayLongerOffersForType(item.roomTypeId);
+    if (!offers.length) return '';
+
+    const nights = nightCount();
+    const rows = offers
+      .map((offer) => {
+        const promoAmt = Number(offer.promoPrice || 0);
+        const regularAmt = Number(offer.regularPrice || item.pricePerNight || 0);
+        const pct = walkInDiscountPercent(regularAmt, promoAmt);
+        const minNights = Number(offer.minNights || 0);
+        const eligible = nights >= minNights;
+        const title = escapeHtml(offer.title || 'Stay longer, save more');
+        return `
+          <div class="guest-offer-rate is-special${eligible ? ' is-eligible' : ''}">
+            <div class="guest-offer-rate-copy">
+              <strong class="guest-offer-rate-name">${title}</strong>
+              <p class="guest-offer-rate-kind">Stay longer, save more · ${minNights}+ nights</p>
+              <ul class="guest-offer-rate-includes">
+                <li>${minNights}+ nights required</li>
+                <li>Cash only</li>
+                ${eligible ? '<li>Eligible for your stay dates</li>' : `<li>Need ${minNights}+ nights (you have ${nights})</li>`}
+              </ul>
+            </div>
+            <div class="guest-offer-rate-price">
+              <span class="guest-offer-price-label">Price for 1 night</span>
+              ${walkInOfferRatePriceHtml(promoAmt, regularAmt, regularAmt > promoAmt)}
+              <span class="guest-offer-price-note">Cash only · / night</span>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+
+    return `
+      <div class="guest-offer-specials">
+        <h4 class="guest-offer-specials-title">Special offers</h4>
+        ${rows}
+      </div>
+    `;
+  }
+
+  function buildWalkInOfferTypeItems() {
+    const selectedIds = new Set(getWalkInTypeSelections().filter(Boolean));
+    return roomTypes
+      .map((type) => ({
+        ...type,
+        available: typeRemaining(type.roomTypeId),
+      }))
+      .filter((type) => type.available > 0 || selectedIds.has(type.roomTypeId))
+      .sort((a, b) => {
+        if (a.available <= 0 && b.available > 0) return 1;
+        if (b.available <= 0 && a.available > 0) return -1;
+        return a.pricePerNight - b.pricePerNight;
+      });
+  }
+
+  function renderWalkInTypeCard(item, roomIndex, roomCount, selectedId) {
+    const base = Number(item.pricePerNight || 0);
+    const limited = walkInLimitedOfferForType(item.roomTypeId);
+    const activeOffer = walkInOfferForType(item.roomTypeId);
+    const effective = effectiveNightlyRate(item.roomTypeId, base);
+    const regular = limited
+      ? Math.max(base, Number(limited.regularPrice || 0))
+      : base;
+    const showCompare = Boolean(activeOffer && effective < regular);
+    const soldOut = item.available < 1;
+    const isSelected = selectedId === item.roomTypeId;
+    const image = item.images?.[0] || '';
+    const safeName = escapeHtml(item.name);
+    const safeImage = escapeHtml(image);
+    const beds = Number(item.bedCount || 0);
+    const bedsLabel = beds === 1 ? `${beds} bed` : `${beds || '—'} beds`;
+    const inclusions = (item.inclusions || []).slice(0, 3);
+    const tags = inclusions.map((inc) => `<li>${escapeHtml(inc)}</li>`).join('');
+    const desc = String(item.description || '').trim();
+    const shortDesc =
+      desc.length > 120 ? `${desc.slice(0, 120).trimEnd()}…` : desc;
+    const limitedTitle = limited?.title ? escapeHtml(limited.title) : 'Limited time offer';
+    const bestRateLabel = limited ? limitedTitle : 'Best available rate';
+    const bestRateKind = limited
+      ? 'Limited time offer · Cash only'
+      : activeOffer?.kind === 'StayLongerSaveMore'
+        ? `Stay longer rate · ${activeOffer.minNights || 2}+ nights`
+        : 'Room only';
+    const stayLongerSection = renderWalkInStayLongerRows(item);
+    const promoBanner =
+      limited && !isThirdPartyChannel()
+        ? `<span class="guest-offer-promo-flag">Special offer</span>`
+        : '';
+    const selectedBadge = isSelected
+      ? `<span class="guest-offer-selected-badge" data-walkin-selected-badge>In your stay</span>`
+      : '';
+    const selectLabel = walkInSelectButtonLabel(roomIndex, roomCount, isSelected, soldOut);
+
+    return `
+      <article
+        class="guest-offer-card admin-walkin-type-card${isSelected ? ' is-selected' : ''}${soldOut ? ' is-sold-out' : ''}${limited ? ' has-limited-offer' : ''}"
+        data-walkin-type-card="${item.roomTypeId}">
+        ${promoBanner}
+        <div class="guest-offer-card-top">
+          <div class="guest-offer-media">
+            ${
+              image
+                ? `<img src="${safeImage}" alt="" loading="lazy" />`
+                : `<div class="guest-room-placeholder" aria-hidden="true"><span>${(item.name || 'R').trim().charAt(0).toUpperCase()}</span></div>`
+            }
+            <span class="guest-offer-availability${soldOut ? ' is-sold-out' : ''}">${
+              soldOut ? 'Fully booked' : `${item.available} available`
+            }</span>
+            ${selectedBadge}
+          </div>
+          <div class="guest-offer-copy">
+            <p class="guest-eyebrow">Guest room</p>
+            <h3>${safeName}</h3>
+            <ul class="guest-offer-meta">
+              <li>Up to ${item.maxOccupancy} guests / room</li>
+              <li>${bedsLabel}</li>
+            </ul>
+            ${tags ? `<ul class="guest-offer-tags">${tags}</ul>` : ''}
+            ${shortDesc ? `<p class="guest-offer-desc">${escapeHtml(shortDesc)}</p>` : ''}
+          </div>
+        </div>
+        <div class="guest-offer-rates">
+          <div class="guest-offer-rate is-best">
+            <div class="guest-offer-rate-copy">
+              <strong class="guest-offer-rate-name">${bestRateLabel}</strong>
+              <p class="guest-offer-rate-kind">${bestRateKind}</p>
+              <ul class="guest-offer-rate-includes">
+                <li>Room only</li>
+                <li>Meals not included</li>
+                ${limited ? '<li>Cash only when promo applies</li>' : ''}
+              </ul>
+            </div>
+            <div class="guest-offer-rate-price">
+              <span class="guest-offer-price-label">Price for 1 night</span>
+              ${walkInOfferRatePriceHtml(effective, regular, showCompare)}
+              ${limited ? '<span class="guest-offer-price-note">Cash only</span>' : ''}
+              <button
+                type="button"
+                class="guest-btn guest-btn-primary guest-offer-select admin-walkin-pick-type${isSelected ? ' is-selected-room' : ''}"
+                data-walkin-pick-type="${item.roomTypeId}"
+                data-walkin-room-index="${roomIndex}"
+                aria-pressed="${isSelected ? 'true' : 'false'}"
+                ${soldOut ? 'disabled' : ''}>
+                ${
+                  isSelected
+                    ? `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>`
+                    : ''
+                }
+                <span>${selectLabel}</span>
+              </button>
+            </div>
+          </div>
+          ${stayLongerSection}
+        </div>
+      </article>
+    `;
+  }
+
+  function renderWalkInTypeSlot(roomIndex, items, roomCount) {
+    const selectedId = Number(walkInTypeSelections[roomIndex] || 0);
+    const head =
+      roomCount > 1
+        ? `<h4 class="admin-walkin-type-slot-head">Room ${roomIndex + 1}</h4>`
+        : '<h4 class="admin-walkin-type-slot-head">Select room type</h4>';
+    const cards = items.map((item) => renderWalkInTypeCard(item, roomIndex, roomCount, selectedId)).join('');
+    return `
+      <div class="admin-walkin-type-slot" data-walkin-type-slot="${roomIndex}">
+        ${head}
+        <div class="admin-walkin-type-cards">${cards}</div>
+      </div>
+    `;
+  }
+
+  function renderWalkInTypePicker() {
+    if (!roomTypePicker) return;
+    syncWalkInTypeSelectionLength();
+    clearUnavailableTypeSelections();
+    const count = roomsNeeded();
+    const items = buildWalkInOfferTypeItems();
+
+    if (typesLede) {
+      typesLede.textContent =
+        count > 1
+          ? `Choose room types for each of the ${count} rooms in the party. Prices shown are per night.`
+          : 'Choose a room type for this stay. Prices shown are per night.';
+    }
+
+    if (!items.length) {
+      roomTypePicker.innerHTML =
+        '<p class="admin-walkin-hint">No room types are available for these dates — try different check-in or check-out dates.</p>';
+      syncWalkInTypesStepState();
+      return;
+    }
+
+    roomTypePicker.innerHTML = Array.from({ length: count }, (_, index) =>
+      renderWalkInTypeSlot(index, items, count)
+    ).join('');
+
+    syncWalkInTypesStepState();
+  }
+
+  function effectiveRoomTypeCapacity(typeId) {
+    const type = roomTypes.find((item) => item.roomTypeId === Number(typeId));
+    const listed = Number(type?.maxOccupancy || 0);
+    return Math.max(listed, MAX_GUESTS_PER_ROOM);
+  }
+
+  function partyFitsSelectedTypes() {
+    const count = roomsNeeded();
+    for (let i = 0; i < count; i += 1) {
+      const room = guestRooms[i];
+      if (!room) return false;
+      const roomGuests = (Number(room.adults) || 0) + (Number(room.children) || 0);
+      const typeId = Number(walkInTypeSelections[i] || 0);
+      if (!typeId) continue;
+      if (roomGuests > effectiveRoomTypeCapacity(typeId)) return false;
+    }
+    return true;
+  }
+
+  function canProceedFromTypesStep() {
+    if (totalRemainingInventory() < roomsNeeded()) return false;
+    if (!allWalkInTypesSelected()) return false;
+    const selectedByType = new Map();
+    getWalkInTypeSelections().forEach((typeId) => {
+      selectedByType.set(typeId, (selectedByType.get(typeId) || 0) + 1);
+    });
+    for (const [typeId, qty] of selectedByType.entries()) {
+      if (qty > typeRemaining(typeId)) return false;
+    }
+    return partyFitsSelectedTypes();
+  }
+
+  function syncWalkInTypesStepState() {
+    updateWalkInAvailabilityNotice();
+    if (nextBtn && wizardStep === 'types') {
+      nextBtn.disabled = !canProceedFromTypesStep();
+    }
   }
 
   function rebuildWalkInOffersByType() {
@@ -128,29 +472,167 @@
     return `${type.name} · ${money(base)}/night · ${remaining} left for dates · max ${type.maxOccupancy}`;
   }
 
+  function isWalkInChannel() {
+    return String(document.getElementById('walkInChannel')?.value || '') === 'WalkIn';
+  }
+
+  function walkInArrivalDiscountSelection() {
+    return String(document.getElementById('walkInArrivalDiscount')?.value || 'None');
+  }
+
+  function isOnWalkInPromoRate() {
+    if (isThirdPartyChannel()) return false;
+    return getWalkInTypeSelections().filter(Boolean).some((typeId) => Boolean(walkInOfferForType(typeId)));
+  }
+
+  function walkInArrivalDiscountActive() {
+    if (!isWalkInChannel()) return false;
+    if (isOnWalkInPromoRate()) return false;
+    const selection = walkInArrivalDiscountSelection();
+    return selection === 'SeniorCitizen' || selection === 'Pwd';
+  }
+
+  function walkInArrivalDiscountAmount(staySubtotal) {
+    if (!walkInArrivalDiscountActive() || !(staySubtotal > 0)) return 0;
+    return Math.round(staySubtotal * WALK_IN_ARRIVAL_DISCOUNT_RATE * 100) / 100;
+  }
+
+  function walkInArrivalDiscountLabel() {
+    const selection = walkInArrivalDiscountSelection();
+    if (selection === 'SeniorCitizen') return 'Senior Citizen discount (20%)';
+    if (selection === 'Pwd') return 'PWD discount (20%)';
+    return '';
+  }
+
   function syncWalkInArrivalDiscountUi() {
     const select = document.getElementById('walkInArrivalDiscount');
     const hint = document.getElementById('walkInArrivalDiscountHint');
-    const assignments = selectedAssignments().filter((item) => item.roomId || item.typeId);
-    const onPromo =
-      !isThirdPartyChannel()
-      && assignments.some((item) => {
-        const typeId = Number(item.typeId || rooms.find((r) => r.id === item.roomId)?.roomTypeId || 0);
-        return Boolean(walkInOfferForType(typeId));
-      });
+    const onPromo = isOnWalkInPromoRate();
+    const thirdParty = isThirdPartyChannel();
     if (select) {
-      select.disabled = onPromo;
-      if (onPromo) select.value = 'None';
+      select.disabled = onPromo || thirdParty;
+      if (onPromo || thirdParty) select.value = 'None';
     }
     if (hint) {
-      hint.textContent = onPromo
-        ? 'Senior / PWD cannot combine with an active walk-in promo rate.'
-        : 'Cannot combine with an active walk-in promo rate.';
+      if (thirdParty) {
+        hint.textContent =
+          'Senior / PWD 20% discount applies to Walk-in channel only. Agoda and RedDoorz use standard OTA rates.';
+      } else if (onPromo) {
+        hint.textContent = 'Senior / PWD cannot combine with an active walk-in promo rate.';
+      } else {
+        hint.textContent =
+          'Walk-in channel: 20% is deducted from the stay when Senior or PWD is selected (verify ID on arrival).';
+      }
     }
   }
 
-  function clamp(value, min, max) {
-    return Math.min(max, Math.max(min, value));
+  function parseMoneyInput(value) {
+    const cleaned = String(value || '').replace(/[^\d.]/g, '');
+    const parsed = Number(cleaned);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function isCashPaymentMethod(method) {
+    return String(method || 'Cash') === 'Cash';
+  }
+
+  function syncWalkInPaymentPanels() {
+    const method = String(paymentMethod?.value || 'Cash');
+    const cash = isCashPaymentMethod(method);
+    const promoCashOnly =
+      !isThirdPartyChannel()
+      && roomTypes.some(
+        (type) => typeRemaining(type.roomTypeId) > 0 && Boolean(walkInOfferForType(type.roomTypeId))
+      );
+    if (paymentMethod && promoCashOnly) {
+      paymentMethod.value = 'Cash';
+      paymentMethod.querySelectorAll('option').forEach((option) => {
+        if (option.value !== 'Cash') option.disabled = true;
+      });
+    } else if (paymentMethod) {
+      paymentMethod.querySelectorAll('option').forEach((option) => {
+        option.disabled = false;
+      });
+    }
+    const effectiveCash = isCashPaymentMethod(paymentMethod?.value || 'Cash');
+    if (paymentCashDueWrap) paymentCashDueWrap.hidden = !effectiveCash;
+    if (paymentCashTenderWrap) paymentCashTenderWrap.hidden = !effectiveCash;
+    if (paymentChange) paymentChange.hidden = !effectiveCash;
+    if (paymentDigitalWrap) paymentDigitalWrap.hidden = effectiveCash;
+    if (paymentDigitalHint) paymentDigitalHint.hidden = effectiveCash;
+    syncWalkInPaymentChange();
+  }
+
+  function syncWalkInPaymentChange() {
+    const total = computeGrandTotal();
+    if (paymentDue) paymentDue.value = money(total).replace('₱', '');
+    const method = String(paymentMethod?.value || 'Cash');
+    if (!isCashPaymentMethod(method)) {
+      if (paymentDigitalAmount && !paymentDigitalAmount.value.trim()) {
+        paymentDigitalAmount.value = total > 0 ? total.toFixed(2) : '';
+      }
+      return;
+    }
+    const tendered = parseMoneyInput(paymentTendered?.value);
+    const change = Math.max(0, tendered - total);
+    if (paymentChange) {
+      paymentChange.hidden = false;
+      paymentChange.textContent = `Change: ${money(change)}`;
+    }
+  }
+
+  function estimatedStayTotal() {
+    const count = roomsNeeded();
+    const nights = nightCount();
+    if (count < 1 || nights < 1) return 0;
+    const available = roomTypes.filter((type) => typeRemaining(type.roomTypeId) > 0);
+    if (!available.length) return 0;
+    const cheapest = Math.min(
+      ...available.map((type) => effectiveNightlyRate(type.roomTypeId, type.pricePerNight))
+    );
+    return cheapest * nights * count;
+  }
+
+  function computeStaySubtotal() {
+    const nights = nightCount();
+    const assignments = selectedAssignments().filter((item) => item.roomId);
+    if (assignments.length) {
+      let stay = 0;
+      assignments.forEach((item) => {
+        const room = rooms.find((r) => r.id === item.roomId);
+        const type = roomTypes.find((t) => t.roomTypeId === (room?.roomTypeId || item.typeId));
+        const typeId = Number(type?.roomTypeId || room?.roomTypeId || item.typeId || 0);
+        const listPrice = Number(room?.pricePerNight || type?.pricePerNight || 0);
+        const rate = effectiveNightlyRate(typeId, listPrice);
+        stay += rate * Math.max(1, nights);
+      });
+      return stay;
+    }
+    const selections = getWalkInTypeSelections().filter((id) => id > 0);
+    if (selections.length) {
+      let stay = 0;
+      selections.forEach((typeId) => {
+        const type = roomTypes.find((t) => t.roomTypeId === typeId);
+        if (!type) return;
+        stay += effectiveNightlyRate(typeId, type.pricePerNight) * Math.max(1, nights);
+      });
+      return stay;
+    }
+    return estimatedStayTotal();
+  }
+
+  function computeGrandTotal() {
+    const count = roomsNeeded();
+    const nights = nightCount();
+    const assignments = selectedAssignments().filter((item) => item.roomId);
+    const stay = computeStaySubtotal();
+    const typeCount = getWalkInTypeSelections().filter(Boolean).length;
+    const feeRooms = Math.max(count, assignments.length || typeCount);
+    const early = earlyFee(feeRooms);
+    const late = lateFee(feeRooms);
+    const extra = extraPersonFee();
+    const arrivalDiscount = walkInArrivalDiscountAmount(stay);
+    return stay - arrivalDiscount + early + late + extra;
   }
 
   function todayIso() {
@@ -516,17 +998,25 @@
   }
 
   function selectedAssignments() {
-    if (!roomSlots) return [];
-    return Array.from(roomSlots.querySelectorAll('[data-slot]')).map((slot, index) => {
-      const typeId = Number(slot.querySelector('[data-slot-type]')?.value || 0);
-      const roomId = Number(slot.querySelector('[data-slot-room]')?.value || 0);
-      return { index, typeId, roomId };
+    const count = roomsNeeded();
+    return Array.from({ length: count }, (_, index) => {
+      let roomId = 0;
+      if (roomSlots) {
+        const slot = roomSlots.querySelector(`[data-slot][data-slot-index="${index}"]`);
+        roomId = Number(slot?.querySelector('[data-slot-room]')?.value || 0);
+      }
+      return {
+        index,
+        typeId: Number(walkInTypeSelections[index] || 0),
+        roomId,
+      };
     });
   }
 
   async function refreshDateAvailability() {
     if (!checkInDate?.value || !checkOutDate?.value) {
       remainingByType = new Map();
+      soldOutByType = new Map();
       return;
     }
     try {
@@ -535,14 +1025,81 @@
         checkoutTimeUtc: toManilaIso(checkOutDate.value, checkOutTime?.value || DEFAULT_CHECKOUT_TIME),
       });
       const items = await apiFetch(`/api/bookings/availability?${query}`);
-      remainingByType = new Map(
-        (Array.isArray(items) ? items : []).map((item) => [
-          Number(item.roomTypeId),
-          Number(item.remaining || 0),
-        ])
-      );
+      remainingByType = new Map();
+      soldOutByType = new Map();
+      (Array.isArray(items) ? items : []).forEach((item) => {
+        const typeId = Number(item.roomTypeId ?? item.RoomTypeId);
+        if (!typeId) return;
+        remainingByType.set(typeId, Number(item.remaining ?? item.Remaining ?? 0));
+        const soldOut = item.soldOutDates ?? item.SoldOutDates;
+        if (Array.isArray(soldOut) && soldOut.length) {
+          soldOutByType.set(typeId, soldOut.filter(Boolean));
+        }
+      });
     } catch {
       remainingByType = new Map();
+      soldOutByType = new Map();
+    }
+  }
+
+  function formatSoldOutDateLabel(isoDate) {
+    if (!isoDate) return '';
+    const parts = String(isoDate).split('-').map(Number);
+    if (parts.length < 3) return isoDate;
+    const d = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
+    if (Number.isNaN(d.getTime())) return isoDate;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
+  function totalRemainingInventory() {
+    return roomTypes.reduce((sum, type) => sum + typeRemaining(type.roomTypeId), 0);
+  }
+
+  function buildSoldOutTypeMessages() {
+    const messages = [];
+    roomTypes.forEach((type) => {
+      const remaining = typeRemaining(type.roomTypeId);
+      if (remaining >= 1) return;
+      const soldOut = soldOutByType.get(type.roomTypeId) || [];
+      if (soldOut.length) {
+        const labels = soldOut.map(formatSoldOutDateLabel).join(', ');
+        messages.push(`${type.name} is fully booked on ${labels}.`);
+      } else {
+        messages.push(`${type.name} has no rooms left for these dates.`);
+      }
+    });
+    return messages;
+  }
+
+  function updateWalkInAvailabilityNotice() {
+    const needed = roomsNeeded();
+    const totalRemaining = totalRemainingInventory();
+    const soldOutMessages = buildSoldOutTypeMessages();
+    let message = '';
+
+    if (totalRemaining < needed) {
+      const shortage =
+        totalRemaining === 0
+          ? `No rooms are available for these dates — you need ${needed} room${needed === 1 ? '' : 's'}. Try different dates or room types.`
+          : `Only ${totalRemaining} room${totalRemaining === 1 ? '' : 's'} available for these dates — you need ${needed}. Try different dates or room types.`;
+      message = soldOutMessages.length
+        ? `${shortage} ${soldOutMessages.join(' ')}`
+        : shortage;
+    } else if (soldOutMessages.length) {
+      message = `Heads up — ${soldOutMessages.join(' ')}`;
+    }
+
+    document.querySelectorAll('[data-walkin-availability-notice]').forEach((el) => {
+      el.textContent = message;
+      el.hidden = !message;
+    });
+  }
+
+  function syncWalkInRoomsStepState() {
+    updateWalkInAvailabilityNotice();
+    const canAssign = totalRemainingInventory() >= roomsNeeded();
+    if (nextBtn && wizardStep === 'rooms') {
+      nextBtn.disabled = !canAssign;
     }
   }
 
@@ -562,19 +1119,19 @@
   }
 
   function refreshSlotRoomOptions(slot, preferredRoomId = null) {
-    const typeSelect = slot.querySelector('[data-slot-type]');
+    const slotIndex = Number(slot.dataset.slotIndex || 0);
     const roomSelect = slot.querySelector('[data-slot-room]');
-    if (!typeSelect || !roomSelect) return;
-    const typeId = Number(typeSelect.value || 0);
+    if (!roomSelect) return;
+    const typeId = Number(walkInTypeSelections[slotIndex] || slot.querySelector('[data-slot-type]')?.value || 0);
     const selectedElsewhere = selectedAssignments()
-      .filter((item) => item.index !== Number(slot.dataset.slotIndex))
+      .filter((item) => item.index !== slotIndex)
       .map((item) => item.roomId)
       .filter(Boolean);
     const current = preferredRoomId || Number(roomSelect.value || 0);
     const options = availableRoomsForType(typeId, selectedElsewhere.filter((id) => id !== current));
     roomSelect.innerHTML = typeId
       ? '<option value="">Select room number…</option>'
-      : '<option value="">Select a type first…</option>';
+      : '<option value="">Select a room type first…</option>';
     options.forEach((room) => {
       const option = document.createElement('option');
       option.value = String(room.id);
@@ -596,27 +1153,29 @@
   }
 
   function bindSlot(slot) {
-    slot.querySelector('[data-slot-type]')?.addEventListener('change', () => {
-      refreshSlotRoomOptions(slot);
-      refreshAllSlotOptions();
-      refreshTotals();
-    });
     slot.querySelector('[data-slot-room]')?.addEventListener('change', () => {
       refreshAllSlotOptions();
       refreshTotals();
     });
   }
 
+  function formatWalkInSlotTypeLabel(typeId) {
+    const type = roomTypes.find((item) => item.roomTypeId === typeId);
+    if (!type) return 'Room type not selected';
+    const rate = effectiveNightlyRate(type.roomTypeId, type.pricePerNight);
+    return `${type.name} · ${money(rate)}/night · max ${type.maxOccupancy}`;
+  }
+
   function renderRoomSlots() {
     if (!roomSlots) return;
     const previous = selectedAssignments();
     const count = roomsNeeded();
-    const types = roomTypes.filter((type) => typeRemaining(type.roomTypeId) > 0
-      || rooms.some((room) => room.roomTypeId === type.roomTypeId && room.status === 'Available'));
+    syncWalkInTypeSelectionLength();
 
     roomSlots.replaceChildren();
     for (let i = 0; i < count; i += 1) {
       const prev = previous[i];
+      const typeId = Number(walkInTypeSelections[i] || prev?.typeId || 0);
       const slot = document.createElement('article');
       slot.className = 'guest-guests-room admin-walkin-slot';
       slot.dataset.slot = 'true';
@@ -625,53 +1184,61 @@
         <div class="guest-guests-room-head">
           <h3>Room ${i + 1}</h3>
         </div>
-        <div class="guest-form-grid guest-form-grid-2">
-          <label>
-            <span>Room type</span>
-            <select data-slot-type required>
-              <option value="">Select type…</option>
-            </select>
-          </label>
+        <p class="admin-walkin-slot-type-label">${escapeHtml(formatWalkInSlotTypeLabel(typeId))}</p>
+        <input type="hidden" data-slot-type value="${typeId || ''}" />
           <label>
             <span>Room number</span>
             <select data-slot-room required>
-              <option value="">Select a type first…</option>
+            <option value="">Select room number…</option>
             </select>
           </label>
-        </div>
       `;
-      const typeSelect = slot.querySelector('[data-slot-type]');
-      types.forEach((type) => {
-        const remaining = typeRemaining(type.roomTypeId);
-        const option = document.createElement('option');
-        option.value = String(type.roomTypeId);
-        option.textContent = formatTypeRateLabel(type);
-        option.disabled = remaining < 1;
-        typeSelect.append(option);
-      });
-      if (prev?.typeId && !typeSelect.querySelector(`option[value="${prev.typeId}"]`)?.disabled) {
-        typeSelect.value = String(prev.typeId);
-      }
       bindSlot(slot);
       roomSlots.append(slot);
       refreshSlotRoomOptions(slot, prev?.roomId || null);
     }
-    if (!types.length || types.every((type) => typeRemaining(type.roomTypeId) < 1)) {
+    if (!allWalkInTypesSelected() || totalRemainingInventory() < count) {
+      const soldOutMessages = buildSoldOutTypeMessages();
+      if (!allWalkInTypesSelected()) {
       roomSlots.innerHTML =
-        '<p class="guest-guests-rule">No room types left for these dates — another booking or reservation may already hold them.</p>';
+          '<p class="guest-guests-rule">Go back to Room type and select a room type for each room in the party.</p>';
+      } else if (soldOutMessages.length) {
+        roomSlots.innerHTML = `<p class="guest-guests-rule">${escapeHtml(soldOutMessages.join(' '))}</p>`;
+      } else if (totalRemainingInventory() < count) {
+        roomSlots.innerHTML =
+          '<p class="guest-guests-rule">No room types are available for these dates — try different check-in or check-out dates.</p>';
+      }
     }
     if (roomsIntro) {
       roomsIntro.textContent = `Assign ${count} available room${count === 1 ? '' : 's'} for this party of ${guestCount()}. Remaining counts include pending and confirmed holds.`;
     }
+    syncWalkInRoomsStepState();
+  }
+
+  function escapeHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   function capacityHold() {
-    return selectedAssignments().reduce((sum, item) => {
-      if (!item.roomId) return sum;
+    const count = roomsNeeded();
+    let sum = 0;
+    for (let i = 0; i < count; i += 1) {
+      const item = selectedAssignments()[i];
+      if (item?.roomId) {
       const room = rooms.find((r) => r.id === item.roomId);
       const type = roomTypes.find((t) => t.roomTypeId === (room?.roomTypeId || item.typeId));
-      return sum + Number(type?.maxOccupancy || room?.maxOccupancy || MAX_GUESTS_PER_ROOM);
-    }, 0);
+        sum += Number(type?.maxOccupancy || room?.maxOccupancy || MAX_GUESTS_PER_ROOM);
+        continue;
+      }
+      const typeId = Number(walkInTypeSelections[i] || 0);
+      if (!typeId) continue;
+      sum += effectiveRoomTypeCapacity(typeId);
+    }
+    return sum;
   }
 
   function refreshTotals() {
@@ -679,34 +1246,42 @@
     const count = roomsNeeded();
     const nights = nightCount();
     const assignments = selectedAssignments().filter((item) => item.roomId);
-    let stay = 0;
-    assignments.forEach((item) => {
-      const room = rooms.find((r) => r.id === item.roomId);
-      const type = roomTypes.find((t) => t.roomTypeId === (room?.roomTypeId || item.typeId));
-      const typeId = Number(type?.roomTypeId || room?.roomTypeId || item.typeId || 0);
-      const listPrice = Number(room?.pricePerNight || type?.pricePerNight || 0);
-      const rate = effectiveNightlyRate(typeId, listPrice);
-      stay += rate * Math.max(1, nights);
-    });
-    const feeRooms = Math.max(count, assignments.length);
+    const stay = computeStaySubtotal();
+    const typeCount = getWalkInTypeSelections().filter(Boolean).length;
+    const feeRooms = Math.max(count, assignments.length || typeCount);
     const early = earlyFee(feeRooms);
     const late = lateFee(feeRooms);
     syncExtraPersonOption();
     const extra = extraPersonFee();
-    const total = stay + early + late + extra;
+    const arrivalDiscount = walkInArrivalDiscountAmount(stay);
+    const total = computeGrandTotal();
+    const usingEstimate = !allWalkInTypesSelected() && assignments.length === 0 && wizardStep !== 'payment';
+    const typeIdsForPromo = assignments.length
+      ? assignments.map((item) =>
+          Number(item.typeId || rooms.find((r) => r.id === item.roomId)?.roomTypeId || 0)
+        )
+      : getWalkInTypeSelections();
 
     if (feeBreakdown) {
       const lines = [];
       if (nights > 0) {
         const promoNote =
           !isThirdPartyChannel()
-          && assignments.some((item) => {
-            const typeId = Number(item.typeId || rooms.find((r) => r.id === item.roomId)?.roomTypeId || 0);
-            return Boolean(walkInOfferForType(typeId));
-          })
+          && typeIdsForPromo.some((typeId) => Boolean(walkInOfferForType(typeId)))
             ? ' · special offer'
             : '';
-        lines.push(`<div><span>Stay (${nights} night${nights === 1 ? '' : 's'} × ${assignments.length || count} room${(assignments.length || count) === 1 ? '' : 's'}${promoNote})</span><strong>${assignments.length ? money(stay) : '—'}</strong></div>`);
+        const roomLabel = assignments.length || typeCount || count;
+        const stayLabel = usingEstimate
+          ? `Stay estimate (${nights} night${nights === 1 ? '' : 's'} × ${roomLabel} room${roomLabel === 1 ? '' : 's'}${promoNote})`
+          : `Stay (${nights} night${nights === 1 ? '' : 's'} × ${roomLabel} room${roomLabel === 1 ? '' : 's'}${promoNote})`;
+        lines.push(
+          `<div><span>${stayLabel}</span><strong>${stay > 0 ? money(stay) : '—'}</strong></div>`
+        );
+      }
+      if (arrivalDiscount > 0) {
+        lines.push(
+          `<div class="admin-walkin-discount-row"><span>${walkInArrivalDiscountLabel()}</span><strong>−${money(arrivalDiscount).replace(/^₱/, '')}</strong></div>`
+        );
       }
       if (early > 0) lines.push(`<div><span>Early check-in (11:30 AM)</span><strong>${money(early)}</strong></div>`);
       if (late > 0) lines.push(`<div><span>Late check-out (+${lateHours()}h)</span><strong>${money(late)}</strong></div>`);
@@ -718,7 +1293,9 @@
     const hold = capacityHold();
     const guests = guestCount();
     if (capacityWarn) {
-      if (assignments.length === count && hold > 0 && guests > hold) {
+      const roomsAssigned = assignments.length === count;
+      const typesReady = allWalkInTypesSelected();
+      if ((roomsAssigned || typesReady) && hold > 0 && guests > hold) {
         capacityWarn.hidden = false;
         capacityWarn.textContent = `Party of ${guests} exceeds selected rooms’ capacity (${hold}). Choose larger types or add rooms.`;
       } else {
@@ -731,6 +1308,7 @@
     if (partySummary) partySummary.textContent = partySummaryText();
     refreshFeeHint();
     syncWalkInArrivalDiscountUi();
+    syncWalkInPaymentPanels();
   }
 
   async function setWizardStep(step) {
@@ -751,23 +1329,33 @@
     });
 
     const isFirst = step === 'guest';
-    const isLast = step === 'confirm';
+    const isLast = step === 'rooms';
     if (backBtn) {
       backBtn.hidden = false;
       backBtn.textContent = isFirst ? 'Back to guests' : 'Back';
     }
     if (nextBtn) nextBtn.hidden = isLast;
     if (submitBtn) submitBtn.hidden = !isLast;
+    if (nextBtn && step !== 'rooms') nextBtn.disabled = false;
     showFormMessage('');
 
-    if (step === 'rooms' || step === 'confirm' || step === 'dates') {
+    if (step === 'rooms' || step === 'payment' || step === 'types' || step === 'dates') {
       await refreshDateAvailability();
+    }
+    if (step === 'types') {
+      renderWalkInTypePicker();
+      refreshTotals();
+    }
+    if (step === 'payment') {
+      refreshTotals();
+      syncWalkInPaymentPanels();
     }
     if (step === 'rooms') {
       renderRoomSlots();
       refreshTotals();
+      syncWalkInRoomsStepState();
     }
-    if (step === 'confirm' || step === 'dates') refreshTotals();
+    if (step === 'dates') refreshTotals();
   }
 
   function validateStep(step) {
@@ -785,6 +1373,86 @@
       if (nightCount() < 1) {
         showFormMessage('Check-out must be after check-in.', true);
         return false;
+      }
+      return true;
+    }
+    if (step === 'types') {
+      if (totalRemainingInventory() < roomsNeeded()) {
+        updateWalkInAvailabilityNotice();
+        const notice = document.getElementById('walkInTypesAvailabilityNotice');
+        showFormMessage(
+          notice?.textContent ||
+            'No rooms are available for these dates. Try different dates or room types.',
+          true
+        );
+        return false;
+      }
+      if (!allWalkInTypesSelected()) {
+        const needed = roomsNeeded();
+        showFormMessage(
+          `Select a room type for each of the ${needed} room${needed === 1 ? '' : 's'} in the party.`,
+          true
+        );
+        return false;
+      }
+      const selectedByType = new Map();
+      getWalkInTypeSelections().forEach((typeId) => {
+        selectedByType.set(typeId, (selectedByType.get(typeId) || 0) + 1);
+      });
+      for (const [typeId, qty] of selectedByType.entries()) {
+        const remaining = typeRemaining(typeId);
+        if (qty > remaining) {
+          const type = roomTypes.find((item) => item.roomTypeId === typeId);
+          showFormMessage(
+            `${type?.name || 'Room type'} has only ${remaining} room(s) left for these dates (other bookings may hold them).`,
+            true
+          );
+          return false;
+        }
+      }
+      if (!partyFitsSelectedTypes()) {
+        showFormMessage(
+          'Party size exceeds the selected room type capacity. Choose a larger type or adjust guests.',
+          true
+        );
+        return false;
+      }
+      return true;
+    }
+    if (step === 'payment') {
+      const channel = String(document.getElementById('walkInChannel')?.value || '');
+      if (!channel) {
+        showFormMessage('Select a booking channel (Walk-in, Agoda, or RedDoorz).', true);
+        return false;
+      }
+      if (totalRemainingInventory() < roomsNeeded()) {
+        updateWalkInAvailabilityNotice();
+        const notice = document.querySelector('[data-walkin-availability-notice]');
+        showFormMessage(
+          notice?.textContent ||
+            'No rooms are available for these dates. Try different dates or room types.',
+          true
+        );
+        return false;
+      }
+      const total = computeGrandTotal();
+      if (total <= 0) {
+        showFormMessage('Set valid stay dates to see the amount due.', true);
+        return false;
+      }
+      const method = String(paymentMethod?.value || 'Cash');
+      if (isCashPaymentMethod(method)) {
+        const tendered = parseMoneyInput(paymentTendered?.value);
+        if (tendered < total - 0.009) {
+          showFormMessage(`Cash tender must cover ${money(total)} due.`, true);
+          return false;
+        }
+      } else {
+        const digital = parseMoneyInput(paymentDigitalAmount?.value);
+        if (digital <= 0) {
+          showFormMessage('Enter the amount received from the guest.', true);
+          return false;
+        }
       }
       return true;
     }
@@ -849,6 +1517,10 @@
       name: type.name || type.roomTypeName || 'Room',
       pricePerNight: Number(type.pricePerNight || 0),
       maxOccupancy: Number(type.maxOccupancy || MAX_GUESTS_PER_ROOM),
+      bedCount: Number(type.bedCount || 0),
+      description: String(type.description || '').trim(),
+      images: Array.isArray(type.images) ? type.images.filter(Boolean) : [],
+      inclusions: Array.isArray(type.inclusions) ? type.inclusions.filter(Boolean) : [],
     }));
 
     rooms = (Array.isArray(roomPayload) ? roomPayload : []).map((room) => {
@@ -906,6 +1578,7 @@
 
   function openWalkInFlow() {
     guestRooms = [{ adults: 2, children: 0, childAges: [] }];
+    walkInTypeSelections = [];
     inventoryReady = false;
     renderGuestsRooms();
     closeModal(bookModal);
@@ -927,13 +1600,29 @@
     }
     closeModal(guestsModal);
     resetDates();
+    walkInTypeSelections = [];
+    const channelEl = document.getElementById('walkInChannel');
+    if (channelEl) channelEl.value = '';
     if (partySummary) partySummary.textContent = partySummaryText();
     setWizardStep('guest');
+    if (paymentTendered) paymentTendered.value = '';
+    if (paymentDigitalAmount) paymentDigitalAmount.value = '';
+    if (paymentMethod) paymentMethod.value = 'Cash';
     openModal(bookModal);
     refreshTotals();
   }
 
   openBtn?.addEventListener('click', () => openWalkInFlow());
+
+  roomTypePicker?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-walkin-pick-type]');
+    if (!btn || btn.disabled) return;
+    event.preventDefault();
+    const roomIndex = Number(btn.getAttribute('data-walkin-room-index'));
+    const typeId = Number(btn.getAttribute('data-walkin-pick-type'));
+    if (!typeId) return;
+    selectWalkInType(roomIndex, typeId);
+  });
 
   guestsAddRoomBtn?.addEventListener('click', () => {
     if (guestRooms.length >= MAX_GUEST_ROOMS) {
@@ -1023,7 +1712,13 @@
       }
       fillTimeOptions();
       await refreshDateAvailability();
-      if (wizardStep === 'rooms') renderRoomSlots();
+      if (wizardStep === 'types') {
+        renderWalkInTypePicker();
+      }
+      if (wizardStep === 'rooms') {
+        renderRoomSlots();
+        syncWalkInRoomsStepState();
+      }
       refreshTotals();
     });
   });
@@ -1031,15 +1726,34 @@
   extraPersonInput?.addEventListener('change', () => refreshTotals());
 
   document.getElementById('walkInChannel')?.addEventListener('change', () => {
+    if (wizardStep === 'types') renderWalkInTypePicker();
     if (wizardStep === 'rooms') renderRoomSlots();
     refreshTotals();
+    syncWalkInPaymentPanels();
   });
+
+  document.getElementById('walkInArrivalDiscount')?.addEventListener('change', () => refreshTotals());
+
+  paymentMethod?.addEventListener('change', () => {
+    syncWalkInPaymentPanels();
+    refreshTotals();
+  });
+  paymentTendered?.addEventListener('input', () => syncWalkInPaymentChange());
+  paymentDigitalAmount?.addEventListener('input', () => syncWalkInPaymentChange());
 
   bookForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (!validateStep('guest') || !validateStep('dates') || !validateStep('rooms')) {
+    if (
+      !validateStep('guest')
+      || !validateStep('dates')
+      || !validateStep('types')
+      || !validateStep('payment')
+      || !validateStep('rooms')
+    ) {
       if (!validateStep('guest')) setWizardStep('guest');
       else if (!validateStep('dates')) setWizardStep('dates');
+      else if (!validateStep('types')) setWizardStep('types');
+      else if (!validateStep('payment')) setWizardStep('payment');
       else setWizardStep('rooms');
       return;
     }
@@ -1055,6 +1769,20 @@
       roomTypeId,
       roomIds,
     }));
+
+    const finalTotal = computeGrandTotal();
+    const payMethod = String(paymentMethod?.value || 'Cash');
+    if (isCashPaymentMethod(payMethod)) {
+      const tendered = parseMoneyInput(paymentTendered?.value);
+      if (tendered < finalTotal - 0.009) {
+        showFormMessage(
+          `Room assignment changed the total to ${money(finalTotal)}. Go back to Payment and update cash tender.`,
+          true
+        );
+        await setWizardStep('payment');
+        return;
+      }
+    }
 
     if (submitBtn) {
       submitBtn.disabled = true;
@@ -1075,10 +1803,28 @@
           checkoutTimeUtc: toManilaIso(checkOutDate.value, checkOutTime.value),
           extraPersons: extraPersonInput?.checked ? 1 : 0,
           assignments: payloadAssignments,
-          channel: String(document.getElementById('walkInChannel')?.value || 'WalkIn'),
+          channel: String(document.getElementById('walkInChannel')?.value || ''),
           arrivalDiscountRequest: String(document.getElementById('walkInArrivalDiscount')?.value || 'None'),
         }),
       });
+
+      const balanceDue = Math.max(0, Number(booking.totalAmount || 0));
+      let payAmount = balanceDue;
+      if (!isCashPaymentMethod(payMethod)) {
+        payAmount = Math.min(balanceDue, parseMoneyInput(paymentDigitalAmount?.value));
+      }
+      if (payAmount > 0) {
+        await apiFetch('/api/admin/payments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bookingId: booking.id,
+            eventType: 'ArrivalPayment',
+            method: payMethod,
+            amount: payAmount,
+          }),
+        });
+      }
 
       closeModal(bookModal);
       if (successMessage) {

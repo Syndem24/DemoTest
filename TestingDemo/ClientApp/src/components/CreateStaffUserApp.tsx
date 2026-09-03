@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type HTMLAttributes } from 'react'
 import { createStaffUser } from '../staffApi'
 import type { CreateStaffUserPayload, StaffRole } from '../staffTypes'
+import { filterMoriInput, type MoriInputFilterKind } from '../inputFilters'
 
 type FieldErrors = Partial<Record<keyof CreateStaffUserPayload, string>>
 
@@ -113,13 +114,9 @@ export function CreateStaffUserApp() {
   const [form, setForm] = useState<CreateStaffUserPayload>(emptyForm)
   const [errors, setErrors] = useState<FieldErrors>({})
   const [submitting, setSubmitting] = useState(false)
-  const [banner, setBanner] = useState<string | null>(root?.dataset.message || null)
-  const [alert, setAlert] = useState<{ message: string; field: keyof CreateStaffUserPayload | null } | null>(
-    root?.dataset.error ? { message: root.dataset.error, field: null } : null,
-  )
+  const [alert, setAlert] = useState<{ message: string; field: keyof CreateStaffUserPayload | null } | null>(null)
 
   const showAlert = (message: string, field: keyof CreateStaffUserPayload | null) => {
-    setBanner(null)
     setAlert({ message, field })
   }
 
@@ -166,7 +163,6 @@ export function CreateStaffUserApp() {
     }
 
     setSubmitting(true)
-    setBanner(null)
     setAlert(null)
     try {
       const payload: CreateStaffUserPayload = {
@@ -220,12 +216,6 @@ export function CreateStaffUserApp() {
         </a>
       </header>
 
-      {banner ? (
-        <div className="sc-banner is-info" role="status" aria-live="polite">
-          {banner}
-        </div>
-      ) : null}
-
       {alert ? (
         <div className="sc-alert-popup" role="presentation" onClick={dismissAlert}>
           <div
@@ -236,7 +226,7 @@ export function CreateStaffUserApp() {
             aria-describedby={`${formId}-alert-message`}
             onClick={(event) => event.stopPropagation()}
           >
-            <h2 id={`${formId}-alert-title`}>Warning</h2>
+            <h2 id={`${formId}-alert-title`}>Check this field</h2>
             <p id={`${formId}-alert-message`}>{alert.message}</p>
             <div className="sc-alert-popup-actions">
               <button ref={alertOkRef} type="button" className="sc-btn sc-btn-primary" onClick={dismissAlert}>
@@ -261,6 +251,7 @@ export function CreateStaffUserApp() {
               error={errors.fullName}
               autoComplete="name"
               placeholder="e.g. Ana Reyes"
+              filterKind="person-name"
               onChange={(value) => setField('fullName', value)}
               onBlur={() => onBlurValidate('fullName')}
             />
@@ -271,6 +262,7 @@ export function CreateStaffUserApp() {
               error={errors.userName}
               autoComplete="off"
               placeholder="e.g. ana.reyes"
+              filterKind="username"
               onChange={(value) => setField('userName', value)}
               onBlur={() => onBlurValidate('userName')}
             />
@@ -314,6 +306,7 @@ export function CreateStaffUserApp() {
               autoComplete="email"
               inputMode="email"
               placeholder="e.g. ana.reyes@gmail.com"
+              filterKind="email"
               onChange={(value) => setField('loginEmail', value)}
               onBlur={() => onBlurValidate('loginEmail')}
             />
@@ -326,6 +319,7 @@ export function CreateStaffUserApp() {
               autoComplete="tel"
               inputMode="tel"
               placeholder="e.g. +63 917 123 4567"
+              filterKind="phone"
               onChange={(value) => setField('phoneNumber', value)}
               onBlur={() => onBlurValidate('phoneNumber')}
             />
@@ -439,6 +433,7 @@ type FieldProps = {
   placeholder?: string
   className?: string
   multiline?: boolean
+  filterKind?: MoriInputFilterKind
 }
 
 function Field({
@@ -454,11 +449,16 @@ function Field({
   placeholder,
   className,
   multiline = false,
+  filterKind,
 }: FieldProps) {
   const errorId = `${id}-error`
   const [passwordVisible, setPasswordVisible] = useState(false)
   const isPassword = type === 'password'
   const inputType = isPassword && passwordVisible ? 'text' : type
+
+  const handleChange = (raw: string) => {
+    onChange(filterKind ? filterMoriInput(filterKind, raw) : raw)
+  }
 
   const control = multiline ? (
     <textarea
@@ -469,7 +469,7 @@ function Field({
       rows={3}
       aria-invalid={Boolean(error)}
       aria-describedby={error ? errorId : undefined}
-      onChange={(event) => onChange(event.target.value)}
+      onChange={(event) => handleChange(event.target.value)}
       onBlur={onBlur}
     />
   ) : (
@@ -480,9 +480,10 @@ function Field({
       autoComplete={autoComplete}
       inputMode={inputMode}
       placeholder={placeholder}
+      data-mori-filter={filterKind}
       aria-invalid={Boolean(error)}
       aria-describedby={error ? errorId : undefined}
-      onChange={(event) => onChange(event.target.value)}
+      onChange={(event) => handleChange(event.target.value)}
       onBlur={onBlur}
     />
   )

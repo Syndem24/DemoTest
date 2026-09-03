@@ -5,16 +5,21 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using TestingDemo.Models;
+using TestingDemo.Services;
 
 namespace TestingDemo.Data;
 
 public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
 {
     private static readonly JsonSerializerOptions JsonOptions = new();
+    private readonly IAuditLogNotifier? _auditNotifier;
 
-    public HotelBookingDbContext(DbContextOptions<HotelBookingDbContext> options)
+    public HotelBookingDbContext(
+        DbContextOptions<HotelBookingDbContext> options,
+        IAuditLogNotifier? auditNotifier = null)
         : base(options)
     {
+        _auditNotifier = auditNotifier;
     }
     public DbSet<Room> Rooms => Set<Room>();
     public DbSet<RoomType> RoomTypes => Set<RoomType>();
@@ -22,28 +27,30 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<BookingItem> BookingItems => Set<BookingItem>();
     public DbSet<BookingCharge> BookingCharges => Set<BookingCharge>();
     public DbSet<BookingRoomAssignment> BookingRoomAssignments => Set<BookingRoomAssignment>();
-    public DbSet<StaffAccountAudit> StaffAccountAudits => Set<StaffAccountAudit>();
     public DbSet<SystemFlushLog> SystemFlushLogs => Set<SystemFlushLog>();
     public DbSet<SystemAuditLog> SystemAuditLogs => Set<SystemAuditLog>();
     public DbSet<PaymentRecord> PaymentRecords => Set<PaymentRecord>();
     public DbSet<SpecialOffer> SpecialOffers => Set<SpecialOffer>();
     public DbSet<SecureSetting> SecureSettings => Set<SecureSetting>();
+    public DbSet<StaffPasswordResetCode> StaffPasswordResetCodes => Set<StaffPasswordResetCode>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        base.OnModelCreating(modelBuilder);
-
+        // Staff roles live on ApplicationUser.RoleId — join/claim tables were dropped.
+        // Ignore before base so IdentityDbContext does not map them first (EF warning 10626).
         modelBuilder.Ignore<IdentityUserRole<string>>();
         modelBuilder.Ignore<IdentityUserClaim<string>>();
         modelBuilder.Ignore<IdentityRoleClaim<string>>();
 
-        modelBuilder.Entity<IdentityRole>().ToTable("StaffRole");
-        modelBuilder.Entity<IdentityUserLogin<string>>().ToTable("StaffAccountLogin");
-        modelBuilder.Entity<IdentityUserToken<string>>().ToTable("StaffAccountToken");
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<IdentityRole>().ToTable(StaffAuthSchema.RoleTable);
+        modelBuilder.Entity<IdentityUserLogin<string>>().ToTable(StaffAuthSchema.ExternalLoginTable);
+        modelBuilder.Entity<IdentityUserToken<string>>().ToTable(StaffAuthSchema.AuthTokenTable);
 
         modelBuilder.Entity<ApplicationUser>(entity =>
         {
-            entity.ToTable("StaffAccount");
+            entity.ToTable(StaffAuthSchema.UserTable);
             entity.Property(e => e.FullName).HasMaxLength(120);
             entity.Property(e => e.Address).HasMaxLength(300);
             entity.Property(e => e.GoogleEmail).HasMaxLength(256);
@@ -63,15 +70,15 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.DashboardLayoutJson).HasColumnType("nvarchar(max)");
         });
 
-        modelBuilder.Entity<StaffAccountAudit>(entity =>
+        modelBuilder.Entity<StaffPasswordResetCode>(entity =>
         {
-            entity.ToTable("StaffAccountAudit");
+            entity.ToTable(StaffAuthSchema.PasswordResetCodeTable);
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Action).HasMaxLength(40).IsRequired();
-            entity.Property(e => e.TargetUserId).HasMaxLength(450).IsRequired();
-            entity.Property(e => e.PerformedByUserId).HasMaxLength(450).IsRequired();
-            entity.Property(e => e.RoleAssigned).HasMaxLength(64).IsRequired();
-            entity.HasIndex(e => e.AtUtc);
+            entity.Property(e => e.UserId).HasMaxLength(450).IsRequired();
+            entity.Property(e => e.NormalizedEmail).HasMaxLength(256).IsRequired();
+            entity.Property(e => e.CodeHash).HasMaxLength(128).IsRequired();
+            entity.HasIndex(e => new { e.UserId, e.CreatedAtUtc });
+            entity.HasIndex(e => new { e.NormalizedEmail, e.ExpiresAtUtc });
         });
 
         modelBuilder.Entity<SecureSetting>(entity =>
@@ -314,5 +321,54 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
                     : value.Aggregate(0, (hash, item) =>
                         HashCode.Combine(hash, StringComparer.OrdinalIgnoreCase.GetHashCode(item))),
                 value => value == null ? new List<string>() : value.ToList()));
+    }
+
+    public override int SaveChanges()
+    {
+        var auditAdded = HasPendingAuditInserts();
+        var count = base.SaveChanges();
+        NotifyAuditIfNeeded(auditAdded);
+        return count;
+    }
+
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        var auditAdded = HasPendingAuditInserts();
+        var count = await base.SaveChangesAsync(cancellationToken);
+        await NotifyAuditIfNeededAsync(auditAdded, cancellationToken);
+        return count;
+    }
+
+    private bool HasPendingAuditInserts() =>
+        ChangeTracker.Entries<SystemAuditLog>().Any(entry => entry.State == EntityState.Added);
+
+    private void NotifyAuditIfNeeded(bool auditAdded)
+    {
+        if (!auditAdded || _auditNotifier is null)
+            return;
+
+        try
+        {
+            _auditNotifier.NotifyChangedAsync().GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // SignalR push should not fail the write.
+        }
+    }
+
+    private async Task NotifyAuditIfNeededAsync(bool auditAdded, CancellationToken cancellationToken)
+    {
+        if (!auditAdded || _auditNotifier is null)
+            return;
+
+        try
+        {
+            await _auditNotifier.NotifyChangedAsync(cancellationToken);
+        }
+        catch
+        {
+            // SignalR push should not fail the write.
+        }
     }
 }

@@ -190,7 +190,6 @@
   let checkoutsFromUrlHandled = false;
   let daytimeFlowLocalDateIso = '';
   let pollTimer = null;
-  let reconnectTimer = null;
   let audioContext = null;
   let audioUnlocked = false;
   let soundEnabled = localStorage.getItem('moriBookingSound') !== 'off';
@@ -2266,8 +2265,6 @@
     if (epayAmount) epayAmount.value = defaultAmount.toFixed(2);
     if (tendered) tendered.value = '';
 
-    const by = paymentAddModal.querySelector('[data-payment-received-by]');
-    if (by) by.value = localStorage.getItem('moriPaymentReceivedBy') || '';
     const methodSelect = paymentAddModal.querySelector('[data-payment-method]');
     const hasIncidental = (booking.charges || []).some(
       (c) => String(c.chargeType) === 'Incidental' && Number(c.amount || 0) > 0
@@ -2327,7 +2324,6 @@
 
   async function saveRecordedPayment() {
     if (!paymentBookingContext || !paymentAddModal) return;
-    const receivedBy = (paymentAddModal.querySelector('[data-payment-received-by]')?.value || '').trim();
     const eventType = 'ArrivalPayment';
     const method = paymentAddModal.querySelector('[data-payment-method]')?.value || 'Cash';
     const saveBtn = paymentAddModal.querySelector('[data-payment-add-save]');
@@ -2357,10 +2353,6 @@
       return;
     }
 
-    if (receivedBy.length < 2) {
-      showPaymentAddPopup('Enter the staff name who received payment.', 'Missing staff name');
-      return;
-    }
     if (!(amount > 0) && eventType !== 'Refund') {
       showPaymentAddPopup('Select an amount from Price details.', 'Missing amount');
       return;
@@ -2432,14 +2424,12 @@
           eventType,
           method,
           amount: eventType === 'Refund' ? -Math.abs(amount) : amount,
-          receivedBy,
           externalReference: cash ? null : externalReference,
           bankTransferReference: cash || method !== 'BankTransfer' ? null : bankTransferReference,
           notes: notes || null,
           receiptImagePath,
         }),
       });
-      localStorage.setItem('moriPaymentReceivedBy', receivedBy);
       const bookingId = paymentBookingContext.id;
       closeAddPaymentModal();
       showBookingMessage(
@@ -3405,6 +3395,14 @@
             ? `Special offer: ${booking.specialOfferTitle}`
             : 'Guest booked a special offer';
           cell.append(tag);
+        }
+        if (booking.exceedsAvailableInventory) {
+          const warn = document.createElement('span');
+          warn.className = 'admin-booking-status is-inventory-warning';
+          warn.textContent = displayEnum(booking.kind) === 'Reservation' ? 'Over capacity' : 'Overbooked';
+          warn.title =
+            'This stay requests more rooms than inventory allows for these dates (pending and confirmed holds).';
+          cell.append(warn);
         }
       } else {
         cell.textContent = value;
@@ -5857,6 +5855,22 @@
     input.type = type;
     input.value = value || '';
     input.required = true;
+    const key = String(name || '').toLowerCase();
+    if (key.includes('phone')) {
+      input.setAttribute('data-mori-filter', 'phone');
+      input.setAttribute('inputmode', 'tel');
+      input.maxLength = 40;
+      input.autocomplete = 'tel';
+    } else if (key.includes('email')) {
+      input.setAttribute('data-mori-filter', 'email');
+      input.setAttribute('inputmode', 'email');
+      input.maxLength = 254;
+      input.autocomplete = 'email';
+    } else if (key.includes('name')) {
+      input.setAttribute('data-mori-filter', 'person-name');
+      input.maxLength = 120;
+      input.autocomplete = 'name';
+    }
     field.append(caption, input);
     return field;
   }
@@ -5877,6 +5891,93 @@
     });
     field.append(caption, select);
     return field;
+  }
+
+  let editRoomTypeCatalog = [];
+
+  async function loadEditRoomTypeCatalog() {
+    if (editRoomTypeCatalog.length) return editRoomTypeCatalog;
+    const rows = await apiFetch('/api/rooms/types');
+    editRoomTypeCatalog = (Array.isArray(rows) ? rows : [])
+      .map((row) => ({
+        roomTypeId: Number(row.roomTypeId ?? row.RoomTypeId),
+        name: String(row.name ?? row.Name ?? 'Room'),
+        pricePerNight: Number(row.pricePerNight ?? row.PricePerNight ?? 0),
+        availableCount: Number(row.availableCount ?? row.AvailableCount ?? 0),
+      }))
+      .filter((row) => row.roomTypeId > 0);
+    return editRoomTypeCatalog;
+  }
+
+  function createEditRoomLine(roomTypes, roomTypeId, quantity) {
+    const row = document.createElement('div');
+    row.className = 'admin-booking-edit-room-line';
+    row.dataset.editRoomLine = '1';
+
+    const typeLabel = document.createElement('label');
+    typeLabel.className = 'admin-booking-edit-room-type';
+    const typeCaption = document.createElement('span');
+    typeCaption.textContent = 'Room type';
+    const typeSelect = document.createElement('select');
+    typeSelect.dataset.roomTypeSelect = '1';
+    typeSelect.required = true;
+    roomTypes.forEach((type) => {
+      const opt = document.createElement('option');
+      opt.value = String(type.roomTypeId);
+      opt.textContent = type.name;
+      if (Number(type.roomTypeId) === Number(roomTypeId)) opt.selected = true;
+      typeSelect.append(opt);
+    });
+    typeLabel.append(typeCaption, typeSelect);
+
+    const qtyLabel = document.createElement('label');
+    qtyLabel.className = 'admin-booking-edit-room-qty';
+    const qtyCaption = document.createElement('span');
+    qtyCaption.textContent = 'Qty';
+    const qtyInput = document.createElement('input');
+    qtyInput.type = 'number';
+    qtyInput.min = '0';
+    qtyInput.max = '20';
+    qtyInput.value = String(quantity ?? 1);
+    qtyInput.dataset.roomQty = '1';
+    qtyInput.required = true;
+    qtyLabel.append(qtyCaption, qtyInput);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'admin-booking-edit-room-remove';
+    removeBtn.dataset.removeRoomLine = '1';
+    removeBtn.textContent = 'Remove';
+
+    row.append(typeLabel, qtyLabel, removeBtn);
+    return row;
+  }
+
+  function readEditRoomLines(form) {
+    return Array.from(form.querySelectorAll('[data-edit-room-line]')).map((row) => {
+      const roomTypeId = Number(row.querySelector('[data-room-type-select]')?.value || 0);
+      const quantity = Number(row.querySelector('[data-room-qty]')?.value || 0);
+      const roomTypeName =
+        row.querySelector('[data-room-type-select] option:checked')?.textContent?.trim() || 'Room';
+      return { roomTypeId, quantity, roomTypeName };
+    });
+  }
+
+  function wireEditRoomLine(row, form, onChange) {
+    row.querySelector('[data-remove-room-line]')?.addEventListener('click', () => {
+      const lines = form.querySelectorAll('[data-edit-room-line]');
+      if (lines.length <= 1) {
+        const qty = row.querySelector('[data-room-qty]');
+        if (qty) qty.value = '0';
+        onChange?.();
+        return;
+      }
+      row.remove();
+      onChange?.();
+    });
+    row.querySelector('[data-room-type-select]')?.addEventListener('change', onChange);
+    row.querySelector('[data-room-qty]')?.addEventListener('change', onChange);
+    row.querySelector('[data-room-qty]')?.addEventListener('input', onChange);
   }
 
   function parseClockToMinutes(timeText) {
@@ -5938,7 +6039,7 @@
     if (!detailBody || !detailActions) return;
     const adjustStay = Boolean(options.adjustStay);
     const hardEdit = Boolean(options.hardEdit);
-    const needsAvailPreview = adjustStay || hardEdit;
+    const needsAvailPreview = true;
     detailBody.replaceChildren();
     detailActions.replaceChildren();
 
@@ -5947,13 +6048,19 @@
     if (adjustStay) form.classList.add('is-adjust-stay');
     if (hardEdit) form.classList.add('is-hard-edit');
 
+    const pastDateNote =
+      ' Reception can set check-in to a past date when correcting a schedule.';
+
     const intro = document.createElement('p');
     intro.className = 'admin-booking-edit-hint';
     intro.textContent = hardEdit
-      ? 'Correct a guest schedule error: update contact and check-in / check-out. Assigned room numbers stay the same. Saving recalculates nights and total.'
+      ? 'Correct a guest schedule error: update contact and check-in / check-out. Assigned room numbers stay the same. Saving recalculates nights and total.' +
+        pastDateNote
       : adjustStay
-        ? 'Guest called to change arrival? Update check-in / check-out (and contact if needed). Saving recalculates nights and total. Assign rooms unlocks on the new Manila arrival date once fully paid.'
-        : 'Update guest details, stay dates, or room quantities.';
+        ? 'Guest called to change arrival? Update check-in / check-out (and contact if needed). Saving recalculates nights and total. Assign rooms unlocks on the new Manila arrival date once fully paid.' +
+          pastDateNote
+        : 'Update guest details, stay dates, or change room types and quantities. Availability is checked live for your dates.' +
+          pastDateNote;
 
     const fields = document.createElement('div');
     fields.className = 'admin-booking-edit-grid';
@@ -5985,9 +6092,15 @@
     availPanel.append(availTitle, availList, availStatus);
 
     const roomHeading = document.createElement('h3');
-    roomHeading.textContent = hardEdit ? 'Assigned rooms (locked)' : 'Room quantities';
+    roomHeading.textContent = hardEdit ? 'Assigned rooms (locked)' : 'Rooms in this booking';
     const roomFields = document.createElement('div');
     roomFields.className = 'admin-booking-edit-rooms';
+    const addRoomBtn = document.createElement('button');
+    addRoomBtn.type = 'button';
+    addRoomBtn.className = 'admin-booking-edit-add-room';
+    addRoomBtn.dataset.addRoomLine = '1';
+    addRoomBtn.textContent = 'Add room type';
+    addRoomBtn.hidden = hardEdit;
 
     if (hardEdit) {
       (booking.items || []).forEach((line) => {
@@ -6007,26 +6120,17 @@
         row.append(hidden);
         roomFields.append(row);
       });
-    } else {
-      (booking.items || []).forEach((line) => {
-        const field = editField(line.roomTypeName, `room-${line.roomTypeId}`, 'number', line.quantity);
-        const input = field.querySelector('input');
-        input.min = '0';
-        input.max = '20';
-        input.dataset.roomTypeId = String(line.roomTypeId);
-        roomFields.append(field);
-      });
     }
 
     const hint = document.createElement('p');
     hint.className = 'admin-booking-edit-hint';
     hint.textContent = hardEdit
       ? 'Room numbers stay assigned. If another guest holds the same room on the new dates, save will be blocked.'
-      : 'Set a room quantity to 0 to remove it. At least one room must remain.';
+      : 'Change room type from the dropdown, adjust quantity, or add another room type. Set quantity to 0 to remove a line.';
     const error = document.createElement('p');
     error.className = 'admin-booking-edit-error';
     error.hidden = true;
-    form.append(intro, fields, availPanel, roomHeading, roomFields, hint, error);
+    form.append(intro, fields, availPanel, roomHeading, roomFields, addRoomBtn, hint, error);
     detailBody.append(form);
 
     const backButton = document.createElement('button');
@@ -6039,9 +6143,16 @@
     saveButton.textContent = hardEdit || adjustStay ? 'Save stay changes' : 'Save changes';
     detailActions.append(backButton, saveButton);
 
-    let availOk = !needsAvailPreview;
+    let availOk = false;
     let availTimer = null;
     let lastNoAvailKey = '';
+
+    function scheduleAvailRefresh() {
+      window.clearTimeout(availTimer);
+      availTimer = window.setTimeout(() => {
+        void refreshEditAvailability();
+      }, 280);
+    }
 
     function requiredLines() {
       if (hardEdit) {
@@ -6051,11 +6162,36 @@
           quantity: Number(line.quantity || 0),
         }));
       }
-      return Array.from(form.querySelectorAll('[data-room-type-id]')).map((input) => ({
-        roomTypeId: Number(input.dataset.roomTypeId),
-        roomTypeName: input.closest('label')?.querySelector('span')?.textContent || 'Room',
-        quantity: Number(input.value || 0),
-      })).filter((line) => line.quantity > 0);
+      return readEditRoomLines(form).filter((line) => line.quantity > 0);
+    }
+
+    if (!hardEdit) {
+      void loadEditRoomTypeCatalog().then((types) => {
+        if (!types.length) {
+          roomFields.textContent = 'No room types available.';
+          addRoomBtn.disabled = true;
+          return;
+        }
+        const items = (booking.items || []).length
+          ? booking.items
+          : [{ roomTypeId: types[0].roomTypeId, quantity: 1 }];
+        items.forEach((line) => {
+          const row = createEditRoomLine(types, line.roomTypeId, line.quantity);
+          wireEditRoomLine(row, form, scheduleAvailRefresh);
+          roomFields.append(row);
+        });
+        addRoomBtn.addEventListener('click', () => {
+          const used = new Set(
+            readEditRoomLines(form).map((line) => line.roomTypeId).filter(Boolean)
+          );
+          const nextType = types.find((type) => !used.has(type.roomTypeId)) || types[0];
+          const row = createEditRoomLine(types, nextType.roomTypeId, 1);
+          wireEditRoomLine(row, form, scheduleAvailRefresh);
+          roomFields.append(row);
+          scheduleAvailRefresh();
+        });
+        scheduleAvailRefresh();
+      });
     }
 
     function showNoAvailabilityPopup(message) {
@@ -6105,17 +6241,28 @@
         needed.forEach((line) => {
           const row = byType.get(line.roomTypeId);
           const remaining = row ? Number(row.remaining ?? row.Remaining ?? 0) : 0;
+          const soldOutDates = Array.isArray(row?.soldOutDates ?? row?.SoldOutDates)
+            ? (row.soldOutDates ?? row.SoldOutDates).filter(Boolean)
+            : [];
           const li = document.createElement('li');
           const ok = remaining >= line.quantity;
           if (!ok) {
             insufficient = true;
-            shortLines.push(
-              `${line.roomTypeName}: need ${line.quantity}, only ${remaining} available`
-            );
+            if (soldOutDates.length) {
+              shortLines.push(
+                `${line.roomTypeName} is fully booked on ${soldOutDates.join(', ')}`
+              );
+            } else {
+              shortLines.push(
+                `${line.roomTypeName}: need ${line.quantity}, only ${remaining} available`
+              );
+            }
           }
           li.className = ok ? 'is-ok' : 'is-short';
-          li.textContent = `${line.roomTypeName}: ${remaining} available` +
-            (line.quantity > 1 ? ` (need ${line.quantity})` : '');
+          let label = `${line.roomTypeName}: ${remaining} available`;
+          if (line.quantity > 1) label += ` (need ${line.quantity})`;
+          if (soldOutDates.length) label += ` · fully booked ${soldOutDates.join(', ')}`;
+          li.textContent = label;
           availList.append(li);
         });
 
@@ -6154,24 +6301,10 @@
       }
     }
 
-    function scheduleAvailRefresh() {
-      if (!needsAvailPreview) return;
-      window.clearTimeout(availTimer);
-      availTimer = window.setTimeout(() => {
-        void refreshEditAvailability();
-      }, 280);
-    }
-
     ['checkIn', 'checkInTime', 'checkOut', 'checkOutTime'].forEach((name) => {
       form.querySelector(`[name="${name}"]`)?.addEventListener('change', scheduleAvailRefresh);
       form.querySelector(`[name="${name}"]`)?.addEventListener('input', scheduleAvailRefresh);
     });
-    if (!hardEdit) {
-      form.querySelectorAll('[data-room-type-id]').forEach((input) => {
-        input.addEventListener('change', scheduleAvailRefresh);
-        input.addEventListener('input', scheduleAvailRefresh);
-      });
-    }
 
     detailModal?.querySelectorAll('[data-edit-availability-ok]').forEach((btn) => {
       if (btn.dataset.wired === '1') return;
@@ -6202,7 +6335,9 @@
     );
 
     if (needsAvailPreview) {
-      void refreshEditAvailability();
+      if (hardEdit) {
+        void refreshEditAvailability();
+      }
     }
   }
 
@@ -6216,10 +6351,12 @@
           roomTypeId: Number(line.roomTypeId),
           quantity: Number(line.quantity || 0),
         }))
-      : Array.from(form.querySelectorAll('[data-room-type-id]')).map((input) => ({
-          roomTypeId: Number(input.dataset.roomTypeId),
-          quantity: Number(input.value || 0),
-        }));
+      : readEditRoomLines(form)
+          .filter((line) => line.quantity > 0)
+          .map((line) => ({
+            roomTypeId: line.roomTypeId,
+            quantity: line.quantity,
+          }));
 
     button.disabled = true;
     errorElement.hidden = true;
@@ -7390,40 +7527,24 @@
     pollTimer = null;
   }
 
-  async function startSignalR() {
-    if (!window.signalR) {
-      beginPolling();
+  async function refreshFromRealtime(eventName, payload) {
+    if (eventName === 'OfferEndingSoon') {
+      playChime();
+      showOfferEndingSoonAlert(payload);
+      await refreshNotifications();
       return;
     }
 
-    const connection = new window.signalR.HubConnectionBuilder()
-      .withUrl('/hubs/bookings')
-      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-      .configureLogging(window.signalR.LogLevel.Warning)
-      .build();
+    if (eventName === 'BookingCreated' || eventName === 'BookingUpdated') {
+      playChime();
+    }
 
-    connection.on('BookingCreated', async () => {
-      playChime();
-      await Promise.all([refreshNotifications(), refreshActiveBookingPanel()]);
-      reservationCalendar?.refetchEvents();
-    });
-    connection.on('BookingUpdated', async () => {
-      playChime();
-      const listRefresh = refreshActiveBookingPanel();
-      await Promise.all([refreshNotifications(), listRefresh]);
-      reservationCalendar?.refetchEvents();
-    });
-    connection.on('OfferEndingSoon', async (notification) => {
-      playChime();
-      showOfferEndingSoonAlert(notification);
-      await refreshNotifications();
-    });
-    connection.on('BookingArchived', async () => {
+    if (eventName === 'BookingArchived') {
       closeBookingDetails();
-      await Promise.all([refreshNotifications(), refreshActiveBookingPanel()]);
-      reservationCalendar?.refetchEvents();
-    });
-    connection.on('PaymentChanged', async (bookingId) => {
+    }
+
+    if (eventName === 'PaymentChanged') {
+      const bookingId = payload;
       await refreshActiveBookingPanel();
       await refreshOpenBookingDetails(bookingId);
       if (
@@ -7435,35 +7556,44 @@
         await openPaymentViewModal(paymentBookingContext);
       }
       reservationCalendar?.refetchEvents();
-    });
-    connection.onreconnecting(beginPolling);
-    connection.onreconnected(async () => {
-      stopPolling();
-      await Promise.all([refreshNotifications(), refreshActiveBookingPanel()]);
-      reservationCalendar?.refetchEvents();
-    });
-    connection.onclose(() => {
-      beginPolling();
-      reconnectTimer = window.setTimeout(connect, 10000);
-    });
-
-    async function connect() {
-      try {
-        await connection.start();
-        stopPolling();
-      } catch {
-        beginPolling();
-        reconnectTimer = window.setTimeout(connect, 10000);
-      }
+      return;
     }
 
-    await connect();
+    await Promise.all([refreshNotifications(), refreshActiveBookingPanel()]);
+    reservationCalendar?.refetchEvents();
+  }
+
+  function wireRealtime() {
+    if (!window.MoriAdminRealtime) {
+      beginPolling();
+      return;
+    }
+
+    window.MoriAdminRealtime.onBooking((eventName, payload) => {
+      window.MoriAdminRealtime.scheduleRefresh('bookings-live', () =>
+        refreshFromRealtime(eventName, payload),
+      );
+    });
+
+    window.addEventListener('mori:admin-refresh', (event) => {
+      const scopes = event.detail?.scopes || [];
+      if (!scopes.includes('all') && !scopes.includes('bookings')) return;
+      window.MoriAdminRealtime.scheduleRefresh('bookings-poll', async () => {
+        await processAutoCheckout();
+        await refreshNotifications();
+        await refreshActiveBookingPanel();
+        reservationCalendar?.refetchEvents();
+      });
+    });
+
+    pollTimer = window.setInterval(() => {
+      void processAutoCheckout();
+    }, 30000);
   }
 
   window.addEventListener('beforeunload', () => {
     isLeavingBookingsPage = true;
     if (pollTimer) window.clearInterval(pollTimer);
-    if (reconnectTimer) window.clearTimeout(reconnectTimer);
     if (searchTimer) window.clearTimeout(searchTimer);
   });
   document.addEventListener('visibilitychange', () => {
@@ -7509,5 +7639,5 @@
 
   void refreshNotifications();
   void refreshBookings();
-  void startSignalR();
+  wireRealtime();
 })();

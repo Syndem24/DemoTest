@@ -1,0 +1,27 @@
+@{
+    var success = TempData.Peek("Success") as string;
+    var message = TempData.Peek("Message") as string;
+    var error = TempData.Peek("Error") as string;
+    var info = TempData.Peek("Info") as string;
+    var passwordModal = TempData.Peek("PasswordSuccess") is string;
+
+    // Password change uses Settings modal — don't also toast that Message.
+    var toastSuccess = !string.IsNullOrWhiteSpace(success)
+        ? success
+        : (passwordModal ? null : message);
+
+    if (!string.IsNullOrWhiteSpace(success)) TempData.Remove("Success");
+    if (!passwordModal && !string.IsNullOrWhiteSpace(message)) TempData.Remove("Message");
+    if (passwordModal && !string.IsNullOrWhiteSpace(message)) TempData.Remove("Message");
+    if (!string.IsNullOrWhiteSpace(error)) TempData.Remove("Error");
+    if (!string.IsNullOrWhiteSpace(info)) TempData.Remove("Info");
+}
+@if (!string.IsNullOrWhiteSpace(toastSuccess) || !string.IsNullOrWhiteSpace(error) || !string.IsNullOrWhiteSpace(info))
+{
+    <div id="moriFlashBoot"
+         hidden
+         data-mori-success="@toastSuccess"
+         data-mori-error="@error"
+         data-mori-info="@info"></div>
+}
+<div id="moriNoticeStack" class="mori-notice-stack" aria-live="polite" aria-relevant="additions"></div>

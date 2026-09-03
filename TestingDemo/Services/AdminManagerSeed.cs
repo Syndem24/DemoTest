@@ -44,6 +44,7 @@ public sealed class AdminManagerSeed : IAdminManagerSeed
     {
         await EnsureRoleAsync(AppRoles.AdminManager);
         await EnsureRoleAsync(AppRoles.Receptionist);
+        await EnsureRoleAsync(AppRoles.Guest);
 
         if (!_options.Value.AllowBootstrapSeed)
         {

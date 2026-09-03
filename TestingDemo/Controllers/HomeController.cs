@@ -14,6 +14,7 @@ public class HomeController : Controller
     private readonly ILogger<HomeController> _logger;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ISecureConfigStore _vault;
+    private readonly IGoogleAuthSettings _googleAuth;
     private readonly IStaffEmailSender _email;
     private readonly HotelBookingDbContext _db;
     private readonly ISystemAuditRecorder _audit;
@@ -22,6 +23,7 @@ public class HomeController : Controller
         ILogger<HomeController> logger,
         UserManager<ApplicationUser> userManager,
         ISecureConfigStore vault,
+        IGoogleAuthSettings googleAuth,
         IStaffEmailSender email,
         HotelBookingDbContext db,
         ISystemAuditRecorder audit)
@@ -29,6 +31,7 @@ public class HomeController : Controller
         _logger = logger;
         _userManager = userManager;
         _vault = vault;
+        _googleAuth = googleAuth;
         _email = email;
         _db = db;
         _audit = audit;
@@ -105,16 +108,73 @@ public class HomeController : Controller
             changedKeys.Add("GeminiApiKey");
         }
 
+        var googleChanged = false;
+        var enabledFlag = model.GoogleLoginEnabled ? GoogleAuthSettings.EnabledTrue : "false";
+        var currentEnabled = await _vault.GetAsync(SecureSettingKeys.GoogleLoginEnabled, cancellationToken) ?? "false";
+        if (!string.Equals(currentEnabled, enabledFlag, StringComparison.OrdinalIgnoreCase))
+        {
+            await _vault.SetAsync(SecureSettingKeys.GoogleLoginEnabled, enabledFlag, cancellationToken);
+            changedKeys.Add("GoogleLoginEnabled");
+            googleChanged = true;
+        }
+
+        var nextClientId = GoogleAuthSettings.SanitizeClientId(model.GoogleClientId);
+        if (nextClientId is not null)
+        {
+            if (!GoogleAuthSettings.IsUsableClientId(nextClientId))
+            {
+                ModelState.AddModelError(
+                    nameof(model.GoogleClientId),
+                    "Client ID must look like …apps.googleusercontent.com (copy it from Google Cloud → Credentials → Web client).");
+                return View(await MergeIntegrationDisplayAsync(model, cancellationToken));
+            }
+
+            var currentClientId = await _vault.GetAsync(SecureSettingKeys.GoogleClientId, cancellationToken);
+            if (!string.Equals(currentClientId, nextClientId, StringComparison.Ordinal))
+            {
+                await _vault.SetAsync(SecureSettingKeys.GoogleClientId, nextClientId, cancellationToken);
+                changedKeys.Add("GoogleClientId");
+                googleChanged = true;
+            }
+        }
+
+        if (model.ClearGoogleClientSecret)
+        {
+            await _vault.RemoveAsync(SecureSettingKeys.GoogleClientSecret, cancellationToken);
+            changedKeys.Add("GoogleClientSecret");
+            googleChanged = true;
+        }
+        else if (!string.IsNullOrWhiteSpace(model.GoogleClientSecret))
+        {
+            var nextSecret = GoogleAuthSettings.SanitizeSecret(model.GoogleClientSecret);
+            if (string.IsNullOrWhiteSpace(nextSecret))
+            {
+                ModelState.AddModelError(nameof(model.GoogleClientSecret), "Client Secret looks empty after trimming.");
+                return View(await MergeIntegrationDisplayAsync(model, cancellationToken));
+            }
+
+            await _vault.SetAsync(SecureSettingKeys.GoogleClientSecret, nextSecret, cancellationToken);
+            changedKeys.Add("GoogleClientSecret");
+            googleChanged = true;
+        }
+
+        if (model.GoogleLoginEnabled)
+        {
+            var (storedId, storedSecret) = await _googleAuth.GetCredentialsAsync(cancellationToken);
+            if (!GoogleAuthSettings.IsUsableClientId(storedId) || !GoogleAuthSettings.IsUsableSecret(storedSecret))
+            {
+                ModelState.AddModelError(
+                    nameof(model.GoogleLoginEnabled),
+                    "Turn on Google login only after both Client ID and Client Secret are saved.");
+                return View(await MergeIntegrationDisplayAsync(model, cancellationToken));
+            }
+        }
+
+        if (googleChanged)
+            _googleAuth.NotifyOptionsChanged();
+
         if (changedKeys.Count > 0)
         {
-            _db.StaffAccountAudits.Add(new StaffAccountAudit
-            {
-                Action = "SecureConfig.Save",
-                TargetUserId = user.Id,
-                PerformedByUserId = user.Id,
-                RoleAssigned = string.Join(",", changedKeys),
-                AtUtc = DateTime.UtcNow
-            });
             _audit.Record(
                 SystemAuditIntent.ConfigurationChange,
                 SystemAuditDomain.Configuration,
@@ -191,7 +251,10 @@ public class HomeController : Controller
             SenderEmail = await _vault.GetAsync(SecureSettingKeys.EmailSender, cancellationToken),
             SmtpPasswordConfigured = await _vault.HasValueAsync(SecureSettingKeys.EmailPassword, cancellationToken),
             GeminiConfigured = await _vault.HasValueAsync(SecureSettingKeys.GeminiApiKey, cancellationToken),
-            GeminiKeyName = await _vault.GetAsync(SecureSettingKeys.GeminiKeyName, cancellationToken)
+            GeminiKeyName = await _vault.GetAsync(SecureSettingKeys.GeminiKeyName, cancellationToken),
+            GoogleLoginEnabled = await _googleAuth.IsEnabledAsync(cancellationToken),
+            GoogleClientId = await _vault.GetAsync(SecureSettingKeys.GoogleClientId, cancellationToken),
+            GoogleClientSecretConfigured = await _vault.HasValueAsync(SecureSettingKeys.GoogleClientSecret, cancellationToken)
         };
     }
 
@@ -201,11 +264,14 @@ public class HomeController : Controller
     {
         model.SmtpPassword = null;
         model.GeminiApiKey = null;
+        model.GoogleClientSecret = null;
         model.CurrentPassword = string.Empty;
         model.SmtpPasswordConfigured = await _vault.HasValueAsync(SecureSettingKeys.EmailPassword, cancellationToken);
         model.GeminiConfigured = await _vault.HasValueAsync(SecureSettingKeys.GeminiApiKey, cancellationToken);
+        model.GoogleClientSecretConfigured = await _vault.HasValueAsync(SecureSettingKeys.GoogleClientSecret, cancellationToken);
         model.SenderEmail ??= await _vault.GetAsync(SecureSettingKeys.EmailSender, cancellationToken);
         model.GeminiKeyName ??= await _vault.GetAsync(SecureSettingKeys.GeminiKeyName, cancellationToken);
+        model.GoogleClientId ??= await _vault.GetAsync(SecureSettingKeys.GoogleClientId, cancellationToken);
         return model;
     }
 }

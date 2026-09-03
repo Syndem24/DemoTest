@@ -20,7 +20,11 @@
     "login": "サインイン・登録",
     "signInJoin": "サインイン・登録",
     "bookStay": "宿泊を予約",
-    "brand": "Mori International Hotel"
+    "brand": "Mori International Hotel",
+    "reviews": "レビュー",
+    "bookingHistory": "予約履歴",
+    "logOut": "ログアウト",
+    "staffPanel": "スタッフルーム"
   },
   "auth": {
     "eyebrow": "お帰りなさい",

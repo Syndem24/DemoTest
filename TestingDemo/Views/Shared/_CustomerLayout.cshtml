@@ -11,10 +11,19 @@
     var immersive = ViewData["GuestImmersive"] as bool? == true || isAccommodations;
     var isAuthPage = ViewData["GuestAuthPage"] as bool? == true || isStaffAuth;
     var isAuthLogin = string.Equals(controller, "Account", StringComparison.OrdinalIgnoreCase)
-        && string.Equals(action, "Login", StringComparison.OrdinalIgnoreCase);
+        && (string.Equals(action, "Login", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(action, "ConfirmGuestAgreement", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(action, "ConfirmStaffIdentity", StringComparison.OrdinalIgnoreCase));
     var isDarkPage = ViewData["GuestDarkPage"] as bool? == true
         || string.Equals(action, "NotFoundPage", StringComparison.OrdinalIgnoreCase)
         || string.Equals(action, "NotFound", StringComparison.OrdinalIgnoreCase);
+    var isSignedIn = User.Identity?.IsAuthenticated == true;
+    var isStaffOnGuest = isSignedIn
+        && (User.IsInRole(TestingDemo.Models.AppRoles.AdminManager)
+            || User.IsInRole(TestingDemo.Models.AppRoles.Receptionist));
+    var profileDisplayName = User.Identity?.Name ?? "Guest";
+    if (profileDisplayName.StartsWith("guest.", StringComparison.OrdinalIgnoreCase))
+        profileDisplayName = profileDisplayName["guest.".Length..];
     var shellClass = isDarkPage
         ? "guest-shell guest-shell--dark-page guest-shell--full-bleed"
         : (isAuthLogin
@@ -22,7 +31,7 @@
             : (isAuthPage
                 ? "guest-shell guest-shell--auth"
                 : (isAccommodations
-                    ? "guest-shell guest-shell--immersive guest-shell--rooms"
+                    ? "guest-shell guest-shell--immersive guest-shell--rooms guest-shell--clay"
                     : (immersive ? "guest-shell guest-shell--immersive" : "guest-shell"))));
 }
 <!DOCTYPE html>
@@ -94,15 +103,82 @@
                         <span data-i18n="nav.contact">Contact</span>
                     </a>
                 }
-                <a class="@(isStaffAuth ? "is-active" : null)"
-                   asp-controller="Account"
-                   asp-action="Login"
-                   title="Sign In or Join">
-                    <svg class="guest-nav-item-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                        <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.28 2.01.2 5.97 1.29 6 3.28-1.29 1.94-3.5 3.22-6 3.22z"/>
-                    </svg>
-                    <span data-i18n="nav.signInJoin">Sign In or Join</span>
-                </a>
+                @if (isSignedIn)
+                {
+                    <div class="guest-nav-profile" data-guest-profile>
+                        <button type="button"
+                                class="guest-nav-profile-toggle"
+                                id="guestProfileToggle"
+                                aria-expanded="false"
+                                aria-controls="guestProfileMenu"
+                                aria-haspopup="menu"
+                                title="@profileDisplayName">
+                            <svg class="guest-nav-item-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.28 2.01.2 5.97 1.29 6 3.28-1.29 1.94-3.5 3.22-6 3.22z"/>
+                            </svg>
+                            <span class="guest-nav-profile-label">@profileDisplayName</span>
+                            <svg class="guest-nav-profile-caret" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+                                <path fill="currentColor" d="M7 10l5 5 5-5z"/>
+                            </svg>
+                        </button>
+                        <div class="guest-nav-profile-menu" id="guestProfileMenu" role="menu" hidden>
+                            @if (isStaffOnGuest)
+                            {
+                                <a role="menuitem"
+                                   class="guest-nav-profile-item"
+                                   asp-controller="Dashboard"
+                                   asp-action="Index">
+                                    <svg class="guest-nav-profile-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                        <path fill="currentColor" d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+                                    </svg>
+                                    <span data-i18n="nav.staffPanel">Staff panel</span>
+                                </a>
+                            }
+                            else
+                            {
+                                <a role="menuitem"
+                                   class="guest-nav-profile-item"
+                                   asp-controller="GuestPortal"
+                                   asp-action="Reviews">
+                                    <svg class="guest-nav-profile-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                        <path fill="currentColor" d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                                    </svg>
+                                    <span data-i18n="nav.reviews">Reviews</span>
+                                </a>
+                                <a role="menuitem"
+                                   class="guest-nav-profile-item"
+                                   asp-controller="GuestPortal"
+                                   asp-action="BookingHistory">
+                                    <svg class="guest-nav-profile-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                        <path fill="currentColor" d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/>
+                                    </svg>
+                                    <span data-i18n="nav.bookingHistory">Booking history</span>
+                                </a>
+                            }
+                            <form asp-controller="Account" asp-action="Logout" method="post" class="guest-nav-profile-logout">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" role="menuitem" class="guest-nav-profile-item">
+                                    <svg class="guest-nav-profile-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                        <path fill="currentColor" d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
+                                    </svg>
+                                    <span data-i18n="nav.logOut">Log out</span>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <a class="@(isStaffAuth ? "is-active" : null)"
+                       asp-controller="Account"
+                       asp-action="Login"
+                       title="Sign In or Join">
+                        <svg class="guest-nav-item-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.28 2.01.2 5.97 1.29 6 3.28-1.29 1.94-3.5 3.22-6 3.22z"/>
+                        </svg>
+                        <span data-i18n="nav.signInJoin">Sign In or Join</span>
+                    </a>
+                }
             </nav>
 
             <div class="guest-lang-nav" data-guest-lang-nav></div>
@@ -160,8 +236,10 @@
 
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/lib/signalr/signalr.min.js"></script>
     <script src="~/js/guest-i18n.js" asp-append-version="true"></script>
     <script src="~/js/photo-zoom.js" asp-append-version="true"></script>
+    <script src="~/js/mori-input-filters.js" asp-append-version="true"></script>
     <script src="~/js/booking-ui.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>

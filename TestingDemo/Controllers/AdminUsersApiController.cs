@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -20,17 +21,20 @@ public sealed class AdminUsersApiController : ControllerBase
     private readonly IStaffAccountCreateService _createService;
     private readonly HotelBookingDbContext _db;
     private readonly ISystemAuditRecorder _audit;
+    private readonly ISystemAuditQuery _auditQuery;
 
     public AdminUsersApiController(
         UserManager<ApplicationUser> userManager,
         IStaffAccountCreateService createService,
         HotelBookingDbContext db,
-        ISystemAuditRecorder audit)
+        ISystemAuditRecorder audit,
+        ISystemAuditQuery auditQuery)
     {
         _userManager = userManager;
         _createService = createService;
         _db = db;
         _audit = audit;
+        _auditQuery = auditQuery;
     }
 
     [HttpGet("list")]
@@ -63,7 +67,8 @@ public sealed class AdminUsersApiController : ControllerBase
                     .Where(role => role.Id == u.RoleId)
                     .Select(role => role.Name)
                     .FirstOrDefault() ?? "Unassigned"
-            });
+            })
+            .Where(u => u.RoleName != AppRoles.Guest);
 
         if (!string.IsNullOrWhiteSpace(q))
         {
@@ -136,6 +141,112 @@ public sealed class AdminUsersApiController : ControllerBase
             totalPages,
             retentionDays = 0,
             summary = summary ?? new { total = 0, adminManagers = 0, receptionists = 0 }
+        });
+    }
+
+    [HttpGet("guests")]
+    public async Task<IActionResult> ListGuests(
+        string? q,
+        string status = "all",
+        int page = 1,
+        int pageSize = 15,
+        CancellationToken cancellationToken = default)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 5, 50);
+        q = (q ?? string.Empty).Trim();
+        status = NormalizeStatus(status);
+
+        var googleProvider = GoogleDefaults.AuthenticationScheme;
+        var logins = _db.Set<IdentityUserLogin<string>>().AsNoTracking();
+
+        IQueryable<UserListRow> query = _db.Users
+            .AsNoTracking()
+            .Select(u => new UserListRow
+            {
+                Id = u.Id,
+                FullName = u.FullName,
+                UserName = u.UserName ?? string.Empty,
+                Email = u.Email ?? string.Empty,
+                PhoneNumber = u.PhoneNumber,
+                BirthDate = u.BirthDate,
+                Address = u.Address,
+                LockoutEnabled = u.LockoutEnabled,
+                LockoutEnd = u.LockoutEnd,
+                RoleName = _db.Roles
+                    .Where(role => role.Id == u.RoleId)
+                    .Select(role => role.Name)
+                    .FirstOrDefault() ?? "Unassigned",
+                HasGoogleLogin = logins.Any(l =>
+                    l.UserId == u.Id && l.LoginProvider == googleProvider)
+            })
+            .Where(u => u.RoleName == AppRoles.Guest);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = $"%{q}%";
+            query = query.Where(u =>
+                EF.Functions.Like(u.UserName, term)
+                || EF.Functions.Like(u.Email, term)
+                || (u.FullName != null && EF.Functions.Like(u.FullName, term))
+                || (u.PhoneNumber != null && EF.Functions.Like(u.PhoneNumber, term)));
+        }
+
+        if (status == "active")
+        {
+            query = query.Where(u => !(u.LockoutEnabled && u.LockoutEnd.HasValue));
+        }
+        else if (status == "disabled")
+        {
+            query = query.Where(u => u.LockoutEnabled && u.LockoutEnd.HasValue);
+        }
+
+        query = query.OrderBy(u => u.FullName ?? u.UserName);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var googleLinkedCount = await query.CountAsync(u => u.HasGoogleLogin, cancellationToken);
+        var totalPages = totalCount == 0 ? 1 : (int)Math.Ceiling(totalCount / (double)pageSize);
+        page = Math.Min(page, totalPages);
+
+        var rows = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        var disabledStates = await GetDisabledStateMapAsync(rows.Select(r => r.Id).ToArray(), cancellationToken);
+        var items = rows.Select(u =>
+        {
+            var disabledAt = disabledStates.TryGetValue(u.Id, out var value) ? value : null;
+            var isDisabled = IsDisabledByLockout(u.LockoutEnabled, u.LockoutEnd);
+            return new
+            {
+                id = u.Id,
+                fullName = u.FullName,
+                userName = u.UserName,
+                email = u.Email,
+                phoneNumber = u.PhoneNumber,
+                birthDate = u.BirthDate?.ToString("yyyy-MM-dd"),
+                address = u.Address,
+                role = u.RoleName,
+                hasGoogleLogin = u.HasGoogleLogin,
+                isDisabled,
+                disabledAtUtc = disabledAt,
+                canDeleteNow = isDisabled
+            };
+        }).ToList();
+
+        return Ok(new
+        {
+            items,
+            page,
+            pageSize,
+            totalCount,
+            totalPages,
+            summary = new
+            {
+                total = totalCount,
+                googleLinked = googleLinkedCount
+            }
         });
     }
 
@@ -292,26 +403,19 @@ public sealed class AdminUsersApiController : ControllerBase
         string role,
         CancellationToken cancellationToken)
     {
-        _db.StaffAccountAudits.Add(new StaffAccountAudit
-        {
-            Action = action,
-            TargetUserId = targetUserId,
-            PerformedByUserId = actorUserId,
-            RoleAssigned = string.IsNullOrWhiteSpace(role) ? "Unassigned" : role,
-            AtUtc = DateTime.UtcNow
-        });
         var target = await _userManager.FindByIdAsync(targetUserId);
         var targetLabel = string.IsNullOrWhiteSpace(target?.FullName)
             ? (target?.UserName ?? targetUserId)
             : target.FullName.Trim();
+        var summary = string.IsNullOrWhiteSpace(role) ? action : $"{action} · {role}";
         _audit.Record(
             SystemAuditIntent.AdministrativeAction,
             SystemAuditDomain.Account,
-            $"Account.{action}",
-            "StaffAccount",
+            StaffAccountActivityMapper.ToAccountAction(action),
+            StaffAuthSchema.AuditTargetType,
             targetUserId,
             targetLabel,
-            summary: string.IsNullOrWhiteSpace(role) ? action : $"{action} · {role}",
+            summary: summary,
             actorUserId: actorUserId);
         await _db.SaveChangesAsync(cancellationToken);
     }
@@ -320,27 +424,7 @@ public sealed class AdminUsersApiController : ControllerBase
         IReadOnlyCollection<string> userIds,
         CancellationToken cancellationToken)
     {
-        if (userIds.Count == 0)
-            return new Dictionary<string, DateTime?>(StringComparer.Ordinal);
-
-        var logs = await _db.StaffAccountAudits
-            .Where(a =>
-                userIds.Contains(a.TargetUserId)
-                && (a.Action == "Disabled" || a.Action == "Enabled"))
-            .OrderByDescending(a => a.AtUtc)
-            .Select(a => new { a.TargetUserId, a.Action, a.AtUtc })
-            .ToListAsync(cancellationToken);
-
-        var result = new Dictionary<string, DateTime?>(StringComparer.Ordinal);
-        foreach (var log in logs)
-        {
-            if (result.ContainsKey(log.TargetUserId))
-                continue;
-            result[log.TargetUserId] = log.Action == "Disabled"
-                ? DateTime.SpecifyKind(log.AtUtc, DateTimeKind.Utc)
-                : null;
-        }
-        return result;
+        return await _auditQuery.GetStaffDisabledStateMapAsync(userIds, cancellationToken);
     }
 
     private static bool IsDisabledByLockout(bool lockoutEnabled, DateTimeOffset? lockoutEnd) =>
@@ -366,5 +450,6 @@ public sealed class AdminUsersApiController : ControllerBase
         public string RoleName { get; init; } = "Unassigned";
         public bool LockoutEnabled { get; init; }
         public DateTimeOffset? LockoutEnd { get; init; }
+        public bool HasGoogleLogin { get; init; }
     }
 }

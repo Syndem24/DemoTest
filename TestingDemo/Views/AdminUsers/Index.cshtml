@@ -1,7 +1,5 @@
 @{
     ViewData["Title"] = "Staff users";
-    var message = TempData["Message"] as string;
-    var error = TempData["Error"] as string;
 }
 
 @section Scripts {
@@ -15,6 +13,5 @@
      data-suggest-url="@Url.Action("Suggestions", "AdminUsers")"
      data-action-base-url="/api/admin/users"
      data-create-url="@Url.Action("Create", "AdminUsers")"
-     data-message="@message"
-     data-error="@error">
+     data-guests-page-url="@Url.Action("Guests", "AdminUsers")">
 </div>

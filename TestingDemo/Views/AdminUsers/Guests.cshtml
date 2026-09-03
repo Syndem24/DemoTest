@@ -1,0 +1,15 @@
+@{
+    ViewData["Title"] = "Guest Google accounts";
+}
+
+@section Scripts {
+    <script type="module" src="~/room-management/room-app.js" asp-append-version="true"></script>
+}
+
+<link rel="stylesheet" href="~/room-management/room-app.css" asp-append-version="true" />
+
+<div id="admin-guest-users-root"
+     data-guests-url="/api/admin/users/guests"
+     data-action-base-url="/api/admin/users"
+     data-staff-url="@Url.Action("Index", "AdminUsers")">
+</div>

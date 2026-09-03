@@ -28,6 +28,8 @@
                            maxlength="20"
                            placeholder="e.g. 101"
                            required
+                           data-mori-filter="room-code"
+                           inputmode="text"
                            value="${currentValues[i] || ''}" />
                 </div>
             `;

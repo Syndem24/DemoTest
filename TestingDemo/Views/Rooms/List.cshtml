@@ -15,17 +15,11 @@
     </div>
 </div>
 
-@if (TempData["Success"] is string success)
-{
-    <div class="alert alert-success alert-dismissible fade show" role="alert">
-        @success
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    </div>
-}
-
 @if (!hasRooms)
 {
-    <div class="alert alert-info">No rooms yet. Create a room type to add rooms.</div>
+    <div class="hotel-empty-state" role="status">
+        <p class="mb-0">No rooms yet. Create a room type to add rooms.</p>
+    </div>
 }
 else
 {

@@ -1,7 +1,5 @@
 @{
     ViewData["Title"] = "Create staff user";
-    var message = TempData["Message"] as string;
-    var error = TempData["Error"] as string;
 }
 
 @section Scripts {
@@ -13,6 +11,4 @@
     <a asp-action="Index" class="btn btn-outline-secondary">Back to users</a>
 </div>
 <div id="staff-create-root"
-     data-list-url="@Url.Action("Index", "AdminUsers")"
-     data-message="@message"
-     data-error="@error"></div>
+     data-list-url="@Url.Action("Index", "AdminUsers")"></div>

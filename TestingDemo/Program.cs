@@ -4,11 +4,14 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Localization;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using QuestPDF.Infrastructure;
 using TestingDemo.Data;
 using TestingDemo.Hubs;
@@ -81,6 +84,27 @@ try
                     QueueLimit = 0,
                     AutoReplenishment = true
                 }));
+        options.AddPolicy("staff-password-reset-verify", context =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 10,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                    AutoReplenishment = true
+                }));
+    });
+
+    builder.Services.AddDistributedMemoryCache();
+    builder.Services.AddSession(options =>
+    {
+        options.IdleTimeout = TimeSpan.FromMinutes(20);
+        options.Cookie.HttpOnly = true;
+        options.Cookie.IsEssential = true;
+        options.Cookie.Name = "MoriHotel.Session";
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
     });
 
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
@@ -88,7 +112,11 @@ try
 
     builder.Services.AddDbContext<HotelBookingDbContext>(options =>
     {
-        options.UseSqlServer(connectionString);
+        options.UseSqlServer(connectionString, sql =>
+        {
+            sql.EnableRetryOnFailure(3, TimeSpan.FromSeconds(3), null);
+            sql.CommandTimeout(60);
+        });
         options.ConfigureWarnings(warnings =>
             warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
     });
@@ -121,6 +149,8 @@ try
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.Cookie.HttpOnly = true;
         options.Cookie.Name = "MoriHotel.Auth";
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
         options.Events.OnRedirectToLogin = context =>
         {
             if (IsApiOrHub(context.Request.Path))
@@ -145,19 +175,54 @@ try
         };
     });
 
-    var googleClientId = builder.Configuration["Authentication:Google:ClientId"];
-    var googleClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
-    if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(googleClientSecret))
-    {
-        builder.Services.AddAuthentication()
-            .AddGoogle(options =>
+    builder.Services.AddSingleton<IConfigureNamedOptions<GoogleOptions>, ConfigureGoogleOptions>();
+    builder.Services.AddScoped<IGoogleAuthSettings, GoogleAuthSettings>();
+
+    builder.Services.AddAuthentication()
+        .AddGoogle(options =>
+        {
+            // Non-empty placeholders satisfy OAuthOptions.Validate(); real values come from the vault.
+            options.ClientId = GoogleAuthSettings.UnconfiguredClientId;
+            options.ClientSecret = GoogleAuthSettings.UnconfiguredClientSecret;
+            options.SaveTokens = false;
+            options.CallbackPath = "/signin-google";
+            options.ClaimActions.MapJsonKey("email_verified", "email_verified");
+
+            // Default CorrelationCookie.SecurePolicy is Always — browsers drop it on plain HTTP
+            // (this app runs http://localhost:5288 in Development). SameAsRequest keeps HTTPS secure.
+            options.CorrelationCookie.Name = "MoriHotel.GoogleCorrelation";
+            options.CorrelationCookie.HttpOnly = true;
+            options.CorrelationCookie.IsEssential = true;
+            options.CorrelationCookie.SameSite = SameSiteMode.Lax;
+            options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+
+            options.Events.OnRemoteFailure = context =>
             {
-                options.ClientId = googleClientId;
-                options.ClientSecret = googleClientSecret;
-                options.SaveTokens = false;
-                options.ClaimActions.MapJsonKey("email_verified", "email_verified");
-            });
-    }
+                context.HandleResponse();
+                var factory = context.HttpContext.RequestServices.GetRequiredService<ITempDataDictionaryFactory>();
+                var tempData = factory.GetTempData(context.HttpContext);
+                tempData["Error"] = "Google sign-in was cancelled or could not be completed. Try Continue with Google again.";
+                tempData.Save();
+                context.Response.Redirect("/Account/Login");
+                return Task.CompletedTask;
+            };
+
+            options.Events.OnRedirectToAuthorizationEndpoint = async context =>
+            {
+                var google = context.HttpContext.RequestServices.GetRequiredService<IGoogleAuthSettings>();
+                var (id, secret) = await google.GetCredentialsAsync();
+                if (!GoogleAuthSettings.IsUsableClientId(id) || !GoogleAuthSettings.IsUsableSecret(secret))
+                {
+                    context.Response.Redirect("/Account/Login");
+                    return;
+                }
+
+                context.Options.ClientId = id!;
+                context.Options.ClientSecret = secret!;
+                context.RedirectUri = GoogleAuthSettings.ReplaceClientIdInAuthorizeUrl(context.RedirectUri, id!);
+                context.Response.Redirect(context.RedirectUri);
+            };
+        });
 
     builder.Services.AddAuthorization(options =>
     {
@@ -166,6 +231,8 @@ try
     });
 
     builder.Services.AddValidatorsFromAssemblyContaining<CreateRoomDtoValidator>();
+    builder.Services.AddScoped<IGuestCatalogNotifier, GuestCatalogNotifier>();
+    builder.Services.AddScoped<IAuditLogNotifier, AuditLogNotifier>();
     builder.Services.AddScoped<IRoomService, RoomService>();
     builder.Services.AddScoped<IBookingService, BookingService>();
     builder.Services.AddHttpContextAccessor();
@@ -185,6 +252,7 @@ try
     builder.Services.AddScoped<ISecureConfigStore, SecureConfigStore>();
     builder.Services.AddScoped<IStaffEmailSender, SmtpStaffEmailSender>();
     builder.Services.AddScoped<IStaffOnboardingEmailSender, SmtpStaffEmailSender>();
+    builder.Services.AddScoped<IStaffPasswordResetCodeService, StaffPasswordResetCodeService>();
     builder.Services.AddScoped<IGeminiChatClient, GeminiChatClient>();
     builder.Services.AddScoped<IStaffAccountCreateService, StaffAccountCreateService>();
     builder.Services.AddScoped<ISpecialOfferService, SpecialOfferService>();
@@ -224,6 +292,7 @@ try
     app.UseRequestLocalization();
     app.UseResponseCompression();
     app.UseRouting();
+    app.UseSession();
     app.UseAuthentication();
     app.UseAuthorization();
     app.UseMiddleware<MustChangePasswordMiddleware>();
@@ -232,6 +301,7 @@ try
     app.MapStaticAssets();
     app.MapControllers();
     app.MapHub<BookingNotificationsHub>("/hubs/bookings");
+    app.MapHub<GuestCatalogHub>("/hubs/guest-catalog");
     app.MapControllerRoute(
             name: "default",
             pattern: "{controller=Booking}/{action=Index}/{id?}")
@@ -265,8 +335,18 @@ catch (Exception ex) when (ex is not HostAbortedException
     Console.Error.WriteLine("FATAL: App failed to start.");
     Console.Error.WriteLine(ex.ToString());
     Console.Error.WriteLine();
-    Console.Error.WriteLine("Try: powershell -File ..\\scripts\\setup-new-device.ps1 -ResetDatabase");
-    Console.Error.WriteLine("Then: .\\run.ps1");
+    if (ex is Microsoft.Data.SqlClient.SqlException sqlEx
+        && (sqlEx.Number == 1857 || sqlEx.Message.Contains("already in use", StringComparison.OrdinalIgnoreCase)))
+    {
+        Console.Error.WriteLine("Database file is locked — usually a previous debug session is still running.");
+        Console.Error.WriteLine("Stop debugging in Visual Studio (Shift+F5), or close any other TestingDemo/dotnet host.");
+        Console.Error.WriteLine("Then run again. From repo root: .\\run.ps1 also stops stale processes on port 5288.");
+    }
+    else
+    {
+        Console.Error.WriteLine("Try: powershell -File ..\\scripts\\setup-new-device.ps1 -ResetDatabase");
+        Console.Error.WriteLine("Then: .\\run.ps1");
+    }
     if (Environment.UserInteractive)
     {
         Console.Error.WriteLine("Press Enter to close...");
@@ -282,13 +362,8 @@ static bool IsApiOrHub(PathString path) =>
 static bool ShouldOpenBrowser(IHostEnvironment environment)
 {
     var flag = Environment.GetEnvironmentVariable("HOTEL_OPEN_BROWSER");
-    if (string.Equals(flag, "0", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(flag, "false", StringComparison.OrdinalIgnoreCase))
-    {
-        return false;
-    }
-
-    return true;
+    return string.Equals(flag, "1", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(flag, "true", StringComparison.OrdinalIgnoreCase);
 }
 
 static void TryOpenBrowser(string url)

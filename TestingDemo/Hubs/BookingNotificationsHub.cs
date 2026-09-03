@@ -11,6 +11,7 @@ public interface IBookingNotificationsClient
     Task BookingArchived(int bookingId);
     Task PaymentChanged(int bookingId);
     Task OfferEndingSoon(SpecialOfferEndingSoonNotificationDto notification);
+    Task AuditLogChanged();
 }
 
 [Authorize(Roles = "AdminManager,Receptionist")]

@@ -885,4 +885,25 @@
 
   refreshPayments();
   refreshFlushLogs();
+
+  function shouldRefreshPayments(scopes) {
+    return scopes.includes('all') || scopes.includes('payments') || scopes.includes('dashboard');
+  }
+
+  function schedulePaymentsRefresh() {
+    if (window.MoriAdminRealtime) {
+      window.MoriAdminRealtime.scheduleRefresh('payments', () => refreshPayments());
+    } else {
+      void refreshPayments();
+    }
+  }
+
+  window.addEventListener('mori:admin-refresh', (event) => {
+    const scopes = event.detail?.scopes || [];
+    if (!shouldRefreshPayments(scopes)) return;
+    schedulePaymentsRefresh();
+    if (scopes.includes('all') || scopes.includes('audit')) {
+      window.MoriAdminRealtime?.scheduleRefresh('payments-flush', () => refreshFlushLogs());
+    }
+  });
 })();

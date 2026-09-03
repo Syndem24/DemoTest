@@ -1,6 +1,7 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { formatMoney } from '../format'
 import { compareValues, useDebouncedValue, usePagination, useSortState } from '../hooks'
+import { notifyMori } from '../moriNotice'
 import type { RoomItem, RoomSortKey } from '../types'
 import { roomStatusLabel } from '../types'
 import { DeleteIconLink, DetailsIconLink, EditIconLink } from './ActionIcons'
@@ -216,12 +217,16 @@ export function RoomListPanel({ data, loading, error, canManage = true }: Props)
   const { page, setPage, totalPages, pageItems } = usePagination(filtered, 12)
   const groups = useMemo(() => groupByRoomType(pageItems), [pageItems])
 
+  useEffect(() => {
+    if (error) notifyMori(error, 'error')
+  }, [error])
+
   if (loading) {
     return <SkeletonRows rows={6} />
   }
 
   if (error) {
-    return <div className="rm-alert">{error}</div>
+    return <div className="rm-empty">Rooms could not be loaded. Try refreshing the page.</div>
   }
 
   return (

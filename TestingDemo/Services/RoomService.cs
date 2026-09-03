@@ -12,19 +12,22 @@ public class RoomService : IRoomService
     private readonly IValidator<CreateRoomsDto> _createBulkValidator;
     private readonly IValidator<UpdateRoomDto> _updateValidator;
     private readonly IValidator<UpdateRoomTypeDto> _updateRoomTypeValidator;
+    private readonly IGuestCatalogNotifier _guestCatalog;
 
     public RoomService(
         HotelBookingDbContext db,
         IValidator<CreateRoomDto> createValidator,
         IValidator<CreateRoomsDto> createBulkValidator,
         IValidator<UpdateRoomDto> updateValidator,
-        IValidator<UpdateRoomTypeDto> updateRoomTypeValidator)
+        IValidator<UpdateRoomTypeDto> updateRoomTypeValidator,
+        IGuestCatalogNotifier guestCatalog)
     {
         _db = db;
         _createValidator = createValidator;
         _createBulkValidator = createBulkValidator;
         _updateValidator = updateValidator;
         _updateRoomTypeValidator = updateRoomTypeValidator;
+        _guestCatalog = guestCatalog;
     }
 
     public async Task<IReadOnlyList<RoomDto>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -73,6 +76,7 @@ public class RoomService : IRoomService
         await _db.SaveChangesAsync(cancellationToken);
 
         var created = await GetByIdWithDetailsAsync(room.Id, cancellationToken);
+        await _guestCatalog.NotifyChangedAsync("rooms", cancellationToken);
         return created!.ToDto();
     }
 
@@ -128,6 +132,7 @@ public class RoomService : IRoomService
         }
 
         await _db.SaveChangesAsync(cancellationToken);
+        await _guestCatalog.NotifyChangedAsync("rooms", cancellationToken);
         return normalizedNumbers.Count;
     }
 
@@ -195,6 +200,7 @@ public class RoomService : IRoomService
         await _db.SaveChangesAsync(cancellationToken);
 
         var updated = await GetByIdWithDetailsAsync(room.Id, cancellationToken);
+        await _guestCatalog.NotifyChangedAsync("rooms", cancellationToken);
         return updated!.ToDto();
     }
 
@@ -262,6 +268,7 @@ public class RoomService : IRoomService
         await SyncOccupancyFromBookingsAsync(cancellationToken);
 
         await _db.SaveChangesAsync(cancellationToken);
+        await _guestCatalog.NotifyChangedAsync("rooms", cancellationToken);
         return rooms.Count;
     }
 
@@ -396,6 +403,7 @@ public class RoomService : IRoomService
         }
 
         await _db.SaveChangesAsync(cancellationToken);
+        await _guestCatalog.NotifyChangedAsync("rooms", cancellationToken);
         return true;
     }
 
@@ -439,6 +447,7 @@ public class RoomService : IRoomService
         }
 
         await _db.SaveChangesAsync(cancellationToken);
+        await _guestCatalog.NotifyChangedAsync("rooms", cancellationToken);
         return room.ToDto();
     }
 
@@ -461,6 +470,7 @@ public class RoomService : IRoomService
         _db.Rooms.RemoveRange(rooms);
         _db.RoomTypes.Remove(roomType);
         await _db.SaveChangesAsync(cancellationToken);
+        await _guestCatalog.NotifyChangedAsync("rooms", cancellationToken);
         return rooms.Count;
     }
 

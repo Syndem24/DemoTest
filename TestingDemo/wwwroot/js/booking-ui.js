@@ -49,6 +49,8 @@
   let bookWizardStep = 'guest';
   /** @type {'initial' | 'change'} */
   let offerSelectMode = 'initial';
+  /** Guests flow: pick stay dates before the room & offer step. */
+  let datesBeforeOfferFlow = false;
   const OFFER_SPECIAL_PREVIEW_COUNT = 3;
   const offerMoreOffersOpen = new Set();
   const offerIncludesOpen = new Set();
@@ -75,6 +77,37 @@
 
   guestNav?.querySelectorAll('.guest-nav-links a, .guest-nav-cta').forEach((link) => {
     link.addEventListener('click', () => setNavOpen(false));
+  });
+
+  const profileRoot = document.querySelector('[data-guest-profile]');
+  const profileToggle = document.getElementById('guestProfileToggle');
+  const profileMenu = document.getElementById('guestProfileMenu');
+
+  function setProfileOpen(open) {
+    if (!profileRoot || !profileToggle || !profileMenu) return;
+    profileRoot.classList.toggle('is-open', open);
+    profileToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    profileMenu.hidden = !open;
+  }
+
+  profileToggle?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setProfileOpen(profileMenu?.hidden !== false);
+  });
+
+  profileMenu?.querySelectorAll('a, button').forEach((item) => {
+    item.addEventListener('click', () => {
+      setProfileOpen(false);
+      setNavOpen(false);
+    });
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!profileRoot?.contains(event.target)) setProfileOpen(false);
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') setProfileOpen(false);
   });
 
   window.addEventListener('resize', () => {
@@ -182,23 +215,91 @@
 
   runHeroTypewriter();
 
+  function revealNode(el) {
+    if (!el) return;
+    el.classList.add('is-inview');
+  }
+
+  function scheduleRevealCascade(elements, options = {}) {
+    const { startDelay = 0, step = 85, maxDelay = 960 } = options;
+    elements.forEach((el, index) => {
+      if (!el) return;
+      const delay = startDelay + Math.min(index * step, maxDelay);
+      window.setTimeout(() => revealNode(el), delay);
+    });
+  }
+
+  function isInRevealViewport(el, marginRatio = 0.12) {
+    const rect = el.getBoundingClientRect();
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const margin = vh * marginRatio;
+    return rect.top < vh - margin && rect.bottom > margin * 0.35;
+  }
+
+  function initAccommodationsHeroEntrance() {
+    const hero = document.querySelector('.guest-hero-rooms');
+    if (!hero) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      hero.classList.add('is-hero-ready');
+      return;
+    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => hero.classList.add('is-hero-ready'));
+    });
+  }
+
   function initScrollReveals() {
     const nodes = Array.from(document.querySelectorAll('[data-reveal]'));
     if (!nodes.length) return;
 
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduceMotion || !('IntersectionObserver' in window)) {
-      nodes.forEach((el) => el.classList.add('is-inview'));
+      nodes.forEach(revealNode);
       return;
     }
 
     const roomsPage = document.querySelector('.guest-rooms-page');
-    const roomsCadence = Boolean(roomsPage);
+
+    if (roomsPage) {
+      initAccommodationsHeroEntrance();
+
+      const intro = roomsPage.querySelector('.guest-rooms-intro[data-reveal]');
+      const cards = Array.from(
+        roomsPage.querySelectorAll('.guest-room-track .guest-reveal[data-reveal]')
+      );
+      const bookCtas = Array.from(
+        roomsPage.querySelectorAll('.guest-rooms-book-cta[data-reveal]')
+      );
+      const loadCascade = [intro, ...cards, ...bookCtas].filter(Boolean);
+      const loadSet = new Set(loadCascade);
+      const scrollNodes = nodes.filter((n) => !loadSet.has(n));
+
+      scheduleRevealCascade(loadCascade, { startDelay: 280, step: 88, maxDelay: 1100 });
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            revealNode(entry.target);
+            observer.unobserve(entry.target);
+          });
+        },
+        { root: null, threshold: 0.06, rootMargin: '14% 0px -4% 0px' }
+      );
+
+      scrollNodes.forEach((el) => {
+        if (isInRevealViewport(el, 0.1)) {
+          revealNode(el);
+        } else {
+          observer.observe(el);
+        }
+      });
+      return;
+    }
 
     nodes.forEach((el, index) => {
       if (!el.style.getPropertyValue('--reveal-delay')) {
-        const step = roomsCadence ? 70 : 90;
-        el.style.setProperty('--reveal-delay', `${Math.min(index % 5, 4) * step}ms`);
+        el.style.setProperty('--reveal-delay', `${Math.min(index % 5, 4) * 90}ms`);
       }
     });
 
@@ -206,18 +307,20 @@
       (entries) => {
         entries.forEach((entry) => {
           if (!entry.isIntersecting) return;
-          entry.target.classList.add('is-inview');
+          revealNode(entry.target);
           observer.unobserve(entry.target);
         });
       },
-      {
-        root: null,
-        threshold: roomsCadence ? 0.14 : 0.18,
-        rootMargin: roomsCadence ? '0px 0px -6% 0px' : '0px 0px -8% 0px'
-      }
+      { root: null, threshold: 0.1, rootMargin: '12% 0px -6% 0px' }
     );
 
-    nodes.forEach((el) => observer.observe(el));
+    nodes.forEach((el) => {
+      if (isInRevealViewport(el, 0.12)) {
+        revealNode(el);
+      } else {
+        observer.observe(el);
+      }
+    });
   }
 
   initScrollReveals();
@@ -394,6 +497,30 @@
     { name: 'Bathroom', items: ['toiletries', 'bath towels'] },
     { name: 'Outdoor area and window view', items: ['city view', 'no window'] },
   ];
+  const DEFAULT_INCLUSION_ITEMS = INCLUSION_CATALOG.flatMap((cat) => cat.items);
+  const DEFAULT_INCLUSION_SET = new Set(DEFAULT_INCLUSION_ITEMS.map((i) => i.toLowerCase()));
+
+  function orderInclusionsCustomFirst(items) {
+    const list = (items || [])
+      .map((i) => String(i).trim())
+      .filter(Boolean);
+    const seen = new Set();
+    const deduped = [];
+    list.forEach((item) => {
+      const key = item.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduped.push(item);
+      }
+    });
+    const custom = deduped
+      .filter((i) => !DEFAULT_INCLUSION_SET.has(i.toLowerCase()))
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    const catalog = DEFAULT_INCLUSION_ITEMS
+      .map((def) => deduped.find((i) => i.toLowerCase() === def.toLowerCase()))
+      .filter(Boolean);
+    return custom.concat(catalog);
+  }
 
   const CATEGORY_ICONS = {
     'video and audio': 'tv',
@@ -423,9 +550,7 @@
   }
 
   function buildInclusionGroups(selectedItems) {
-    const selected = (selectedItems || [])
-      .map((i) => String(i).trim())
-      .filter(Boolean);
+    const selected = orderInclusionsCustomFirst(selectedItems);
     const selectedSet = new Set(selected.map((i) => i.toLowerCase()));
     const used = new Set();
     const groups = [];
@@ -441,14 +566,16 @@
         });
     }
 
+    const customItems = takeItems(
+      selected.filter((i) => !DEFAULT_INCLUSION_SET.has(i.toLowerCase()))
+    );
+    if (customItems.length) {
+      groups.push({ name: 'Custom', items: customItems });
+    }
+
     for (const cat of INCLUSION_CATALOG) {
       const items = takeItems(cat.items);
       if (items.length) groups.push({ name: cat.name, items });
-    }
-
-    const leftovers = selected.filter((i) => !used.has(i.toLowerCase()));
-    if (leftovers.length) {
-      groups.push({ name: 'Custom', items: leftovers });
     }
 
     return groups;
@@ -1299,12 +1426,15 @@
     const hasRooms = bookingCart.length > 0;
     const overCapacity = isGuestCapacityExceeded();
     const overIntended = cartRoomCount() > intendedRoomCount();
+    const soldOutConflict = hasSoldOutConflict();
     const intended = intendedRoomCount();
     const slotsLeft = remainingSlotsForOfferAdd();
-    const ok = hasRooms && !overCapacity && !overIntended;
+    const ok = hasRooms && !overCapacity && !overIntended && !soldOutConflict;
 
     document.querySelectorAll('[data-offer-add], [data-stay-longer-book]').forEach((btn) => {
-      btn.disabled = slotsLeft < 1;
+      const card = btn.closest('.guest-offer-card');
+      const soldOut = card?.classList.contains('is-sold-out');
+      btn.disabled = slotsLeft < 1 || soldOut;
       btn.title = slotsLeft < 1
         ? tx(
             'booking.alreadyAddedRooms',
@@ -1331,7 +1461,9 @@
             )
           : overCapacity
             ? tx('booking.capacityHint', null, 'Guests exceed room capacity. Add more rooms or reduce guests.')
-            : '';
+            : soldOutConflict
+              ? buildSoldOutMessages(lastAvailabilitySnapshot).join(' ')
+              : '';
     }
 
     if (hint) {
@@ -1354,6 +1486,9 @@
           { guests: guestCount, hold },
           `Guests (${guestCount}) exceed selected room capacity (${hold}). Add more rooms or go back to adjust guests.`
         );
+      } else if (soldOutConflict) {
+        hint.hidden = false;
+        hint.textContent = buildSoldOutMessages(lastAvailabilitySnapshot).join(' ');
       } else {
         hint.hidden = false;
         const extras = extraPersonsSelected();
@@ -2500,45 +2635,214 @@
     return '';
   }
 
-  function applyLiveAvailability(items) {
+  /** Last availability snapshot from /api/bookings/availability (per selected dates). */
+  let lastAvailabilitySnapshot = [];
+
+  function formatSoldOutDateLabel(isoDate) {
+    if (!isoDate) return '';
+    const parts = String(isoDate).split('-').map(Number);
+    if (parts.length < 3) return isoDate;
+    const d = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
+    if (Number.isNaN(d.getTime())) return isoDate;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
+  function soldOutDatesForItem(item) {
+    const raw = item?.soldOutDates ?? item?.SoldOutDates;
+    return Array.isArray(raw) ? raw.filter(Boolean) : [];
+  }
+
+  function buildSoldOutMessages(items, cartLines = bookingCart) {
+    const list = Array.isArray(items) ? items : [];
+    const byId = new Map(list.map((item) => [Number(item.roomTypeId ?? item.RoomTypeId), item]));
+    const messages = [];
+    const seen = new Set();
+
+    const lines = Array.isArray(cartLines) && cartLines.length ? cartLines : [];
+    const targets = lines.length
+      ? lines.map((line) => ({
+          roomTypeId: Number(line.roomTypeId || 0),
+          roomType: line.roomType,
+          qty: Number(line.qty || 0),
+        }))
+      : list.map((item) => ({
+          roomTypeId: Number(item.roomTypeId ?? item.RoomTypeId),
+          roomType: item.roomTypeName ?? item.RoomTypeName ?? '',
+          qty: 0,
+        }));
+
+    targets.forEach((target) => {
+      const item = byId.get(target.roomTypeId);
+      if (!item) return;
+      const remaining = Number(item.remaining ?? item.Remaining ?? 0);
+      const soldOutDates = soldOutDatesForItem(item);
+      const name = target.roomType || item.roomTypeName || item.RoomTypeName || 'Room';
+      const key = `${target.roomTypeId}:${remaining}:${soldOutDates.join(',')}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      if (soldOutDates.length) {
+        const labels = soldOutDates.map(formatSoldOutDateLabel).join(', ');
+        messages.push(
+          tx(
+            'booking.soldOutNightMessage',
+            { room: name, dates: labels },
+            `${name} is fully booked on ${labels}.`
+          )
+        );
+      } else if (remaining < 1 || (target.qty > 0 && remaining < target.qty)) {
+        messages.push(
+          tx(
+            'booking.soldOutStayMessage',
+            { room: name },
+            `${name} has no rooms left for your entire stay.`
+          )
+        );
+      }
+    });
+
+    return messages;
+  }
+
+  function hasSoldOutConflict() {
+    if (!lastAvailabilitySnapshot.length) return false;
     const byId = new Map(
-      (Array.isArray(items) ? items : []).map((item) => [Number(item.roomTypeId), item])
+      lastAvailabilitySnapshot.map((item) => [Number(item.roomTypeId ?? item.RoomTypeId), item])
+    );
+
+    if (bookingCart.length) {
+      return bookingCart.some((line) => {
+        const item = byId.get(Number(line.roomTypeId || 0));
+        const remaining = item ? Number(item.remaining ?? item.Remaining ?? 0) : 0;
+        return remaining < Number(line.qty || 0);
+      });
+    }
+
+    return lastAvailabilitySnapshot.some((item) => Number(item.remaining ?? item.Remaining ?? 0) < 1);
+  }
+
+  function updateSoldOutDatesUi() {
+    const msgEl = document.getElementById('stayDatesAvailabilityMsg');
+    const offerMsgEl = document.getElementById('offerDatesAvailabilityMsg');
+    const checkIn = modalCheckIn?.value || '';
+    const checkOut = modalCheckOut?.value || '';
+    if (!msgEl && !offerMsgEl) return;
+
+    if (!checkIn || !checkOut || validateDates(checkIn, checkOut)) {
+      if (msgEl) {
+        msgEl.hidden = true;
+        msgEl.textContent = '';
+      }
+      if (offerMsgEl) {
+        offerMsgEl.hidden = true;
+        offerMsgEl.textContent = '';
+      }
+      return;
+    }
+
+    const messages = buildSoldOutMessages(lastAvailabilitySnapshot);
+    const text = messages.join(' ');
+    if (messages.length) {
+      if (msgEl) {
+        msgEl.hidden = false;
+        msgEl.textContent = text;
+      }
+      if (offerMsgEl) {
+        offerMsgEl.hidden = false;
+        offerMsgEl.textContent = text;
+      }
+    } else {
+      if (msgEl) {
+        msgEl.hidden = true;
+        msgEl.textContent = '';
+      }
+      if (offerMsgEl) {
+        offerMsgEl.hidden = true;
+        offerMsgEl.textContent = '';
+      }
+    }
+  }
+
+  function syncOfferCardsFromAvailability(byId) {
+    document
+      .querySelectorAll('#offerRoomList .guest-offer-card[data-offer-room-id]')
+      .forEach((card) => {
+        const roomTypeId = Number(card.getAttribute('data-offer-room-id') || 0);
+        const item = byId.get(roomTypeId);
+        const remaining = item ? Number(item.remaining ?? item.Remaining ?? 0) : 0;
+        const soldOut = remaining < 1;
+        card.classList.toggle('is-sold-out', soldOut);
+        card.dataset.available = String(remaining);
+
+        const badge = card.querySelector('.guest-offer-availability');
+        if (badge) {
+          badge.textContent = soldOut
+            ? tx('rooms.fullyBooked', null, 'Fully booked')
+            : tx('booking.nAvailable', { n: remaining }, `${remaining} available`);
+          badge.classList.toggle('is-sold-out', soldOut);
+        }
+
+        const selectBtn = card.querySelector('[data-offer-add]');
+        if (selectBtn) {
+          selectBtn.disabled = soldOut;
+          if (soldOut) {
+            selectBtn.textContent = tx('booking.soldOutForDates', null, 'Fully booked for these dates');
+          } else {
+            const inCart = qtyForRoomType(card.getAttribute('data-offer-room-type') || '') > 0;
+            selectBtn.textContent = inCart
+              ? tx('rooms.inYourStay', null, 'In your stay')
+              : tx('booking.addRoom', null, 'Add room');
+          }
+        }
+      });
+  }
+
+  function applyLiveAvailability(items) {
+    lastAvailabilitySnapshot = Array.isArray(items) ? items : [];
+    const byId = new Map(
+      lastAvailabilitySnapshot.map((item) => [Number(item.roomTypeId ?? item.RoomTypeId), item])
     );
 
     document.querySelectorAll('.guest-room[data-room-type-id]').forEach((card) => {
       const item = byId.get(Number(card.dataset.roomTypeId || 0));
-      const remaining = item ? Number(item.remaining || 0) : 0;
+      const remaining = item ? Number(item.remaining ?? item.Remaining ?? 0) : 0;
+      const soldOut = remaining < 1;
       card.dataset.available = String(remaining);
+      card.classList.toggle('is-sold-out', soldOut);
 
       const availability = card.querySelector('.guest-room-availability');
       if (availability) {
-        availability.textContent =
-          remaining > 0
-            ? `${remaining} left for these dates (pending & confirmed holds)`
-            : 'No rooms left for these dates';
-        availability.classList.toggle('is-unavailable', remaining < 1);
+        availability.textContent = soldOut
+          ? tx('rooms.fullyBooked', null, 'Fully booked')
+          : tx('booking.nAvailable', { n: remaining }, `${remaining} available`);
+        availability.classList.toggle('is-sold-out', soldOut);
+        availability.classList.toggle('is-unavailable', soldOut);
       }
 
       const bookButton = card.querySelector('[data-guest-modal="guests"], [data-guest-modal="book"]');
-      if (bookButton) bookButton.disabled = remaining < 1;
+      if (bookButton) bookButton.disabled = soldOut;
     });
+
+    syncOfferCardsFromAvailability(byId);
 
     let hasShortage = false;
     bookingCart.forEach((line) => {
       const item = byId.get(Number(line.roomTypeId || 0));
-      line.available = item ? Number(item.remaining || 0) : 0;
-      // Never overwrite promo rates with the regular availability price.
+      line.available = item ? Number(item.remaining ?? item.Remaining ?? 0) : 0;
+      line.soldOutDates = item ? soldOutDatesForItem(item) : [];
       if (!cartLineUsesSpecialOffer(line)) {
-        line.price = item ? Number(item.pricePerNight || line.price) : line.price;
+        line.price = item ? Number(item.pricePerNight ?? item.PricePerNight ?? line.price) : line.price;
         line.regularPrice = line.price;
       } else if (item) {
-        line.regularPrice = Number(item.pricePerNight || line.regularPrice || 0);
+        line.regularPrice = Number(item.pricePerNight ?? item.PricePerNight ?? line.regularPrice ?? 0);
       }
       if (line.qty > line.available) hasShortage = true;
     });
     reapplySpecialOfferPrices();
     renderCart();
     syncModalQtyMax();
+    updateSoldOutDatesUi();
+    syncOfferContinueState();
     return hasShortage;
   }
 
@@ -2556,9 +2860,17 @@
       if (hasShortage) {
         setMessage(
           bookMsg,
-          'Not enough rooms for these dates (other bookings or reservations may already hold them). Adjust room types or dates.',
+          tx(
+            'booking.notEnoughRoomsDates',
+            null,
+            'Not enough rooms for these dates (other bookings or reservations may already hold them). Adjust room types or dates.'
+          ),
           false
         );
+      } else if (hasSoldOutConflict() && bookWizardStep !== 'dates') {
+        setMessage(bookMsg, buildSoldOutMessages(lastAvailabilitySnapshot).join(' '), false);
+      } else if (bookWizardStep === 'dates') {
+        setMessage(bookMsg, '', false);
       }
     } catch {
       // The submit endpoint performs the authoritative availability check.
@@ -3084,6 +3396,24 @@
     return `<strong class="guest-offer-price">${formatMoney(effective)}</strong>`;
   }
 
+  function remainingFromAvailabilitySnapshot(roomTypeId, fallback) {
+    const checkIn = modalCheckIn?.value || '';
+    const checkOut = modalCheckOut?.value || '';
+    if (
+      !lastAvailabilitySnapshot.length ||
+      !checkIn ||
+      !checkOut ||
+      validateDates(checkIn, checkOut)
+    ) {
+      return fallback;
+    }
+    const item = lastAvailabilitySnapshot.find(
+      (row) => Number(row.roomTypeId ?? row.RoomTypeId) === roomTypeId
+    );
+    if (!item) return fallback;
+    return Number(item.remaining ?? item.Remaining ?? 0);
+  }
+
   function collectOfferRoomTypes() {
     const cards = Array.from(document.querySelectorAll('.guest-room[data-room-type-id]'));
     return cards
@@ -3093,9 +3423,12 @@
         const price = Number(card.getAttribute('data-price') || 0);
         const occupancy = Number(card.getAttribute('data-occupancy') || 0);
         const beds = Number(card.getAttribute('data-beds') || 0);
-        const available = Number(card.getAttribute('data-available') || 0);
+        const available = remainingFromAvailabilitySnapshot(
+          roomTypeId,
+          Number(card.getAttribute('data-available') || 0)
+        );
         const images = parseJsonArray(card.getAttribute('data-images'));
-        const inclusions = parseJsonArray(card.getAttribute('data-inclusions'));
+        const inclusions = orderInclusionsCustomFirst(parseJsonArray(card.getAttribute('data-inclusions')));
         const description =
           card.querySelector('.guest-room-desc-full')?.textContent?.trim() ||
           card.querySelector('.guest-room-feature-desc')?.textContent?.trim() ||
@@ -3113,8 +3446,12 @@
           preferred: Boolean(preferredRoomType && roomType === preferredRoomType),
         };
       })
-      .filter((item) => item.roomType && item.available >= 1)
-      .sort((a, b) => Number(b.preferred) - Number(a.preferred) || a.price - b.price);
+      .filter((item) => item.roomType)
+      .sort((a, b) => {
+        if (a.available <= 0 && b.available > 0) return 1;
+        if (b.available <= 0 && a.available > 0) return -1;
+        return Number(b.preferred) - Number(a.preferred) || a.price - b.price;
+      });
   }
 
   function renderOfferPanel() {
@@ -3201,8 +3538,9 @@
       ]
         .filter(Boolean)
         .join('');
+      const soldOut = item.available < 1;
       const article = document.createElement('article');
-      article.className = `guest-offer-card${item.preferred ? ' is-preferred' : ''}`;
+      article.className = `guest-offer-card${item.preferred ? ' is-preferred' : ''}${soldOut ? ' is-sold-out' : ''}`;
       article.id = `offer-room-${item.roomTypeId}`;
       article.setAttribute('data-offer-room-type', item.roomType);
       article.setAttribute('data-offer-room-id', String(item.roomTypeId));
@@ -3214,7 +3552,11 @@
                 ? `<img src="${safeImage}" alt="" loading="lazy" />`
                 : `<div class="guest-room-placeholder" aria-hidden="true"><span>${(item.roomType || 'R').trim().charAt(0).toUpperCase()}</span></div>`
             }
-            <span class="guest-offer-availability">${tx('booking.nAvailable', { n: item.available }, `${item.available} available`)}</span>
+            <span class="guest-offer-availability${soldOut ? ' is-sold-out' : ''}">${
+              soldOut
+                ? tx('rooms.fullyBooked', null, 'Fully booked')
+                : tx('booking.nAvailable', { n: item.available }, `${item.available} available`)
+            }</span>
           </div>
           <div class="guest-offer-copy">
             <button type="button"
@@ -3260,8 +3602,13 @@
               ${limited ? `<span class="guest-offer-price-note">${tx('booking.cashOnly', null, 'Cash only')}</span>` : ''}
               <button type="button"
                       class="guest-btn guest-btn-primary guest-offer-select"
-                      data-offer-add="">
-                ${tx('booking.addRoom', null, 'Add room')}
+                      data-offer-add=""
+                      ${soldOut ? 'disabled' : ''}>
+                ${
+                  soldOut
+                    ? tx('booking.soldOutForDates', null, 'Fully booked for these dates')
+                    : tx('booking.addRoom', null, 'Add room')
+                }
               </button>
             </div>
           </div>
@@ -3373,8 +3720,314 @@
     cards.forEach((card) => offerBookTagObserver.observe(card));
   }
 
-  async function loadSpecialOffers() {
-    if (cachedSpecialOffers) return cachedSpecialOffers;
+  let guestCatalogRefreshTimer = 0;
+  let guestCatalogRefreshing = false;
+
+  function normalizeGuestRoomType(raw) {
+    return {
+      roomTypeId: Number(raw.roomTypeId ?? raw.RoomTypeId ?? 0),
+      name: String(raw.name ?? raw.Name ?? '').trim(),
+      description: String(raw.description ?? raw.Description ?? '').trim(),
+      pricePerNight: Number(raw.pricePerNight ?? raw.PricePerNight ?? 0),
+      maxOccupancy: Number(raw.maxOccupancy ?? raw.MaxOccupancy ?? 0),
+      bedCount: Number(raw.bedCount ?? raw.BedCount ?? 0),
+      availableCount: Number(raw.availableCount ?? raw.AvailableCount ?? 0),
+      inclusions: orderInclusionsCustomFirst(raw.inclusions ?? raw.Inclusions ?? []),
+      images: Array.isArray(raw.images ?? raw.Images)
+        ? [...(raw.images ?? raw.Images)].filter(Boolean)
+        : [],
+    };
+  }
+
+  function renderGuestRoomFeatureTags(card, inclusions) {
+    let tagsEl = card.querySelector('.guest-room-feature-tags');
+    if (!inclusions.length) {
+      if (tagsEl) tagsEl.remove();
+      return;
+    }
+    if (!tagsEl) {
+      const copy = card.querySelector('.guest-room-feature-copy');
+      const priceEl = card.querySelector('.guest-room-feature-price');
+      if (!copy || !priceEl) return;
+      tagsEl = document.createElement('ul');
+      tagsEl.className = 'guest-room-feature-tags';
+      copy.insertBefore(tagsEl, priceEl);
+    }
+    const visible = inclusions.slice(0, 3);
+    const more = inclusions.length - visible.length;
+    tagsEl.innerHTML =
+      visible.map((inc) => `<li>${escapeHtml(inc)}</li>`).join('') +
+      (more > 0 ? `<li data-i18n-more="${more}">+${more} more</li>` : '');
+  }
+
+  function applyGuestRoomTypeToCard(card, type) {
+    const canBook = type.availableCount > 0;
+    card.classList.toggle('is-sold-out', !canBook);
+    card.setAttribute('data-fill-room', type.name);
+    card.setAttribute('data-room-type', type.name);
+    card.setAttribute('data-room-type-id', String(type.roomTypeId));
+    card.setAttribute('data-price', type.pricePerNight.toFixed(2));
+    card.setAttribute('data-occupancy', String(type.maxOccupancy));
+    card.setAttribute('data-beds', String(type.bedCount));
+    card.setAttribute('data-available', String(type.availableCount));
+    card.setAttribute('data-images', JSON.stringify(type.images));
+    card.setAttribute('data-inclusions', JSON.stringify(type.inclusions));
+
+    const title = card.querySelector(`#room-title-${type.roomTypeId}`) || card.querySelector('h2');
+    if (title) title.textContent = type.name;
+
+    const descFull = card.querySelector('.guest-room-desc-full');
+    if (descFull) descFull.textContent = type.description || '';
+
+    const descEl = card.querySelector('.guest-room-feature-desc');
+    if (descEl) {
+      if (!type.description) {
+        descEl.textContent = tx(
+          'rooms.defaultDescription',
+          null,
+          'A comfortable stay with everything you need for a quiet night in.'
+        );
+        descEl.setAttribute('data-i18n', 'rooms.defaultDescription');
+      } else {
+        descEl.removeAttribute('data-i18n');
+        const desc = type.description;
+        descEl.textContent =
+          desc.length > 180 ? `${desc.slice(0, 180).trimEnd()}…` : desc;
+      }
+    }
+
+    const avail = card.querySelector('.guest-room-availability');
+    if (avail) {
+      avail.classList.toggle('is-sold-out', !canBook);
+      avail.setAttribute('data-available', String(type.availableCount));
+      avail.setAttribute('data-i18n-available', String(type.availableCount));
+      avail.textContent = canBook
+        ? `${type.availableCount} available`
+        : tx('rooms.fullyBooked', null, 'Fully booked');
+    }
+
+    const upTo = card.querySelector('[data-i18n-up-to]');
+    if (upTo) {
+      upTo.setAttribute('data-i18n-up-to', String(type.maxOccupancy));
+      upTo.textContent = tx(
+        'rooms.upToGuests',
+        { n: type.maxOccupancy },
+        `Up to ${type.maxOccupancy} guests`
+      );
+    }
+
+    const beds = card.querySelector('[data-i18n-beds]');
+    if (beds) {
+      beds.setAttribute('data-i18n-beds', String(type.bedCount));
+      const bedLabel =
+        type.bedCount === 1
+          ? tx('rooms.bed', { n: type.bedCount }, `${type.bedCount} bed`)
+          : tx('rooms.beds', { n: type.bedCount }, `${type.bedCount} beds`);
+      beds.textContent = bedLabel;
+    }
+
+    renderGuestRoomFeatureTags(card, type.inclusions);
+
+    const img = card.querySelector('[data-feature-image]');
+    const firstImage = type.images[0];
+    if (img && firstImage) {
+      img.src = firstImage;
+      img.alt = type.name;
+    }
+  }
+
+  function buildGuestRoomCardHtml(type) {
+    const canBook = type.availableCount > 0;
+    const safeName = escapeHtml(type.name);
+    const desc = type.description || '';
+    const inclusions = type.inclusions;
+    const tagsHtml = inclusions.length
+      ? `<ul class="guest-room-feature-tags">${inclusions
+          .slice(0, 3)
+          .map((inc) => `<li>${escapeHtml(inc)}</li>`)
+          .join('')}${
+          inclusions.length > 3
+            ? `<li data-i18n-more="${inclusions.length - 3}">+${inclusions.length - 3} more</li>`
+            : ''
+        }</ul>`
+      : '';
+    const image = type.images[0];
+    const mediaHtml = image
+      ? `<img src="${escapeHtml(image)}" alt="${safeName}" loading="lazy" data-feature-image />`
+      : `<div class="guest-room-placeholder" aria-hidden="true"><span>${escapeHtml(
+          (type.name.trim()[0] || 'R').toUpperCase()
+        )}</span></div>`;
+    const pagerHtml =
+      type.images.length > 1
+        ? `<div class="guest-feature-pager" data-feature-pager>
+            <button type="button" class="guest-feature-pager-btn is-prev" data-feature-prev aria-label="Previous photo for ${safeName}">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <span class="guest-feature-pager-count" data-feature-count>1 / ${type.images.length}</span>
+            <button type="button" class="guest-feature-pager-btn is-next" data-feature-next aria-label="Next photo for ${safeName}">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>`
+        : '';
+
+    const descHtml = desc
+      ? `<p class="guest-room-feature-desc">${escapeHtml(
+          desc.length > 180 ? `${desc.slice(0, 180).trimEnd()}…` : desc
+        )}</p>`
+      : `<p class="guest-room-feature-desc" data-i18n="rooms.defaultDescription">A comfortable stay with everything you need for a quiet night in.</p>`;
+
+    const bedSuffix = type.bedCount === 1 ? '' : 's';
+    const imagesJson = JSON.stringify(type.images).replace(/"/g, '&quot;');
+    const inclusionsJson = JSON.stringify(inclusions).replace(/"/g, '&quot;');
+    return `<article class="guest-room guest-room-feature guest-reveal guest-reveal--noren${canBook ? '' : ' is-sold-out'}"
+         data-reveal
+         data-guest-modal="details"
+         data-fill-room="${safeName}"
+         data-room-type="${safeName}"
+         data-room-type-id="${type.roomTypeId}"
+         data-price="${type.pricePerNight.toFixed(2)}"
+         data-occupancy="${type.maxOccupancy}"
+         data-beds="${type.bedCount}"
+         data-available="${type.availableCount}"
+         data-images="${imagesJson}"
+         data-inclusions="${inclusionsJson}"
+         aria-labelledby="room-title-${type.roomTypeId}">
+      <div class="guest-room-desc-full" hidden>${escapeHtml(desc)}</div>
+      <div class="guest-room-feature-media" data-feature-media>
+        ${mediaHtml}
+        <span class="guest-room-availability${canBook ? '' : ' is-sold-out'}"
+              data-i18n-available="${type.availableCount}"
+              data-available="${type.availableCount}">
+          ${canBook ? `${type.availableCount} available` : 'Fully booked'}
+        </span>
+        ${pagerHtml}
+      </div>
+      <div class="guest-room-feature-copy">
+        <div class="guest-room-feature-heading">
+          <p class="guest-eyebrow" data-i18n="rooms.guestRoom">Guest room</p>
+          <h2 id="room-title-${type.roomTypeId}">${safeName}</h2>
+        </div>
+        ${descHtml}
+        <ul class="guest-room-feature-meta">
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>
+            <span data-i18n-up-to="${type.maxOccupancy}">Up to ${type.maxOccupancy} guests</span>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5v14M3 9h18M21 5v14M7 13h10"/></svg>
+            <span data-i18n-beds="${type.bedCount}">${type.bedCount} bed${bedSuffix}</span>
+          </li>
+        </ul>
+        ${tagsHtml}
+        <p class="guest-room-feature-price">
+          <small data-i18n="rooms.from">From</small>
+          <span>₱${type.pricePerNight.toFixed(2)}</span>
+          <small data-i18n="rooms.perNight">per night</small>
+        </p>
+        <div class="guest-room-feature-actions">
+          <button type="button"
+                  class="guest-btn guest-btn-ghost"
+                  data-guest-modal="details"
+                  data-fill-room="${safeName}"
+                  aria-label="View details for ${safeName}"
+                  data-i18n="rooms.details">Details</button>
+        </div>
+      </div>
+    </article>`;
+  }
+
+  function syncGuestRoomsIntroMeta(types) {
+    const meta = document.querySelector('.guest-rooms-intro-meta[data-i18n-types-meta]');
+    if (!meta) return;
+    const typeCount = types.length;
+    const bookableCount = types.filter((t) => t.availableCount > 0).length;
+    meta.setAttribute('data-types', String(typeCount));
+    meta.setAttribute('data-available-types', String(bookableCount));
+    meta.textContent = `${typeCount} room type${typeCount === 1 ? '' : 's'} · ${bookableCount} available to book`;
+  }
+
+  function applyGuestRoomTypes(types) {
+    if (!document.getElementById('rooms')) return;
+    const track = document.querySelector('[data-room-carousel-track]');
+    const existingCards = Array.from(document.querySelectorAll('.guest-room[data-room-type-id]'));
+    const byId = new Map(types.map((t) => [t.roomTypeId, t]));
+    const existingIds = new Set(
+      existingCards.map((c) => Number(c.getAttribute('data-room-type-id')))
+    );
+
+    existingCards.forEach((card) => {
+      const id = Number(card.getAttribute('data-room-type-id'));
+      const type = byId.get(id);
+      if (!type) {
+        card.remove();
+        return;
+      }
+      applyGuestRoomTypeToCard(card, type);
+    });
+
+    const newTypes = types.filter((t) => !existingIds.has(t.roomTypeId));
+    if (newTypes.length && track) {
+      newTypes.forEach((type) => {
+        track.insertAdjacentHTML('beforeend', buildGuestRoomCardHtml(type));
+      });
+      const freshCards = Array.from(
+        track.querySelectorAll('.guest-room-feature[data-reveal]:not(.is-inview)')
+      ).slice(-newTypes.length);
+      scheduleRevealCascade(freshCards, { startDelay: 60, step: 70, maxDelay: 480 });
+      document.querySelectorAll('.guest-room-feature[data-images]').forEach((card) => {
+        if (!card.dataset.featurePagerBound) {
+          initFeatureMediaPager(card);
+          card.dataset.featurePagerBound = '1';
+        }
+      });
+    }
+
+    syncGuestRoomsIntroMeta(types);
+    paintRoomCardPrices();
+  }
+
+  async function refreshGuestCatalog() {
+    if (guestCatalogRefreshing || !document.getElementById('rooms')) return;
+    guestCatalogRefreshing = true;
+    try {
+      const response = await fetch('/api/guest/room-types', {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+      });
+      if (!response.ok) return;
+      const raw = await response.json();
+      const types = (Array.isArray(raw) ? raw : [])
+        .map(normalizeGuestRoomType)
+        .filter((t) => t.roomTypeId > 0 && t.name);
+      applyGuestRoomTypes(types);
+      cachedSpecialOffers = null;
+      await loadSpecialOffers(true);
+      if (offerSelectModal && !offerSelectModal.hidden) {
+        renderOfferPanel();
+        syncOfferChangeChrome();
+      }
+    } finally {
+      guestCatalogRefreshing = false;
+    }
+  }
+
+  function scheduleGuestCatalogRefresh() {
+    clearTimeout(guestCatalogRefreshTimer);
+    guestCatalogRefreshTimer = setTimeout(() => refreshGuestCatalog(), 300);
+  }
+
+  function initGuestCatalogRealtime() {
+    if (!document.getElementById('rooms') || typeof signalR === 'undefined') return;
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl('/hubs/guest-catalog')
+      .withAutomaticReconnect()
+      .build();
+    connection.on('GuestCatalogChanged', () => scheduleGuestCatalogRefresh());
+    connection.start().catch(() => {});
+  }
+
+  async function loadSpecialOffers(forceReload = false) {
+    if (!forceReload && cachedSpecialOffers) return cachedSpecialOffers;
     try {
       const response = await fetch('/api/special-offers/active', {
         headers: { Accept: 'application/json' },
@@ -3503,6 +4156,68 @@
     return true;
   }
 
+  function syncDatesBeforeOfferChrome() {
+    const stepList = document.getElementById('bookStepList');
+    const bookTitle = document.getElementById('bookTitle');
+    const eyebrow = document.querySelector('#bookModal .guest-book-modal-head .guest-eyebrow');
+    const backBtn = document.getElementById('bookWizardBackBtn');
+    const nextBtn = document.getElementById('bookWizardNextBtn');
+
+    if (datesBeforeOfferFlow) {
+      stepList?.setAttribute('hidden', '');
+      if (bookTitle) {
+        bookTitle.textContent = tx('booking.stayDates', null, 'Stay dates');
+      }
+      if (eyebrow) {
+        eyebrow.textContent = tx('booking.stepDates', null, 'Dates');
+      }
+      if (backBtn) {
+        backBtn.textContent = tx('booking.backToGuests', null, 'Back to guests');
+      }
+      if (nextBtn) {
+        nextBtn.textContent = tx('booking.continueToRooms', null, 'Continue to rooms');
+      }
+    } else {
+      stepList?.removeAttribute('hidden');
+      if (bookTitle) {
+        bookTitle.textContent = tx('booking.completeBooking', null, 'Complete your booking');
+      }
+      if (eyebrow) {
+        eyebrow.textContent = tx('booking.booking', null, 'Booking');
+      }
+    }
+  }
+
+  async function openDatesBeforeOfferStep() {
+    const error = validateGuestRooms();
+    if (error) {
+      showGuestsHint(error);
+      showToast(error, false);
+      return;
+    }
+    if (guestRoomsOverCapacity()) {
+      const message = tx(
+        'booking.capacityHint',
+        null,
+        `Guests exceed room capacity (max ${MAX_GUESTS_PER_ROOM} per room). Add another room or reduce guests to continue.`
+      );
+      showGuestsHint(message);
+      showToast(message, false);
+      syncGuestsContinueState();
+      return;
+    }
+    showGuestsHint('');
+    datesBeforeOfferFlow = true;
+    offerSelectMode = 'initial';
+    clearPendingChangeRoom();
+    ensureStayDatesForOffer();
+    applyDateLimits(modalCheckIn, modalCheckOut);
+    updateLeadHint(modalCheckIn, modalLeadHint, bookModalForm);
+    syncDatesBeforeOfferChrome();
+    setBookWizardStep('dates');
+    openModal(bookModal);
+  }
+
   async function openOfferStep() {
     const error = validateGuestRooms();
     if (error) {
@@ -3527,6 +4242,10 @@
     syncOfferChangeChrome();
     syncGuestFlowSummary();
     await loadSpecialOffers();
+    ensureStayDatesForOffer();
+    if (modalCheckIn?.value && modalCheckOut?.value) {
+      await refreshLiveAvailability(modalCheckIn.value, modalCheckOut.value);
+    }
     const seeded = seedPreferredRoomIntoOfferCart();
     renderOfferPanel();
     openModal(offerSelectModal);
@@ -3559,13 +4278,16 @@
     }
   }
 
-  function openOfferChangeMode(preferredType = '') {
+  async function openOfferChangeMode(preferredType = '') {
     if (preferredType) preferredRoomType = preferredType;
     pendingChangeRoomType = preferredType || '';
     pendingChangeQty = preferredType ? 1 : 0;
     offerSelectMode = 'change';
     syncOfferChangeChrome();
     syncGuestFlowSummary();
+    if (modalCheckIn?.value && modalCheckOut?.value) {
+      await refreshLiveAvailability(modalCheckIn.value, modalCheckOut.value);
+    }
     renderOfferPanel();
     openModal(offerSelectModal);
     showToast(
@@ -3781,6 +4503,12 @@
       syncOfferContinueState();
       return;
     }
+    if (hasSoldOutConflict()) {
+      const message = buildSoldOutMessages(lastAvailabilitySnapshot).join(' ');
+      showToast(message, false);
+      syncOfferContinueState();
+      return;
+    }
 
     if (offerSelectMode === 'change') {
       returnToBookRooms();
@@ -3799,6 +4527,9 @@
     syncModalQtyMax();
     updatePaymentPreview();
     renderCart();
+    if (modalCheckIn?.value && modalCheckOut?.value) {
+      void refreshLiveAvailability(modalCheckIn.value, modalCheckOut.value);
+    }
     setBookWizardStep('guest');
     openModal(bookModal);
     showToast(`${cartRoomCount()} room${cartRoomCount() === 1 ? '' : 's'} ready — enter guest details.`, true);
@@ -3871,6 +4602,7 @@
     clearBookRequiredErrors();
     setMessage(document.getElementById('bookFormMessage'), '', false);
     syncCartSubmitState();
+    syncDatesBeforeOfferChrome();
 
     const panel = form?.querySelector(`[data-book-step-panel="${step}"]`);
     const focusEl = panel?.querySelector('input, select, button, textarea');
@@ -3985,6 +4717,13 @@
       return { ok: false, message: dateError };
     }
 
+    if (bookingCart.length && hasSoldOutConflict()) {
+      const soldOutMsg = buildSoldOutMessages(lastAvailabilitySnapshot).join(' ');
+      updateSoldOutDatesUi();
+      checkOutEl?.focus();
+      return { ok: false, message: soldOutMsg };
+    }
+
     return { ok: true, message: '' };
   }
 
@@ -4008,6 +4747,12 @@
         message: `Guests (${guestCount}) exceed this room’s capacity (${hold}). Add more rooms or reduce guests to continue.`,
       };
     }
+    if (hasSoldOutConflict()) {
+      return {
+        ok: false,
+        message: buildSoldOutMessages(lastAvailabilitySnapshot).join(' '),
+      };
+    }
     return { ok: true, message: '' };
   }
 
@@ -4024,12 +4769,26 @@
       return;
     }
 
+    if (datesBeforeOfferFlow && bookWizardStep === 'dates') {
+      datesBeforeOfferFlow = false;
+      syncDatesBeforeOfferChrome();
+      closeAllModals(false);
+      void openOfferStep();
+      return;
+    }
+
     const index = BOOK_WIZARD_STEPS.indexOf(bookWizardStep);
     const next = BOOK_WIZARD_STEPS[Math.min(BOOK_WIZARD_STEPS.length - 1, index + 1)];
     setBookWizardStep(next);
   }
 
   function retreatBookWizard() {
+    if (datesBeforeOfferFlow && bookWizardStep === 'dates') {
+      datesBeforeOfferFlow = false;
+      syncDatesBeforeOfferChrome();
+      openGuestsStep(preferredRoomType);
+      return;
+    }
     if (bookWizardStep === 'guest') {
       renderOfferPanel();
       openModal(offerSelectModal);
@@ -4248,7 +5007,7 @@
   });
 
   document.getElementById('guestsSubmitBtn')?.addEventListener('click', () => {
-    openOfferStep();
+    openDatesBeforeOfferStep();
   });
 
   document.getElementById('offerBackToGuestsBtn')?.addEventListener('click', () => {
@@ -4867,10 +5626,14 @@
     });
   }
 
-  document.querySelectorAll('.guest-room-feature[data-images]').forEach(initFeatureMediaPager);
+  document.querySelectorAll('.guest-room-feature[data-images]').forEach((card) => {
+    initFeatureMediaPager(card);
+    card.dataset.featurePagerBound = '1';
+  });
 
   // Apply active Limited Time rates on room cards as soon as offers load.
   loadSpecialOffers();
+  initGuestCatalogRealtime();
 
   // Show / hide password toggle
   document.addEventListener('click', (e) => {

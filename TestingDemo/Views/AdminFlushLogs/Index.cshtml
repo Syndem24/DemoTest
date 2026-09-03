@@ -21,12 +21,12 @@
         <ul class="admin-flush-kpis" aria-label="Audit coverage">
             <li>
                 <span>Events</span>
-                <strong>@Model.AuditTotal</strong>
+                <strong data-audit-total>@Model.AuditTotal</strong>
                 <em>@(Model.AuditTotal == 1 ? "recorded change" : "recorded changes")</em>
             </li>
             <li>
                 <span>This page</span>
-                <strong>@Model.AuditRows.Count</strong>
+                <strong data-audit-page-count>@Model.AuditRows.Count</strong>
                 <em>newest first</em>
             </li>
             <li>
@@ -46,7 +46,7 @@
         <p class="admin-flush-banner is-error" role="alert">@Model.Error</p>
     }
 
-    <section class="admin-flush-card admin-audit-panel" aria-labelledby="auditFilterTitle">
+    <section class="admin-flush-card admin-audit-panel" aria-labelledby="auditFilterTitle" data-audit-live data-audit-api="@Url.Content("~/api/admin/audit/recent")">
         <header class="admin-flush-card-head">
             <h2 id="auditFilterTitle">Find what changed</h2>
             <p>Filter by hotel area. Search receipt numbers, booking references, staff names, or reasons.</p>
@@ -147,11 +147,11 @@
                             <th>Reason / summary</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody data-audit-tbody>
                     @foreach (var row in Model.AuditRows)
                     {
                         var reasonText = string.IsNullOrWhiteSpace(row.Reason) ? row.Summary : row.Reason;
-                        <tr>
+                        <tr data-audit-id="@row.Id">
                             <td data-label="When (PH)">
                                 <time datetime="@DateTime.SpecifyKind(row.AtUtc, DateTimeKind.Utc).ToString("o")">@PhilippinesTime.FormatStamp(row.AtUtc)</time>
                             </td>
@@ -350,6 +350,7 @@
 
 @section Scripts {
     <script src="~/js/admin-audit-search.js" asp-append-version="true"></script>
+    <script src="~/js/admin-audit-live.js" asp-append-version="true"></script>
     <script>
         (() => {
             const form = document.getElementById('adminFlushForm');

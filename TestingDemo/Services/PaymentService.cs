@@ -32,7 +32,7 @@ public sealed class PaymentService : IPaymentService
         var receivedBy = request.ReceivedBy?.Trim() ?? string.Empty;
         if (receivedBy.Length < 2 || receivedBy.Length > 120)
         {
-            throw new ArgumentException("Enter the staff name who received payment (2–120 characters).");
+            throw new ArgumentException("Staff identity is required to record payment. Sign in again and retry.");
         }
 
         if (request.Amount == 0)

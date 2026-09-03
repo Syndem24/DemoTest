@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Mail;
 using System.Net.Mime;
 using System.Text;
+using Microsoft.AspNetCore.Hosting;
+using TestingDemo.Branding;
 using TestingDemo.Models;
 
 namespace TestingDemo.Services;
@@ -9,7 +11,11 @@ namespace TestingDemo.Services;
 public interface IStaffEmailSender
 {
     Task<bool> IsConfiguredAsync(CancellationToken cancellationToken = default);
-    Task SendPasswordResetAsync(string toEmail, string resetUrl, CancellationToken cancellationToken = default);
+    Task SendPasswordResetOtpAsync(
+        string toEmail,
+        string otpCode,
+        int expiryMinutes,
+        CancellationToken cancellationToken = default);
     Task SendTestAsync(string toEmail, CancellationToken cancellationToken = default);
 }
 
@@ -17,15 +23,18 @@ public sealed class SmtpStaffEmailSender : IStaffEmailSender, IStaffOnboardingEm
 {
     private readonly ISecureConfigStore _vault;
     private readonly IConfiguration _configuration;
+    private readonly IWebHostEnvironment _environment;
     private readonly ILogger<SmtpStaffEmailSender> _logger;
 
     public SmtpStaffEmailSender(
         ISecureConfigStore vault,
         IConfiguration configuration,
+        IWebHostEnvironment environment,
         ILogger<SmtpStaffEmailSender> logger)
     {
         _vault = vault;
         _configuration = configuration;
+        _environment = environment;
         _logger = logger;
     }
 
@@ -36,24 +45,39 @@ public sealed class SmtpStaffEmailSender : IStaffEmailSender, IStaffOnboardingEm
         return !string.IsNullOrWhiteSpace(sender) && !string.IsNullOrWhiteSpace(password);
     }
 
-    public async Task SendPasswordResetAsync(string toEmail, string resetUrl, CancellationToken cancellationToken = default)
+    public async Task SendPasswordResetOtpAsync(
+        string toEmail,
+        string otpCode,
+        int expiryMinutes,
+        CancellationToken cancellationToken = default)
     {
         var publicBase = GetPublicBaseUrl();
         var siteHost = GetPublicSiteHost(publicBase);
-        var subject = "Password reset request — Mori International Hotel";
-        var text = BuildPasswordResetText(resetUrl, siteHost, publicBase);
-        var html = BuildPasswordResetHtml(resetUrl, siteHost, publicBase);
+        var verifyUrl = $"{publicBase}/Account/VerifyResetOtp";
+        var subject = $"Staff password reset code — {HotelBrand.Name}";
+        var text = BuildPasswordResetOtpText(otpCode, expiryMinutes, siteHost, verifyUrl);
+        var html = BuildPasswordResetOtpHtml(otpCode, expiryMinutes, siteHost);
         await SendAsync(toEmail, subject, text, html, cancellationToken);
     }
 
     public async Task SendTestAsync(string toEmail, CancellationToken cancellationToken = default)
     {
-        await SendAsync(
-            toEmail,
-            "Mori International Hotel SMTP test",
-            "SMTP is configured. This test message contains no secrets.",
-            htmlBody: null,
-            cancellationToken);
+        var publicBase = GetPublicBaseUrl();
+        var bodyHtml = $"""
+            <p style="margin:0 0 14px;">Hello,</p>
+            <p style="margin:0 0 14px;">This is a test message from <strong>{StaffEmailBranding.Encode(HotelBrand.Mark)}</strong> staff email (SMTP).</p>
+            <p style="margin:0 0 14px;">If you received this, Gmail SMTP is configured correctly. This message contains no secrets.</p>
+            <p style="margin:0;font-size:13px;color:#3d4f63;">Sent from {StaffEmailBranding.Encode(publicBase)}</p>
+            """;
+        var html = StaffEmailBranding.BuildLayout("SMTP test", bodyHtml, publicBase);
+        var text = $"""
+            {HotelBrand.Mark} SMTP test
+
+            SMTP is configured. This test message contains no secrets.
+
+            {StaffEmailBranding.BuildTextFooter()}
+            """;
+        await SendAsync(toEmail, $"{HotelBrand.Mark} SMTP test", text, html, cancellationToken);
     }
 
     public async Task SendOnboardingAsync(
@@ -70,19 +94,45 @@ public sealed class SmtpStaffEmailSender : IStaffEmailSender, IStaffOnboardingEm
             return;
         }
 
-        await SendAsync(
-            user.Email,
-            "Your Mori International Hotel staff account",
-            $"""
-            A staff account was created for you.
+        var publicBase = GetPublicBaseUrl();
+        var loginUrl = StaffEmailBranding.Encode($"{publicBase}/Account/Login");
+        var safeUser = StaffEmailBranding.Encode(user.UserName);
+        var safeVerify = StaffEmailBranding.Encode(googleVerifyUrl);
+        var bodyHtml = $"""
+            <p style="margin:0 0 14px;">Hello,</p>
+            <p style="margin:0 0 14px;">A staff account was created for you at <strong>{StaffEmailBranding.Encode(HotelBrand.Mark)}</strong>.</p>
+            <p style="margin:0 0 8px;"><strong>Username:</strong> {safeUser}</p>
+            <p style="margin:0 0 14px;">Sign in with the temporary password set by your administrator, then change it immediately.</p>
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 18px;">
+              <tr>
+                <td style="border-radius:8px;background:{HotelBrand.Teal};">
+                  <a href="{loginUrl}" style="display:inline-block;padding:12px 22px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;">Sign in to staff portal</a>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0 0 8px;font-size:15px;font-weight:700;">Google verification</p>
+            <p style="margin:0 0 14px;font-size:14px;"><a href="{safeVerify}" style="color:{HotelBrand.Teal};">{safeVerify}</a></p>
+            """;
+        var html = StaffEmailBranding.BuildLayout("Your staff account", bodyHtml, publicBase);
+        var text = $"""
+            {HotelBrand.Mark}
+            Your staff account
 
             Username: {user.UserName}
             Sign in and change the temporary password set by your administrator.
 
+            Sign in: {publicBase}/Account/Login
+
             Google verification:
             {googleVerifyUrl}
-            """,
-            htmlBody: null,
+
+            {StaffEmailBranding.BuildTextFooter()}
+            """;
+        await SendAsync(
+            user.Email,
+            $"Your {HotelBrand.Mark} staff account",
+            text,
+            html,
             cancellationToken);
     }
 
@@ -103,7 +153,7 @@ public sealed class SmtpStaffEmailSender : IStaffEmailSender, IStaffOnboardingEm
 
         using var message = new MailMessage
         {
-            From = new MailAddress(sender, "Mori International Hotel"),
+            From = new MailAddress(sender, HotelBrand.EmailSenderDisplayName),
             Subject = subject,
             Body = htmlBody ?? textBody,
             IsBodyHtml = htmlBody is not null,
@@ -114,10 +164,12 @@ public sealed class SmtpStaffEmailSender : IStaffEmailSender, IStaffOnboardingEm
 
         if (htmlBody is not null)
         {
-            message.AlternateViews.Add(
-                AlternateView.CreateAlternateViewFromString(textBody, Encoding.UTF8, MediaTypeNames.Text.Plain));
-            message.AlternateViews.Add(
-                AlternateView.CreateAlternateViewFromString(htmlBody, Encoding.UTF8, MediaTypeNames.Text.Html));
+            var plainView = AlternateView.CreateAlternateViewFromString(textBody, Encoding.UTF8, MediaTypeNames.Text.Plain);
+            message.AlternateViews.Add(plainView);
+
+            var htmlView = AlternateView.CreateAlternateViewFromString(htmlBody, Encoding.UTF8, MediaTypeNames.Text.Html);
+            StaffEmailBranding.AttachLogo(htmlView, StaffEmailBranding.ResolveLogoPath(_environment));
+            message.AlternateViews.Add(htmlView);
         }
 
         using var client = new SmtpClient("smtp.gmail.com", 587)
@@ -138,92 +190,71 @@ public sealed class SmtpStaffEmailSender : IStaffEmailSender, IStaffOnboardingEm
             ? uri.Authority
             : "localhost:5288";
 
-    private static string BuildPasswordResetText(string resetUrl, string siteHost, string publicBase)
+    private static string BuildPasswordResetOtpText(
+        string otpCode,
+        int expiryMinutes,
+        string siteHost,
+        
+        string verifyUrl)
     {
         return $"""
-            Mori International Hotel
-            Staff account — password reset
+            {HotelBrand.Name}
+            Staff account — password reset code
 
-            We received a request to reset the password for a Mori International Hotel staff account linked to this email.
+            We received a request to reset the password for a {HotelBrand.Name} staff account linked to this email.
 
-            Open this address in your browser within one hour:
-            {resetUrl}
+            Your one-time verification code:
+            {otpCode}
 
-            The address should begin with {siteHost}. If it does not, do not continue.
+            Enter this code on the staff sign-in page within {expiryMinutes} minutes:
+            {verifyUrl}
 
-            This link can be used once. After you change your password, or after one hour, the link will no longer open.
+            This code works once. After you set a new password, or after {expiryMinutes} minutes, it will no longer work.
+            After three incorrect attempts, this code is cancelled — request a new one.
 
             Security
-            - Do not share this email or the reset link with anyone, including coworkers.
-            - Mori International Hotel will never ask you to reply with your password, app password, or a code.
+            - Do not share this code or email with anyone, including coworkers.
+            - {HotelBrand.Name} will never ask you to reply with your password or app password.
             - Do not reply to this message. This mailbox is not monitored.
-            - If you did not request a reset, please reach out of the hotel staff and inform them about this email.
-            - If you ignore this email, your password stays the same.
+            - If you did not request this, please contact the admin for further investigations.
 
-            Sign in after you finish: {publicBase}/Account/Login
+            Site address: {siteHost}
+
+            {StaffEmailBranding.BuildTextFooter(plainBrandName: true)}
             """;
     }
 
-    private static string BuildPasswordResetHtml(string resetUrl, string siteHost, string publicBase)
+    private static string BuildPasswordResetOtpHtml(
+        string otpCode,
+        int expiryMinutes,
+        string siteHost)
     {
-        var safeUrl = WebUtility.HtmlEncode(resetUrl);
-        var safeHost = WebUtility.HtmlEncode(siteHost);
-        var loginUrl = WebUtility.HtmlEncode($"{publicBase}/Account/Login");
+        var safeCode = StaffEmailBranding.Encode(otpCode);
+        var safeHost = StaffEmailBranding.Encode(siteHost);
+        var brandName = StaffEmailBranding.Encode(HotelBrand.Name);
 
-        return $"""
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-              <meta charset="utf-8" />
-              <meta name="viewport" content="width=device-width, initial-scale=1" />
-              <title>Password reset</title>
-            </head>
-            <body style="margin:0;padding:0;background:#f3f7f8;font-family:'Segoe UI',Arial,sans-serif;color:#0b1f3a;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f7f8;padding:24px 12px;">
-                <tr>
-                  <td align="center">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #d7dee6;border-radius:12px;overflow:hidden;">
-                      <tr>
-                        <td style="background:#0b1f3a;padding:22px 28px;">
-                          <p style="margin:0 0 6px;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#1aa6a6;font-weight:700;">Mori International Hotel</p>
-                          <h1 style="margin:0;font-size:22px;line-height:1.3;color:#ffffff;">Staff password reset</h1>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding:24px 28px 8px;font-size:15px;line-height:1.55;">
-                          <p style="margin:0 0 14px;">Hello,</p>
-                          <p style="margin:0 0 14px;">We received a request to reset the password for a Mori International Hotel staff account that uses this email address.</p>
-                          <p style="margin:0 0 18px;">Use the button below within <strong>one hour</strong>. After you change your password, this link is turned off and cannot be opened again — even on the same device.</p>
-                          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 18px;">
-                            <tr>
-                              <td style="border-radius:8px;background:#1aa6a6;">
-                                <a href="{safeUrl}" style="display:inline-block;padding:12px 22px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;">Set a new password</a>
-                              </td>
-                            </tr>
-                          </table>
-                          <p style="margin:0 0 14px;font-size:13px;color:#3d4f63;">The link should go to <strong>{safeHost}</strong>. If the address looks different, do not continue.</p>
-                          <p style="margin:0 0 6px;font-size:15px;font-weight:700;">Please keep this email private</p>
-                          <ul style="margin:0 0 16px;padding-left:18px;font-size:14px;line-height:1.5;">
-                            <li>Do not share this email or the reset link with anyone.</li>
-                            <li>We will never ask you to reply with your password or a code.</li>
-                            <li>Do not reply to this message. This mailbox is not monitored.</li>
-                            <li>If you did not request this, ignore the email. Your current password stays the same.</li>
-                          </ul>
-                          <p style="margin:0 0 18px;">When you are done, sign in at <a href="{loginUrl}" style="color:#1aa6a6;">{safeHost}/Account/Login</a>.</p>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding:16px 28px 22px;border-top:1px solid #e4ebf0;font-size:12px;line-height:1.45;color:#5b6b7c;">
-                          Mori International Hotel · Mandaue City, Cebu<br />
-                          Official staff notice. This is not a guest booking message.
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-            </body>
-            </html>
+        var bodyHtml = $"""
+            <p style="margin:0 0 14px;">Hello,</p>
+            <p style="margin:0 0 14px;">We received a request to reset the password for a <strong>{brandName}</strong> staff account that uses this email address.</p>
+            <p style="margin:0 0 12px;font-size:14px;color:#3d4f63;">Enter this one-time code within <strong>{expiryMinutes} minutes</strong>. It can be used only once. After three incorrect attempts, request a new code.</p>
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;width:100%;">
+              <tr>
+                <td align="center" style="padding:20px 16px;border-radius:12px;background:#f4f7fa;border:1px solid #d8e2ec;">
+                  <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#3d4f63;">Verification code</p>
+                  <p style="margin:0;font-size:36px;font-weight:800;letter-spacing:0.35em;color:{HotelBrand.Teal};font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">{safeCode}</p>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0 0 14px;font-size:13px;color:#3d4f63;">Open <strong>go to the Website</strong>, navigate to <strong>Forgot password</strong>, then enter the code above. If the address looks different, do not continue.</p>
+            <p style="margin:0 0 6px;font-size:15px;font-weight:700;">Keep this code private</p>
+            <ul style="margin:0;padding-left:18px;font-size:14px;line-height:1.5;">
+              <li>Do not share this code or forward this email.</li>
+              <li>We will never ask you to reply with your password or a code.</li>
+              <li>Do not reply to this message. This mailbox is not monitored.</li>
+              <li>If you did not request this, please contact the administrator for further investigations.</li>
+            </ul>
             """;
+
+        return StaffEmailBranding.BuildLayout("Staff password reset code", bodyHtml, string.Empty, plainBrandName: true);
     }
 }

@@ -13,7 +13,6 @@
   const clearButton = root.querySelector('[data-notification-clear]');
 
   let pollTimer = 0;
-  let reconnectTimer = 0;
   let audioContext = null;
   let audioUnlocked = false;
   let soundEnabled = localStorage.getItem('moriBookingSound') !== 'off';
@@ -299,53 +298,35 @@
     pollTimer = 0;
   }
 
-  async function startSignalR() {
-    if (!window.signalR) {
-      beginPolling();
-      return;
-    }
-
-    const connection = new window.signalR.HubConnectionBuilder()
-      .withUrl('/hubs/bookings')
-      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-      .configureLogging(window.signalR.LogLevel.Warning)
-      .build();
-
-    connection.on('BookingCreated', async () => {
-      playChime();
-      await refreshNotifications();
-    });
-    connection.on('BookingUpdated', () => {
-      playChime();
-      return refreshNotifications();
-    });
-    connection.on('BookingArchived', () => refreshNotifications());
-    connection.on('OfferEndingSoon', (notification) => {
-      playChime();
-      showOfferEndingSoonAlert(notification);
-      return refreshNotifications();
-    });
-    connection.onreconnecting(beginPolling);
-    connection.onreconnected(async () => {
-      stopPolling();
-      await refreshNotifications();
-    });
-    connection.onclose(() => {
-      beginPolling();
-      reconnectTimer = window.setTimeout(connect, 10000);
-    });
-
-    async function connect() {
-      try {
-        await connection.start();
-        stopPolling();
-      } catch {
-        beginPolling();
-        reconnectTimer = window.setTimeout(connect, 10000);
+  function wireRealtime() {
+    const scheduleRefresh = () => {
+      if (window.MoriAdminRealtime) {
+        window.MoriAdminRealtime.scheduleRefresh('notifications', () => refreshNotifications());
+      } else {
+        void refreshNotifications();
       }
-    }
+    };
 
-    await connect();
+    if (window.MoriAdminRealtime) {
+      window.MoriAdminRealtime.onBooking((eventName, payload) => {
+        if (eventName === 'OfferEndingSoon') {
+          playChime();
+          showOfferEndingSoonAlert(payload);
+        } else if (eventName !== 'PaymentChanged') {
+          playChime();
+        }
+        scheduleRefresh();
+      });
+
+      window.addEventListener('mori:admin-refresh', (event) => {
+        const scopes = event.detail?.scopes || [];
+        if (scopes.includes('all') || scopes.includes('notifications')) {
+          scheduleRefresh();
+        }
+      });
+    } else {
+      beginPolling();
+    }
   }
 
   document.addEventListener('pointerdown', unlockAudio, { once: true });
@@ -398,9 +379,8 @@
 
   window.addEventListener('beforeunload', () => {
     if (pollTimer) window.clearInterval(pollTimer);
-    if (reconnectTimer) window.clearTimeout(reconnectTimer);
   });
 
   void refreshNotifications();
-  void startSignalR();
+  wireRealtime();
 })();

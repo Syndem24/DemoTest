@@ -78,32 +78,43 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
         var roomsUnavailable = rooms.Count(s => s == RoomStatus.Unavailable);
         var occupancy = roomsTotal == 0 ? 0 : Math.Round(100m * roomsOccupied / roomsTotal, 1);
 
-        var live = _db.Bookings.AsNoTracking().Where(b => !b.IsArchived);
-        var pending = await live.CountAsync(b => b.Status == BookingStatus.Pending, cancellationToken);
-        var confirmed = await live.CountAsync(b => b.Status == BookingStatus.Confirmed, cancellationToken);
-        var inHouse = await live.CountAsync(
-            b => b.Status == BookingStatus.Confirmed
-                 && b.CheckInAtUtc < tomorrowStart
-                 && b.CheckoutTimeUtc > nowUtc,
-            cancellationToken);
-        var arrivals = await live.CountAsync(
-            b => (b.Status == BookingStatus.Pending || b.Status == BookingStatus.Confirmed)
-                 && b.CheckInAtUtc >= todayStart
-                 && b.CheckInAtUtc < tomorrowStart,
-            cancellationToken);
-        var departures = await live.CountAsync(
-            b => b.Status == BookingStatus.Confirmed
-                 && b.CheckoutTimeUtc >= todayStart
-                 && b.CheckoutTimeUtc < tomorrowStart,
-            cancellationToken);
+        var liveRows = await _db.Bookings.AsNoTracking()
+            .Where(b => !b.IsArchived)
+            .Select(b => new LiveBookingRow(
+                b.Id,
+                b.Status,
+                b.CheckInAtUtc,
+                b.CheckoutTimeUtc,
+                b.TotalAmount,
+                b.Channel,
+                b.Reference,
+                b.GuestName))
+            .ToListAsync(cancellationToken);
 
-        var rejected = await live.CountAsync(b => b.Status == BookingStatus.Rejected, cancellationToken);
-        var cancelled = await live.CountAsync(b => b.Status == BookingStatus.Cancelled, cancellationToken);
-        var checkedOut = await live.CountAsync(b => b.Status == BookingStatus.CheckedOut, cancellationToken);
+        var pending = liveRows.Count(b => b.Status == BookingStatus.Pending);
+        var confirmed = liveRows.Count(b => b.Status == BookingStatus.Confirmed);
+        var inHouse = liveRows.Count(b =>
+            b.Status == BookingStatus.Confirmed
+            && b.CheckInAtUtc < tomorrowStart
+            && b.CheckoutTimeUtc > nowUtc);
+        var arrivals = liveRows.Count(b =>
+            (b.Status == BookingStatus.Pending || b.Status == BookingStatus.Confirmed)
+            && b.CheckInAtUtc >= todayStart
+            && b.CheckInAtUtc < tomorrowStart);
+        var departures = liveRows.Count(b =>
+            b.Status == BookingStatus.Confirmed
+            && b.CheckoutTimeUtc >= todayStart
+            && b.CheckoutTimeUtc < tomorrowStart);
+        var rejected = liveRows.Count(b => b.Status == BookingStatus.Rejected);
+        var cancelled = liveRows.Count(b => b.Status == BookingStatus.Cancelled);
+        var checkedOut = liveRows.Count(b => b.Status == BookingStatus.CheckedOut);
 
-        var pipeline = await live
+        var pipeline = liveRows
             .Where(b => b.Status == BookingStatus.Pending || b.Status == BookingStatus.Confirmed)
-            .SumAsync(b => (decimal?)b.TotalAmount, cancellationToken) ?? 0;
+            .Sum(b => b.TotalAmount);
+
+        var liveIds = liveRows.Select(b => b.Id).ToList();
+        var roomsByBooking = await LoadRoomCountsByBookingAsync(liveIds, cancellationToken);
 
         var payments = await _db.PaymentRecords.AsNoTracking()
             .Where(p => p.PaidAtUtc >= monthStartUtc || (p.VoidedAtUtc != null && p.VoidedAtUtc >= monthStartUtc))
@@ -134,23 +145,20 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
         var adr = roomsOccupied == 0 ? 0 : Math.Round(revenueToday / roomsOccupied, 2);
         var revPar = roomsTotal == 0 ? 0 : Math.Round(revenueToday / roomsTotal, 2);
 
-        var weekBookings = await live
+        var weekBookings = liveRows
             .Where(b => b.CheckInAtUtc >= weekStartUtc && b.CheckInAtUtc < tomorrowStart)
-            .Select(b => new { b.CheckInAtUtc, b.Status })
-            .ToListAsync(cancellationToken);
+            .ToList();
 
-        var stayWindows = await live
+        var stayWindows = liveRows
             .Where(b =>
                 (b.Status == BookingStatus.Confirmed || b.Status == BookingStatus.CheckedOut)
                 && b.CheckoutTimeUtc > weekStartUtc
                 && b.CheckInAtUtc < tomorrowStart)
-            .Select(b => new
-            {
+            .Select(b => new StayWindowRow(
                 b.CheckInAtUtc,
                 b.CheckoutTimeUtc,
-                Rooms = b.Items.Sum(i => i.RoomAssignments.Count > 0 ? i.RoomAssignments.Count : i.Quantity)
-            })
-            .ToListAsync(cancellationToken);
+                roomsByBooking.GetValueOrDefault(b.Id, 0)))
+            .ToList();
 
         var last7 = new List<DashboardDayPoint>(7);
         for (var i = 0; i < 7; i++)
@@ -172,20 +180,19 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
         var averageStay = openCount == 0 ? 0 : Math.Round(pipeline / openCount, 2);
         var bookedShare = openCount == 0 ? 0 : Math.Round(100m * confirmed / openCount, 1);
 
-        var channelRows = await live
+        var channelMix = liveRows
             .Where(b => b.Status == BookingStatus.Pending || b.Status == BookingStatus.Confirmed)
             .GroupBy(b => b.Channel)
-            .Select(g => new { g.Key, Count = g.Count() })
-            .ToListAsync(cancellationToken);
-        var channelMix = channelRows
+            .Select(g => new { Channel = g.Key, Count = g.Count() })
             .OrderByDescending(r => r.Count)
-            .Select(r => new DashboardStatusSlice(ChannelLabel(r.Key), r.Count))
+            .Select(r => new DashboardStatusSlice(ChannelLabel(r.Channel), r.Count))
             .ToList();
 
+        // One campaign can span several room types — count offers, not rows.
         var activeOffers = await _db.SpecialOffers.AsNoTracking()
-            .CountAsync(
-                o => o.IsActive && o.StartsAtUtc <= nowUtc && o.EndsAtUtc >= nowUtc,
-                cancellationToken);
+            .Where(o => o.IsActive && o.StartsAtUtc <= nowUtc && o.EndsAtUtc >= nowUtc)
+            .GroupBy(o => new { o.Kind, o.Title, o.StartsAtUtc, o.EndsAtUtc })
+            .CountAsync(cancellationToken);
 
         var signals = BuildSignals(
             isAdminManager,
@@ -200,7 +207,7 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
             pipeline,
             activeOffers);
 
-        var attention = await live
+        var attentionItems = liveRows
             .Where(b =>
                 (b.Status == BookingStatus.Pending && b.CheckInAtUtc < tomorrowStart.AddHours(12))
                 || (b.Status == BookingStatus.Confirmed
@@ -208,24 +215,18 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
                     && b.CheckInAtUtc < tomorrowStart))
             .OrderBy(b => b.CheckInAtUtc)
             .Take(8)
-            .Select(b => new
+            .Select(row =>
             {
-                b.Reference,
-                b.GuestName,
-                b.Status,
-                b.CheckInAtUtc
+                var when = PhilippinesTime.ToManila(row.CheckInAtUtc).ToString("h:mm tt");
+                var title = row.Status == BookingStatus.Pending
+                    ? $"Call · {row.GuestName}"
+                    : $"Arrival · {row.GuestName}";
+                return new DashboardAttentionItem(
+                    title,
+                    $"{row.Reference} · {when}",
+                    "/AdminBookings");
             })
-            .ToListAsync(cancellationToken);
-
-        var attentionItems = attention.Select(row =>
-        {
-            var when = PhilippinesTime.ToManila(row.CheckInAtUtc).ToString("h:mm tt");
-            var title = row.Status == BookingStatus.Pending ? $"Call · {row.GuestName}" : $"Arrival · {row.GuestName}";
-            return new DashboardAttentionItem(
-                title,
-                $"{row.Reference} · {when}",
-                "/AdminBookings");
-        }).ToList();
+            .ToList();
 
         return new DashboardSnapshot(
             roleName,
@@ -262,6 +263,27 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
             channelMix,
             signals,
             attentionItems);
+    }
+
+    private async Task<Dictionary<int, int>> LoadRoomCountsByBookingAsync(
+        List<int> bookingIds,
+        CancellationToken cancellationToken)
+    {
+        if (bookingIds.Count == 0)
+        {
+            return new Dictionary<int, int>();
+        }
+
+        var itemRows = await _db.BookingItems.AsNoTracking()
+            .Where(i => bookingIds.Contains(i.BookingId))
+            .Select(i => new { i.BookingId, i.Quantity, Assigned = i.RoomAssignments.Count })
+            .ToListAsync(cancellationToken);
+
+        return itemRows
+            .GroupBy(i => i.BookingId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Sum(i => i.Assigned > 0 ? i.Assigned : i.Quantity));
     }
 
     private static string ChannelLabel(BookingChannel channel) => channel switch
@@ -323,4 +345,19 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
 
         return signals.Take(5).ToList();
     }
+
+    private sealed record LiveBookingRow(
+        int Id,
+        BookingStatus Status,
+        DateTime CheckInAtUtc,
+        DateTime CheckoutTimeUtc,
+        decimal TotalAmount,
+        BookingChannel Channel,
+        string Reference,
+        string GuestName);
+
+    private sealed record StayWindowRow(
+        DateTime CheckInAtUtc,
+        DateTime CheckoutTimeUtc,
+        int Rooms);
 }

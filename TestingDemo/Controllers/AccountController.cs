@@ -1,4 +1,7 @@
+using System.Security.Claims;
 using System.Text;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
@@ -17,27 +20,33 @@ public class AccountController : Controller
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IStaffEmailSender _emailSender;
-    private readonly IConfiguration _configuration;
+    private readonly IStaffPasswordResetCodeService _passwordResetCode;
     private readonly HotelBookingDbContext _db;
     private readonly ILogger<AccountController> _logger;
     private readonly ISystemAuditRecorder _audit;
+    private readonly ISystemAuditQuery _auditQuery;
+    private readonly IGoogleAuthSettings _googleAuth;
 
     public AccountController(
         SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager,
         IStaffEmailSender emailSender,
-        IConfiguration configuration,
+        IStaffPasswordResetCodeService passwordResetCode,
         HotelBookingDbContext db,
         ILogger<AccountController> logger,
-        ISystemAuditRecorder audit)
+        ISystemAuditRecorder audit,
+        ISystemAuditQuery auditQuery,
+        IGoogleAuthSettings googleAuth)
     {
         _signInManager = signInManager;
         _userManager = userManager;
         _emailSender = emailSender;
-        _configuration = configuration;
+        _passwordResetCode = passwordResetCode;
         _db = db;
         _logger = logger;
         _audit = audit;
+        _auditQuery = auditQuery;
+        _googleAuth = googleAuth;
     }
 
     [HttpGet]
@@ -50,9 +59,10 @@ public class AccountController : Controller
             if (current?.MustChangePassword == true)
                 return RedirectToAction(nameof(ChangePassword));
 
-            return RedirectToLocal(returnUrl);
+            return await RedirectAfterSignInAsync(current, returnUrl);
         }
 
+        ViewBag.GoogleLoginEnabled = await _googleAuth.IsLoginButtonVisibleAsync();
         return View(new LoginViewModel { ReturnUrl = returnUrl });
     }
 
@@ -62,6 +72,7 @@ public class AccountController : Controller
     public async Task<IActionResult> Login(LoginViewModel model)
     {
         model.ReturnUrl ??= Url.Content("~/Dashboard");
+        ViewBag.GoogleLoginEnabled = await _googleAuth.IsLoginButtonVisibleAsync();
 
         if (!ModelState.IsValid)
             return View(model);
@@ -70,6 +81,12 @@ public class AccountController : Controller
         if (user is null)
         {
             ModelState.AddModelError(string.Empty, "Invalid login attempt.");
+            return View(model);
+        }
+
+        if (await IsGuestUserAsync(user))
+        {
+            ModelState.AddModelError(string.Empty, "Guest accounts sign in with Google. Use Continue with Google.");
             return View(model);
         }
 
@@ -85,7 +102,7 @@ public class AccountController : Controller
             if (user.MustChangePassword)
                 return RedirectToAction(nameof(ChangePassword));
 
-            return RedirectToLocal(model.ReturnUrl);
+            return await RedirectAfterSignInAsync(user, model.ReturnUrl);
         }
 
         if (result.IsLockedOut)
@@ -98,8 +115,343 @@ public class AccountController : Controller
         return View(model);
     }
 
+    [HttpPost]
+    [AllowAnonymous]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ExternalLogin(string? returnUrl = null, bool rememberMe = false)
+    {
+        if (!await _googleAuth.IsLoginButtonVisibleAsync()
+            || !await _googleAuth.TryApplyToOptionsAsync())
+        {
+            return RedirectToAction(nameof(Login), new { returnUrl });
+        }
+
+        var redirectUrl = Url.Action(nameof(ExternalLoginCallback), "Account", new { returnUrl, rememberMe });
+        var properties = _signInManager.ConfigureExternalAuthenticationProperties(
+            GoogleDefaults.AuthenticationScheme,
+            redirectUrl);
+        return Challenge(properties, GoogleDefaults.AuthenticationScheme);
+    }
+
     [HttpGet]
-    [Authorize]
+    [AllowAnonymous]
+    public async Task<IActionResult> ExternalLoginCallback(string? returnUrl = null, bool rememberMe = false)
+    {
+        ViewBag.GoogleLoginEnabled = await _googleAuth.IsLoginButtonVisibleAsync();
+
+        var info = await _signInManager.GetExternalLoginInfoAsync();
+        if (info is null)
+        {
+            TempData["Error"] = "Google sign-in was cancelled or failed. Try again.";
+            return RedirectToAction(nameof(Login), new { returnUrl });
+        }
+
+        var email = info.Principal.FindFirstValue(ClaimTypes.Email)
+                    ?? info.Principal.FindFirstValue("email");
+        var emailVerified = info.Principal.FindFirstValue("email_verified");
+        var googleSubject = info.ProviderKey;
+
+        if (string.IsNullOrWhiteSpace(email)
+            || string.IsNullOrWhiteSpace(googleSubject)
+            || string.Equals(emailVerified, "false", StringComparison.OrdinalIgnoreCase))
+        {
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+            TempData["Error"] = "Google did not provide a verified email. Use another Google account.";
+            return RedirectToAction(nameof(Login), new { returnUrl });
+        }
+
+        email = email.Trim();
+        var normalizedGoogle = _userManager.NormalizeEmail(email);
+        var loginInfo = new UserLoginInfo(info.LoginProvider, info.ProviderKey, info.ProviderDisplayName ?? "Google");
+
+        var staffByRecovery = await _db.Users
+            .FirstOrDefaultAsync(u =>
+                u.NormalizedGoogleEmail == normalizedGoogle
+                && u.GoogleVerificationStatus == GoogleVerificationStatus.GoogleVerified);
+
+        if (staffByRecovery is not null)
+        {
+            var staffSignIn = await TrySignInStaffWithGoogleAsync(
+                staffByRecovery, loginInfo, email, rememberMe, returnUrl);
+            if (staffSignIn is not null)
+                return staffSignIn;
+        }
+
+        var existingByLogin = await _userManager.FindByLoginAsync(info.LoginProvider, info.ProviderKey);
+        if (existingByLogin is not null)
+        {
+            var staffSignIn = await TrySignInStaffWithGoogleAsync(
+                existingByLogin, loginInfo, email, rememberMe, returnUrl);
+            if (staffSignIn is not null)
+                return staffSignIn;
+
+            await _signInManager.SignInAsync(existingByLogin, rememberMe);
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+            _logger.LogInformation("Guest {User} signed in with Google.", existingByLogin.UserName);
+            return await RedirectAfterSignInAsync(existingByLogin, returnUrl);
+        }
+
+        var existingByEmail = await _userManager.FindByEmailAsync(email);
+        if (existingByEmail is not null)
+        {
+            var staffSignIn = await TrySignInStaffWithGoogleAsync(
+                existingByEmail, loginInfo, email, rememberMe, returnUrl);
+            if (staffSignIn is not null)
+                return staffSignIn;
+
+            var linkExisting = await _userManager.AddLoginAsync(existingByEmail, info);
+            if (!linkExisting.Succeeded && !AlreadyLinked(linkExisting))
+            {
+                await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+                TempData["Error"] = "Could not link Google to this guest account. Try again or contact the front desk.";
+                return RedirectToAction(nameof(Login), new { returnUrl });
+            }
+
+            await _signInManager.SignInAsync(existingByEmail, rememberMe);
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+            return await RedirectAfterSignInAsync(existingByEmail, returnUrl);
+        }
+
+        // New guest: require privacy/integrity agreement before creating the account.
+        var given = info.Principal.FindFirstValue(ClaimTypes.GivenName)
+                    ?? info.Principal.FindFirstValue(ClaimTypes.Name);
+        await HttpContext.Session.LoadAsync();
+        GoogleGuestPendingSession.Set(
+            HttpContext.Session,
+            email,
+            info.LoginProvider,
+            info.ProviderKey,
+            given,
+            returnUrl,
+            rememberMe);
+        return RedirectToAction(nameof(ConfirmGuestAgreement));
+    }
+
+    [HttpGet]
+    [AllowAnonymous]
+    public async Task<IActionResult> ConfirmGuestAgreement()
+    {
+        await HttpContext.Session.LoadAsync();
+        if (!GoogleGuestPendingSession.TryGet(
+                HttpContext.Session,
+                out var email,
+                out _,
+                out _,
+                out var displayName,
+                out var returnUrl,
+                out var rememberMe))
+        {
+            TempData["Error"] = "Guest agreement expired. Sign in with Google again.";
+            return RedirectToAction(nameof(Login));
+        }
+
+        ViewData["GuestAuthPage"] = true;
+        return View(new ConfirmGuestAgreementViewModel
+        {
+            Email = email,
+            DisplayName = displayName,
+            ReturnUrl = returnUrl,
+            RememberMe = rememberMe
+        });
+    }
+
+    [HttpPost]
+    [AllowAnonymous]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ConfirmGuestAgreement(ConfirmGuestAgreementViewModel model)
+    {
+        await HttpContext.Session.LoadAsync();
+        if (!GoogleGuestPendingSession.TryGet(
+                HttpContext.Session,
+                out var email,
+                out var loginProvider,
+                out var providerKey,
+                out var displayName,
+                out var pendingReturnUrl,
+                out var rememberMe))
+        {
+            TempData["Error"] = "Guest agreement expired. Sign in with Google again.";
+            return RedirectToAction(nameof(Login));
+        }
+
+        if (!model.AcceptedTerms)
+        {
+            ModelState.AddModelError(
+                nameof(model.AcceptedTerms),
+                "Please agree to the guest terms, privacy, and integrity commitments to continue.");
+            model.Email = email;
+            model.DisplayName = displayName;
+            model.ReturnUrl = pendingReturnUrl;
+            model.RememberMe = rememberMe;
+            ViewData["GuestAuthPage"] = true;
+            return View(model);
+        }
+
+        var info = await _signInManager.GetExternalLoginInfoAsync();
+        UserLoginInfo loginInfo;
+        string? givenName = displayName;
+        if (info is not null
+            && string.Equals(info.LoginProvider, loginProvider, StringComparison.Ordinal)
+            && string.Equals(info.ProviderKey, providerKey, StringComparison.Ordinal))
+        {
+            loginInfo = info;
+            givenName = info.Principal.FindFirstValue(ClaimTypes.GivenName)
+                       ?? info.Principal.FindFirstValue(ClaimTypes.Name)
+                       ?? displayName;
+        }
+        else
+        {
+            loginInfo = new UserLoginInfo(loginProvider, providerKey, "Google");
+        }
+
+        // Guard: account may have been created in another tab.
+        var existing = await _userManager.FindByLoginAsync(loginInfo.LoginProvider, loginInfo.ProviderKey)
+                       ?? await _userManager.FindByEmailAsync(email);
+        if (existing is not null)
+        {
+            GoogleGuestPendingSession.Clear(HttpContext.Session);
+            var staffSignIn = await TrySignInStaffWithGoogleAsync(
+                existing, loginInfo, email, rememberMe, pendingReturnUrl ?? model.ReturnUrl);
+            if (staffSignIn is not null)
+                return staffSignIn;
+
+            if (await _userManager.FindByLoginAsync(loginInfo.LoginProvider, loginInfo.ProviderKey) is null)
+                await _userManager.AddLoginAsync(existing, loginInfo);
+
+            await _signInManager.SignInAsync(existing, rememberMe);
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+            return await RedirectAfterSignInAsync(existing, pendingReturnUrl ?? model.ReturnUrl);
+        }
+
+        var guest = await CreateGuestFromGoogleAsync(email, loginInfo, givenName);
+        GoogleGuestPendingSession.Clear(HttpContext.Session);
+        if (guest is null)
+        {
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+            TempData["Error"] = "Could not create a guest account from Google. Try again.";
+            return RedirectToAction(nameof(Login));
+        }
+
+        await _signInManager.SignInAsync(guest, rememberMe);
+        await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+        _logger.LogInformation("Created guest {User} via Google after agreement.", guest.UserName);
+        return await RedirectAfterSignInAsync(guest, pendingReturnUrl ?? model.ReturnUrl);
+    }
+
+    [HttpPost]
+    [AllowAnonymous]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeclineGuestAgreement()
+    {
+        await HttpContext.Session.LoadAsync();
+        GoogleGuestPendingSession.Clear(HttpContext.Session);
+        await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+        TempData["Error"] = "You must accept the guest agreement to create an account.";
+        return RedirectToAction(nameof(Login));
+    }
+
+    [HttpGet]
+    [AllowAnonymous]
+    public async Task<IActionResult> ConfirmStaffIdentity()
+    {
+        await HttpContext.Session.LoadAsync();
+        if (!GoogleStaffConfirmSession.TryGet(
+                HttpContext.Session,
+                out var userId,
+                out _,
+                out var googleEmail,
+                out var returnUrl))
+        {
+            TempData["Error"] = "Staff confirmation expired. Sign in with Google again.";
+            return RedirectToAction(nameof(Login));
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null || !await IsStaffUserAsync(user))
+        {
+            GoogleStaffConfirmSession.Clear(HttpContext.Session);
+            TempData["Error"] = "Staff account was not found. Sign in again.";
+            return RedirectToAction(nameof(Login));
+        }
+
+        var roles = await _userManager.GetRolesAsync(user);
+        return View(new ConfirmStaffIdentityViewModel
+        {
+            DisplayName = StaffDisplayName.FromUser(user),
+            RoleName = roles.FirstOrDefault() ?? "Staff",
+            GoogleEmail = googleEmail,
+            ReturnUrl = returnUrl
+        });
+    }
+
+    [HttpPost]
+    [AllowAnonymous]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ConfirmStaffIdentity(string? returnUrl, bool confirm)
+    {
+        await HttpContext.Session.LoadAsync();
+        if (!GoogleStaffConfirmSession.TryGet(
+                HttpContext.Session,
+                out var userId,
+                out var googleSubject,
+                out var googleEmail,
+                out var pendingReturnUrl))
+        {
+            TempData["Error"] = "Staff confirmation expired. Sign in with Google again.";
+            return RedirectToAction(nameof(Login));
+        }
+
+        returnUrl ??= pendingReturnUrl;
+
+        if (!confirm)
+        {
+            GoogleStaffConfirmSession.Clear(HttpContext.Session);
+            return RedirectToAction(nameof(Login), new { returnUrl });
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null
+            || !await IsStaffUserAsync(user)
+            || !ApplicationUser.HasVerifiedGoogleRecovery(user)
+            || !string.Equals(user.GoogleEmail, googleEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            GoogleStaffConfirmSession.Clear(HttpContext.Session);
+            TempData["Error"] = "Could not confirm staff identity.";
+            return RedirectToAction(nameof(Login));
+        }
+
+        var loginInfo = new UserLoginInfo(GoogleDefaults.AuthenticationScheme, googleSubject, "Google");
+        var existingLogin = await _userManager.FindByLoginAsync(loginInfo.LoginProvider, loginInfo.ProviderKey);
+        if (existingLogin is null)
+        {
+            var link = await _userManager.AddLoginAsync(user, loginInfo);
+            if (!link.Succeeded && !AlreadyLinked(link))
+            {
+                GoogleStaffConfirmSession.Clear(HttpContext.Session);
+                TempData["Error"] = "This Google account is already linked to another login.";
+                return RedirectToAction(nameof(Login));
+            }
+        }
+        else if (!string.Equals(existingLogin.Id, user.Id, StringComparison.Ordinal))
+        {
+            GoogleStaffConfirmSession.Clear(HttpContext.Session);
+            TempData["Error"] = "This Google account is already linked to another login.";
+            return RedirectToAction(nameof(Login));
+        }
+
+        GoogleStaffConfirmSession.Clear(HttpContext.Session);
+        await _signInManager.SignInAsync(user, isPersistent: false);
+        await RecordAccountActivityAsync(user.Id, "Auth.GoogleStaffConfirm", "Signed in with Google recovery email");
+        _logger.LogInformation("Staff {User} confirmed Google identity.", user.UserName);
+
+        if (user.MustChangePassword)
+            return RedirectToAction(nameof(ChangePassword));
+
+        return await RedirectAfterSignInAsync(user, returnUrl);
+    }
+
+    [HttpGet]
+    [Authorize(Roles = AppRoles.AdminManager + "," + AppRoles.Receptionist)]
     public async Task<IActionResult> Settings(string? section = null, int activityPage = 1)
     {
         var user = await _userManager.GetUserAsync(User);
@@ -111,7 +463,7 @@ public class AccountController : Controller
     }
 
     [HttpPost]
-    [Authorize]
+    [Authorize(Roles = AppRoles.AdminManager + "," + AppRoles.Receptionist)]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateProfile([Bind(Prefix = "Profile")] UpdateProfileViewModel model)
     {
@@ -179,7 +531,7 @@ public class AccountController : Controller
     }
 
     [HttpPost]
-    [Authorize]
+    [Authorize(Roles = AppRoles.AdminManager + "," + AppRoles.Receptionist)]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateGoogleRecovery([Bind(Prefix = "Profile")] UpdateGoogleRecoveryViewModel model)
     {
@@ -299,7 +651,7 @@ public class AccountController : Controller
     }
 
     [HttpPost]
-    [Authorize]
+    [Authorize(Roles = AppRoles.AdminManager + "," + AppRoles.Receptionist)]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdatePassword([Bind(Prefix = "Password")] ChangePasswordViewModel model)
     {
@@ -324,6 +676,7 @@ public class AccountController : Controller
         await RecordAccountActivityAsync(user.Id, "Password.Update", "Password");
 
         TempData["Message"] = "Password updated successfully.";
+        TempData["PasswordSuccess"] = "1";
         return RedirectToAction(nameof(Settings), new { section = "password" });
     }
 
@@ -388,41 +741,91 @@ public class AccountController : Controller
         if (!ModelState.IsValid)
             return View(model);
 
+        var normalizedEmail = model.Email.Trim();
+
         if (!await _emailSender.IsConfiguredAsync(cancellationToken))
         {
             _logger.LogWarning("Password reset skipped: SMTP is not configured.");
-            return RedirectToAction(nameof(ForgotPasswordConfirmation));
+        }
+        else
+        {
+            var user = await _userManager.FindByEmailAsync(normalizedEmail);
+            if (user is not null)
+                await _passwordResetCode.IssueAndSendAsync(user, cancellationToken);
         }
 
-        var user = await _userManager.FindByEmailAsync(model.Email.Trim());
-        if (user is not null)
-            await TrySendPasswordResetAsync(user, cancellationToken);
+        TempData["PasswordResetEmail"] = normalizedEmail;
+        return RedirectToAction(nameof(VerifyResetOtp));
+    }
 
-        return RedirectToAction(nameof(ForgotPasswordConfirmation));
+    [HttpGet]
+    [AllowAnonymous]
+    public async Task<IActionResult> VerifyResetOtp(CancellationToken cancellationToken)
+    {
+        var email = TempData["PasswordResetEmail"] as string ?? string.Empty;
+        var model = new VerifyResetOtpViewModel { Email = email };
+        if (!string.IsNullOrWhiteSpace(email))
+            model.RemainingAttempts = await _passwordResetCode.GetRemainingAttemptsAsync(email, cancellationToken);
+
+        return View(model);
+    }
+
+    [HttpPost]
+    [AllowAnonymous]
+    [ValidateAntiForgeryToken]
+    [EnableRateLimiting("staff-password-reset-verify")]
+    public async Task<IActionResult> VerifyResetOtp(VerifyResetOtpViewModel model, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            model.RemainingAttempts = await _passwordResetCode.GetRemainingAttemptsAsync(model.Email, cancellationToken);
+            return View(model);
+        }
+
+        var result = await _passwordResetCode.VerifyAsync(model.Email, model.Otp, cancellationToken);
+        model.RemainingAttempts = result.RemainingAttempts
+            ?? await _passwordResetCode.GetRemainingAttemptsAsync(model.Email, cancellationToken);
+
+        switch (result.Status)
+        {
+            case StaffPasswordResetCodeVerifyStatus.Success when result.User is not null:
+                var token = await _userManager.GeneratePasswordResetTokenAsync(result.User);
+                var encoded = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
+                PasswordResetSession.SetGrant(HttpContext.Session, model.Email.Trim(), encoded);
+                return RedirectToAction(nameof(ResetPassword));
+            case StaffPasswordResetCodeVerifyStatus.Expired:
+                ModelState.AddModelError(string.Empty, "That code has expired. Request a new one.");
+                break;
+            case StaffPasswordResetCodeVerifyStatus.TooManyAttempts:
+                ModelState.AddModelError(string.Empty, "Too many incorrect attempts. This code has expired — request a new one.");
+                model.RemainingAttempts = 0;
+                break;
+            case StaffPasswordResetCodeVerifyStatus.NotFound:
+                ModelState.AddModelError(string.Empty, "No active reset code for that email. Check the address or request a new code.");
+                break;
+            default:
+                ModelState.AddModelError(string.Empty, "Incorrect code. Check the digits and try again.");
+                break;
+        }
+
+        return View(model);
     }
 
     [HttpGet]
     [AllowAnonymous]
     public IActionResult ForgotPasswordConfirmation()
     {
-        return View();
+        return RedirectToAction(nameof(VerifyResetOtp));
     }
 
     [HttpGet]
     [AllowAnonymous]
-    public async Task<IActionResult> ResetPassword(string? email = null, string? code = null)
+    public IActionResult ResetPassword()
     {
-        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(code))
-            return RedirectToAction(nameof(ForgotPassword));
-
-        if (!await IsPasswordResetTokenValidAsync(email, code))
+        if (!PasswordResetSession.TryGetGrant(HttpContext.Session, out var email, out _))
             return RedirectToAction(nameof(ResetPasswordInvalid));
 
-        return View(new ResetPasswordViewModel
-        {
-            Email = email,
-            Code = code
-        });
+        return View(new ResetPasswordViewModel { Email = email });
     }
 
     [HttpPost]
@@ -430,14 +833,17 @@ public class AccountController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ResetPassword(ResetPasswordViewModel model)
     {
-        if (!await IsPasswordResetTokenValidAsync(model.Email, model.Code))
+        if (!PasswordResetSession.TryGetGrant(HttpContext.Session, out var sessionEmail, out var encodedCode))
+            return RedirectToAction(nameof(ResetPasswordInvalid));
+
+        if (!string.Equals(sessionEmail, model.Email.Trim(), StringComparison.OrdinalIgnoreCase))
             return RedirectToAction(nameof(ResetPasswordInvalid));
 
         if (!ModelState.IsValid)
             return View(model);
 
         var user = await _userManager.FindByEmailAsync(model.Email);
-        if (user is null || !TryDecodeResetCode(model.Code, out var decoded))
+        if (user is null || !TryDecodeResetCode(encodedCode, out var decoded))
             return RedirectToAction(nameof(ResetPasswordInvalid));
 
         var result = await _userManager.ResetPasswordAsync(user, decoded, model.NewPassword);
@@ -450,10 +856,11 @@ public class AccountController : Controller
             return View(model);
         }
 
+        PasswordResetSession.Clear(HttpContext.Session);
         user.MustChangePassword = false;
         await _userManager.UpdateAsync(user);
         await _userManager.UpdateSecurityStampAsync(user);
-        await RecordAccountActivityAsync(user.Id, "Password.Reset", "Reset from email link");
+        await RecordAccountActivityAsync(user.Id, "Password.Reset", "Reset after email OTP");
         _logger.LogInformation("User {User} reset their password.", user.UserName);
         return RedirectToAction(nameof(ResetPasswordConfirmation));
     }
@@ -477,40 +884,13 @@ public class AccountController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Logout()
     {
+        var user = await _userManager.GetUserAsync(User);
+        var wasGuest = user is not null && await IsGuestUserAsync(user);
         await _signInManager.SignOutAsync();
+        await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+        if (wasGuest)
+            return RedirectToAction("Index", "Booking");
         return RedirectToAction(nameof(Login));
-    }
-
-    private async Task TrySendPasswordResetAsync(ApplicationUser user, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(user.Email))
-            return;
-
-        var token = await _userManager.GeneratePasswordResetTokenAsync(user);
-        var code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
-        var resetUrl = BuildPublicResetUrl(user.Email, code);
-
-        try
-        {
-            await _emailSender.SendPasswordResetAsync(user.Email, resetUrl, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Password reset email failed for {User}.", user.UserName);
-        }
-    }
-
-    private async Task<bool> IsPasswordResetTokenValidAsync(string email, string code)
-    {
-        var user = await _userManager.FindByEmailAsync(email);
-        if (user is null || !TryDecodeResetCode(code, out var decoded))
-            return false;
-
-        return await _userManager.VerifyUserTokenAsync(
-            user,
-            _userManager.Options.Tokens.PasswordResetTokenProvider,
-            UserManager<ApplicationUser>.ResetPasswordTokenPurpose,
-            decoded);
     }
 
     private static bool TryDecodeResetCode(string code, out string decoded)
@@ -527,20 +907,6 @@ public class AccountController : Controller
         }
     }
 
-    private string BuildPublicResetUrl(string email, string code)
-    {
-        var publicBase = (_configuration["PublicBaseUrl"] ?? "http://localhost:5288").TrimEnd('/');
-        var relative = Url.Action(nameof(ResetPassword), "Account", new { email, code })
-                       ?? $"/Account/ResetPassword?email={Uri.EscapeDataString(email)}&code={Uri.EscapeDataString(code)}";
-        if (relative.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-        {
-            var pathAndQuery = new Uri(relative).PathAndQuery;
-            return publicBase + pathAndQuery;
-        }
-
-        return publicBase + (relative.StartsWith('/') ? relative : "/" + relative);
-    }
-
     private async Task<ApplicationUser?> FindUserAsync(string userNameOrEmail)
     {
         var byName = await _userManager.FindByNameAsync(userNameOrEmail);
@@ -549,6 +915,156 @@ public class AccountController : Controller
 
         return await _userManager.FindByEmailAsync(userNameOrEmail);
     }
+
+    private async Task<IActionResult?> TrySignInStaffWithGoogleAsync(
+        ApplicationUser user,
+        UserLoginInfo loginInfo,
+        string googleEmail,
+        bool rememberMe,
+        string? returnUrl)
+    {
+        if (!await IsStaffUserAsync(user))
+            return null;
+
+        var existingLogin = await _userManager.FindByLoginAsync(loginInfo.LoginProvider, loginInfo.ProviderKey);
+        if (existingLogin is null)
+        {
+            var link = await _userManager.AddLoginAsync(user, loginInfo);
+            if (!link.Succeeded && !AlreadyLinked(link))
+            {
+                await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+                TempData["Error"] = "This Google account is already linked to another login.";
+                return RedirectToAction(nameof(Login), new { returnUrl });
+            }
+        }
+        else if (!string.Equals(existingLogin.Id, user.Id, StringComparison.Ordinal))
+        {
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+            TempData["Error"] = "This Google account is already linked to another login.";
+            return RedirectToAction(nameof(Login), new { returnUrl });
+        }
+
+        var normalizedGoogle = _userManager.NormalizeEmail(googleEmail);
+        var emailMatchesAccount = string.Equals(user.NormalizedEmail, normalizedGoogle, StringComparison.Ordinal);
+        var emailMatchesRecovery = string.Equals(user.NormalizedGoogleEmail, normalizedGoogle, StringComparison.Ordinal);
+        if (emailMatchesAccount || emailMatchesRecovery)
+        {
+            if (!ApplicationUser.HasVerifiedGoogleRecovery(user)
+                || !string.Equals(user.GoogleEmail, googleEmail, StringComparison.OrdinalIgnoreCase))
+            {
+                user.GoogleEmail = googleEmail;
+                user.NormalizedGoogleEmail = normalizedGoogle;
+                user.GoogleVerificationStatus = GoogleVerificationStatus.GoogleVerified;
+                await _userManager.UpdateAsync(user);
+            }
+        }
+
+        await _signInManager.SignInAsync(user, rememberMe);
+        await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+        await RecordAccountActivityAsync(user.Id, "Auth.GoogleStaffSignIn", "Signed in with Google");
+        _logger.LogInformation("Staff {User} signed in with Google.", user.UserName);
+
+        if (user.MustChangePassword)
+            return RedirectToAction(nameof(ChangePassword));
+
+        return await RedirectAfterSignInAsync(user, returnUrl);
+    }
+
+    private async Task<bool> IsStaffUserAsync(ApplicationUser user)
+    {
+        var roles = await _userManager.GetRolesAsync(user);
+        return roles.Any(r => AppRoles.StaffAssignable.Contains(r));
+    }
+
+    private async Task<bool> IsGuestUserAsync(ApplicationUser user)
+    {
+        var roles = await _userManager.GetRolesAsync(user);
+        return roles.Contains(AppRoles.Guest);
+    }
+
+    private async Task<IActionResult> RedirectAfterSignInAsync(ApplicationUser? user, string? returnUrl)
+    {
+        if (user is null || !await IsStaffUserAsync(user))
+        {
+            if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl) && IsGuestSafeReturnUrl(returnUrl))
+                return Redirect(returnUrl);
+            return RedirectToAction("Index", "Booking");
+        }
+
+        return RedirectToLocal(returnUrl);
+    }
+
+    private static bool IsGuestSafeReturnUrl(string returnUrl)
+    {
+        if (returnUrl.StartsWith("/Dashboard", StringComparison.OrdinalIgnoreCase)
+            || returnUrl.StartsWith("/Rooms", StringComparison.OrdinalIgnoreCase)
+            || returnUrl.StartsWith("/Admin", StringComparison.OrdinalIgnoreCase)
+            || returnUrl.StartsWith("/WalkIn", StringComparison.OrdinalIgnoreCase)
+            || returnUrl.StartsWith("/Account/Settings", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return true;
+    }
+
+    private async Task<ApplicationUser?> CreateGuestFromGoogleAsync(
+        string email,
+        UserLoginInfo loginInfo,
+        string? displayName)
+    {
+        var local = email.Split('@')[0];
+        var sanitized = new string(local.Where(ch => char.IsLetterOrDigit(ch) || ch is '.' or '_' or '-').ToArray());
+        if (string.IsNullOrWhiteSpace(sanitized))
+            sanitized = "guest";
+        if (sanitized.Length > 40)
+            sanitized = sanitized[..40];
+
+        var userName = $"guest.{sanitized}";
+        var suffix = 0;
+        while (await _userManager.FindByNameAsync(userName) is not null)
+        {
+            suffix++;
+            userName = $"guest.{sanitized}.{suffix}";
+        }
+
+        var user = new ApplicationUser
+        {
+            UserName = userName,
+            Email = email,
+            EmailConfirmed = true,
+            FullName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim(),
+            MustChangePassword = false,
+            GoogleVerificationStatus = GoogleVerificationStatus.NotLinked
+        };
+
+        var create = await _userManager.CreateAsync(user);
+        if (!create.Succeeded)
+        {
+            _logger.LogWarning(
+                "Guest create failed for {Email}: {Errors}",
+                email,
+                string.Join("; ", create.Errors.Select(e => e.Description)));
+            return null;
+        }
+
+        await _userManager.AddToRoleAsync(user, AppRoles.Guest);
+        var link = await _userManager.AddLoginAsync(user, loginInfo);
+        if (!link.Succeeded && !AlreadyLinked(link))
+        {
+            _logger.LogWarning(
+                "Guest Google link failed for {User}: {Errors}",
+                user.UserName,
+                string.Join("; ", link.Errors.Select(e => e.Description)));
+            await _userManager.DeleteAsync(user);
+            return null;
+        }
+
+        await _userManager.UpdateAsync(user);
+        return user;
+    }
+
+    private static bool AlreadyLinked(IdentityResult result) =>
+        result.Errors.Any(e =>
+            e.Code.Contains("LoginAlreadyAssociated", StringComparison.OrdinalIgnoreCase)
+            || e.Description.Contains("already", StringComparison.OrdinalIgnoreCase));
 
     private IActionResult RedirectToLocal(string? returnUrl)
     {
@@ -663,14 +1179,6 @@ public class AccountController : Controller
         if (clipped.Length > 64)
             clipped = clipped[..61] + "...";
 
-        _db.StaffAccountAudits.Add(new StaffAccountAudit
-        {
-            Action = action,
-            TargetUserId = userId,
-            PerformedByUserId = userId,
-            RoleAssigned = clipped,
-            AtUtc = DateTime.UtcNow
-        });
         var target = await _userManager.FindByIdAsync(userId);
         var targetLabel = string.IsNullOrWhiteSpace(target?.FullName)
             ? (target?.UserName ?? userId)
@@ -678,11 +1186,12 @@ public class AccountController : Controller
         _audit.Record(
             SystemAuditIntent.AdministrativeAction,
             SystemAuditDomain.Account,
-            action.StartsWith("Password", StringComparison.Ordinal) ? $"Account.{action}" : $"Account.{action}",
-            "StaffAccount",
+            StaffAccountActivityMapper.ToAccountAction(action),
+            StaffAuthSchema.AuditTargetType,
             userId,
             targetLabel,
-            summary: clipped);
+            summary: clipped,
+            actorUserId: userId);
         await _db.SaveChangesAsync();
     }
 
@@ -691,59 +1200,7 @@ public class AccountController : Controller
         int page)
     {
         const int pageSize = 15;
-        page = Math.Max(1, page);
-
-        var query = _db.StaffAccountAudits
-            .AsNoTracking()
-            .Where(a => a.TargetUserId == userId && AccountActivityActions.Contains(a.Action));
-
-        var total = await query.CountAsync();
-        var rows = await query
-            .OrderByDescending(a => a.AtUtc)
-            .ThenByDescending(a => a.Id)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
-
-        return (rows.Select(MapAccountActivity).ToList(), total);
-    }
-
-    private static readonly HashSet<string> AccountActivityActions = new(StringComparer.Ordinal)
-    {
-        "Created",
-        "Edited",
-        "Disabled",
-        "Enabled",
-        "Profile.Update",
-        "RecoveryEmail.Update",
-        "Password.Update",
-        "Password.Reset"
-    };
-
-    private static AccountActivityItem MapAccountActivity(StaffAccountAudit row)
-    {
-        var (title, fallback) = row.Action switch
-        {
-            "Profile.Update" => ("Profile details updated", "Account details"),
-            "RecoveryEmail.Update" => ("Login / recovery email changed", "Email"),
-            "Password.Update" => ("Password changed", "Password"),
-            "Password.Reset" => ("Password reset from email link", "Password"),
-            "Created" => ("Account created", "Staff account"),
-            "Edited" => ("Account edited by an administrator", "Account details"),
-            "Disabled" => ("Account disabled", "Access"),
-            "Enabled" => ("Account enabled", "Access"),
-            _ => ("Account updated", "Account")
-        };
-
-        var local = PhilippinesTime.ToManila(row.AtUtc);
-        return new AccountActivityItem
-        {
-            Title = title,
-            Detail = string.IsNullOrWhiteSpace(row.RoleAssigned) || row.RoleAssigned == "Unassigned"
-                ? fallback
-                : row.RoleAssigned,
-            WhenLocal = local.ToString("dd MMM yyyy, h:mm tt"),
-            WhenUtc = DateTime.SpecifyKind(row.AtUtc, DateTimeKind.Utc).ToString("o")
-        };
+        var (rows, total) = await _auditQuery.GetStaffAccountActivityAsync(userId, page, pageSize);
+        return (rows.Select(StaffAccountActivityMapper.MapActivity).ToList(), total);
     }
 }

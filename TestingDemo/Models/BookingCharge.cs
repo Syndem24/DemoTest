@@ -9,7 +9,9 @@ public enum BookingChargeType
     ServiceFee = 4,
     SnackBeverage = 5,
     /// <summary>Display/metadata for extended nights; amount excluded from TotalAmount fee sum.</summary>
-    StayExtension = 6
+    StayExtension = 6,
+    /// <summary>Senior Citizen / PWD 20% off stay (walk-in, no active promo).</summary>
+    ArrivalDiscount = 7
 }
 
 /// <summary>

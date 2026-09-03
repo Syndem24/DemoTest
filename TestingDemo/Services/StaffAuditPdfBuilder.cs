@@ -5,7 +5,7 @@ using TestingDemo.Models;
 
 namespace TestingDemo.Services;
 
-/// <summary>Branded PDF of staff account audit rows before they are deleted.</summary>
+/// <summary>Branded PDF of staff account audit rows from <see cref="SystemAuditLog"/>.</summary>
 public static class StaffAuditPdfBuilder
 {
     private static readonly Color Navy = Color.FromHex("#0B1F33");
@@ -14,7 +14,7 @@ public static class StaffAuditPdfBuilder
     private static readonly Color HeaderBg = Color.FromHex("#E8F4F4");
 
     public static byte[] Build(
-        IReadOnlyList<StaffAccountAudit> rows,
+        IReadOnlyList<SystemAuditLog> rows,
         string performedBy,
         DateTime flushedAtUtc,
         string? logoPath)
@@ -70,7 +70,7 @@ public static class StaffAuditPdfBuilder
                 {
                     brand.Item().Text("MORI INTERNATIONAL HOTEL — Staff audit log")
                         .FontSize(11).Bold().FontColor(Navy);
-                    brand.Item().Text("Account create / edit / disable actions · exported before deletion")
+                    brand.Item().Text("Account create / edit / disable actions · exported from system audit")
                         .FontSize(7).FontColor(Teal);
                 });
             });
@@ -81,7 +81,7 @@ public static class StaffAuditPdfBuilder
         });
     }
 
-    private static void ComposeTable(IContainer container, IReadOnlyList<StaffAccountAudit> rows)
+    private static void ComposeTable(IContainer container, IReadOnlyList<SystemAuditLog> rows)
     {
         container.Table(table =>
         {
@@ -89,14 +89,14 @@ public static class StaffAuditPdfBuilder
             {
                 columns.RelativeColumn(1.4f);
                 columns.RelativeColumn(1.2f);
-                columns.RelativeColumn(1.1f);
+                columns.RelativeColumn(1.6f);
                 columns.RelativeColumn(1.6f);
                 columns.RelativeColumn(1.6f);
             });
 
             table.Header(header =>
             {
-                foreach (var title in new[] { "When (PH)", "Action", "Role", "Target user", "Performed by" })
+                foreach (var title in new[] { "When (PH)", "Action", "Summary", "Target", "Actor" })
                 {
                     header.Cell().Background(HeaderBg).BorderBottom(1).BorderColor(Line)
                         .Padding(5).Text(title).SemiBold().FontSize(7);
@@ -106,11 +106,12 @@ public static class StaffAuditPdfBuilder
             foreach (var row in rows)
             {
                 var when = PhilippinesTime.ToManila(row.AtUtc).ToString("dd MMM yyyy HH:mm");
+                var action = StaffAccountActivityMapper.NormalizeActionKey(row.Action);
                 table.Cell().BorderBottom(0.5f).BorderColor(Line).Padding(5).Text(when).FontSize(7);
-                table.Cell().BorderBottom(0.5f).BorderColor(Line).Padding(5).Text(row.Action).FontSize(7);
-                table.Cell().BorderBottom(0.5f).BorderColor(Line).Padding(5).Text(row.RoleAssigned).FontSize(7);
-                table.Cell().BorderBottom(0.5f).BorderColor(Line).Padding(5).Text(row.TargetUserId).FontSize(7);
-                table.Cell().BorderBottom(0.5f).BorderColor(Line).Padding(5).Text(row.PerformedByUserId).FontSize(7);
+                table.Cell().BorderBottom(0.5f).BorderColor(Line).Padding(5).Text(action).FontSize(7);
+                table.Cell().BorderBottom(0.5f).BorderColor(Line).Padding(5).Text(row.Summary).FontSize(7);
+                table.Cell().BorderBottom(0.5f).BorderColor(Line).Padding(5).Text(row.TargetLabel).FontSize(7);
+                table.Cell().BorderBottom(0.5f).BorderColor(Line).Padding(5).Text(row.ActorDisplayName).FontSize(7);
             }
         });
     }

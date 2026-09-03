@@ -37,8 +37,10 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const manageTypes = canManageRoomTypes()
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (silent = false) => {
+    if (!silent) {
+      setLoading(true)
+    }
     setError(null)
     try {
       const [typeData, roomData] = await Promise.all([fetchRoomTypes(), fetchRooms()])
@@ -47,12 +49,25 @@ export default function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load rooms.')
     } finally {
-      setLoading(false)
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }, [])
 
   useEffect(() => {
     void load()
+  }, [load])
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const scopes = (event as CustomEvent<{ scopes?: string[] }>).detail?.scopes || []
+      if (scopes.includes('all') || scopes.includes('rooms')) {
+        void load(true)
+      }
+    }
+    window.addEventListener('mori:admin-refresh', handler)
+    return () => window.removeEventListener('mori:admin-refresh', handler)
   }, [load])
 
   const changeView = (next: ViewMode) => {

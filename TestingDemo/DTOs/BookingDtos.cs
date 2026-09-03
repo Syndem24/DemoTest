@@ -111,7 +111,8 @@ public sealed record RoomAvailabilityDto(
     string RoomTypeName,
     int Capacity,
     int Remaining,
-    decimal PricePerNight);
+    decimal PricePerNight,
+    IReadOnlyList<string> SoldOutDates);
 
 public sealed record BookingItemDto(
     int RoomTypeId,
@@ -160,7 +161,8 @@ public sealed record BookingDto(
     ArrivalDiscountRequest ArrivalDiscountRequest = ArrivalDiscountRequest.None,
     bool CashOnlyPromo = false,
     string? SpecialOfferTitle = null,
-    decimal? SpecialOfferRegularPricePerNight = null);
+    decimal? SpecialOfferRegularPricePerNight = null,
+  bool ExceedsAvailableInventory = false);
 
 public sealed record CreateBookingResponse(
     string Reference,
@@ -181,6 +183,11 @@ public sealed class ConfirmRoomAssignmentRequest
 {
     public int RoomTypeId { get; set; }
     public List<int> RoomIds { get; set; } = new();
+}
+
+public sealed class AssignRoomsRequest
+{
+    public List<ConfirmRoomAssignmentRequest> Assignments { get; set; } = new();
 }
 
 public sealed record AssignableRoomDto(

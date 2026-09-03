@@ -1,4 +1,5 @@
 using TestingDemo.Models;
+using TestingDemo.Services;
 
 namespace TestingDemo.ViewModels;
 
@@ -44,7 +45,7 @@ public class RoomIndexViewModel
                     BedCount = representative.BedCount,
                     RoomCount = g.Rooms.Count,
                     AvailableCount = g.Rooms.Count(r => r.Status == RoomStatus.Available),
-                    Inclusions = representative.Inclusions.ToList(),
+                    Inclusions = InclusionCatalog.OrderForGuestDisplay(representative.Inclusions),
                     Images = representative.Images.ToList()
                 };
             })

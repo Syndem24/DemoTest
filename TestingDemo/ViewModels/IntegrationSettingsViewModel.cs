@@ -31,6 +31,22 @@ public sealed class IntegrationSettingsViewModel
     [StringLength(80)]
     public string? GeminiKeyName { get; set; }
 
+    [Display(Name = "Show Continue with Google on login")]
+    public bool GoogleLoginEnabled { get; set; }
+
+    [Display(Name = "Google Client ID")]
+    [StringLength(256)]
+    public string? GoogleClientId { get; set; }
+
+    [DataType(DataType.Password)]
+    [Display(Name = "Google Client Secret")]
+    public string? GoogleClientSecret { get; set; }
+
+    public bool GoogleClientSecretConfigured { get; set; }
+
+    [Display(Name = "Clear Google Client Secret")]
+    public bool ClearGoogleClientSecret { get; set; }
+
     [Required]
     [DataType(DataType.Password)]
     [Display(Name = "Current password")]
@@ -45,14 +61,28 @@ public sealed class ForgotPasswordViewModel
     public string Email { get; set; } = string.Empty;
 }
 
+public sealed class VerifyResetOtpViewModel
+{
+    [Required]
+    [EmailAddress]
+    [Display(Name = "Email")]
+    public string Email { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(6, MinimumLength = 6)]
+    [RegularExpression(@"^\d{6}$", ErrorMessage = "Enter the 6-digit code from your email.")]
+    [Display(Name = "Verification code")]
+    public string Otp { get; set; } = string.Empty;
+
+    /// <summary>Attempts left before the active code is cancelled (null = unknown / no active code).</summary>
+    public int? RemainingAttempts { get; set; }
+}
+
 public sealed class ResetPasswordViewModel
 {
     [Required]
     [EmailAddress]
     public string Email { get; set; } = string.Empty;
-
-    [Required]
-    public string Code { get; set; } = string.Empty;
 
     [Required, DataType(DataType.Password)]
     [StringLength(100, MinimumLength = 12)]

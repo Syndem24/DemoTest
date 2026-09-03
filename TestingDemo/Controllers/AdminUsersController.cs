@@ -18,17 +18,20 @@ public class AdminUsersController : Controller
     private readonly IStaffAccountCreateService _createService;
     private readonly HotelBookingDbContext _db;
     private readonly ISystemAuditRecorder _audit;
+    private readonly ISystemAuditQuery _auditQuery;
 
     public AdminUsersController(
         UserManager<ApplicationUser> userManager,
         IStaffAccountCreateService createService,
         HotelBookingDbContext db,
-        ISystemAuditRecorder audit)
+        ISystemAuditRecorder audit,
+        ISystemAuditQuery auditQuery)
     {
         _userManager = userManager;
         _createService = createService;
         _db = db;
         _audit = audit;
+        _auditQuery = auditQuery;
     }
 
     [HttpGet]
@@ -88,6 +91,8 @@ public class AdminUsersController : Controller
         if (user is null)
             return NotFound();
         var roles = await _userManager.GetRolesAsync(user);
+        var role = roles.FirstOrDefault() ?? AppRoles.Receptionist;
+        var isGuest = string.Equals(role, AppRoles.Guest, StringComparison.Ordinal);
         var model = new EditAdminUserViewModel
         {
             Id = user.Id,
@@ -97,10 +102,13 @@ public class AdminUsersController : Controller
             PhoneNumber = user.PhoneNumber,
             BirthDate = user.BirthDate,
             Address = user.Address,
-            Role = roles.FirstOrDefault() ?? AppRoles.Receptionist,
+            Role = role,
             IsDisabled = IsDisabledByLockout(user)
         };
-        ViewBag.RoleOptions = AppRoles.StaffAssignable.ToArray();
+        ViewBag.IsGuestAccount = isGuest;
+        ViewBag.RoleOptions = isGuest
+            ? new[] { AppRoles.Guest }
+            : AppRoles.StaffAssignable.ToArray();
         return View(model);
     }
 
@@ -108,21 +116,35 @@ public class AdminUsersController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(EditAdminUserViewModel model, CancellationToken cancellationToken)
     {
-        if (!AppRoles.StaffAssignable.Contains(model.Role))
+        var targetProbe = await _userManager.FindByIdAsync(model.Id);
+        if (targetProbe is null)
+            return NotFound();
+        var existingRoles = await _userManager.GetRolesAsync(targetProbe);
+        var isGuest = existingRoles.Contains(AppRoles.Guest);
+        if (isGuest)
+        {
+            model.Role = AppRoles.Guest;
+            ModelState.Remove(nameof(model.Role));
+        }
+        else if (!AppRoles.StaffAssignable.Contains(model.Role))
+        {
             ModelState.AddModelError(nameof(model.Role), "Invalid role.");
+        }
+
         if (!ModelState.IsValid)
         {
-            ViewBag.RoleOptions = AppRoles.StaffAssignable.ToArray();
+            ViewBag.IsGuestAccount = isGuest;
+            ViewBag.RoleOptions = isGuest
+                ? new[] { AppRoles.Guest }
+                : AppRoles.StaffAssignable.ToArray();
             return View(model);
         }
 
         var actor = await _userManager.GetUserAsync(User);
         if (actor is null)
             return Challenge();
-        var target = await _userManager.FindByIdAsync(model.Id);
-        if (target is null)
-            return NotFound();
-        var currentRoles = await _userManager.GetRolesAsync(target);
+        var target = targetProbe;
+        var currentRoles = existingRoles;
         var currentRole = currentRoles.FirstOrDefault() ?? "Unassigned";
         var normalizedUserName = model.UserName.Trim();
         var normalizedEmail = model.Email.Trim();
@@ -136,13 +158,21 @@ public class AdminUsersController : Controller
             ? null
             : model.Address.Trim();
 
+        void SetRoleOptions()
+        {
+            ViewBag.IsGuestAccount = isGuest;
+            ViewBag.RoleOptions = isGuest
+                ? new[] { AppRoles.Guest }
+                : AppRoles.StaffAssignable.ToArray();
+        }
+
         if (!string.Equals(target.UserName, normalizedUserName, StringComparison.OrdinalIgnoreCase))
         {
             var setUserName = await _userManager.SetUserNameAsync(target, normalizedUserName);
             if (!setUserName.Succeeded)
             {
                 AddIdentityErrors(setUserName);
-                ViewBag.RoleOptions = AppRoles.StaffAssignable.ToArray();
+                SetRoleOptions();
                 return View(model);
             }
         }
@@ -153,7 +183,7 @@ public class AdminUsersController : Controller
             if (!setEmail.Succeeded)
             {
                 AddIdentityErrors(setEmail);
-                ViewBag.RoleOptions = AppRoles.StaffAssignable.ToArray();
+                SetRoleOptions();
                 return View(model);
             }
             target.EmailConfirmed = true;
@@ -164,13 +194,13 @@ public class AdminUsersController : Controller
         target.BirthDate = model.BirthDate;
         target.Address = normalizedAddress;
 
-        if (!string.Equals(currentRole, model.Role, StringComparison.Ordinal))
+        if (!isGuest && !string.Equals(currentRole, model.Role, StringComparison.Ordinal))
         {
             var remove = await _userManager.RemoveFromRolesAsync(target, currentRoles);
             if (!remove.Succeeded)
             {
                 AddIdentityErrors(remove);
-                ViewBag.RoleOptions = AppRoles.StaffAssignable.ToArray();
+                SetRoleOptions();
                 return View(model);
             }
 
@@ -178,7 +208,7 @@ public class AdminUsersController : Controller
             if (!add.Succeeded)
             {
                 AddIdentityErrors(add);
-                ViewBag.RoleOptions = AppRoles.StaffAssignable.ToArray();
+                SetRoleOptions();
                 return View(model);
             }
         }
@@ -187,7 +217,7 @@ public class AdminUsersController : Controller
         if (!update.Succeeded)
         {
             AddIdentityErrors(update);
-            ViewBag.RoleOptions = AppRoles.StaffAssignable.ToArray();
+            SetRoleOptions();
             return View(model);
         }
 
@@ -197,8 +227,14 @@ public class AdminUsersController : Controller
             actor.Id,
             model.Role,
             cancellationToken);
-        TempData["Message"] = "User account updated.";
-        return RedirectToAction(nameof(Index));
+        TempData["Message"] = isGuest ? "Guest account updated." : "User account updated.";
+        return RedirectToAction(isGuest ? nameof(Guests) : nameof(Index));
+    }
+
+    [HttpGet]
+    public IActionResult Guests()
+    {
+        return View();
     }
 
     [HttpGet]
@@ -398,26 +434,19 @@ public class AdminUsersController : Controller
         string role,
         CancellationToken cancellationToken)
     {
-        _db.StaffAccountAudits.Add(new StaffAccountAudit
-        {
-            Action = action,
-            TargetUserId = targetUserId,
-            PerformedByUserId = actorUserId,
-            RoleAssigned = string.IsNullOrWhiteSpace(role) ? "Unassigned" : role,
-            AtUtc = DateTime.UtcNow
-        });
         var target = await _userManager.FindByIdAsync(targetUserId);
         var targetLabel = string.IsNullOrWhiteSpace(target?.FullName)
             ? (target?.UserName ?? targetUserId)
             : target.FullName.Trim();
+        var summary = string.IsNullOrWhiteSpace(role) ? action : $"{action} · {role}";
         _audit.Record(
             SystemAuditIntent.AdministrativeAction,
             SystemAuditDomain.Account,
-            $"Account.{action}",
-            "StaffAccount",
+            StaffAccountActivityMapper.ToAccountAction(action),
+            StaffAuthSchema.AuditTargetType,
             targetUserId,
             targetLabel,
-            summary: string.IsNullOrWhiteSpace(role) ? action : $"{action} · {role}",
+            summary: summary,
             actorUserId: actorUserId);
         await _db.SaveChangesAsync(cancellationToken);
     }
@@ -426,28 +455,7 @@ public class AdminUsersController : Controller
         IReadOnlyCollection<string> userIds,
         CancellationToken cancellationToken)
     {
-        if (userIds.Count == 0)
-            return new Dictionary<string, DateTime?>(StringComparer.Ordinal);
-
-        var logs = await _db.StaffAccountAudits
-            .Where(a =>
-                userIds.Contains(a.TargetUserId)
-                && (a.Action == "Disabled" || a.Action == "Enabled"))
-            .OrderByDescending(a => a.AtUtc)
-            .Select(a => new { a.TargetUserId, a.Action, a.AtUtc })
-            .ToListAsync(cancellationToken);
-
-        var result = new Dictionary<string, DateTime?>(StringComparer.Ordinal);
-        foreach (var log in logs)
-        {
-            if (result.ContainsKey(log.TargetUserId))
-                continue;
-            result[log.TargetUserId] = log.Action == "Disabled"
-                ? DateTime.SpecifyKind(log.AtUtc, DateTimeKind.Utc)
-                : null;
-        }
-
-        return result;
+        return await _auditQuery.GetStaffDisabledStateMapAsync(userIds, cancellationToken);
     }
 
     private static bool IsDisabledByLockout(AdminUserQueryRow user) =>
