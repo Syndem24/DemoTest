@@ -16,7 +16,8 @@ public enum SystemAuditDomain
     Booking = 2,
     SpecialOffer = 3,
     Configuration = 4,
-    File = 5
+    File = 5,
+    Shift = 6
 }
 
 /// <summary>

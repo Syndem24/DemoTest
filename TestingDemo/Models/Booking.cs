@@ -79,6 +79,13 @@ public class Booking
     /// <summary>When true, payments must be Cash (walk-in LimitedTime promo).</summary>
     public bool CashOnlyPromo { get; set; }
 
+    /// <summary>Total adults across the stay (receptionist / guest head count).</summary>
+    public int AdultCount { get; set; }
+    /// <summary>Total children under 12 across the stay.</summary>
+    public int ChildCount { get; set; }
+    /// <summary>JSON array of per-room head counts: [{"adults":2,"children":0},…].</summary>
+    public string? GuestPartyJson { get; set; }
+
     public SpecialOffer? SpecialOffer { get; set; }
     public ICollection<BookingItem> Items { get; set; } = new List<BookingItem>();
     public ICollection<BookingCharge> Charges { get; set; } = new List<BookingCharge>();

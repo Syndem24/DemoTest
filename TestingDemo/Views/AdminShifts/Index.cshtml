@@ -1,0 +1,330 @@
+@{
+    ViewData["Title"] = "Shift";
+    var staffName = ViewData["StaffDisplayName"] as string ?? "Staff";
+    var isAdmin = ViewData["IsAdminManager"] as bool? == true;
+}
+
+<div class="admin-flush-page admin-shift-page" data-admin-shifts data-is-admin="@(isAdmin ? "true" : "false")">
+    @Html.AntiForgeryToken()
+
+    <header class="admin-shift-hero" aria-labelledby="shiftPageTitle">
+        <div class="admin-shift-hero-copy">
+            <p class="admin-shift-eyebrow">Front desk · @staffName</p>
+            <h1 id="shiftPageTitle">Shift</h1>
+            <p class="admin-shift-lede">
+                Status and hotel totals stay on screen. Briefing notes open in panels or a quick editor — less scrolling, same handover flow.
+            </p>
+        </div>
+        <div class="admin-shift-status-card" data-shift-kpis aria-live="polite">
+            <p class="admin-shift-status-label">Status</p>
+            <strong class="admin-shift-status-value" data-kpi-status>Off shift</strong>
+            <em class="admin-shift-status-meta" data-kpi-status-meta>No open shift</em>
+            <dl class="admin-shift-status-gain">
+                <div>
+                    <dt>Collected</dt>
+                    <dd data-kpi-collected>₱0.00</dd>
+                </div>
+                <div>
+                    <dt>Cash</dt>
+                    <dd data-kpi-cash>₱0.00</dd>
+                </div>
+            </dl>
+        </div>
+        <div class="admin-shift-toolbar" role="toolbar" aria-label="Shift actions">
+            <button type="button" class="admin-shift-btn admin-shift-btn-primary" data-shift-start>Start shift</button>
+            <button type="button" class="admin-shift-btn admin-shift-btn-secondary" data-shift-refresh>Refresh</button>
+            <button type="button" class="admin-shift-btn admin-shift-btn-secondary" data-shift-save-briefing hidden>Save notes</button>
+            <button type="button" class="admin-shift-btn admin-shift-btn-danger" data-shift-end hidden>End shift</button>
+        </div>
+    </header>
+
+    <p class="admin-bookings-message admin-shift-message" data-shift-message role="status" hidden></p>
+
+    @* Bento: live + gain + ops — above the fold *@
+    <section class="admin-shift-bento" aria-label="Shift dashboard">
+        <article class="admin-shift-bento-tile admin-shift-bento-live" data-shift-live>
+            <header class="admin-shift-bento-head">
+                <h2>Live hotel</h2>
+                <p>Today’s desk pressure</p>
+            </header>
+            <ul class="admin-shift-ops" data-shift-live-ops>
+                <li><span>Arrivals</span><strong>—</strong></li>
+                <li><span>Departures</span><strong>—</strong></li>
+                <li><span>Need assign</span><strong>—</strong></li>
+                <li><span>Offers</span><strong>—</strong></li>
+            </ul>
+            <p class="admin-shift-offer-list" data-shift-offer-titles hidden></p>
+        </article>
+
+        <article class="admin-shift-bento-tile admin-shift-bento-gain" data-shift-gain>
+            <header class="admin-shift-bento-head">
+                <h2>Hotel gain</h2>
+                <p>This shift window</p>
+            </header>
+            <dl class="admin-shift-gain-compact">
+                <div><dt>Cash</dt><dd data-gain-cash>₱0.00</dd></div>
+                <div><dt>E-wallet</dt><dd data-gain-ewallet>₱0.00</dd></div>
+                <div><dt>Bank</dt><dd data-gain-bank>₱0.00</dd></div>
+                <div><dt>Other</dt><dd data-gain-other>₱0.00</dd></div>
+                <div class="is-total"><dt>Total</dt><dd data-gain-total>₱0.00</dd></div>
+                <div><dt>Refunded</dt><dd data-gain-refunded>₱0.00</dd></div>
+                <div><dt>Payments</dt><dd data-gain-count>0</dd></div>
+            </dl>
+        </article>
+
+        <article class="admin-shift-bento-tile admin-shift-bento-ops">
+            <header class="admin-shift-bento-head">
+                <h2>Ops window</h2>
+                <p>Bookings &amp; offers touched</p>
+            </header>
+            <dl class="admin-shift-gain-compact" data-shift-window-ops>
+                <div><dt>Created</dt><dd>—</dd></div>
+                <div><dt>Confirmed</dt><dd>—</dd></div>
+                <div><dt>Checked out</dt><dd>—</dd></div>
+                <div><dt>Cancelled</dt><dd>—</dd></div>
+                <div><dt>Offer changes</dt><dd>—</dd></div>
+            </dl>
+        </article>
+    </section>
+
+    @* Incoming handover from previous desk shift — always readable *@
+    <section class="admin-shift-handover" data-shift-last-handover hidden aria-label="Previous handover">
+        <header class="admin-shift-handover-head">
+            <div>
+                <h2>Previous handover</h2>
+                <p data-last-handover-meta>Notes left by the last closed shift</p>
+            </div>
+            <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-view-last-handover>
+                Read full briefing
+            </button>
+        </header>
+        <div class="admin-shift-handover-grid" data-last-handover-grid>
+            <article>
+                <h3>Rooms</h3>
+                <p data-last-preview="rooms">—</p>
+            </article>
+            <article>
+                <h3>Guests</h3>
+                <p data-last-preview="guests">—</p>
+            </article>
+            <article>
+                <h3>Offers</h3>
+                <p data-last-preview="offers">—</p>
+            </article>
+            <article>
+                <h3>Gain / cash</h3>
+                <p data-last-preview="gain">—</p>
+            </article>
+            <article class="admin-shift-handover-wide">
+                <h3>Closing note</h3>
+                <p data-last-preview="closing">—</p>
+            </article>
+            <article class="admin-shift-handover-wide">
+                <h3>Opening note (that shift)</h3>
+                <p data-last-preview="opening">—</p>
+            </article>
+        </div>
+    </section>
+
+    @* Off-shift: opening note accordion *@
+    <section class="admin-shift-accordion" data-shift-clock aria-label="Start shift">
+        <details class="admin-shift-acc" open>
+            <summary class="admin-shift-acc-summary">
+                <span class="admin-shift-acc-num" aria-hidden="true">1</span>
+                <span class="admin-shift-acc-title">
+                    <strong>Start shift</strong>
+                    <small data-shift-clock-lede>Add opening note, then Start in the toolbar.</small>
+                </span>
+                <span class="admin-shift-acc-chevron" aria-hidden="true"></span>
+            </summary>
+            <div class="admin-shift-acc-body">
+                <label class="admin-shift-field">
+                    <span class="admin-shift-field-label">Opening note</span>
+                    <span class="admin-shift-field-hint">Cash float, desk status — required context when you start</span>
+                    <textarea rows="3" maxlength="2000" data-shift-opening
+                              placeholder="e.g. Float ₱5,000 · Room 204 OOO · VIP arriving 3pm"></textarea>
+                </label>
+                <p class="admin-shift-acc-hint" data-shift-clock-foot>Then press <strong>Start shift</strong> in the top toolbar.</p>
+            </div>
+        </details>
+    </section>
+
+    @* On-duty: briefing as accordion + edit modal *@
+    <section class="admin-shift-briefing-board" data-shift-briefing hidden aria-label="Handover briefing">
+        <div class="admin-shift-briefing-head">
+            <div>
+                <h2>Handover notes</h2>
+                <p data-shift-onduty-banner>Expand a category or use Edit for a focused writer.</p>
+            </div>
+        </div>
+
+        <div class="admin-shift-note-grid" role="list">
+            <article class="admin-shift-note-card" role="listitem" data-note-card="rooms">
+                <header>
+                    <h3>Rooms</h3>
+                    <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-open-note-modal="rooms">Edit</button>
+                </header>
+                <p class="admin-shift-note-preview" data-note-preview="rooms">No notes yet.</p>
+                <textarea hidden maxlength="4000" data-shift-rooms></textarea>
+            </article>
+            <article class="admin-shift-note-card" role="listitem" data-note-card="guests">
+                <header>
+                    <h3>Guests</h3>
+                    <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-open-note-modal="guests">Edit</button>
+                </header>
+                <p class="admin-shift-note-preview" data-note-preview="guests">No notes yet.</p>
+                <textarea hidden maxlength="4000" data-shift-guests></textarea>
+            </article>
+            <article class="admin-shift-note-card" role="listitem" data-note-card="offers">
+                <header>
+                    <h3>Special offers</h3>
+                    <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-open-note-modal="offers">Edit</button>
+                </header>
+                <p class="admin-shift-note-preview" data-note-preview="offers">No notes yet.</p>
+                <textarea hidden maxlength="4000" data-shift-offers></textarea>
+            </article>
+            <article class="admin-shift-note-card" role="listitem" data-note-card="gain">
+                <header>
+                    <h3>Gain / cash</h3>
+                    <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-open-note-modal="gain">Edit</button>
+                </header>
+                <p class="admin-shift-note-preview" data-note-preview="gain">No notes yet.</p>
+                <textarea hidden maxlength="2000" data-shift-gain-notes></textarea>
+            </article>
+            <article class="admin-shift-note-card admin-shift-note-card-wide" role="listitem" data-note-card="closing">
+                <header>
+                    <h3>Closing note</h3>
+                    <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-open-note-modal="closing">Edit</button>
+                </header>
+                <p class="admin-shift-note-preview" data-note-preview="closing">No notes yet.</p>
+                <textarea hidden maxlength="2000" data-shift-closing></textarea>
+            </article>
+        </div>
+    </section>
+
+    @* History accordion *@
+    <section class="admin-shift-accordion" aria-label="Shift history">
+        <details class="admin-shift-acc">
+            <summary class="admin-shift-acc-summary">
+                <span class="admin-shift-acc-num" aria-hidden="true">≡</span>
+                <span class="admin-shift-acc-title">
+                    <strong>@(isAdmin ? "Recent shifts (all staff)" : "My recent shifts")</strong>
+                    <small>Frozen totals for audit — expand when needed</small>
+                </span>
+                <span class="admin-shift-acc-chevron" aria-hidden="true"></span>
+            </summary>
+            <div class="admin-shift-acc-body">
+                <div class="admin-shift-history-toolbar">
+                    <label class="admin-shift-page-size">
+                        <span>Rows</span>
+                        <select data-shift-history-page-size aria-label="Shifts per page">
+                            <option value="5">5</option>
+                            <option value="10" selected>10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                        </select>
+                    </label>
+                    <p class="admin-shift-history-count" data-shift-history-count hidden></p>
+                </div>
+                <div class="admin-bookings-table-wrap admin-shift-history-wrap">
+                    <table class="admin-bookings-table admin-shift-history-table">
+                        <thead>
+                            <tr>
+                                <th>Staff</th>
+                                <th>Started</th>
+                                <th>Ended</th>
+                                <th>Collected</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody data-shift-history>
+                            <tr><td colspan="6" class="admin-bookings-loading">Loading shifts…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <nav class="admin-bookings-pagination admin-shift-history-pager" aria-label="Shift history pages">
+                    <button type="button" data-shift-history-prev disabled>Previous</button>
+                    <span data-shift-history-page>Page 1</span>
+                    <button type="button" data-shift-history-next disabled>Next</button>
+                </nav>
+            </div>
+        </details>
+    </section>
+
+    @* Note editor / handover reader modal *@
+    <div class="admin-shift-modal" data-shift-note-modal hidden>
+        <button type="button" class="admin-shift-modal-backdrop" data-shift-note-close aria-label="Close editor"></button>
+        <div class="admin-shift-modal-card" role="dialog" aria-modal="true" aria-labelledby="shiftNoteModalTitle">
+            <header class="admin-shift-modal-head">
+                <h3 id="shiftNoteModalTitle" data-shift-note-modal-title>Edit note</h3>
+                <button type="button" class="admin-shift-modal-x" data-shift-note-close aria-label="Close">×</button>
+            </header>
+            <div class="admin-shift-modal-body">
+                <label class="admin-shift-field admin-shift-field-grow" data-shift-note-edit-wrap>
+                    <span class="admin-shift-field-label" data-shift-note-modal-label>Note</span>
+                    <span class="admin-shift-field-hint" data-shift-note-modal-hint></span>
+                    <textarea rows="12" data-shift-note-modal-input maxlength="4000"></textarea>
+                </label>
+                <div class="admin-shift-handover-read" data-shift-note-read-wrap hidden>
+                    <p class="admin-shift-handover-read-meta" data-shift-note-read-meta></p>
+                    <div class="admin-shift-handover-read-blocks" data-shift-note-read-blocks></div>
+                </div>
+            </div>
+            <footer class="admin-shift-modal-foot">
+                <button type="button" class="admin-shift-btn admin-shift-btn-secondary" data-shift-note-close>Close</button>
+                <button type="button" class="admin-shift-btn admin-shift-btn-primary" data-shift-note-apply>Apply to card</button>
+            </footer>
+        </div>
+    </div>
+
+    @if (isAdmin)
+    {
+        @* Admin-only: frozen Live / Gain / Ops for a history row *@
+        <div class="admin-shift-modal admin-shift-details-modal" data-shift-details-modal hidden>
+            <button type="button" class="admin-shift-modal-backdrop" data-shift-details-close aria-label="Close shift details"></button>
+            <div class="admin-shift-modal-card admin-shift-details-card" role="dialog" aria-modal="true" aria-labelledby="shiftDetailsTitle">
+                <header class="admin-shift-modal-head">
+                    <div>
+                        <h3 id="shiftDetailsTitle" data-shift-details-title>Shift details</h3>
+                        <p class="admin-shift-details-meta" data-shift-details-meta></p>
+                    </div>
+                    <button type="button" class="admin-shift-modal-x" data-shift-details-close aria-label="Close">×</button>
+                </header>
+                <div class="admin-shift-modal-body admin-shift-details-body">
+                    <div class="admin-shift-details-bento">
+                        <article class="admin-shift-bento-tile admin-shift-bento-live">
+                            <header class="admin-shift-bento-head">
+                                <h2>Live hotel</h2>
+                                <p>Desk pressure at shift close</p>
+                            </header>
+                            <ul class="admin-shift-ops" data-shift-details-live></ul>
+                            <p class="admin-shift-offer-list" data-shift-details-offers hidden></p>
+                        </article>
+                        <article class="admin-shift-bento-tile admin-shift-bento-gain">
+                            <header class="admin-shift-bento-head">
+                                <h2>Hotel gain</h2>
+                                <p>This shift window</p>
+                            </header>
+                            <dl class="admin-shift-gain-compact" data-shift-details-gain></dl>
+                        </article>
+                        <article class="admin-shift-bento-tile admin-shift-bento-ops">
+                            <header class="admin-shift-bento-head">
+                                <h2>Ops window</h2>
+                                <p>Bookings &amp; offers touched</p>
+                            </header>
+                            <dl class="admin-shift-gain-compact" data-shift-details-ops></dl>
+                        </article>
+                    </div>
+                </div>
+                <footer class="admin-shift-modal-foot">
+                    <button type="button" class="admin-shift-btn admin-shift-btn-secondary" data-shift-details-close>Close</button>
+                </footer>
+            </div>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script src="~/js/admin-shifts.js" asp-append-version="true"></script>
+}

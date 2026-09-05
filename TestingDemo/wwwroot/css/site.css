@@ -8553,7 +8553,382 @@ body.admin-cal-day-open {
 
 .admin-booking-edit-form {
   display: grid;
-  gap: 1rem;
+  gap: 0.85rem;
+}
+
+.admin-booking-edit-category {
+  border: 1px solid color-mix(in srgb, var(--navy) 12%, var(--white));
+  border-radius: 0.65rem;
+  background: var(--white);
+  overflow: hidden;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--navy) 4%, transparent);
+}
+
+.admin-booking-edit-category-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border: 0;
+  background: color-mix(in srgb, var(--navy-soft) 55%, var(--white));
+  color: var(--navy);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 160ms ease;
+}
+
+.admin-booking-edit-category-badge {
+  flex: 0 0 auto;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 0.45rem;
+  display: grid;
+  place-items: center;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--white);
+  background: var(--navy);
+}
+
+.admin-booking-edit-category--contact .admin-booking-edit-category-badge::before {
+  content: "1";
+}
+
+.admin-booking-edit-category--headcount .admin-booking-edit-category-badge::before {
+  content: "2";
+}
+
+.admin-booking-edit-category--rooms .admin-booking-edit-category-badge::before {
+  content: "3";
+}
+
+.admin-booking-edit-category--contact .admin-booking-edit-category-toggle {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--teal-soft) 70%, var(--white)),
+    color-mix(in srgb, var(--navy-soft) 40%, var(--white))
+  );
+  border-bottom: 1px solid color-mix(in srgb, var(--teal) 22%, transparent);
+}
+
+.admin-booking-edit-category--contact .admin-booking-edit-category-badge {
+  background: var(--teal);
+}
+
+.admin-booking-edit-category--headcount .admin-booking-edit-category-toggle {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--navy-soft) 85%, var(--white)),
+    color-mix(in srgb, var(--teal-soft) 25%, var(--white))
+  );
+  border-bottom: 1px solid color-mix(in srgb, var(--navy) 10%, transparent);
+}
+
+.admin-booking-edit-category--headcount .admin-booking-edit-category-badge {
+  background: color-mix(in srgb, var(--navy) 88%, var(--teal));
+}
+
+.admin-booking-edit-category--rooms .admin-booking-edit-category-toggle {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--navy) 6%, var(--white)),
+    color-mix(in srgb, var(--teal) 8%, var(--white))
+  );
+  border-bottom: 1px solid color-mix(in srgb, var(--navy) 10%, transparent);
+}
+
+.admin-booking-edit-category--rooms .admin-booking-edit-category-badge {
+  background: color-mix(in srgb, var(--teal) 55%, var(--navy));
+}
+
+.admin-booking-edit-category-copy {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.admin-booking-edit-category-title {
+  display: block;
+  color: var(--navy);
+  font-size: 0.92rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.admin-booking-edit-category-preview {
+  display: block;
+  color: color-mix(in srgb, var(--navy) 62%, white);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: min(36rem, 70vw);
+}
+
+.admin-booking-edit-category-attention {
+  flex: 0 1 auto;
+  max-width: min(14rem, 42vw);
+  margin-left: auto;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #b45309 35%, var(--navy-line));
+  background: color-mix(in srgb, #f59e0b 22%, var(--white));
+  color: #9a3412;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-booking-edit-category.has-attention:not(.is-open) .admin-booking-edit-category-toggle {
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.admin-booking-edit-category.is-open .admin-booking-edit-category-attention {
+  display: none !important;
+}
+
+.admin-booking-edit-category-chevron {
+  color: color-mix(in srgb, var(--navy) 55%, white);
+  flex: 0 0 auto;
+  transition: transform 160ms ease;
+}
+
+.admin-booking-edit-category.is-open .admin-booking-edit-category-chevron {
+  transform: rotate(180deg);
+}
+
+.admin-booking-edit-category-toggle:hover,
+.admin-booking-edit-category-toggle:focus-visible {
+  filter: brightness(0.98);
+}
+
+.admin-booking-edit-category-toggle:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: -2px;
+}
+
+.admin-booking-edit-category-body {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem 0.95rem 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--navy) 10%, var(--white));
+  background: var(--white);
+}
+
+.admin-booking-edit-category-body[hidden] {
+  display: none !important;
+}
+
+.admin-booking-edit-category--contact.is-open .admin-booking-edit-category-body {
+  background: color-mix(in srgb, var(--teal-soft) 18%, var(--white));
+}
+
+.admin-booking-edit-category--headcount.is-open .admin-booking-edit-category-body {
+  background: color-mix(in srgb, var(--navy-soft) 35%, var(--white));
+}
+
+.admin-booking-edit-category--rooms.is-open .admin-booking-edit-category-body {
+  background: color-mix(in srgb, var(--navy) 2%, var(--white));
+}
+
+.admin-booking-edit-headcount-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.admin-booking-edit-headcount-rooms {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.admin-booking-edit-guest-room {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--navy) 12%, var(--white));
+  border-radius: 0.55rem;
+  background: var(--white);
+  animation: admin-edit-guest-room-in 0.22s ease;
+}
+
+@keyframes admin-edit-guest-room-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.35rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.admin-booking-edit-guest-room.is-at-capacity {
+  border-color: color-mix(in srgb, var(--teal) 35%, var(--navy-line));
+}
+
+.admin-booking-edit-guest-room.has-extra-person {
+  border-color: color-mix(in srgb, #f59e0b 40%, var(--navy-line));
+  background: color-mix(in srgb, #f59e0b 6%, var(--white));
+}
+
+.admin-booking-edit-guest-room-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.admin-booking-edit-guest-room-head h4 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.admin-booking-edit-guest-room-remove {
+  padding: 0.28rem 0.65rem;
+  border: 1px solid var(--navy-line);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--navy);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-booking-edit-guest-room-remove:hover {
+  background: color-mix(in srgb, var(--navy) 6%, var(--white));
+}
+
+.admin-booking-edit-guest-room-extra {
+  margin: 0;
+  color: #9a3412;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.admin-booking-edit-headcount-counter {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--navy) 10%, var(--white));
+  border-radius: 0.5rem;
+  background: var(--white);
+}
+
+.admin-booking-edit-headcount-label {
+  color: var(--navy);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.admin-booking-edit-headcount-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.admin-booking-edit-headcount-controls button {
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--navy-line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--navy-soft) 70%, var(--white));
+  color: var(--navy);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.admin-booking-edit-headcount-controls button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--teal-soft) 70%, var(--white));
+}
+
+.admin-booking-edit-headcount-controls button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.admin-booking-edit-headcount-value {
+  min-width: 1.5rem;
+  text-align: center;
+  color: var(--navy);
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.admin-booking-edit-headcount-status {
+  margin: 0;
+  color: color-mix(in srgb, var(--navy) 68%, white);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.admin-booking-edit-headcount-status.is-at-capacity {
+  color: #9b1c1c;
+  font-weight: 700;
+}
+
+.admin-booking-edit-add-room-from-head {
+  justify-self: start;
+  padding: 0.45rem 0.9rem;
+  border: 1px dashed color-mix(in srgb, var(--teal) 55%, var(--navy));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--teal) 10%, var(--white));
+  color: var(--navy);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-booking-edit-add-room-from-head:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--teal) 18%, var(--white));
+}
+
+.admin-booking-edit-add-room-from-head:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.admin-booking-edit-room-line.is-needs-type {
+  outline: 2px solid color-mix(in srgb, #f59e0b 55%, transparent);
+  outline-offset: 2px;
+  border-radius: 10px;
+  padding: 0.35rem;
+  background: color-mix(in srgb, #f59e0b 8%, var(--white));
+}
+
+.admin-booking-edit-room-line.is-needs-type [data-room-type-select] {
+  border-color: color-mix(in srgb, #b45309 45%, var(--navy-line));
+}
+
+.admin-booking-edit-section-title {
+  margin: 0;
+  color: var(--navy);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.admin-booking-edit-section-lede {
+  margin: 0;
+  color: color-mix(in srgb, var(--navy) 62%, white);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .admin-booking-edit-grid,
@@ -8586,20 +8961,14 @@ body.admin-cal-day-open {
   background: color-mix(in srgb, var(--navy) 6%, var(--white));
 }
 
-.admin-booking-edit-add-room {
-  justify-self: start;
-  padding: 0.4rem 0.85rem;
-  border: 1px dashed color-mix(in srgb, var(--teal) 55%, var(--navy));
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--teal) 8%, var(--white));
-  color: var(--navy);
-  font-size: 0.82rem;
-  font-weight: 700;
-  cursor: pointer;
+.admin-booking-edit-room-qty.is-locked input {
+  opacity: 0.85;
+  cursor: default;
+  background: color-mix(in srgb, var(--navy) 4%, var(--white));
 }
 
-.admin-booking-edit-add-room:hover {
-  background: color-mix(in srgb, var(--teal) 14%, var(--white));
+.admin-booking-edit-add-room {
+  display: none;
 }
 
 .admin-booking-edit-grid {
@@ -10006,6 +10375,14 @@ body.hotel-confirm-open {
 
   .admin-booking-guest-details-preview {
     max-width: calc(100vw - 8rem);
+  }
+
+  .admin-booking-edit-category-preview {
+    max-width: calc(100vw - 8rem);
+  }
+
+  .admin-booking-edit-headcount-row {
+    grid-template-columns: 1fr;
   }
 
   .admin-booking-edit-grid,
@@ -12152,4 +12529,1072 @@ body.hotel-photo-zoom-open {
   color: var(--navy);
   font-weight: 600;
   box-shadow: 0 8px 24px rgba(11, 31, 58, 0.08);
+}/* —— Staff shift / handover (category flow) —— */
+
+/* —— Staff shift / handover (bento + accordion + modal) —— */
+.admin-shift-page {
+  --shift-gap: clamp(0.75rem, 1.2vw, 1rem);
+  width: 100%;
+  max-width: none;
 }
+
+.admin-shift-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(13rem, 0.7fr) auto;
+  gap: 0.85rem 1rem;
+  align-items: stretch;
+  padding: clamp(0.9rem, 1.6vw, 1.2rem) clamp(1rem, 2vw, 1.35rem);
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--navy) 10%, var(--white));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--navy) 92%, #000) 0%,
+    var(--navy) 55%,
+    color-mix(in srgb, var(--teal) 35%, var(--navy)) 100%
+  );
+  color: var(--white);
+  margin-bottom: var(--shift-gap);
+}
+
+.admin-shift-eyebrow {
+  margin: 0 0 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.78;
+}
+
+.admin-shift-hero h1 {
+  margin: 0;
+  font-size: clamp(1.35rem, 2.2vw, 1.7rem);
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--white);
+}
+
+.admin-shift-lede {
+  margin: 0.35rem 0 0;
+  max-width: 40rem;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  opacity: 0.88;
+}
+
+.admin-shift-status-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.admin-shift-status-label {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.admin-shift-status-value {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.admin-shift-status-meta {
+  font-size: 0.78rem;
+  font-style: normal;
+  opacity: 0.8;
+}
+
+.admin-shift-status-gain {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  margin: 0.55rem 0 0;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.admin-shift-status-gain dt {
+  margin: 0;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.admin-shift-status-gain dd {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.admin-shift-toolbar {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.45rem;
+  min-width: 9.5rem;
+}
+
+.admin-shift-message {
+  margin-bottom: var(--shift-gap);
+}
+
+.admin-shift-bento {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--shift-gap);
+  margin-bottom: var(--shift-gap);
+}
+
+.admin-shift-bento-tile {
+  min-width: 0;
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--navy) 10%, var(--white));
+  background: var(--white);
+  box-shadow: 0 8px 20px rgba(11, 31, 58, 0.05);
+}
+
+.admin-shift-bento-head {
+  margin-bottom: 0.65rem;
+  text-align: left;
+}
+
+.admin-shift-bento-head h2 {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 750;
+  color: var(--navy);
+}
+
+.admin-shift-bento-head p {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  color: color-mix(in srgb, var(--navy) 55%, var(--white));
+}
+
+.admin-shift-ops {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.admin-shift-ops li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--navy) 9%, var(--white));
+  background: color-mix(in srgb, var(--navy) 3%, var(--white));
+  text-align: left;
+}
+
+.admin-shift-ops span {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--navy) 55%, var(--white));
+}
+
+.admin-shift-ops strong {
+  font-size: 1.1rem;
+  color: var(--navy);
+}
+
+.admin-shift-offer-list {
+  margin: 0.55rem 0 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  border: 1px dashed color-mix(in srgb, var(--teal) 40%, var(--navy));
+  background: color-mix(in srgb, var(--teal) 7%, var(--white));
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--navy);
+  text-align: left;
+}
+
+.admin-shift-gain-compact {
+  margin: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.admin-shift-gain-compact > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.84rem;
+}
+
+.admin-shift-gain-compact dt {
+  margin: 0;
+  color: color-mix(in srgb, var(--navy) 58%, var(--white));
+  text-align: left;
+}
+
+.admin-shift-gain-compact dd {
+  margin: 0;
+  font-weight: 700;
+  color: var(--navy);
+  text-align: right;
+}
+
+.admin-shift-gain-compact .is-total {
+  padding-top: 0.3rem;
+  margin-top: 0.15rem;
+  border-top: 1px dashed color-mix(in srgb, var(--navy) 18%, var(--white));
+}
+
+.admin-shift-btn {
+  appearance: none;
+  cursor: pointer;
+  border-radius: 9px;
+  padding: 0.5rem 0.85rem;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+  white-space: nowrap;
+}
+
+.admin-shift-btn:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--teal) 70%, var(--white));
+  outline-offset: 2px;
+}
+
+.admin-shift-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.admin-shift-btn-primary {
+  background: var(--teal);
+  color: var(--white);
+  border-color: color-mix(in srgb, var(--teal) 70%, var(--navy));
+}
+
+.admin-shift-btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--teal) 88%, var(--navy));
+}
+
+.admin-shift-btn-secondary {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--white);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.admin-shift-hero .admin-shift-btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.admin-shift-btn-danger {
+  background: color-mix(in srgb, var(--navy) 70%, #000);
+  color: var(--white);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.admin-shift-btn-danger:hover:not(:disabled) {
+  background: #000;
+}
+
+.admin-shift-btn-ghost {
+  background: transparent;
+  color: var(--teal);
+  border-color: color-mix(in srgb, var(--teal) 35%, var(--navy));
+  padding: 0.3rem 0.65rem;
+  font-size: 0.78rem;
+}
+
+.admin-shift-btn-ghost:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--teal) 10%, var(--white));
+}
+
+.admin-shift-accordion {
+  margin-bottom: var(--shift-gap);
+}
+
+.admin-shift-acc {
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--navy) 10%, var(--white));
+  background: var(--white);
+  box-shadow: 0 6px 18px rgba(11, 31, 58, 0.04);
+  overflow: hidden;
+}
+
+.admin-shift-acc-summary {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.65rem 0.75rem;
+  align-items: center;
+  padding: 0.8rem 1rem;
+  cursor: pointer;
+  list-style: none;
+  background: color-mix(in srgb, var(--navy) 2.5%, var(--white));
+}
+
+.admin-shift-acc-summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-shift-acc-num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--teal) 16%, var(--white));
+  border: 1px solid color-mix(in srgb, var(--teal) 40%, var(--navy));
+  color: var(--navy);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.admin-shift-acc-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  text-align: left;
+  min-width: 0;
+}
+
+.admin-shift-acc-title strong {
+  font-size: 0.95rem;
+  color: var(--navy);
+}
+
+.admin-shift-acc-title small {
+  font-size: 0.78rem;
+  color: color-mix(in srgb, var(--navy) 55%, var(--white));
+}
+
+.admin-shift-acc-chevron {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-right: 2px solid var(--navy);
+  border-bottom: 2px solid var(--navy);
+  transform: rotate(45deg);
+  transition: transform 0.2s ease;
+  opacity: 0.55;
+}
+
+.admin-shift-acc[open] .admin-shift-acc-chevron {
+  transform: rotate(225deg);
+}
+
+.admin-shift-acc-body {
+  padding: 0.85rem 1rem 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--navy) 8%, var(--white));
+}
+
+.admin-shift-acc-hint {
+  margin: 0.55rem 0 0;
+  font-size: 0.8rem;
+  color: color-mix(in srgb, var(--navy) 55%, var(--white));
+}
+
+.admin-shift-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  text-align: left;
+}
+
+.admin-shift-field-label {
+  font-size: 0.82rem;
+  font-weight: 750;
+  color: var(--navy);
+}
+
+.admin-shift-field-hint {
+  font-size: 0.76rem;
+  color: color-mix(in srgb, var(--navy) 52%, var(--white));
+}
+
+.admin-shift-field textarea {
+  width: 100%;
+  min-height: 4.5rem;
+  resize: vertical;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--navy) 16%, var(--white));
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--navy);
+  background: var(--white);
+}
+
+.admin-shift-field textarea:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--teal) 70%, var(--white));
+  outline-offset: 1px;
+}
+
+.admin-shift-briefing-board {
+  margin-bottom: var(--shift-gap);
+  padding: 0.9rem 1rem 1rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--navy) 10%, var(--white));
+  background: var(--white);
+  box-shadow: 0 8px 20px rgba(11, 31, 58, 0.05);
+}
+
+.admin-shift-briefing-head {
+  margin-bottom: 0.75rem;
+  text-align: left;
+}
+
+.admin-shift-briefing-head h2 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--navy);
+}
+
+.admin-shift-briefing-head p {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  color: color-mix(in srgb, var(--navy) 55%, var(--white));
+}
+
+.admin-shift-note-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.admin-shift-note-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.7rem 0.8rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--navy) 10%, var(--white));
+  background: color-mix(in srgb, var(--navy) 2.5%, var(--white));
+  text-align: left;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.admin-shift-note-card.has-notes {
+  border-color: color-mix(in srgb, var(--teal) 45%, var(--navy));
+  background: color-mix(in srgb, var(--teal) 6%, var(--white));
+}
+
+.admin-shift-note-card-wide {
+  grid-column: 1 / -1;
+}
+
+.admin-shift-note-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.admin-shift-note-card h3 {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 750;
+  color: var(--navy);
+}
+
+.admin-shift-note-preview {
+  margin: 0;
+  min-height: 2.6rem;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--navy) 62%, var(--white));
+}
+
+.admin-shift-history-wrap {
+  margin: 0;
+}
+
+.admin-shift-muted {
+  color: color-mix(in srgb, var(--navy) 45%, var(--white));
+  font-size: 0.85rem;
+}
+
+.admin-shift-handover {
+  margin-bottom: var(--shift-gap);
+  padding: 0.9rem 1rem 1rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--teal) 35%, var(--navy));
+  background: color-mix(in srgb, var(--teal) 7%, var(--white));
+  box-shadow: 0 8px 20px rgba(11, 31, 58, 0.05);
+}
+
+.admin-shift-handover-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  margin-bottom: 0.75rem;
+  text-align: left;
+}
+
+.admin-shift-handover-head h2 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--navy);
+}
+
+.admin-shift-handover-head p {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  color: color-mix(in srgb, var(--navy) 55%, var(--white));
+}
+
+.admin-shift-handover-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.admin-shift-handover-grid article {
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--navy) 10%, var(--white));
+  background: var(--white);
+  text-align: left;
+}
+
+.admin-shift-handover-grid h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--navy) 60%, var(--white));
+}
+
+.admin-shift-handover-grid p {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.4;
+  color: var(--navy);
+  white-space: pre-wrap;
+}
+
+.admin-shift-handover-wide {
+  grid-column: span 2;
+}
+
+.admin-shift-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  padding: clamp(0.5rem, 2vw, 1.25rem);
+}
+
+.admin-shift-modal[hidden] {
+  display: none !important;
+}
+
+.admin-shift-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(11, 31, 58, 0.45);
+  cursor: pointer;
+}
+
+.admin-shift-modal-card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: min(52rem, 100%);
+  height: min(92vh, 46rem);
+  max-height: 92vh;
+  overflow: hidden;
+  padding: 1rem 1.15rem 1rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--navy) 12%, var(--white));
+  background: var(--white);
+  box-shadow: 0 18px 48px rgba(11, 31, 58, 0.22);
+}
+
+.admin-shift-modal-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.admin-shift-modal-head h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--navy);
+}
+
+.admin-shift-modal-x {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--navy);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+}
+
+.admin-shift-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.admin-shift-field-grow {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-shift-field-grow textarea {
+  flex: 1 1 auto;
+  min-height: 16rem;
+  height: 100%;
+  resize: none;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.admin-shift-handover-read {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  text-align: left;
+}
+
+.admin-shift-handover-read-meta {
+  margin: 0;
+  font-size: 0.86rem;
+  color: color-mix(in srgb, var(--navy) 55%, var(--white));
+}
+
+.admin-shift-handover-read-blocks {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.admin-shift-handover-read-blocks article {
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--navy) 10%, var(--white));
+  background: color-mix(in srgb, var(--navy) 2.5%, var(--white));
+}
+
+.admin-shift-handover-read-blocks h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--navy) 58%, var(--white));
+}
+
+.admin-shift-handover-read-blocks p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--navy);
+  white-space: pre-wrap;
+}
+
+.admin-shift-modal-foot {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--navy) 8%, var(--white));
+}
+
+.admin-shift-modal-foot .admin-shift-btn-secondary {
+  background: var(--white);
+  color: var(--navy);
+  border-color: color-mix(in srgb, var(--navy) 20%, var(--white));
+}
+
+body.admin-shift-modal-open {
+  overflow: hidden;
+}
+
+@media (max-width: 1100px) {
+  .admin-shift-handover-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-shift-handover-wide {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .admin-shift-handover-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-shift-handover-wide {
+    grid-column: auto;
+  }
+
+  .admin-shift-modal-card {
+    height: min(96vh, 100%);
+    width: 100%;
+  }
+
+  .admin-shift-field-grow textarea {
+    min-height: 12rem;
+  }
+}
+
+@media (max-width: 1100px) {
+  .admin-shift-hero {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-shift-toolbar {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .admin-shift-bento {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-shift-bento-ops {
+    grid-column: 1 / -1;
+  }
+
+  .admin-shift-note-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .admin-shift-hero,
+  .admin-shift-bento,
+  .admin-shift-note-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-shift-bento-ops,
+  .admin-shift-note-card-wide {
+    grid-column: auto;
+  }
+
+  .admin-shift-toolbar {
+    flex-direction: column;
+  }
+
+  .admin-shift-toolbar .admin-shift-btn {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-shift-btn,
+  .admin-shift-acc-chevron,
+  .admin-shift-note-card {
+    transition: none;
+  }
+}
+
+/* Recent shifts pagination + page-size dropdown */
+.admin-shift-history-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.admin-shift-page-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-size: 0.84rem;
+  font-weight: 650;
+  color: color-mix(in srgb, var(--navy) 70%, var(--white));
+}
+
+.admin-shift-page-size select {
+  min-height: 2.15rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--navy) 16%, var(--white));
+  background: var(--white);
+  color: var(--navy);
+  font: inherit;
+  font-weight: 650;
+}
+
+.admin-shift-history-count {
+  margin: 0;
+  font-size: 0.82rem;
+  color: color-mix(in srgb, var(--navy) 55%, var(--white));
+}
+
+.admin-shift-history-pager {
+  margin-top: 0.85rem;
+}
+
+/* Logout while on shift */
+.admin-logout-shift-confirm[hidden] {
+  display: none !important;
+}
+
+.admin-logout-shift-confirm:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+}
+
+.admin-logout-shift-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(6, 17, 34, 0.58);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+}
+
+.admin-logout-shift-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(28rem, 100%);
+  padding: 1.35rem 1.4rem 1.25rem;
+  border-radius: 16px;
+  background: var(--white);
+  border: 1px solid color-mix(in srgb, var(--navy) 10%, var(--white));
+  box-shadow: 0 22px 52px rgba(6, 17, 34, 0.28);
+  color: var(--navy);
+}
+
+.admin-logout-shift-dialog h2 {
+  margin: 0 0 0.45rem;
+  font-size: 1.35rem;
+  line-height: 1.25;
+}
+
+.admin-logout-shift-dialog p {
+  margin: 0 0 1.15rem;
+  color: color-mix(in srgb, var(--navy) 72%, var(--white));
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+
+.admin-logout-shift-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.admin-logout-shift-actions .admin-shift-btn-secondary {
+  background: var(--white);
+  color: var(--navy);
+  border-color: color-mix(in srgb, var(--navy) 20%, var(--white));
+}
+
+.admin-logout-shift-actions .admin-shift-btn-secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--navy) 4%, var(--white));
+}
+
+.admin-logout-shift-actions .admin-shift-btn-ghost {
+  background: color-mix(in srgb, var(--navy) 4%, var(--white));
+}
+
+@media (max-width: 520px) {
+  .admin-logout-shift-actions {
+    flex-direction: column-reverse;
+  }
+
+  .admin-logout-shift-actions .admin-shift-btn {
+    width: 100%;
+  }
+}
+
+/* Soft “start a shift” nudge after login */
+.admin-shift-start-nudge[hidden] {
+  display: none !important;
+}
+
+.admin-shift-start-nudge:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  z-index: 1250;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  pointer-events: auto;
+}
+
+.admin-shift-start-nudge-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(11, 31, 58, 0.28);
+  cursor: pointer;
+}
+
+.admin-shift-start-nudge-card {
+  position: relative;
+  z-index: 1;
+  width: min(24.5rem, 100%);
+  padding: 1.25rem 1.35rem 1.1rem;
+  border-radius: 16px;
+  background: var(--white);
+  border: 1px solid color-mix(in srgb, var(--teal) 28%, var(--navy-line, rgba(11, 31, 58, 0.12)));
+  box-shadow: 0 18px 44px rgba(11, 31, 58, 0.18);
+  color: var(--navy);
+  animation: admin-shift-nudge-in 0.28s ease;
+}
+
+.admin-shift-start-nudge-kicker {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+
+.admin-shift-start-nudge-card h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.25rem;
+  line-height: 1.25;
+}
+
+.admin-shift-start-nudge-card > p {
+  margin: 0 0 1rem;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--navy) 72%, var(--white));
+}
+
+.admin-shift-start-nudge-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.admin-shift-start-nudge-actions .admin-shift-btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-shift-start-nudge-hint {
+  margin: 0.85rem 0 0 !important;
+  font-size: 0.78rem !important;
+  color: color-mix(in srgb, var(--navy) 48%, var(--white)) !important;
+}
+
+@keyframes admin-shift-nudge-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-shift-start-nudge-card {
+    animation: none;
+  }
+}
+
+/* History action buttons + admin shift details modal */
+.admin-shift-history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.admin-shift-history-actions .admin-shift-btn-ghost {
+  background: var(--white);
+  color: var(--navy);
+  border-color: color-mix(in srgb, var(--teal) 45%, var(--navy-line, rgba(11, 31, 58, 0.16)));
+}
+
+.admin-shift-history-actions .admin-shift-btn-ghost:hover:not(:disabled) {
+  border-color: var(--teal);
+  color: color-mix(in srgb, var(--teal) 35%, var(--navy));
+}
+
+.admin-shift-details-card {
+  width: min(64rem, 100%);
+  height: auto;
+  max-height: 92vh;
+}
+
+.admin-shift-details-meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--navy) 55%, var(--white));
+}
+
+.admin-shift-details-body {
+  overflow: auto;
+}
+
+.admin-shift-details-bento {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.admin-shift-details-bento .admin-shift-bento-tile {
+  margin: 0;
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .admin-shift-details-bento {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+

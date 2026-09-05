@@ -35,6 +35,7 @@ public static class DatabaseBootstrap
             EnsureStaffPasswordResetCodeTable(db);
             EnsureSystemAuditLogTable(db);
             EnsureStaffDashboardLayoutColumn(db);
+            EnsureStaffShiftTable(db);
 
             // Warm starts: one cheap existence probe, then skip redundant Ensure* SQL.
             if (SchemaPatchesNeeded(db))
@@ -47,6 +48,8 @@ public static class DatabaseBootstrap
                 EnsureSystemFlushLogTable(db);
                 EnsurePaymentRecordTable(db);
                 EnsureBookingChargeTable(db);
+                EnsureBookingGuestHeadCountColumns(db);
+                EnsureStaffShiftTable(db);
             }
         }
         catch (Exception ex) when (IsSqlConnectivityFailure(ex))
@@ -399,6 +402,7 @@ public static class DatabaseBootstrap
                         OR COL_LENGTH(N'dbo.StaffAccount', N'RoleId') IS NULL
                         OR OBJECT_ID(N'[dbo].[SystemFlushLog]', N'U') IS NULL
                         OR OBJECT_ID(N'[dbo].[SystemAuditLog]', N'U') IS NULL
+                        OR OBJECT_ID(N'[dbo].[StaffShift]', N'U') IS NULL
                     THEN 1 ELSE 0 END
                     """;
                 var result = command.ExecuteScalar();
@@ -951,6 +955,67 @@ public static class DatabaseBootstrap
                     );
                     CREATE INDEX [IX_BookingCharge_BookingId_ChargeType]
                         ON [dbo].[BookingCharge] ([BookingId], [ChargeType]);
+                END
+                """);
+        }
+        catch
+        {
+            // Ignore if table exists or transient schema check
+        }
+    }
+
+    private static void EnsureBookingGuestHeadCountColumns(HotelBookingDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(
+                """
+                IF COL_LENGTH(N'dbo.Booking', N'AdultCount') IS NULL
+                    ALTER TABLE [dbo].[Booking] ADD [AdultCount] int NOT NULL CONSTRAINT [DF_Booking_AdultCount] DEFAULT (0);
+                IF COL_LENGTH(N'dbo.Booking', N'ChildCount') IS NULL
+                    ALTER TABLE [dbo].[Booking] ADD [ChildCount] int NOT NULL CONSTRAINT [DF_Booking_ChildCount] DEFAULT (0);
+                IF COL_LENGTH(N'dbo.Booking', N'GuestPartyJson') IS NULL
+                    ALTER TABLE [dbo].[Booking] ADD [GuestPartyJson] nvarchar(4000) NULL;
+                """);
+        }
+        catch
+        {
+            // Ignore if columns exist or transient schema check
+        }
+    }
+
+    private static void EnsureStaffShiftTable(HotelBookingDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(
+                """
+                IF OBJECT_ID(N'dbo.StaffShift', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[StaffShift] (
+                        [Id] int NOT NULL IDENTITY,
+                        [StaffUserId] nvarchar(450) NOT NULL,
+                        [StaffDisplayName] nvarchar(120) NOT NULL,
+                        [StartedAtUtc] datetime2 NOT NULL,
+                        [EndedAtUtc] datetime2 NULL,
+                        [OpeningNote] nvarchar(2000) NULL,
+                        [ClosingNote] nvarchar(2000) NULL,
+                        [RoomsBriefing] nvarchar(4000) NULL,
+                        [GuestsBriefing] nvarchar(4000) NULL,
+                        [OffersBriefing] nvarchar(4000) NULL,
+                        [GainNotes] nvarchar(2000) NULL,
+                        [ClosingSummaryJson] nvarchar(max) NULL,
+                        [CreatedAtUtc] datetime2 NOT NULL,
+                        [UpdatedAtUtc] datetime2 NOT NULL,
+                        CONSTRAINT [PK_StaffShift] PRIMARY KEY ([Id])
+                    );
+                    CREATE INDEX [IX_StaffShift_StaffUserId_StartedAtUtc]
+                        ON [dbo].[StaffShift] ([StaffUserId], [StartedAtUtc]);
+                    CREATE INDEX [IX_StaffShift_EndedAtUtc]
+                        ON [dbo].[StaffShift] ([EndedAtUtc]);
+                    CREATE UNIQUE INDEX [IX_StaffShift_StaffUserId_Open]
+                        ON [dbo].[StaffShift] ([StaffUserId])
+                        WHERE [EndedAtUtc] IS NULL;
                 END
                 """);
         }

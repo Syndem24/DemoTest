@@ -722,6 +722,7 @@ public class AccountController : Controller
         await RecordAccountActivityAsync(user.Id, "Password.Update", "Password");
         _logger.LogInformation("User {User} changed password (must-change cleared).", user.UserName);
         TempData["Message"] = "Password updated.";
+        TempData["PromptStartShift"] = "1";
         return RedirectToAction("Index", "Dashboard");
     }
 
@@ -991,6 +992,7 @@ public class AccountController : Controller
             return RedirectToAction("Index", "Booking");
         }
 
+        TempData["PromptStartShift"] = "1";
         return RedirectToLocal(returnUrl);
     }
 

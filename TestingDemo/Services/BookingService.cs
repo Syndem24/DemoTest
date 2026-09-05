@@ -1403,17 +1403,21 @@ public sealed class BookingService : IBookingService
 
         var now = DateTime.UtcNow;
         booking.Status = status;
-        booking.IsNotificationCleared = false;
         booking.UpdatedAtUtc = now;
 
-        // Confirming inside the arrival window should surface the arrival notice immediately.
+        // Staff just reviewed this stay — clear the bell item so confirm doesn't
+        // re-notify the same guest. Only reopen for a new arrival-window alert.
+        var reopenNotification = false;
         if (status == BookingStatus.Confirmed
             && booking.ArrivalWarningSentAtUtc == null
             && now >= booking.CheckInAtUtc.AddMinutes(-20)
             && now < booking.CheckInAtUtc)
         {
             booking.ArrivalWarningSentAtUtc = now;
+            reopenNotification = true;
         }
+
+        booking.IsNotificationCleared = !reopenNotification;
 
         AuditBooking(
             booking,
@@ -1470,7 +1474,8 @@ public sealed class BookingService : IBookingService
 
         EnsureRoomAssignmentAllowed(booking);
         await AssignAndOccupyRoomsAsync(booking, assignments, ct);
-        booking.IsNotificationCleared = false;
+        // Assigning rooms is a staff action — don't re-ping the notification bell.
+        booking.IsNotificationCleared = true;
         booking.UpdatedAtUtc = DateTime.UtcNow;
         AuditBooking(booking, "Booking.RoomsAssigned", "Rooms assigned to the stay.");
 
@@ -1662,12 +1667,10 @@ public sealed class BookingService : IBookingService
         }
 
         booking.UpdatedAtUtc = DateTime.UtcNow;
+        ApplyGuestPartyFromRequest(booking, request);
         var early = StayTimeFees.IsEarlyCheckIn(checkInAtUtc);
         var lateHours = StayTimeFees.LateCheckoutHours(checkoutTimeUtc);
-        var extraPersons = booking.Charges
-            .Where(c => c.ChargeType == BookingChargeType.ExtraPerson)
-            .Select(c => c.Quantity)
-            .FirstOrDefault();
+        var extraPersons = Math.Clamp(request.ExtraPersons, 0, StayTimeFees.MaxExtraPersons);
         await ReapplyBookingOfferPricesAsync(booking, ct);
         var typeMeta = await LoadRoomTypeMetaAsync(
             booking.Items.Where(line => line.RoomTypeId.HasValue).Select(line => line.RoomTypeId!.Value),
@@ -1679,6 +1682,44 @@ public sealed class BookingService : IBookingService
         await _db.SaveChangesAsync(ct);
         return MapBooking(booking);
         }, cancellationToken);
+    }
+
+    private static void ApplyGuestPartyFromRequest(Booking booking, UpdateBookingRequest request)
+    {
+        var rooms = (request.GuestRooms ?? new List<BookingGuestRoomRequest>())
+            .Select(room => new BookingGuestRoomRequest
+            {
+                Adults = Math.Clamp(room.Adults, 0, 3),
+                Children = Math.Clamp(room.Children, 0, 3)
+            })
+            .Where(room => room.Adults + room.Children > 0)
+            .Take(20)
+            .ToList();
+
+        if (rooms.Count == 0)
+        {
+            var adults = Math.Max(0, request.AdultCount);
+            var children = Math.Max(0, request.ChildCount);
+            if (adults + children > 0)
+            {
+                var clampedAdults = Math.Min(3, Math.Max(1, adults));
+                var clampedChildren = Math.Clamp(children, 0, Math.Max(0, 3 - clampedAdults));
+                rooms.Add(new BookingGuestRoomRequest
+                {
+                    Adults = clampedAdults,
+                    Children = clampedChildren
+                });
+            }
+            else
+            {
+                rooms.Add(new BookingGuestRoomRequest { Adults = 2, Children = 0 });
+            }
+        }
+
+        booking.AdultCount = rooms.Sum(r => r.Adults);
+        booking.ChildCount = rooms.Sum(r => r.Children);
+        booking.GuestPartyJson = System.Text.Json.JsonSerializer.Serialize(
+            rooms.Select(r => new { adults = r.Adults, children = r.Children }));
     }
 
     public async Task<BookingDto> UpdateChargesAsync(
@@ -2943,6 +2984,7 @@ public sealed class BookingService : IBookingService
 
     private static BookingDto MapBooking(Booking booking)
     {
+        var guestRooms = ParseGuestParty(booking);
         return new BookingDto(
             booking.Id,
             booking.Reference,
@@ -2974,7 +3016,11 @@ public sealed class BookingService : IBookingService
                         .Select(assignment => new AssignedRoomDto(
                             assignment.RoomId,
                             assignment.Room?.RoomNumber ?? string.Empty))
-                        .ToList()))
+                        .ToList(),
+                    RegularPricePerNight: line.RoomType?.PricePerNight is decimal list
+                        && list > line.PricePerNight
+                        ? list
+                        : null))
                 .ToList(),
             (booking.Charges ?? Array.Empty<BookingCharge>())
                 .OrderBy(charge => charge.ChargeType)
@@ -2993,7 +3039,56 @@ public sealed class BookingService : IBookingService
             booking.ArrivalDiscountRequest,
             booking.CashOnlyPromo,
             booking.SpecialOffer?.Title,
-            booking.SpecialOffer?.RegularPricePerNight);
+            booking.SpecialOffer?.RegularPricePerNight,
+            ExceedsAvailableInventory: false,
+            AdultCount: booking.AdultCount > 0 || booking.ChildCount > 0
+                ? booking.AdultCount
+                : guestRooms.Sum(r => r.Adults),
+            ChildCount: booking.AdultCount > 0 || booking.ChildCount > 0
+                ? booking.ChildCount
+                : guestRooms.Sum(r => r.Children),
+            GuestRooms: guestRooms);
+    }
+
+    private static IReadOnlyList<BookingGuestRoomDto> ParseGuestParty(Booking booking)
+    {
+        if (!string.IsNullOrWhiteSpace(booking.GuestPartyJson))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(booking.GuestPartyJson);
+                if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    var list = new List<BookingGuestRoomDto>();
+                    foreach (var el in doc.RootElement.EnumerateArray())
+                    {
+                        var adults = el.TryGetProperty("adults", out var a) ? a.GetInt32()
+                            : el.TryGetProperty("Adults", out var a2) ? a2.GetInt32() : 0;
+                        var children = el.TryGetProperty("children", out var c) ? c.GetInt32()
+                            : el.TryGetProperty("Children", out var c2) ? c2.GetInt32() : 0;
+                        if (adults + children > 0)
+                            list.Add(new BookingGuestRoomDto(Math.Clamp(adults, 0, 3), Math.Clamp(children, 0, 3)));
+                    }
+                    if (list.Count > 0) return list;
+                }
+            }
+            catch
+            {
+                // Fall through to totals / defaults.
+            }
+        }
+
+        if (booking.AdultCount > 0 || booking.ChildCount > 0)
+        {
+            return new[]
+            {
+                new BookingGuestRoomDto(
+                    Math.Max(1, Math.Min(3, booking.AdultCount)),
+                    Math.Clamp(booking.ChildCount, 0, Math.Max(0, 3 - Math.Max(1, Math.Min(3, booking.AdultCount)))))
+            };
+        }
+
+        return Array.Empty<BookingGuestRoomDto>();
     }
 
     private async Task<SpecialOffer?> ResolveWalkInOfferAsync(
@@ -3025,6 +3120,8 @@ public sealed class BookingService : IBookingService
 
     /// <summary>
     /// Restores promo nightly rates after admin edits that reset lines to list price.
+    /// Uses sibling campaign rows (same title/kind/window) so every room type on the stay
+    /// gets that campaign's rate — not only the room type of booking.SpecialOfferId.
     /// </summary>
     private async Task ReapplyBookingOfferPricesAsync(
         Booking booking,
@@ -3043,32 +3140,61 @@ public sealed class BookingService : IBookingService
                 .FirstOrDefaultAsync(o => o.Id == offerId, cancellationToken);
         }
 
-        if (offer is null)
-        {
-            return;
-        }
-
         var nights = StayNights(booking.CheckInAtUtc, booking.CheckoutTimeUtc);
         var now = DateTime.UtcNow;
-        if (!offer.IsActive
-            || offer.StartsAtUtc > now
-            || offer.EndsAtUtc < now
-            || offer.PromoPricePerNight is not decimal promo
-            || promo <= 0
-            || !SpecialOfferService.IsEligibleForStay(offer, nights))
+
+        Dictionary<int, SpecialOffer> promoByType;
+        if (offer is not null)
         {
-            return;
+            if (!offer.IsActive
+                || offer.StartsAtUtc > now
+                || offer.EndsAtUtc < now
+                || !SpecialOfferService.IsEligibleForStay(offer, nights))
+            {
+                return;
+            }
+
+            var siblings = await _db.SpecialOffers
+                .AsNoTracking()
+                .Where(o => o.Title == offer.Title
+                    && o.Kind == offer.Kind
+                    && o.StartsAtUtc == offer.StartsAtUtc
+                    && o.EndsAtUtc == offer.EndsAtUtc
+                    && o.IsActive
+                    && o.PromoPricePerNight != null
+                    && o.PromoPricePerNight > 0)
+                .ToListAsync(cancellationToken);
+
+            promoByType = siblings
+                .Where(o => SpecialOfferService.IsEligibleForStay(o, nights))
+                .GroupBy(o => o.RoomTypeId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.OrderBy(o => o.PromoPricePerNight).First());
+
+            booking.CashOnlyPromo = offer.CashOnly || siblings.Any(s => s.CashOnly);
+        }
+        else
+        {
+            // Cash-only promo flag without a linked offer id — apply any active rate offer per type.
+            var typeIds = booking.Items
+                .Where(line => line.RoomTypeId.HasValue)
+                .Select(line => line.RoomTypeId!.Value)
+                .Distinct()
+                .ToList();
+            promoByType = await ResolveActiveOnlineRateOffersAsync(typeIds, nights, cancellationToken);
         }
 
         foreach (var line in booking.Items)
         {
-            if (line.RoomTypeId == offer.RoomTypeId)
+            if (line.RoomTypeId is int roomTypeId
+                && promoByType.TryGetValue(roomTypeId, out var typeOffer)
+                && typeOffer.PromoPricePerNight is decimal promo
+                && promo > 0)
             {
                 line.PricePerNight = promo;
             }
         }
-
-        booking.CashOnlyPromo = offer.CashOnly;
     }
 
     private async Task<Dictionary<int, SpecialOffer>> ResolveActiveOnlineRateOffersAsync(

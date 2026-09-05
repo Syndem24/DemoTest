@@ -3425,9 +3425,9 @@
     if (needsRooms) {
       const flag = document.createElement('span');
       flag.className = 'admin-booking-status is-needs-rooms';
-      flag.textContent = canAssignRoomsToday(booking) ? 'Needs attention' : 'Ready on arrival';
+      flag.textContent = canAssignRoomsToday(booking) ? 'Assign rooms' : 'Ready on arrival';
       flag.title = canAssignRoomsToday(booking)
-        ? 'Confirmed — open booking to finish payment check, rooms, and check-in'
+        ? 'Confirmed — finish payment if needed, then assign room numbers'
         : arrivalAssignMessage(booking);
       statusCell.append(flag);
     }
@@ -3827,9 +3827,9 @@
     if (needsRooms) {
       const flag = document.createElement('span');
       flag.className = 'admin-booking-status is-needs-rooms';
-      flag.textContent = canAssignRoomsToday(booking) ? 'Needs attention' : 'Ready on arrival';
+      flag.textContent = canAssignRoomsToday(booking) ? 'Assign rooms' : 'Ready on arrival';
       flag.title = canAssignRoomsToday(booking)
-        ? 'Confirmed — open booking to finish payment check, rooms, and check-in'
+        ? 'Confirmed — finish payment if needed, then assign room numbers'
         : arrivalAssignMessage(booking);
       statusGroup.append(flag);
     }
@@ -3987,6 +3987,26 @@
       detailField('Stay', staySummary),
       detailField('Nights', String(nights)),
       detailField('Rooms', roomSummary),
+      detailField(
+        'Guest head count',
+        (() => {
+          const adults = Number(booking.adultCount ?? booking.AdultCount ?? 0);
+          const children = Number(booking.childCount ?? booking.ChildCount ?? 0);
+          const rooms = booking.guestRooms || booking.GuestRooms;
+          if (Array.isArray(rooms) && rooms.length) {
+            const a = rooms.reduce((s, r) => s + Number(r.adults ?? r.Adults ?? 0), 0);
+            const c = rooms.reduce((s, r) => s + Number(r.children ?? r.Children ?? 0), 0);
+            const total = a + c;
+            if (total > 0) {
+              return `${total} (${a} adult${a === 1 ? '' : 's'}, ${c} child${c === 1 ? '' : 'ren'} · ${rooms.length} room card${rooms.length === 1 ? '' : 's'})`;
+            }
+          }
+          if (adults + children > 0) {
+            return `${adults + children} (${adults} adult${adults === 1 ? '' : 's'}, ${children} child${children === 1 ? '' : 'ren'})`;
+          }
+          return 'Not recorded';
+        })()
+      ),
       detailField('Request type', displayEnum(booking.kind) || '—'),
       detailField('Payment option', displayEnum(booking.paymentOption) || '—'),
       detailField(
@@ -5178,7 +5198,11 @@
       const qty = Number(line.quantity || 0);
       const rate = Number(line.pricePerNight || 0);
       const lineTotal = qty * rate * nights;
-      const regular = Number(booking.specialOfferRegularPricePerNight || 0);
+      const regular = Number(
+        line.regularPricePerNight
+          ?? booking.specialOfferRegularPricePerNight
+          ?? 0
+      );
       const showCompare =
         (booking.specialOfferId || booking.cashOnlyPromo) && regular > rate;
       const rateHtml = showCompare
@@ -5341,7 +5365,11 @@
         : `${line.quantity}× ${line.roomTypeName}${status === 'Confirmed' ? ' · rooms not assigned yet' : ''}`;
       const rate = document.createElement('strong');
       const promo = Number(line.pricePerNight || 0);
-      const regular = Number(booking.specialOfferRegularPricePerNight || 0);
+      const regular = Number(
+        line.regularPricePerNight
+          ?? booking.specialOfferRegularPricePerNight
+          ?? 0
+      );
       if ((booking.specialOfferId || booking.cashOnlyPromo) && regular > promo) {
         rate.innerHTML = `<s class="admin-rate-was">${money(regular)}</s> → ${money(promo)} / night`;
       } else {
@@ -5909,10 +5937,15 @@
     return editRoomTypeCatalog;
   }
 
-  function createEditRoomLine(roomTypes, roomTypeId, quantity) {
+  function createEditRoomLine(roomTypes, roomTypeId, quantity, options = {}) {
+    const needsType = Boolean(options.needsType);
     const row = document.createElement('div');
     row.className = 'admin-booking-edit-room-line';
     row.dataset.editRoomLine = '1';
+    if (needsType) {
+      row.dataset.needsType = '1';
+      row.classList.add('is-needs-type');
+    }
 
     const typeLabel = document.createElement('label');
     typeLabel.className = 'admin-booking-edit-room-type';
@@ -5921,11 +5954,18 @@
     const typeSelect = document.createElement('select');
     typeSelect.dataset.roomTypeSelect = '1';
     typeSelect.required = true;
+    if (needsType || !roomTypeId) {
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Select room type';
+      placeholder.selected = true;
+      typeSelect.append(placeholder);
+    }
     roomTypes.forEach((type) => {
       const opt = document.createElement('option');
       opt.value = String(type.roomTypeId);
       opt.textContent = type.name;
-      if (Number(type.roomTypeId) === Number(roomTypeId)) opt.selected = true;
+      if (!needsType && Number(type.roomTypeId) === Number(roomTypeId)) opt.selected = true;
       typeSelect.append(opt);
     });
     typeLabel.append(typeCaption, typeSelect);
@@ -5948,6 +5988,12 @@
     removeBtn.className = 'admin-booking-edit-room-remove';
     removeBtn.dataset.removeRoomLine = '1';
     removeBtn.textContent = 'Remove';
+    // Room count is controlled from Guest head count; Edit rooms only assigns types.
+    removeBtn.hidden = true;
+    qtyInput.readOnly = true;
+    qtyInput.tabIndex = -1;
+    qtyLabel.classList.add('is-locked');
+    qtyLabel.title = 'Room quantity follows Guest head count';
 
     row.append(typeLabel, qtyLabel, removeBtn);
     return row;
@@ -5959,7 +6005,8 @@
       const quantity = Number(row.querySelector('[data-room-qty]')?.value || 0);
       const roomTypeName =
         row.querySelector('[data-room-type-select] option:checked')?.textContent?.trim() || 'Room';
-      return { roomTypeId, quantity, roomTypeName };
+      const needsType = row.dataset.needsType === '1' || !roomTypeId;
+      return { roomTypeId, quantity, roomTypeName, needsType };
     });
   }
 
@@ -5975,7 +6022,17 @@
       row.remove();
       onChange?.();
     });
-    row.querySelector('[data-room-type-select]')?.addEventListener('change', onChange);
+    const typeSelect = row.querySelector('[data-room-type-select]');
+    typeSelect?.addEventListener('change', () => {
+      if (typeSelect.value) {
+        delete row.dataset.needsType;
+        row.classList.remove('is-needs-type');
+      } else {
+        row.dataset.needsType = '1';
+        row.classList.add('is-needs-type');
+      }
+      onChange?.();
+    });
     row.querySelector('[data-room-qty]')?.addEventListener('change', onChange);
     row.querySelector('[data-room-qty]')?.addEventListener('input', onChange);
   }
@@ -6035,11 +6092,188 @@
     return '15:00';
   }
 
+  function roomsEditPreview(booking) {
+    const lines = (booking.items || [])
+      .map((line) => {
+        const qty = Number(line.quantity || 0);
+        if (qty <= 0) return '';
+        return `${qty}× ${line.roomTypeName || 'Room'}`;
+      })
+      .filter(Boolean);
+    return lines.length ? lines.join(' · ') : 'No rooms on this booking yet';
+  }
+
+  function bookingRoomQuantity(booking) {
+    return Math.max(
+      1,
+      (booking.items || []).reduce((sum, line) => sum + Number(line.quantity || 0), 0)
+    );
+  }
+
+  function bookingExtraPersons(booking) {
+    const charges = booking.charges || booking.Charges || [];
+    const extra = charges.find(
+      (c) => String(c.chargeType ?? c.ChargeType ?? '') === 'ExtraPerson'
+    );
+    return Math.min(1, Math.max(0, Number(extra?.quantity ?? extra?.Quantity ?? 0)));
+  }
+
+  function normalizeEditGuestRooms(booking, roomQtyFallback, extraFallback) {
+    const raw = booking.guestRooms || booking.GuestRooms;
+    if (Array.isArray(raw) && raw.length) {
+      return raw.map((room) => ({
+        adults: Math.max(0, Number(room.adults ?? room.Adults ?? 0)),
+        children: Math.max(0, Number(room.children ?? room.Children ?? 0)),
+      })).map((room) => ({
+        adults: Math.max(1, room.adults || (room.children > 0 ? 1 : 2)),
+        children: room.children,
+      }));
+    }
+    const adults = Number(booking.adultCount ?? booking.AdultCount ?? 0);
+    const children = Number(booking.childCount ?? booking.ChildCount ?? 0);
+    if (adults + children > 0) {
+      return [{ adults: Math.max(1, adults), children: Math.max(0, children) }];
+    }
+    return Array.from({ length: Math.max(1, roomQtyFallback) }, (_, index) => {
+      if (index === 0) {
+        const withExtra = Math.min(3, 2 + Number(extraFallback || 0));
+        return { adults: Math.max(1, withExtra), children: 0 };
+      }
+      return { adults: 2, children: 0 };
+    });
+  }
+
+  function makeEditCategoryPanel({ id, title, preview, open = false, onOpen, onClose, accordionRoot }) {
+    const panel = document.createElement('section');
+    panel.className = `admin-booking-edit-category admin-booking-edit-category--${id}${open ? ' is-open' : ''}`;
+    panel.dataset.editCategory = id;
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'admin-booking-edit-category-toggle';
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    toggle.innerHTML =
+      `<span class="admin-booking-edit-category-badge" aria-hidden="true"></span>` +
+      `<span class="admin-booking-edit-category-copy">` +
+      `<strong class="admin-booking-edit-category-title">${escapeHtml(title)}</strong>` +
+      `<small class="admin-booking-edit-category-preview">${escapeHtml(preview || '')}</small>` +
+      `</span>` +
+      `<span class="admin-booking-edit-category-attention" hidden></span>` +
+      `<span class="admin-booking-edit-category-chevron" aria-hidden="true">▾</span>`;
+
+    const body = document.createElement('div');
+    body.className = 'admin-booking-edit-category-body';
+    body.hidden = !open;
+
+    const previewEl = toggle.querySelector('.admin-booking-edit-category-preview');
+    const attentionEl = toggle.querySelector('.admin-booking-edit-category-attention');
+
+    function setOpen(nextOpen) {
+      const wasOpen = panel.classList.contains('is-open');
+      panel.classList.toggle('is-open', nextOpen);
+      toggle.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+      body.hidden = !nextOpen;
+      if (nextOpen) onOpen?.();
+      else if (wasOpen) onClose?.();
+    }
+
+    toggle.addEventListener('click', () => {
+      const nextOpen = !panel.classList.contains('is-open');
+      if (nextOpen && accordionRoot) {
+        accordionRoot.querySelectorAll('[data-edit-category].is-open').forEach((other) => {
+          if (other === panel) return;
+          other.classList.remove('is-open');
+          const otherToggle = other.querySelector('.admin-booking-edit-category-toggle');
+          const otherBody = other.querySelector('.admin-booking-edit-category-body');
+          if (otherToggle) otherToggle.setAttribute('aria-expanded', 'false');
+          if (otherBody) otherBody.hidden = true;
+          other.dispatchEvent(new CustomEvent('edit-category-closed', { bubbles: false }));
+        });
+      }
+      setOpen(nextOpen);
+    });
+
+    panel.addEventListener('edit-category-closed', () => {
+      onClose?.();
+    });
+
+    panel.append(toggle, body);
+    return {
+      panel,
+      body,
+      toggle,
+      setOpen,
+      isOpen: () => panel.classList.contains('is-open'),
+      setPreview(text) {
+        if (previewEl) previewEl.textContent = text || '';
+      },
+      setAttention(text) {
+        if (!attentionEl) return;
+        const label = String(text || '').trim();
+        if (!label) {
+          attentionEl.hidden = true;
+          attentionEl.textContent = '';
+          panel.classList.remove('has-attention');
+          return;
+        }
+        attentionEl.hidden = false;
+        attentionEl.textContent = label;
+        panel.classList.add('has-attention');
+      },
+    };
+  }
+
+  function makeHeadCountStepper(label, value, onChange) {
+    const wrap = document.createElement('div');
+    wrap.className = 'admin-booking-edit-headcount-counter';
+    const caption = document.createElement('span');
+    caption.className = 'admin-booking-edit-headcount-label';
+    caption.textContent = label;
+    const controls = document.createElement('div');
+    controls.className = 'admin-booking-edit-headcount-controls';
+    const dec = document.createElement('button');
+    dec.type = 'button';
+    dec.textContent = '−';
+    const count = document.createElement('span');
+    count.className = 'admin-booking-edit-headcount-value';
+    count.setAttribute('aria-live', 'polite');
+    count.textContent = String(value);
+    const inc = document.createElement('button');
+    inc.type = 'button';
+    inc.textContent = '+';
+    const sync = (next) => {
+      count.textContent = String(next);
+      onChange(next, { dec, inc });
+    };
+    dec.addEventListener('click', () => {
+      const current = Number(count.textContent || 0);
+      sync(Math.max(0, current - 1));
+    });
+    inc.addEventListener('click', () => {
+      const current = Number(count.textContent || 0);
+      sync(current + 1);
+    });
+    controls.append(dec, count, inc);
+    wrap.append(caption, controls);
+    wrap._setValue = (next) => {
+      count.textContent = String(next);
+    };
+    wrap._getValue = () => Number(count.textContent || 0);
+    wrap._setButtons = ({ canDec, canInc }) => {
+      dec.disabled = !canDec;
+      inc.disabled = !canInc;
+    };
+    return wrap;
+  }
+
   function renderBookingEdit(booking, options = {}) {
     if (!detailBody || !detailActions) return;
     const adjustStay = Boolean(options.adjustStay);
     const hardEdit = Boolean(options.hardEdit);
     const needsAvailPreview = true;
+    const BASE_GUESTS_PER_ROOM = 2;
+    const MAX_GUESTS_PER_ROOM = 3;
+    const MAX_EXTRA_PERSONS = 1;
     detailBody.replaceChildren();
     detailActions.replaceChildren();
 
@@ -6054,13 +6288,27 @@
     const intro = document.createElement('p');
     intro.className = 'admin-booking-edit-hint';
     intro.textContent = hardEdit
-      ? 'Correct a guest schedule error: update contact and check-in / check-out. Assigned room numbers stay the same. Saving recalculates nights and total.' +
+      ? 'Update guest contact and dates first. Head count uses per-room adults/children (like guest booking). Assigned room numbers stay locked.' +
         pastDateNote
-      : adjustStay
-        ? 'Guest called to change arrival? Update check-in / check-out (and contact if needed). Saving recalculates nights and total. Assign rooms unlocks on the new Manila arrival date once fully paid.' +
-          pastDateNote
-        : 'Update guest details, stay dates, or change room types and quantities. Availability is checked live for your dates.' +
-          pastDateNote;
+      : 'Edit contact & dates, then guest head count per room (Adults / Children). Add another room to open a new head-count card — then assign its room type under Edit rooms.' +
+        pastDateNote;
+
+    const roomQtyInitial = bookingRoomQuantity(booking);
+    const extraInitial = bookingExtraPersons(booking);
+    /** @type {{ adults: number, children: number }[]} */
+    let editGuestRooms = normalizeEditGuestRooms(booking, roomQtyInitial, extraInitial);
+
+    const contactPreview = [booking.guestName, booking.guestPhone, booking.guestEmail]
+      .map((part) => String(part || '').trim())
+      .filter(Boolean)
+      .join(' · ');
+    const contactCategory = makeEditCategoryPanel({
+      id: 'contact',
+      title: 'Guest contact & dates',
+      preview: contactPreview || 'No contact on file',
+      open: true,
+      accordionRoot: form,
+    });
 
     const fields = document.createElement('div');
     fields.className = 'admin-booking-edit-grid';
@@ -6077,6 +6325,58 @@
       editSelectField('Check-in time', 'checkInTime', checkInTimeOptions(), checkInTime),
       editSelectField('Check-out time', 'checkOutTime', checkOutTimeOptions(), checkOutTime)
     );
+    const contactLede = document.createElement('p');
+    contactLede.className = 'admin-booking-edit-section-lede';
+    contactLede.textContent = 'Correct guest name, phone, email, and stay schedule.';
+    contactCategory.body.append(contactLede, fields);
+
+    const headStatus = document.createElement('p');
+    headStatus.className = 'admin-booking-edit-headcount-status';
+    const headRoomsList = document.createElement('div');
+    headRoomsList.className = 'admin-booking-edit-headcount-rooms';
+    const extraHidden = document.createElement('input');
+    extraHidden.type = 'hidden';
+    extraHidden.name = 'extraPersons';
+    extraHidden.value = String(extraInitial);
+    const adultCountHidden = document.createElement('input');
+    adultCountHidden.type = 'hidden';
+    adultCountHidden.name = 'adultCount';
+    adultCountHidden.value = '0';
+    const childCountHidden = document.createElement('input');
+    childCountHidden.type = 'hidden';
+    childCountHidden.name = 'childCount';
+    childCountHidden.value = '0';
+    const guestPartyHidden = document.createElement('input');
+    guestPartyHidden.type = 'hidden';
+    guestPartyHidden.name = 'guestPartyJson';
+    guestPartyHidden.value = '[]';
+    const headLede = document.createElement('p');
+    headLede.className = 'admin-booking-edit-section-lede';
+    headLede.textContent =
+      'Same as guest booking: each room has its own adults / children. Max 3 guests per room (2 included). One extra guest for the stay adds ₱200 / night. Use Add another room here — a type row appears under Edit rooms for you to assign.';
+    const addRoomFromHeadBtn = document.createElement('button');
+    addRoomFromHeadBtn.type = 'button';
+    addRoomFromHeadBtn.className = 'admin-booking-edit-add-room-from-head';
+    addRoomFromHeadBtn.textContent = 'Add another room';
+    addRoomFromHeadBtn.hidden = hardEdit;
+    addRoomFromHeadBtn.title = 'Adds a head-count card and a room-type row to assign';
+    const headCategory = makeEditCategoryPanel({
+      id: 'headcount',
+      title: 'Guest head count',
+      preview: '',
+      open: false,
+      accordionRoot: form,
+    });
+    headCategory.body.append(
+      headLede,
+      headRoomsList,
+      headStatus,
+      addRoomFromHeadBtn,
+      extraHidden,
+      adultCountHidden,
+      childCountHidden,
+      guestPartyHidden
+    );
 
     const availPanel = document.createElement('div');
     availPanel.className = 'admin-booking-edit-availability';
@@ -6091,16 +6391,8 @@
     availStatus.textContent = 'Checking availability…';
     availPanel.append(availTitle, availList, availStatus);
 
-    const roomHeading = document.createElement('h3');
-    roomHeading.textContent = hardEdit ? 'Assigned rooms (locked)' : 'Rooms in this booking';
     const roomFields = document.createElement('div');
     roomFields.className = 'admin-booking-edit-rooms';
-    const addRoomBtn = document.createElement('button');
-    addRoomBtn.type = 'button';
-    addRoomBtn.className = 'admin-booking-edit-add-room';
-    addRoomBtn.dataset.addRoomLine = '1';
-    addRoomBtn.textContent = 'Add room type';
-    addRoomBtn.hidden = hardEdit;
 
     if (hardEdit) {
       (booking.items || []).forEach((line) => {
@@ -6126,11 +6418,26 @@
     hint.className = 'admin-booking-edit-hint';
     hint.textContent = hardEdit
       ? 'Room numbers stay assigned. If another guest holds the same room on the new dates, save will be blocked.'
-      : 'Change room type from the dropdown, adjust quantity, or add another room type. Set quantity to 0 to remove a line.';
+      : 'Choose a room type for each stay room. Add or remove rooms under Guest head count — a type row appears here automatically.';
+
+    const roomsCategory = makeEditCategoryPanel({
+      id: 'rooms',
+      title: hardEdit ? 'Assigned rooms (locked)' : 'Edit rooms',
+      preview: roomsEditPreview(booking),
+      open: false,
+      accordionRoot: form,
+      onOpen: () => {
+        scheduleAvailRefresh();
+        syncRoomsAttention();
+      },
+      onClose: () => syncRoomsAttention(),
+    });
+    roomsCategory.body.append(availPanel, roomFields, hint);
+
     const error = document.createElement('p');
     error.className = 'admin-booking-edit-error';
     error.hidden = true;
-    form.append(intro, fields, availPanel, roomHeading, roomFields, addRoomBtn, hint, error);
+    form.append(intro, contactCategory.panel, headCategory.panel, roomsCategory.panel, error);
     detailBody.append(form);
 
     const backButton = document.createElement('button');
@@ -6143,9 +6450,294 @@
     saveButton.textContent = hardEdit || adjustStay ? 'Save stay changes' : 'Save changes';
     detailActions.append(backButton, saveButton);
 
+    function maxPartyForRoomCount(roomCount) {
+      return Math.max(0, roomCount) * BASE_GUESTS_PER_ROOM + MAX_EXTRA_PERSONS;
+    }
+
+    function minRoomsForParty(guestTotal) {
+      const total = Math.max(1, Number(guestTotal) || 1);
+      let rooms = 1;
+      while (maxPartyForRoomCount(rooms) < total) rooms += 1;
+      return rooms;
+    }
+
+    function partyTotals() {
+      return editGuestRooms.reduce(
+        (acc, room) => {
+          acc.adults += Number(room.adults) || 0;
+          acc.children += Number(room.children) || 0;
+          return acc;
+        },
+        { adults: 0, children: 0 }
+      );
+    }
+
+    function roomHasExtraGuest(room) {
+      return (Number(room?.adults) || 0) + (Number(room?.children) || 0) > BASE_GUESTS_PER_ROOM;
+    }
+
+    function bookingAlreadyUsesExtra(exceptIndex = -1) {
+      return editGuestRooms.some((room, index) => {
+        if (index === exceptIndex) return false;
+        return roomHasExtraGuest(room);
+      });
+    }
+
+    function clampEditGuestRooms() {
+      let extraUsed = false;
+      editGuestRooms.forEach((room, index) => {
+        let a = Math.max(0, Number(room.adults) || 0);
+        let c = Math.max(0, Number(room.children) || 0);
+        if (a < 1 && c < 1) a = 1;
+        if (a + c > MAX_GUESTS_PER_ROOM) {
+          c = Math.max(0, MAX_GUESTS_PER_ROOM - a);
+          if (a > MAX_GUESTS_PER_ROOM) {
+            a = MAX_GUESTS_PER_ROOM;
+            c = 0;
+          }
+        }
+        if (a + c > BASE_GUESTS_PER_ROOM) {
+          if (extraUsed) {
+            if (a > BASE_GUESTS_PER_ROOM) {
+              a = BASE_GUESTS_PER_ROOM;
+              c = 0;
+            } else {
+              c = Math.max(0, BASE_GUESTS_PER_ROOM - a);
+            }
+          } else {
+            extraUsed = true;
+          }
+        }
+        room.adults = a;
+        room.children = c;
+      });
+    }
+
+    function currentRoomQty() {
+      return Math.max(1, editGuestRooms.length);
+    }
+
+    function computeExtraPersons() {
+      const raw = editGuestRooms.reduce((sum, room) => {
+        const total = (Number(room.adults) || 0) + (Number(room.children) || 0);
+        return sum + Math.max(0, total - BASE_GUESTS_PER_ROOM);
+      }, 0);
+      return Math.min(MAX_EXTRA_PERSONS, raw);
+    }
+
+    function syncHeadCountUi() {
+      clampEditGuestRooms();
+      const rooms = currentRoomQty();
+      const totals = partyTotals();
+      const total = totals.adults + totals.children;
+      const included = rooms * BASE_GUESTS_PER_ROOM;
+      const extras = computeExtraPersons();
+      extraHidden.value = String(extras);
+      adultCountHidden.value = String(totals.adults);
+      childCountHidden.value = String(totals.children);
+      guestPartyHidden.value = JSON.stringify(
+        editGuestRooms.map((room) => ({
+          adults: Number(room.adults) || 0,
+          children: Number(room.children) || 0,
+        }))
+      );
+      const typeLinesQty = hardEdit
+        ? bookingRoomQuantity(booking)
+        : readEditRoomLines(form)
+            .filter((line) => line.quantity > 0)
+            .reduce((sum, line) => sum + line.quantity, 0);
+      const typeGap = Math.max(0, rooms - Math.max(typeLinesQty, 0));
+      let statusText = `${total} guest${total === 1 ? '' : 's'} · ${rooms} room${rooms === 1 ? '' : 's'}`;
+      if (extras > 0) statusText += ' · includes ₱200 / night extra person';
+      else statusText += ` · within included capacity (${included})`;
+      if (typeGap > 0) {
+        statusText += ` · assign type for ${typeGap} new room${typeGap === 1 ? '' : 's'} under Edit rooms`;
+      }
+      headStatus.textContent = statusText;
+      headStatus.classList.toggle('is-at-capacity', typeGap > 0);
+      headCategory.setPreview(
+        `${total} guest${total === 1 ? '' : 's'} · ${rooms} room${rooms === 1 ? '' : 's'}`
+      );
+    }
+
+    function renderEditGuestRooms() {
+      clampEditGuestRooms();
+      headRoomsList.replaceChildren();
+      editGuestRooms.forEach((room, index) => {
+        const total = (Number(room.adults) || 0) + (Number(room.children) || 0);
+        const wouldUseExtra = total >= BASE_GUESTS_PER_ROOM;
+        const extraBlocked =
+          wouldUseExtra && !roomHasExtraGuest(room) && bookingAlreadyUsesExtra(index);
+        const canInc = total < MAX_GUESTS_PER_ROOM && !extraBlocked;
+        const card = document.createElement('article');
+        card.className = `admin-booking-edit-guest-room${total >= MAX_GUESTS_PER_ROOM ? ' is-at-capacity' : ''}${roomHasExtraGuest(room) ? ' has-extra-person' : ''}`;
+        card.dataset.editGuestRoom = String(index);
+
+        const head = document.createElement('div');
+        head.className = 'admin-booking-edit-guest-room-head';
+        const title = document.createElement('h4');
+        title.textContent = `Room ${index + 1}`;
+        head.append(title);
+        if (index > 0 && !hardEdit) {
+          const removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
+          removeBtn.className = 'admin-booking-edit-guest-room-remove';
+          removeBtn.textContent = 'Remove';
+          removeBtn.setAttribute('aria-label', `Remove room ${index + 1}`);
+          removeBtn.addEventListener('click', () => {
+            removeEditGuestRoom(index);
+          });
+          head.append(removeBtn);
+        }
+
+        const counters = document.createElement('div');
+        counters.className = 'admin-booking-edit-headcount-row';
+        const adultsStepper = makeHeadCountStepper('Adults', room.adults, (next) => {
+          room.adults = next;
+          renderEditGuestRooms();
+          syncHeadCountUi();
+        });
+        const childrenStepper = makeHeadCountStepper('Children under 12', room.children, (next) => {
+          room.children = next;
+          renderEditGuestRooms();
+          syncHeadCountUi();
+        });
+        adultsStepper._setButtons({ canDec: room.adults > 1, canInc });
+        childrenStepper._setButtons({ canDec: room.children > 0, canInc });
+        const blockMsg = extraBlocked
+          ? 'Only one extra guest (₱200/night) is allowed per booking.'
+          : `Each room holds up to ${MAX_GUESTS_PER_ROOM} guests. Add another room for more guests.`;
+        adultsStepper.title = canInc ? '' : blockMsg;
+        childrenStepper.title = canInc ? '' : blockMsg;
+        counters.append(adultsStepper, childrenStepper);
+
+        card.append(head, counters);
+        if (roomHasExtraGuest(room)) {
+          const note = document.createElement('p');
+          note.className = 'admin-booking-edit-guest-room-extra';
+          note.textContent = 'Extra person · ₱200 / night';
+          card.append(note);
+        }
+        headRoomsList.append(card);
+      });
+      syncHeadCountUi();
+    }
+
+    function removeEditGuestRoom(index) {
+      if (index <= 0 || editGuestRooms.length <= 1) return;
+      editGuestRooms.splice(index, 1);
+      // Drop a matching needs-type line first, else the last room line with qty.
+      const needsRows = Array.from(form.querySelectorAll('[data-edit-room-line][data-needs-type="1"]'));
+      if (needsRows.length) {
+        needsRows[needsRows.length - 1].remove();
+      } else {
+        const rows = Array.from(form.querySelectorAll('[data-edit-room-line]'));
+        const last = rows[rows.length - 1];
+        if (last && rows.length > 1) last.remove();
+        else if (last) {
+          const qty = last.querySelector('[data-room-qty]');
+          if (qty) qty.value = '1';
+        }
+      }
+      renderEditGuestRooms();
+      onRoomsChanged();
+    }
+
+    renderEditGuestRooms();
+
     let availOk = false;
     let availTimer = null;
     let lastNoAvailKey = '';
+
+    function updateRoomsPreview() {
+      if (hardEdit) {
+        roomsCategory.setPreview(roomsEditPreview(booking));
+        return;
+      }
+      const lines = readEditRoomLines(form)
+        .filter((line) => line.quantity > 0)
+        .map((line) =>
+          line.needsType || !line.roomTypeId
+            ? `${line.quantity}× Select type`
+            : `${line.quantity}× ${line.roomTypeName || 'Room'}`
+        );
+      roomsCategory.setPreview(
+        lines.length ? lines.join(' · ') : 'No rooms selected — add a room type'
+      );
+    }
+
+    function pendingTypeSelectCount() {
+      return Array.from(form.querySelectorAll('[data-edit-room-line]')).filter((row) => {
+        const qty = Number(row.querySelector('[data-room-qty]')?.value || 0);
+        if (qty <= 0) return false;
+        return row.dataset.needsType === '1' || !row.querySelector('[data-room-type-select]')?.value;
+      }).length;
+    }
+
+    function syncRoomsAttention() {
+      if (hardEdit) {
+        roomsCategory.setAttention(null);
+        return;
+      }
+      const pending = pendingTypeSelectCount();
+      const showTag = pending > 0 && !roomsCategory.isOpen();
+      if (!showTag) {
+        roomsCategory.setAttention(null);
+        return;
+      }
+      roomsCategory.setAttention(
+        pending === 1
+          ? 'Select room type for new room'
+          : `Select room types · ${pending} new rooms`
+      );
+    }
+
+    function onRoomsChanged() {
+      updateRoomsPreview();
+      syncHeadCountUi();
+      syncRoomsAttention();
+      scheduleAvailRefresh();
+    }
+
+    let editRoomTypesCache = [];
+
+    function appendNeedsTypeRoomLine(types, options = {}) {
+      const row = createEditRoomLine(types, 0, 1, { needsType: true });
+      wireEditRoomLine(row, form, onRoomsChanged);
+      roomFields.append(row);
+      if (!options.silent) onRoomsChanged();
+    }
+
+    async function addRoomFromHeadCount() {
+      if (hardEdit) return;
+      addRoomFromHeadBtn.disabled = true;
+      try {
+        const types = editRoomTypesCache.length
+          ? editRoomTypesCache
+          : await loadEditRoomTypeCatalog();
+        editRoomTypesCache = types;
+        if (!types.length) {
+          showEditNoticePopup('No room types available to add.', 'Cannot add room');
+          return;
+        }
+        error.hidden = true;
+        editGuestRooms.push({ adults: 2, children: 0 });
+        appendNeedsTypeRoomLine(types);
+        renderEditGuestRooms();
+        // Keep head count open so the new Adults/Children card is visible.
+        headCategory.setOpen(true);
+        syncRoomsAttention();
+        // Scroll new card into view
+        const cards = headRoomsList.querySelectorAll('[data-edit-guest-room]');
+        cards[cards.length - 1]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } finally {
+        addRoomFromHeadBtn.disabled = false;
+      }
+    }
+
+    addRoomFromHeadBtn.addEventListener('click', () => {
+      void addRoomFromHeadCount();
+    });
 
     function scheduleAvailRefresh() {
       window.clearTimeout(availTimer);
@@ -6162,14 +6754,15 @@
           quantity: Number(line.quantity || 0),
         }));
       }
-      return readEditRoomLines(form).filter((line) => line.quantity > 0);
+      return readEditRoomLines(form).filter((line) => line.quantity > 0 && line.roomTypeId > 0);
     }
 
     if (!hardEdit) {
       void loadEditRoomTypeCatalog().then((types) => {
+        editRoomTypesCache = types;
         if (!types.length) {
           roomFields.textContent = 'No room types available.';
-          addRoomBtn.disabled = true;
+          addRoomFromHeadBtn.disabled = true;
           return;
         }
         const items = (booking.items || []).length
@@ -6177,38 +6770,52 @@
           : [{ roomTypeId: types[0].roomTypeId, quantity: 1 }];
         items.forEach((line) => {
           const row = createEditRoomLine(types, line.roomTypeId, line.quantity);
-          wireEditRoomLine(row, form, scheduleAvailRefresh);
+          wireEditRoomLine(row, form, onRoomsChanged);
           roomFields.append(row);
         });
-        addRoomBtn.addEventListener('click', () => {
-          const used = new Set(
-            readEditRoomLines(form).map((line) => line.roomTypeId).filter(Boolean)
-          );
-          const nextType = types.find((type) => !used.has(type.roomTypeId)) || types[0];
-          const row = createEditRoomLine(types, nextType.roomTypeId, 1);
-          wireEditRoomLine(row, form, scheduleAvailRefresh);
-          roomFields.append(row);
-          scheduleAvailRefresh();
-        });
+        // Head-count cards are the room-count source: pad type rows when party has more rooms.
+        const headRooms = Math.max(1, editGuestRooms.length);
+        let typedQty = readEditRoomLines(form)
+          .filter((line) => line.quantity > 0)
+          .reduce((sum, line) => sum + line.quantity, 0);
+        while (typedQty < headRooms) {
+          appendNeedsTypeRoomLine(types, { silent: true });
+          typedQty += 1;
+        }
+        updateRoomsPreview();
+        syncHeadCountUi();
+        syncRoomsAttention();
         scheduleAvailRefresh();
       });
     }
 
-    function showNoAvailabilityPopup(message) {
+    function showEditNoticePopup(message, title = 'Booking edit') {
       const popup = detailModal?.querySelector('[data-edit-availability-popup]');
       const msg = popup?.querySelector('[data-edit-availability-message]');
+      const heading = popup?.querySelector('#editAvailabilityTitle');
       if (!popup || !msg) {
+        if (typeof window.showMoriNotice === 'function') {
+          window.showMoriNotice(message, 'error');
+          return;
+        }
         window.alert(message);
         return;
       }
+      if (heading) heading.textContent = title;
       msg.textContent = message;
       popup.hidden = false;
+      popup.querySelector('[data-edit-availability-ok]')?.focus();
     }
 
-    function hideNoAvailabilityPopup() {
+    function hideEditNoticePopup() {
       const popup = detailModal?.querySelector('[data-edit-availability-popup]');
       if (popup) popup.hidden = true;
     }
+
+    // Back-compat aliases used by availability checks below.
+    const showNoAvailabilityPopup = (message) =>
+      showEditNoticePopup(message, 'No available rooms');
+    const hideNoAvailabilityPopup = hideEditNoticePopup;
 
     async function refreshEditAvailability() {
       if (!needsAvailPreview) return;
@@ -6316,6 +6923,19 @@
     });
 
     saveButton.addEventListener('click', () => {
+      const pendingTypes = pendingTypeSelectCount();
+      if (pendingTypes > 0) {
+        error.hidden = true;
+        showEditNoticePopup(
+          pendingTypes === 1
+            ? 'Open Edit rooms and select a room type for the newly added room.'
+            : `Open Edit rooms and select room types for ${pendingTypes} newly added rooms.`,
+          'Room type needed'
+        );
+        roomsCategory.setOpen(true);
+        syncRoomsAttention();
+        return;
+      }
       if (needsAvailPreview && !availOk) {
         showNoAvailabilityPopup(
           'Even if you adjust these dates, there is still no available room right now for what this booking needs.'
@@ -6376,6 +6996,22 @@
             String(data.get('checkOut') || ''),
             String(data.get('checkOutTime') || '12:00')
           ),
+          extraPersons: Math.min(1, Math.max(0, Number(data.get('extraPersons') || 0))),
+          adultCount: Math.max(0, Number(data.get('adultCount') || 0)),
+          childCount: Math.max(0, Number(data.get('childCount') || 0)),
+          guestRooms: (() => {
+            try {
+              const parsed = JSON.parse(String(data.get('guestPartyJson') || '[]'));
+              return Array.isArray(parsed)
+                ? parsed.map((room) => ({
+                    adults: Math.max(0, Number(room.adults ?? room.Adults ?? 0)),
+                    children: Math.max(0, Number(room.children ?? room.Children ?? 0)),
+                  }))
+                : [];
+            } catch {
+              return [];
+            }
+          })(),
           items,
         }),
       });
@@ -6387,8 +7023,22 @@
       await Promise.all([refreshBookings(), refreshNotifications()]);
       reservationCalendar?.refetchEvents();
     } catch (error) {
-      errorElement.textContent = error instanceof Error ? error.message : 'Unable to save changes.';
-      errorElement.hidden = false;
+      errorElement.hidden = true;
+      const message = error instanceof Error ? error.message : 'Unable to save changes.';
+      const popup = detailModal?.querySelector('[data-edit-availability-popup]');
+      const msg = popup?.querySelector('[data-edit-availability-message]');
+      const heading = popup?.querySelector('#editAvailabilityTitle');
+      if (popup && msg) {
+        if (heading) heading.textContent = 'Unable to save';
+        msg.textContent = message;
+        popup.hidden = false;
+        popup.querySelector('[data-edit-availability-ok]')?.focus();
+      } else if (typeof window.showMoriNotice === 'function') {
+        window.showMoriNotice(message, 'error');
+      } else {
+        errorElement.textContent = message;
+        errorElement.hidden = false;
+      }
     } finally {
       button.disabled = false;
     }
@@ -7535,7 +8185,10 @@
       return;
     }
 
-    if (eventName === 'BookingCreated' || eventName === 'BookingUpdated') {
+    if (eventName === 'BookingCreated') {
+      playChime();
+    } else if (eventName === 'BookingUpdated' && payload?.message) {
+      // Only chime for alert messages (arrival/checkout), not routine confirm/edit.
       playChime();
     }
 

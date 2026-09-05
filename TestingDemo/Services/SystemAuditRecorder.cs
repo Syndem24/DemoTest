@@ -394,6 +394,7 @@ public sealed class SystemAuditRecorder : ISystemAuditRecorder, ISystemAuditQuer
         SystemAuditDomain.SpecialOffer => "Special offers",
         SystemAuditDomain.Configuration => "Configuration",
         SystemAuditDomain.File => "Files",
+        SystemAuditDomain.Shift => "Shifts",
         _ => domain.ToString()
     };
 

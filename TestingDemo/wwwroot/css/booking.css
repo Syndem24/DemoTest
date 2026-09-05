@@ -6484,6 +6484,17 @@ body.guest-modal-open {
   overflow: hidden;
 }
 
+/* Clay rooms gives .guest-main z-index:1 for atrium layers, which traps
+   position:fixed modals under sticky/fixed .guest-nav (z-index:40).
+   While a modal is open, lift main above the nav so the close control is usable. */
+body.guest-modal-open .guest-nav {
+  z-index: 20;
+}
+
+body.guest-modal-open.guest-shell--clay.guest-shell--rooms .guest-main {
+  z-index: 100;
+}
+
 @media (max-width: 719px) {
   .guest-room {
     flex-basis: min(100%, 20.5rem);

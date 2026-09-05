@@ -121,7 +121,9 @@ public sealed record BookingItemDto(
     decimal PricePerNight,
     int MaxOccupancy,
     /// <summary>Physical rooms assigned to this line (from BookingRoomAssignment). JSON key stays assignedRooms.</summary>
-    IReadOnlyList<AssignedRoomDto> AssignedRooms);
+    IReadOnlyList<AssignedRoomDto> AssignedRooms,
+    /// <summary>List / “was” nightly rate for offer compare UI when promo is applied.</summary>
+    decimal? RegularPricePerNight = null);
 
 public sealed record BookingChargeDto(
     int Id,
@@ -162,7 +164,10 @@ public sealed record BookingDto(
     bool CashOnlyPromo = false,
     string? SpecialOfferTitle = null,
     decimal? SpecialOfferRegularPricePerNight = null,
-  bool ExceedsAvailableInventory = false);
+    bool ExceedsAvailableInventory = false,
+    int AdultCount = 0,
+    int ChildCount = 0,
+    IReadOnlyList<BookingGuestRoomDto>? GuestRooms = null);
 
 public sealed record CreateBookingResponse(
     string Reference,
@@ -214,8 +219,24 @@ public sealed class UpdateBookingRequest
     public DateTime CheckInAtUtc { get; set; }
     public DateTime CheckoutTimeUtc { get; set; }
     public PaymentOption? PaymentOption { get; set; }
+    /// <summary>0 or 1; one extra guest beyond 2 included occupants per room (₱200/night).</summary>
+    public int ExtraPersons { get; set; }
+    /// <summary>Total adults across all rooms (data gathering).</summary>
+    public int AdultCount { get; set; }
+    /// <summary>Total children under 12 across all rooms.</summary>
+    public int ChildCount { get; set; }
+    /// <summary>Per-room adults/children cards (same shape as guest booking).</summary>
+    public List<BookingGuestRoomRequest> GuestRooms { get; set; } = new();
     public List<CreateBookingItemRequest> Items { get; set; } = new();
 }
+
+public sealed class BookingGuestRoomRequest
+{
+    public int Adults { get; set; }
+    public int Children { get; set; }
+}
+
+public sealed record BookingGuestRoomDto(int Adults, int Children);
 
 public sealed record ReservationCalendarEventDto(
     int Id,

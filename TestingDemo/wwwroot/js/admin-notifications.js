@@ -312,7 +312,9 @@
         if (eventName === 'OfferEndingSoon') {
           playChime();
           showOfferEndingSoonAlert(payload);
-        } else if (eventName !== 'PaymentChanged') {
+        } else if (eventName === 'BookingCreated') {
+          playChime();
+        } else if (eventName === 'BookingUpdated' && payload?.message) {
           playChime();
         }
         scheduleRefresh();
