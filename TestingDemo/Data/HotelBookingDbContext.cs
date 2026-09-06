@@ -34,6 +34,7 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<SecureSetting> SecureSettings => Set<SecureSetting>();
     public DbSet<StaffPasswordResetCode> StaffPasswordResetCodes => Set<StaffPasswordResetCode>();
     public DbSet<StaffShift> StaffShifts => Set<StaffShift>();
+    public DbSet<StayReview> StayReviews => Set<StayReview>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -325,6 +326,25 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(e => e.StaffUserId)
                 .IsUnique()
                 .HasFilter("[EndedAtUtc] IS NULL");
+        });
+
+        modelBuilder.Entity<StayReview>(entity =>
+        {
+            entity.ToTable("StayReview");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.GuestUserId).HasMaxLength(450).IsRequired();
+            entity.Property(e => e.DisplayName).HasMaxLength(80).IsRequired();
+            entity.Property(e => e.Comment).HasMaxLength(2000);
+            entity.Property(e => e.TagsJson).HasMaxLength(1000);
+            entity.Property(e => e.HotelReply).HasMaxLength(1000);
+            entity.Property(e => e.HotelReplyBy).HasMaxLength(120);
+            entity.HasIndex(e => e.BookingId).IsUnique();
+            entity.HasIndex(e => e.GuestUserId);
+            entity.HasIndex(e => new { e.IsPublished, e.CreatedAtUtc });
+            entity.HasOne(e => e.Booking)
+                .WithMany()
+                .HasForeignKey(e => e.BookingId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 
