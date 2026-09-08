@@ -15,6 +15,7 @@ public sealed class AdminShiftsController : Controller
             User.FindFirstValue("FullName")
             ?? User.Identity?.Name
             ?? "Staff";
+        ViewData["StaffUserId"] = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
         ViewData["IsAdminManager"] = User.IsInRole("AdminManager");
         return View();
     }

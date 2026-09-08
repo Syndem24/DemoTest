@@ -179,6 +179,8 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.Channels).HasConversion<int>();
             entity.Property(e => e.RegularPricePerNight).HasPrecision(18, 2);
             entity.Property(e => e.PromoPricePerNight).HasPrecision(18, 2);
+            entity.Property(e => e.LoyaltyApplyMode).HasConversion<int>();
+            entity.Property(e => e.OpenEnded);
             entity.HasIndex(e => new { e.RoomTypeId, e.IsActive, e.StartsAtUtc, e.EndsAtUtc });
             entity.HasIndex(e => e.SortOrder);
             entity.HasOne(e => e.RoomType)

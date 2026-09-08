@@ -36,6 +36,9 @@ public static class DatabaseBootstrap
             EnsureSystemAuditLogTable(db);
             EnsureStaffDashboardLayoutColumn(db);
             EnsureStaffShiftTable(db);
+            EnsureStayReviewTable(db);
+            EnsureLoyaltyApplyModeColumn(db);
+            EnsureSpecialOfferOpenEndedColumn(db);
 
             // Warm starts: one cheap existence probe, then skip redundant Ensure* SQL.
             if (SchemaPatchesNeeded(db))
@@ -50,6 +53,7 @@ public static class DatabaseBootstrap
                 EnsureBookingChargeTable(db);
                 EnsureBookingGuestHeadCountColumns(db);
                 EnsureStaffShiftTable(db);
+                EnsureStayReviewTable(db);
             }
         }
         catch (Exception ex) when (IsSqlConnectivityFailure(ex))
@@ -403,6 +407,7 @@ public static class DatabaseBootstrap
                         OR OBJECT_ID(N'[dbo].[SystemFlushLog]', N'U') IS NULL
                         OR OBJECT_ID(N'[dbo].[SystemAuditLog]', N'U') IS NULL
                         OR OBJECT_ID(N'[dbo].[StaffShift]', N'U') IS NULL
+                        OR OBJECT_ID(N'[dbo].[StayReview]', N'U') IS NULL
                     THEN 1 ELSE 0 END
                     """;
                 var result = command.ExecuteScalar();
@@ -1022,6 +1027,98 @@ public static class DatabaseBootstrap
         catch
         {
             // Ignore if table exists or transient schema check
+        }
+    }
+
+    private static void EnsureStayReviewTable(HotelBookingDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(
+                """
+                IF OBJECT_ID(N'dbo.StayReview', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE [dbo].[StayReview] (
+                        [Id] int NOT NULL IDENTITY,
+                        [BookingId] int NOT NULL,
+                        [GuestUserId] nvarchar(450) NOT NULL,
+                        [DisplayName] nvarchar(80) NOT NULL,
+                        [OverallRating] tinyint NOT NULL,
+                        [StaffRating] tinyint NOT NULL,
+                        [ComfortRating] tinyint NOT NULL,
+                        [FacilitiesRating] tinyint NOT NULL,
+                        [WouldRecommend] bit NULL,
+                        [Comment] nvarchar(2000) NULL,
+                        [TagsJson] nvarchar(1000) NULL,
+                        [HotelReply] nvarchar(1000) NULL,
+                        [HotelReplyAtUtc] datetime2 NULL,
+                        [HotelReplyBy] nvarchar(120) NULL,
+                        [IsPublished] bit NOT NULL CONSTRAINT [DF_StayReview_IsPublished] DEFAULT (1),
+                        [CreatedAtUtc] datetime2 NOT NULL,
+                        [UpdatedAtUtc] datetime2 NOT NULL,
+                        CONSTRAINT [PK_StayReview] PRIMARY KEY ([Id]),
+                        CONSTRAINT [FK_StayReview_Booking_BookingId]
+                            FOREIGN KEY ([BookingId]) REFERENCES [dbo].[Booking] ([Id]) ON DELETE CASCADE,
+                        CONSTRAINT [CK_StayReview_OverallRating] CHECK ([OverallRating] BETWEEN 1 AND 5),
+                        CONSTRAINT [CK_StayReview_StaffRating] CHECK ([StaffRating] BETWEEN 1 AND 5),
+                        CONSTRAINT [CK_StayReview_ComfortRating] CHECK ([ComfortRating] BETWEEN 1 AND 5),
+                        CONSTRAINT [CK_StayReview_FacilitiesRating] CHECK ([FacilitiesRating] BETWEEN 1 AND 5)
+                    );
+                    CREATE UNIQUE INDEX [IX_StayReview_BookingId] ON [dbo].[StayReview] ([BookingId]);
+                    CREATE INDEX [IX_StayReview_GuestUserId] ON [dbo].[StayReview] ([GuestUserId]);
+                    CREATE INDEX [IX_StayReview_IsPublished_CreatedAtUtc]
+                        ON [dbo].[StayReview] ([IsPublished], [CreatedAtUtc] DESC);
+                END
+                ELSE
+                BEGIN
+                    IF COL_LENGTH(N'dbo.StayReview', N'HotelReply') IS NULL
+                        ALTER TABLE [dbo].[StayReview] ADD [HotelReply] nvarchar(1000) NULL;
+                    IF COL_LENGTH(N'dbo.StayReview', N'HotelReplyAtUtc') IS NULL
+                        ALTER TABLE [dbo].[StayReview] ADD [HotelReplyAtUtc] datetime2 NULL;
+                    IF COL_LENGTH(N'dbo.StayReview', N'HotelReplyBy') IS NULL
+                        ALTER TABLE [dbo].[StayReview] ADD [HotelReplyBy] nvarchar(120) NULL;
+                END
+                """);
+        }
+        catch
+        {
+            // Ignore if table exists or transient schema check
+        }
+    }
+
+    private static void EnsureLoyaltyApplyModeColumn(HotelBookingDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(
+                """
+                IF OBJECT_ID(N'dbo.SpecialOffer', N'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.SpecialOffer', N'LoyaltyApplyMode') IS NULL
+                    ALTER TABLE [dbo].[SpecialOffer] ADD [LoyaltyApplyMode] int NOT NULL
+                        CONSTRAINT [DF_SpecialOffer_LoyaltyApplyMode] DEFAULT (0);
+                """);
+        }
+        catch
+        {
+            // Ignore if column exists or transient schema check
+        }
+    }
+
+    private static void EnsureSpecialOfferOpenEndedColumn(HotelBookingDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(
+                """
+                IF OBJECT_ID(N'dbo.SpecialOffer', N'U') IS NOT NULL
+                   AND COL_LENGTH(N'dbo.SpecialOffer', N'OpenEnded') IS NULL
+                    ALTER TABLE [dbo].[SpecialOffer] ADD [OpenEnded] bit NOT NULL
+                        CONSTRAINT [DF_SpecialOffer_OpenEnded] DEFAULT (0);
+                """);
+        }
+        catch
+        {
+            // Ignore if column exists or transient schema check
         }
     }
 }

@@ -82,7 +82,11 @@ public sealed class OfferExpiryWarningBackgroundService : BackgroundService
             .Include(o => o.RoomType)
             .Where(o =>
                 o.IsActive
-                && (o.Kind == SpecialOfferKind.LimitedTime || o.Kind == SpecialOfferKind.StayLongerSaveMore)
+                && !o.OpenEnded
+                && o.EndsAtUtc.Year < 9999
+                && (o.Kind == SpecialOfferKind.LimitedTime
+                    || o.Kind == SpecialOfferKind.StayLongerSaveMore
+                    || o.Kind == SpecialOfferKind.GoogleLoyalty)
                 && o.EndsAtUtc > now
                 && o.EndsAtUtc <= windowEnd)
             .OrderBy(o => o.EndsAtUtc)

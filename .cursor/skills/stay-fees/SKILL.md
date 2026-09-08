@@ -16,7 +16,7 @@ description: >-
 |-----|------|-------------|
 | Early check-in | ₱500 / room | **Only 11:30 AM** Manila (`StayTimeFees.EarlyCheckInTime`) |
 | Late checkout | ₱100 / hour / room | Max **3** hours past noon |
-| Extra person | ₱200 / night | Max **1**; only when booking has a **single** room (`MaxOccupancy == 1` or name contains "Single") |
+| Extra person | ₱200 / night | Max **1 extra guest per room** (2 included, 3 total). Reception picks which stay rooms get the fee (allowed on Pending; other stay fees wait for Confirm). |
 
 Default check-in **14:00**, default checkout **12:00**. Selecting a fee **changes stored times** and shows an **extended-time** indicator in admin details.
 
@@ -54,7 +54,7 @@ Default check-in **14:00**, default checkout **12:00**. Selecting a fee **change
 - Do show fees in price breakdown as recorded lines
 - Do include `Charges` (and room type meta for single detection) when mapping booking details
 - Don't add early slots other than 11:30
-- Don't allow extra person on non-single rooms
+- Don't cap extra persons at one for the whole booking — each room may add one extra guest
 - Don't treat fees as payment records — charges are amounts owed, payments are collections
 
 ## Verify

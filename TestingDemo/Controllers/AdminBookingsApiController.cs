@@ -430,9 +430,9 @@ public sealed class AdminBookingsApiController : ControllerBase
             return BadRequest(new { message = "Late check-out is limited to 0–3 hours." });
         }
 
-        if (request.ExtraPersons is < 0 or > 1)
+        if (request.ExtraPersons < 0)
         {
-            return BadRequest(new { message = "Only one extra guest is allowed (₱200 / night)." });
+            return BadRequest(new { message = "At most one extra guest per room is allowed (₱200 / night)." });
         }
 
         if (request.IncidentalAmount < 0

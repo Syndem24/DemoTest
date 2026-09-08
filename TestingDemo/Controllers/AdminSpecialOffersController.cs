@@ -54,6 +54,7 @@ public class AdminSpecialOffersController : Controller
             Channels = SpecialOfferChannels.OnlineVisible | SpecialOfferChannels.WalkIn,
             CashOnly = true,
             IsActive = true,
+            LoyaltyApplyMode = LoyaltyApplyMode.EveryNight,
             StartsAtUtc = starts,
             EndsAtUtc = starts.AddDays(14)
         });
@@ -99,7 +100,7 @@ public class AdminSpecialOffersController : Controller
         var starts = dto.IsActive
             ? TruncateToMinute(PhilippinesTime.ToManila(dto.StartsAtUtc))
             : default;
-        var ends = dto.IsActive
+        var ends = dto.IsActive && !dto.OpenEnded
             ? TruncateToMinute(PhilippinesTime.ToManila(dto.EndsAtUtc))
             : default;
         return View(new UpsertSpecialOfferRequest
@@ -108,7 +109,14 @@ public class AdminSpecialOffersController : Controller
             RoomTypeId = dto.RoomTypeId,
             Kind = dto.Kind,
             Description = dto.Description,
-            DiscountPercent = DeriveDiscountPercent(dto.RegularPricePerNight, dto.PromoPricePerNight),
+            DiscountPercent = SpecialOfferService.IsPercentRateKind(dto.Kind)
+                ? DeriveDiscountPercent(dto.RegularPricePerNight, dto.PromoPricePerNight)
+                : null,
+            DiscountAmount = SpecialOfferService.IsFixedAmountKind(dto.Kind)
+                ? DeriveDiscountAmount(dto.RegularPricePerNight, dto.PromoPricePerNight)
+                : null,
+            LoyaltyApplyMode = dto.LoyaltyApplyMode,
+            OpenEnded = dto.OpenEnded,
             MinNights = dto.MinNights,
             RegularPricePerNight = dto.RegularPricePerNight,
             PromoPricePerNight = dto.PromoPricePerNight,
@@ -116,7 +124,7 @@ public class AdminSpecialOffersController : Controller
             CashOnly = dto.CashOnly,
             IsActive = dto.IsActive,
             StartsAtUtc = starts,
-            EndsAtUtc = ends
+            EndsAtUtc = dto.OpenEnded ? default : ends
         });
     }
 
@@ -178,10 +186,13 @@ public class AdminSpecialOffersController : Controller
         ModelState.Remove(nameof(model.RoomTypeId));
         ModelState.Remove(nameof(model.Title));
         model.Title = SpecialOfferService.TitleForKind(model.Kind);
-        if (model.Kind is not (SpecialOfferKind.LimitedTime or SpecialOfferKind.StayLongerSaveMore))
+        if (!SpecialOfferService.IsPercentRateKind(model.Kind))
             ModelState.Remove(nameof(model.DiscountPercent));
+        if (!SpecialOfferService.IsFixedAmountKind(model.Kind))
+            ModelState.Remove(nameof(model.DiscountAmount));
         if (model.Kind != SpecialOfferKind.StayLongerSaveMore)
             ModelState.Remove(nameof(model.MinNights));
+        ModelState.Remove(nameof(model.LoyaltyApplyMode));
     }
 
     private async Task PopulateRoomTypesAsync(CancellationToken cancellationToken)
@@ -205,6 +216,13 @@ public class AdminSpecialOffersController : Controller
         if (promo is not decimal p || regular <= 0 || p <= 0 || p >= regular)
             return null;
         return decimal.Round((1m - p / regular) * 100m, 2, MidpointRounding.AwayFromZero);
+    }
+
+    private static decimal? DeriveDiscountAmount(decimal regular, decimal? promo)
+    {
+        if (promo is not decimal p || regular <= 0 || p <= 0 || p >= regular)
+            return null;
+        return decimal.Round(regular - p, 2, MidpointRounding.AwayFromZero);
     }
 
     private static DateTime TruncateToMinute(DateTime value) =>

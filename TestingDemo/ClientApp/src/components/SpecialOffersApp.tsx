@@ -15,12 +15,15 @@ function money(amount: number): string {
   })}`
 }
 
-function formatWindow(startIso: string, endIso: string): string {
+function formatWindow(startIso: string, endIso: string, openEnded?: boolean): string {
   const start = new Date(startIso)
-  const end = new Date(endIso)
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return '—'
+  if (Number.isNaN(start.getTime())) return '—'
   const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' }
-  return `${start.toLocaleDateString('en-PH', opts)} – ${end.toLocaleDateString('en-PH', opts)}`
+  const startLabel = start.toLocaleDateString('en-PH', opts)
+  if (openEnded) return `${startLabel} – Until deactivated`
+  const end = new Date(endIso)
+  if (Number.isNaN(end.getTime())) return startLabel
+  return `${startLabel} – ${end.toLocaleDateString('en-PH', opts)}`
 }
 
 function discountPercent(regular: number, promo: number | null | undefined): number | null {
@@ -39,8 +42,29 @@ function kindLabel(kind: string): string {
   const map: Record<string, string> = {
     LimitedTime: 'Limited time',
     StayLongerSaveMore: 'Stay longer, save more',
+    GoogleLoyalty: 'Loyalty Coupon',
   }
   return map[kind] || kind
+}
+
+function loyaltyApplyLabel(mode?: string | null): string {
+  if (mode === 'FirstNight') return 'First night only'
+  if (mode === 'WeeklyReset') return 'Once every 7 nights'
+  if (mode === 'FirstBooking') return 'First booking only'
+  return 'Every night'
+}
+
+function loyaltyAmountOff(offer: SpecialOfferDto): number | null {
+  if (String(offer.kind) !== 'GoogleLoyalty') return null
+  const direct = Number(offer.discountAmount)
+  if (direct > 0) return direct
+  if (
+    offer.promoPricePerNight != null
+    && offer.regularPricePerNight > offer.promoPricePerNight
+  ) {
+    return offer.regularPricePerNight - offer.promoPricePerNight
+  }
+  return null
 }
 
 /** Manila wall time as datetime-local value (yyyy-MM-ddTHH:mm). */
@@ -547,6 +571,8 @@ export function SpecialOffersApp() {
               const hasPromo = group.promoFrom != null
               const promoSame = group.promoFrom === group.promoTo
               const regularSame = group.regularFrom === group.regularTo
+              const isLoyalty = String(offer.kind) === 'GoogleLoyalty'
+              const couponOff = loyaltyAmountOff(offer)
               return (
                 <li key={group.key} className="so-card">
                   <div className="so-card-main">
@@ -564,7 +590,13 @@ export function SpecialOffersApp() {
                           <span>{offer.minNights}+ nights</span>
                         </>
                       ) : null}
-                      {offer.cashOnly ? (
+                      {isLoyalty ? (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span>{loyaltyApplyLabel(offer.loyaltyApplyMode)}</span>
+                        </>
+                      ) : null}
+                      {!isLoyalty && offer.cashOnly ? (
                         <>
                           <span aria-hidden="true">·</span>
                           <span>Cash only</span>
@@ -574,7 +606,9 @@ export function SpecialOffersApp() {
                     <div className="so-price">
                       {hasPromo ? (
                         <>
-                          {pct != null && pct > 0 ? (
+                          {couponOff != null && couponOff > 0 ? (
+                            <span className="so-pct">−{money(couponOff)}</span>
+                          ) : !isLoyalty && pct != null && pct > 0 ? (
                             <span className="so-pct">−{pct}%</span>
                           ) : null}
                           {group.regularFrom != null ? (
@@ -604,7 +638,7 @@ export function SpecialOffersApp() {
                         </>
                       )}
                     </div>
-                    <p className="so-window">{formatWindow(offer.startsAtUtc, offer.endsAtUtc)}</p>
+                    <p className="so-window">{formatWindow(offer.startsAtUtc, offer.endsAtUtc, offer.openEnded)}</p>
                   </div>
                   <div className="so-card-actions">
                     {canManage ? (
@@ -656,7 +690,7 @@ export function SpecialOffersApp() {
                   ? 'Scheduled'
                   : 'Not active'}{' '}
               ·{' '}
-              {formatWindow(viewGroup.primary.startsAtUtc, viewGroup.primary.endsAtUtc)}
+              {formatWindow(viewGroup.primary.startsAtUtc, viewGroup.primary.endsAtUtc, viewGroup.primary.openEnded)}
             </p>
             <dl className="so-view-dl">
               <div>
@@ -673,11 +707,26 @@ export function SpecialOffersApp() {
                 <dt>Channels</dt>
                 <dd>{channelLabels(viewGroup.primary.channels)}</dd>
               </div>
-              <div>
-                <dt>Payment</dt>
-                <dd>{viewGroup.primary.cashOnly ? 'Cash only at front desk' : 'Standard payment options'}</dd>
-              </div>
-              {viewGroup.discountPct != null && viewGroup.discountPct > 0 ? (
+              {String(viewGroup.primary.kind) !== 'GoogleLoyalty' ? (
+                <div>
+                  <dt>Payment</dt>
+                  <dd>{viewGroup.primary.cashOnly ? 'Cash only at front desk' : 'Standard payment options'}</dd>
+                </div>
+              ) : null}
+              {String(viewGroup.primary.kind) === 'GoogleLoyalty' ? (
+                <>
+                  {loyaltyAmountOff(viewGroup.primary) != null ? (
+                    <div>
+                      <dt>Amount off</dt>
+                      <dd>−{money(loyaltyAmountOff(viewGroup.primary)!)}</dd>
+                    </div>
+                  ) : null}
+                  <div>
+                    <dt>When to deduct</dt>
+                    <dd>{loyaltyApplyLabel(viewGroup.primary.loyaltyApplyMode)}</dd>
+                  </div>
+                </>
+              ) : viewGroup.discountPct != null && viewGroup.discountPct > 0 ? (
                 <div>
                   <dt>Discount</dt>
                   <dd>−{viewGroup.discountPct}% off regular rate</dd>
@@ -708,7 +757,7 @@ export function SpecialOffersApp() {
                   </dd>
                 </div>
               ) : null}
-              {viewGroup.primary.description?.trim() ? (
+              {String(viewGroup.primary.kind) !== 'GoogleLoyalty' && viewGroup.primary.description?.trim() ? (
                 <div>
                   <dt>Notes</dt>
                   <dd>{viewGroup.primary.description.trim()}</dd>

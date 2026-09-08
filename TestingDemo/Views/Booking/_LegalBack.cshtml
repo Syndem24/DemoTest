@@ -1,0 +1,24 @@
+@if (ViewBag.ReturnToGuestAgreement as bool? == true)
+{
+    <a class="guest-legal-back"
+       asp-controller="Account"
+       asp-action="ConfirmGuestAgreement">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M19 12H5" />
+            <path d="m12 19-7-7 7-7" />
+        </svg>
+        <span data-i18n="legal.backSignIn">Back to guest sign-in</span>
+    </a>
+}
+else
+{
+    <a class="guest-legal-back"
+       asp-controller="Booking"
+       asp-action="Index">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M19 12H5" />
+            <path d="m12 19-7-7 7-7" />
+        </svg>
+        <span data-i18n="legal.backHome">Back to home</span>
+    </a>
+}

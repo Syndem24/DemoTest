@@ -36,8 +36,11 @@ public sealed class CreateBookingRequestValidator : AbstractValidator<CreateBook
             .WithMessage("You must read and accept the Terms of Stay.");
 
         RuleFor(x => x.ExtraPersons)
-            .InclusiveBetween(0, 1)
-            .WithMessage("Only one extra guest is allowed (₱200 / night).");
+            .GreaterThanOrEqualTo(0)
+            .Must((request, extras) =>
+                extras <= StayTimeFees.MaxExtraPersonsForRooms(
+                    request.Items?.Sum(item => item.Quantity) ?? 0))
+            .WithMessage("At most one extra guest per room is allowed (₱200 / night).");
 
         RuleFor(x => x.Items)
             .NotEmpty()

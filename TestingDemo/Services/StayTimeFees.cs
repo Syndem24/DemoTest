@@ -14,9 +14,22 @@ public static class StayTimeFees
     public const decimal LateCheckoutFeePerRoomPerHour = 100m;
     public const decimal ExtraPersonFeePerNight = 200m;
     public const int MaxLateCheckoutHours = 3;
-    /// <summary>Max extra guests beyond 2 included occupants per room (booking-wide).</summary>
-    public const int MaxExtraPersons = 1;
-    public const int MaxExtraPersonsOnSingleRoom = MaxExtraPersons;
+    public const int IncludedGuestsPerRoom = 2;
+    /// <summary>Max extra guests beyond 2 included occupants, per room.</summary>
+    public const int MaxExtraPersonsPerRoom = 1;
+    /// <summary>Legacy alias for <see cref="MaxExtraPersonsPerRoom"/>.</summary>
+    public const int MaxExtraPersons = MaxExtraPersonsPerRoom;
+    public const int MaxExtraPersonsOnSingleRoom = MaxExtraPersonsPerRoom;
+    public const int MaxGuestsPerRoom = IncludedGuestsPerRoom + MaxExtraPersonsPerRoom;
+
+    public static int MaxExtraPersonsForRooms(int roomCount) =>
+        Math.Max(0, roomCount) * MaxExtraPersonsPerRoom;
+
+    public static int ExtraPersonsFromHeadcount(int adults, int children) =>
+        Math.Clamp(Math.Max(0, adults + children - IncludedGuestsPerRoom), 0, MaxExtraPersonsPerRoom);
+
+    public static int ExtraPersonsFromRooms(IEnumerable<(int Adults, int Children)> rooms) =>
+        rooms.Sum(room => ExtraPersonsFromHeadcount(room.Adults, room.Children));
 
     public static bool IsEarlyCheckIn(DateTime checkInAtUtc)
     {

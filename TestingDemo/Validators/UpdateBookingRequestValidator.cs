@@ -30,8 +30,15 @@ public sealed class UpdateBookingRequestValidator : AbstractValidator<UpdateBook
             .Must(items => items.Any(item => item.Quantity > 0))
             .WithMessage("Keep at least one room in the booking.");
         RuleFor(x => x.ExtraPersons)
-            .InclusiveBetween(0, 1)
-            .WithMessage("Only one extra guest is allowed (₱200 / night).");
+            .GreaterThanOrEqualTo(0)
+            .Must((request, extras) =>
+            {
+                var rooms = Math.Max(
+                    request.Items?.Sum(item => item.Quantity) ?? 0,
+                    request.GuestRooms?.Count ?? 0);
+                return extras <= StayTimeFees.MaxExtraPersonsForRooms(rooms);
+            })
+            .WithMessage("At most one extra guest per room is allowed (₱200 / night).");
         RuleFor(x => x.AdultCount)
             .InclusiveBetween(0, 40)
             .WithMessage("Adult count must be between 0 and 40.");

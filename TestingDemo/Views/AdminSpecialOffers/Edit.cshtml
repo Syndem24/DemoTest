@@ -6,13 +6,17 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/hotel-toast.js" asp-append-version="true"></script>
     <script src="~/js/admin-special-offer-form.js" asp-append-version="true"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            const serverErrors = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+                ViewData["OfferValidationToasts"] as IReadOnlyList<string> ?? Array.Empty<string>()));
             initOfferPricingForm(
                 document.getElementById('editOfferForm'),
                 @Html.Raw(pricesJson)
             );
+            initOfferValidationToasts('editOfferForm', serverErrors);
         });
     </script>
 }

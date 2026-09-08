@@ -122,6 +122,13 @@ public sealed class StaffShiftService : IStaffShiftService
         var liveStart = current?.StartedAtUtc ?? PhilippinesTime.StartOfTodayUtc();
         var liveOps = await BuildOpsAsync(liveStart, liveEnd, cancellationToken);
 
+        var onDuty = await _db.StaffShifts
+            .AsNoTracking()
+            .Where(s => s.EndedAtUtc == null)
+            .OrderBy(s => s.StartedAtUtc)
+            .Select(s => new StaffOnDutyDto(s.StaffUserId, s.StaffDisplayName, s.StartedAtUtc))
+            .ToListAsync(cancellationToken);
+
         return new StaffShiftPageDto(
             currentDto,
             lastHandover,
@@ -129,7 +136,8 @@ public sealed class StaffShiftService : IStaffShiftService
             recentTotal,
             recentPage,
             recentPageSize,
-            liveOps);
+            liveOps,
+            onDuty);
     }
 
     public async Task<StaffShiftDto?> GetOpenShiftAsync(

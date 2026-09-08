@@ -1,14 +1,130 @@
 @{
     Layout = "~/Views/Shared/_CustomerLayout.cshtml";
     ViewData["Title"] = "Reviews";
+    ViewData["I18nTitle"] = "reviews.title";
 }
 
-<section class="guest-section guest-portal-promise" aria-labelledby="guestPortalTitle">
-    <p class="guest-eyebrow">Guest account</p>
-    <h1 id="guestPortalTitle">Reviews</h1>
-    <p class="guest-section-copy">
-        Leave and manage stay reviews from your guest profile — coming soon.
-        Your Google sign-in is ready; this page is a placeholder until review storage ships.
+<section class="guest-section guest-portal-reviews" data-guest-reviews aria-labelledby="guestPortalReviewsTitle">
+    @Html.AntiForgeryToken()
+    <p class="guest-eyebrow" data-i18n="reviews.eyebrow">Guest account</p>
+    <h1 id="guestPortalReviewsTitle" data-i18n="reviews.title">Your stay reviews</h1>
+    <p class="guest-section-copy" data-i18n="reviews.lede">
+        After checkout, rate staff, comfort, and facilities. Reviews appear on the hotel site for future guests.
+        Stays match your account email.
     </p>
-    <a class="guest-btn guest-btn-primary" asp-controller="Booking" asp-action="Index">Back to hotel site</a>
+
+    <p class="guest-reviews-portal-message" data-review-message role="status" hidden></p>
+
+    <section class="guest-reviews-portal-block" aria-labelledby="eligibleTitle">
+        <h2 id="eligibleTitle" data-i18n="reviews.ready">Ready to review</h2>
+        <div class="guest-reviews-portal-list" data-review-eligible>
+            <p class="guest-reviews-empty" data-i18n="reviews.loading">Loading…</p>
+        </div>
+    </section>
+
+    <section class="guest-reviews-portal-block" aria-labelledby="mineTitle">
+        <h2 id="mineTitle" data-i18n="reviews.yours">Your reviews</h2>
+        <div class="guest-reviews-portal-list" data-review-mine>
+            <p class="guest-reviews-empty" data-i18n="reviews.loading">Loading…</p>
+        </div>
+    </section>
+
+    <div class="guest-review-modal" data-review-modal hidden>
+        <button type="button" class="guest-review-modal-backdrop" data-review-close aria-label="Close" data-i18n="reviews.close" data-i18n-attr="aria-label" data-i18n-attr-only></button>
+        <div class="guest-review-modal-card" role="dialog" aria-modal="true" aria-labelledby="reviewModalTitle">
+            <header>
+                <div class="guest-review-modal-head-copy">
+                    <p class="guest-eyebrow" data-i18n="reviews.verified">Verified stay</p>
+                    <h3 id="reviewModalTitle" data-review-modal-title data-i18n="reviews.write">Write a review</h3>
+                    <p class="guest-review-modal-lede" data-i18n="reviews.writeLede">Share what future guests should know about staff, comfort, and facilities.</p>
+                </div>
+                <button type="button" class="guest-review-modal-x" data-review-close aria-label="Close" data-i18n="reviews.close" data-i18n-attr="aria-label">×</button>
+            </header>
+            <form data-review-form id="guestReviewForm">
+                <input type="hidden" data-review-booking-id />
+                <input type="hidden" data-review-id />
+
+                <section class="guest-review-modal-panel guest-review-rating-panel" aria-label="Ratings" data-i18n="reviews.ratingsAria" data-i18n-attr="aria-label">
+                    <div class="guest-review-rating-grid">
+                        <label class="guest-review-field">
+                            <span><span data-i18n="reviews.overall">Overall stay</span> <em>*</em></span>
+                            <select data-review-overall required>
+                                <option value="" data-i18n="reviews.select">Select</option>
+                                <option value="5" data-i18n="reviews.excellent">5 — Excellent</option>
+                                <option value="4" data-i18n="reviews.veryGood">4 — Very good</option>
+                                <option value="3" data-i18n="reviews.good">3 — Good</option>
+                                <option value="2" data-i18n="reviews.fair">2 — Fair</option>
+                                <option value="1" data-i18n="reviews.poor">1 — Poor</option>
+                            </select>
+                        </label>
+                        <label class="guest-review-field">
+                            <span><span data-i18n="reviews.staff">Staff / service</span> <em>*</em></span>
+                            <select data-review-staff required>
+                                <option value="" data-i18n="reviews.select">Select</option>
+                                <option value="5">5</option>
+                                <option value="4">4</option>
+                                <option value="3">3</option>
+                                <option value="2">2</option>
+                                <option value="1">1</option>
+                            </select>
+                        </label>
+                        <label class="guest-review-field">
+                            <span><span data-i18n="reviews.comfort">Comfort</span> <em>*</em></span>
+                            <select data-review-comfort required>
+                                <option value="" data-i18n="reviews.select">Select</option>
+                                <option value="5">5</option>
+                                <option value="4">4</option>
+                                <option value="3">3</option>
+                                <option value="2">2</option>
+                                <option value="1">1</option>
+                            </select>
+                        </label>
+                        <label class="guest-review-field">
+                            <span><span data-i18n="reviews.facilities">Facilities</span> <em>*</em></span>
+                            <select data-review-facilities required>
+                                <option value="" data-i18n="reviews.select">Select</option>
+                                <option value="5">5</option>
+                                <option value="4">4</option>
+                                <option value="3">3</option>
+                                <option value="2">2</option>
+                                <option value="1">1</option>
+                            </select>
+                        </label>
+                    </div>
+                </section>
+
+                <fieldset class="guest-review-field guest-review-modal-panel">
+                    <legend data-i18n="reviews.stoodOut">What stood out? (optional)</legend>
+                    <div class="guest-review-tags-pick" data-review-tags>
+                        <label><input type="checkbox" value="FriendlyStaff" /> <span data-i18n="reviews.tagFriendly">Friendly staff</span></label>
+                        <label><input type="checkbox" value="CleanRooms" /> <span data-i18n="reviews.tagClean">Clean rooms</span></label>
+                        <label><input type="checkbox" value="QuietStay" /> <span data-i18n="reviews.tagQuiet">Quiet stay</span></label>
+                        <label><input type="checkbox" value="GreatValue" /> <span data-i18n="reviews.tagValue">Great value</span></label>
+                        <label><input type="checkbox" value="ComfortableBed" /> <span data-i18n="reviews.tagBed">Comfortable bed</span></label>
+                        <label><input type="checkbox" value="NiceBathroom" /> <span data-i18n="reviews.tagBath">Nice bathroom</span></label>
+                        <label><input type="checkbox" value="SlowCheckIn" /> <span data-i18n="reviews.tagSlow">Slow check-in</span></label>
+                        <label><input type="checkbox" value="WifiIssues" /> <span data-i18n="reviews.tagWifi">Wi‑Fi issues</span></label>
+                    </div>
+                </fieldset>
+
+                <label class="guest-review-field guest-review-field-grow guest-review-modal-panel">
+                    <span data-i18n="reviews.commentLabel">Anything else to share? (optional)</span>
+                    <textarea data-review-comment maxlength="2000" rows="5" placeholder="What future guests should know…" data-i18n="reviews.commentPh" data-i18n-attr="placeholder" data-i18n-attr-only></textarea>
+                </label>
+
+            </form>
+            <footer class="guest-review-modal-actions">
+                <button type="button" class="guest-btn guest-btn-ghost" data-review-close data-i18n="reviews.cancel">Cancel</button>
+                <button type="submit" form="guestReviewForm" class="guest-btn guest-btn-primary" data-review-submit data-i18n="reviews.submit">Submit review</button>
+            </footer>
+        </div>
+    </div>
+
+    <p class="guest-reviews-portal-foot">
+        <a class="guest-btn guest-btn-ghost" asp-controller="Booking" asp-action="Index" asp-fragment="reviews" data-i18n="reviews.seePublic">See public reviews</a>
+    </p>
 </section>
+
+@section Scripts {
+    <script src="~/js/guest-reviews.js" asp-append-version="true"></script>
+}

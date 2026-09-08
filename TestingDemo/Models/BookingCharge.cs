@@ -11,7 +11,9 @@ public enum BookingChargeType
     /// <summary>Display/metadata for extended nights; amount excluded from TotalAmount fee sum.</summary>
     StayExtension = 6,
     /// <summary>Senior Citizen / PWD 20% off stay (walk-in, no active promo).</summary>
-    ArrivalDiscount = 7
+    ArrivalDiscount = 7,
+    /// <summary>Google Loyalty Coupon peso credit (negative amount).</summary>
+    LoyaltyCoupon = 8
 }
 
 /// <summary>

@@ -106,6 +106,7 @@
                 <a class="admin-audit-chip @(Model.Domain == SystemAuditDomain.Booking ? "is-active" : null)" href="@Url.Action("Index", new { q = Model.Search, domain = SystemAuditDomain.Booking })">Bookings</a>
                 <a class="admin-audit-chip @(Model.Domain == SystemAuditDomain.SpecialOffer ? "is-active" : null)" href="@Url.Action("Index", new { q = Model.Search, domain = SystemAuditDomain.SpecialOffer })">Special offers</a>
                 <a class="admin-audit-chip @(Model.Domain == SystemAuditDomain.Shift ? "is-active" : null)" href="@Url.Action("Index", new { q = Model.Search, domain = SystemAuditDomain.Shift })">Shifts</a>
+                <a class="admin-audit-chip @(Model.Domain == SystemAuditDomain.Review ? "is-active" : null)" href="@Url.Action("Index", new { q = Model.Search, domain = SystemAuditDomain.Review })">Reviews</a>
                 <a class="admin-audit-chip @(Model.Domain == SystemAuditDomain.Configuration ? "is-active" : null)" href="@Url.Action("Index", new { q = Model.Search, domain = SystemAuditDomain.Configuration })">Vault / config</a>
                 <a class="admin-audit-chip @(Model.Domain == SystemAuditDomain.File ? "is-active" : null)" href="@Url.Action("Index", new { q = Model.Search, domain = SystemAuditDomain.File })">Files</a>
             </fieldset>

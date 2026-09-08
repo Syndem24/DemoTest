@@ -4,6 +4,13 @@ export type SpecialOfferKind =
   | 'BestAvailableRate'
   | 'BookNowStayLater'
   | 'MonthlyStay'
+  | 'GoogleLoyalty'
+
+export type LoyaltyApplyMode =
+  | 'EveryNight'
+  | 'FirstNight'
+  | 'WeeklyReset'
+  | 'FirstBooking'
 
 export type SpecialOfferDto = {
   id: number
@@ -21,4 +28,7 @@ export type SpecialOfferDto = {
   startsAtUtc: string
   endsAtUtc: string
   isCurrentlyActive: boolean
+  discountAmount?: number | null
+  loyaltyApplyMode?: LoyaltyApplyMode | string
+  openEnded?: boolean
 }

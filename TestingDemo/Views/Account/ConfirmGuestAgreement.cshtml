@@ -1,6 +1,7 @@
 @{
     Layout = "~/Views/Shared/_CustomerLayout.cshtml";
     ViewData["Title"] = "Guest agreement";
+    ViewData["I18nTitle"] = "agree.title";
     ViewData["GuestAuthPage"] = true;
 }
 @model TestingDemo.ViewModels.ConfirmGuestAgreementViewModel
@@ -20,27 +21,42 @@
             <div class="guest-auth-card-accent" aria-hidden="true"></div>
 
             <header class="guest-auth-card-header">
-                <h1 id="guestAuthTitle">Before we create your guest account</h1>
+                <h1 id="guestAuthTitle" data-i18n="agree.title">Before we create your guest account</h1>
                 <p class="guest-auth-card-lede">
-                    Google verified <strong>@Model.Email</strong>. Please review and accept our guest commitments — we prioritize privacy and integrity.
+                    <span data-i18n="agree.ledeBefore">Google verified </span><strong>@Model.Email</strong><span data-i18n="agree.ledeAfter">. Please read the summary below, then open the full </span>
+                    <a class="guest-auth-policy-link"
+                       asp-controller="Booking"
+                       asp-action="Terms"
+                       asp-route-from="guest-agreement"
+                       data-i18n="legal.termsTitle">Terms and policies</a>
+                    <span data-i18n="agree.ledeAnd"> and </span>
+                    <a class="guest-auth-policy-link"
+                       asp-controller="Booking"
+                       asp-action="PrivacyPolicy"
+                       asp-route-from="guest-agreement"
+                       data-i18n="legal.privacyTitle">Privacy policy</a>
+                    <span data-i18n="agree.ledeEnd"> if you want the complete text.</span>
                 </p>
             </header>
 
-            <div class="guest-auth-agreement-body">
-                <h2>Privacy</h2>
-                <p>
-                    We use your Google email and name only to identify your guest account, support bookings, and contact you about your stay.
-                    We do not sell your personal data. Staff can access booking-related details needed to operate the hotel.
+            <div class="guest-auth-agreement-body" id="guestAgreementSummary">
+                <h2 data-i18n="agree.dataTitle">Personal data we will use</h2>
+                <p data-i18n="agree.dataBody">
+                    Mori International Hotel (AS Fortuna, Mandaue City, Cebu) will use your Google name and verified email to create a guest-level account, identify you on this site, support bookings, and contact you about your stay. We do not sell your personal data. Hotel staff can see booking details needed to operate the front desk.
                 </p>
-                <h2>Integrity &amp; fair use</h2>
-                <p>
-                    You agree to provide accurate stay details, respect house policies, and not misuse booking tools or other guests’ information.
-                    Fraudulent or abusive activity may result in account or booking restrictions.
+                <h2 data-i18n="agree.whyTitle">Why we ask for consent</h2>
+                <p data-i18n="agree.whyBody">
+                    Philippine data privacy rules require consent to be freely given, specific, and informed. Ticking the box is your consent to that processing. You may press Cancel if you do not want an account. Completing a later booking is also needed so we can provide the stay you request.
                 </p>
-                <h2>Account notice</h2>
+                <h2 data-i18n="agree.rulesTitle">Stay and account rules</h2>
+                <p data-i18n="agree.rulesBody">
+                    You agree to provide accurate stay details, respect house policies, and not misuse booking tools or other guests’ information. Check-in is 14:00 and check-out is 12:00 unless a paid early or late option is available. This account is not a staff login. You can log out anytime from your profile menu.
+                </p>
+                <h2 data-i18n="agree.rightsTitle">Your rights</h2>
                 <p>
-                    Accepting creates a <strong>guest-level</strong> Mori International Hotel account linked to this Google login.
-                    This is not a staff account. You can log out anytime from your profile menu.
+                    <span data-i18n="agree.rightsBodyBefore">You may ask to access or correct your data, or to withdraw this consent, by emailing </span>
+                    <a class="guest-auth-policy-link" href="mailto:moriyamahotel@gmail.com">moriyamahotel@gmail.com</a>
+                    <span data-i18n="agree.rightsBodyAfter">. Read the linked policies before you agree.</span>
                 </p>
             </div>
 
@@ -53,16 +69,27 @@
                 <input type="hidden" asp-for="ReturnUrl" />
                 <input type="hidden" asp-for="RememberMe" />
 
-                <div asp-validation-summary="ModelOnly" class="guest-form-message is-error" role="alert"></div>
-
                 <label class="guest-check guest-auth-agree-check" for="AcceptedTerms">
-                    <input asp-for="AcceptedTerms" id="AcceptedTerms" />
-                    <span>I agree to the privacy, integrity, and guest account terms above.</span>
+                    <input asp-for="AcceptedTerms" id="AcceptedTerms" aria-describedby="guestAgreementSummary" />
+                    <span>
+                        <span data-i18n="agree.checkBefore">I give my consent to personal data processing and confirm that I have read the </span>
+                        <a class="guest-auth-policy-link"
+                           asp-controller="Booking"
+                           asp-action="Terms"
+                           asp-route-from="guest-agreement"
+                           data-i18n="legal.termsTitle">Terms and policies</a>
+                        <span data-i18n="agree.checkMid"> and </span>
+                        <a class="guest-auth-policy-link"
+                           asp-controller="Booking"
+                           asp-action="PrivacyPolicy"
+                           asp-route-from="guest-agreement"
+                           data-i18n="legal.privacyTitle">Privacy policy</a>
+                        <span data-i18n="agree.checkEnd">.</span>
+                    </span>
                 </label>
-                <span asp-validation-for="AcceptedTerms" class="guest-form-message is-error"></span>
 
-                <button type="submit" class="guest-auth-submit" id="guestAgreementSubmit">
-                    <span>Agree and continue</span>
+                <button type="submit" class="guest-auth-submit" id="guestAgreementSubmit" disabled>
+                    <span data-i18n="agree.continue">Agree and continue</span>
                 </button>
             </form>
 
@@ -72,7 +99,7 @@
                   class="guest-auth-google-form">
                 @Html.AntiForgeryToken()
                 <button type="submit" class="guest-btn guest-btn-ghost guest-auth-google">
-                    <span>Cancel</span>
+                    <span data-i18n="agree.cancel">Cancel</span>
                 </button>
             </form>
         </div>
@@ -83,8 +110,8 @@
     <div class="guest-auth-loading-backdrop" aria-hidden="true"></div>
     <div class="guest-auth-loading-card" role="status" aria-live="polite" aria-busy="true">
         <div class="guest-auth-loading-spinner" aria-hidden="true"></div>
-        <strong>Creating your guest account</strong>
-        <p>Please wait while we finish setting up your Google guest login.</p>
+        <strong data-i18n="agree.loadingTitle">Creating your guest account</strong>
+        <p data-i18n="agree.loadingLede">Please wait while we finish setting up your Google guest login.</p>
         <span class="guest-auth-loading-dots" aria-hidden="true"><i></i><i></i><i></i></span>
     </div>
 </div>

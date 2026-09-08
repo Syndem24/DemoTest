@@ -10,6 +10,8 @@
         : Model.EndsAtUtc.ToString("yyyy-MM-ddTHH:mm");
     var limitedKind = (int)SpecialOfferKind.LimitedTime;
     var stayLongerKind = (int)SpecialOfferKind.StayLongerSaveMore;
+    var googleLoyaltyKind = (int)SpecialOfferKind.GoogleLoyalty;
+    var onlineOnlyChannels = (int)SpecialOfferChannels.OnlineVisible;
     var roomOptions = ViewBag.RoomTypeOptions as IList<RoomTypePriceOption> ?? new List<RoomTypePriceOption>();
     var selectedIds = new HashSet<int>(Model.RoomTypeIds ?? new List<int>());
     if (selectedIds.Count == 0 && Model.RoomTypeId > 0)
@@ -17,15 +19,37 @@
     var discountValue = Model.DiscountPercent is decimal d
         ? d.ToString(d == decimal.Truncate(d) ? "0" : "0.##")
         : string.Empty;
+    var amountValue = Model.DiscountAmount is decimal amt
+        ? amt.ToString(amt == decimal.Truncate(amt) ? "0" : "0.##")
+        : string.Empty;
     var minNightsValue = Model.MinNights is int mn ? mn.ToString() : string.Empty;
+    var applyMode = Model.LoyaltyApplyMode ?? LoyaltyApplyMode.EveryNight;
+    ViewData["OfferValidationToasts"] = ViewData.ModelState
+        .SelectMany(entry => entry.Value?.Errors ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.ModelBinding.ModelError>())
+        .Select(error =>
+        {
+            var message = error.ErrorMessage ?? string.Empty;
+            if (message.Contains("LoyaltyApplyMode", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("Loyalty Apply Mode", StringComparison.OrdinalIgnoreCase)
+                || (message.Contains("When to deduct", StringComparison.OrdinalIgnoreCase)
+                    && message.Contains("required", StringComparison.OrdinalIgnoreCase)))
+            {
+                return "Choose when the Loyalty Coupon should deduct.";
+            }
+            return message;
+        })
+        .Where(message => !string.IsNullOrWhiteSpace(message))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
     var kindItems = new SelectList(new[]
     {
         new { Value = limitedKind, Text = "Limited time" },
-        new { Value = stayLongerKind, Text = "Stay longer, save more" }
+        new { Value = stayLongerKind, Text = "Stay longer, save more" },
+        new { Value = googleLoyaltyKind, Text = "Loyalty Coupon" }
     }, "Value", "Text", (int)Model.Kind);
 }
 
-<div asp-validation-summary="All" class="text-danger" role="alert"></div>
+<div asp-validation-summary="All" class="visually-hidden" aria-hidden="true"></div>
 
 <div class="admin-offers-fields-2">
     <div class="admin-offers-field">
@@ -35,7 +59,8 @@
                 asp-items="kindItems"
                 data-offer-kind
                 data-limited-kind="@limitedKind"
-                data-stay-longer-kind="@stayLongerKind"></select>
+                data-stay-longer-kind="@stayLongerKind"
+                data-google-loyalty-kind="@googleLoyaltyKind"></select>
         <span asp-validation-for="Kind" class="text-danger"></span>
     </div>
     <div class="admin-offers-field">
@@ -53,6 +78,18 @@
                  data-offer-room-menu
                  hidden
                  role="listbox">
+                @if (roomOptions.Count > 0)
+                {
+                    <label class="offer-room-type-option is-select-all">
+                        <input class="offer-room-type-check"
+                               type="checkbox"
+                               data-offer-room-select-all />
+                        <span class="offer-room-type-copy">
+                            <strong>Select all</strong>
+                            <span class="text-muted">All room types</span>
+                        </span>
+                    </label>
+                }
                 @foreach (var room in roomOptions)
                 {
                     var id = room.RoomTypeId;
@@ -80,7 +117,7 @@
     </div>
 </div>
 
-<div class="admin-offers-field">
+<div class="admin-offers-field" data-description-wrap @(Model.Kind == SpecialOfferKind.GoogleLoyalty ? "hidden" : null)>
     <label asp-for="Description" class="form-label">Description <span class="text-muted fw-normal">(optional)</span></label>
     <textarea asp-for="Description" class="form-control" rows="2" maxlength="1000" placeholder="Short note for guests"></textarea>
     <span asp-validation-for="Description" class="text-danger"></span>
@@ -127,6 +164,60 @@
                 </div>
                 <span asp-validation-for="DiscountPercent" class="text-danger"></span>
             </div>
+            <div class="admin-offers-field" data-amount-wrap hidden>
+                <label asp-for="DiscountAmount" class="form-label">Amount off</label>
+                <div class="input-group">
+                    <span class="input-group-text">₱</span>
+                    <input name="DiscountAmount"
+                           id="DiscountAmount"
+                           class="form-control"
+                           type="number"
+                           inputmode="decimal"
+                           placeholder="240"
+                           min="0.01"
+                           max="999999.99"
+                           step="0.01"
+                           value="@amountValue"
+                           data-offer-amount
+                           data-mori-filter="decimal" />
+                </div>
+                <span asp-validation-for="DiscountAmount" class="text-danger"></span>
+            </div>
+            <fieldset class="admin-offers-apply" data-loyalty-apply-wrap hidden>
+                <legend class="form-label">When to deduct</legend>
+                <label class="admin-offers-apply-option">
+                    <input type="radio"
+                           name="LoyaltyApplyMode"
+                           id="LoyaltyApplyMode_EveryNight"
+                           value="@((int)LoyaltyApplyMode.EveryNight)"
+                           @(applyMode == LoyaltyApplyMode.EveryNight ? "checked" : null) />
+                    <span>Every night of the stay</span>
+                </label>
+                <label class="admin-offers-apply-option">
+                    <input type="radio"
+                           name="LoyaltyApplyMode"
+                           id="LoyaltyApplyMode_FirstNight"
+                           value="@((int)LoyaltyApplyMode.FirstNight)"
+                           @(applyMode == LoyaltyApplyMode.FirstNight ? "checked" : null) />
+                    <span>First night only</span>
+                </label>
+                <label class="admin-offers-apply-option">
+                    <input type="radio"
+                           name="LoyaltyApplyMode"
+                           id="LoyaltyApplyMode_WeeklyReset"
+                           value="@((int)LoyaltyApplyMode.WeeklyReset)"
+                           @(applyMode == LoyaltyApplyMode.WeeklyReset ? "checked" : null) />
+                    <span>Once every 7 nights (resets each week)</span>
+                </label>
+                <label class="admin-offers-apply-option">
+                    <input type="radio"
+                           name="LoyaltyApplyMode"
+                           id="LoyaltyApplyMode_FirstBooking"
+                           value="@((int)LoyaltyApplyMode.FirstBooking)"
+                           @(applyMode == LoyaltyApplyMode.FirstBooking ? "checked" : null) />
+                    <span>First booking for this Google guest only</span>
+                </label>
+            </fieldset>
             <label class="admin-offers-cash-check" data-cash-only-wrap>
                 <input asp-for="CashOnly" class="admin-offers-toggle-input" data-offer-cash-only />
                 <span>Cash only</span>
@@ -155,7 +246,7 @@
                data-original-value="@startsLocal" />
         <span asp-validation-for="StartsAtUtc" class="text-danger"></span>
     </div>
-    <div class="admin-offers-field">
+    <div class="admin-offers-field" data-offer-ends-wrap @(Model.OpenEnded ? "hidden" : null)>
         <label asp-for="EndsAtUtc" class="form-label">Ends (Manila)</label>
         <input asp-for="EndsAtUtc"
                class="form-control"
@@ -166,11 +257,16 @@
         <span asp-validation-for="EndsAtUtc" class="text-danger"></span>
     </div>
 </div>
+<label class="admin-offers-cash-check admin-offers-open-ended" data-open-ended-wrap>
+    <input asp-for="OpenEnded" class="admin-offers-toggle-input" data-offer-open-ended />
+    <span>Stay live until deactivated</span>
+</label>
+<p class="admin-offers-open-ended-hint">No end date. This offer keeps running after you save. Uncheck this and set an end date, or use Deactivate on Special offers, to stop it.</p>
 <p class="text-danger small mb-0" data-offer-date-error hidden></p>
 
-<div class="admin-offers-field">
+<div class="admin-offers-field" data-channels-wrap>
     <label asp-for="Channels" class="form-label">Channels</label>
-    <select asp-for="Channels" class="form-select">
+    <select asp-for="Channels" class="form-select" data-offer-channels data-online-only="@onlineOnlyChannels">
         <option value="@((int)(SpecialOfferChannels.OnlineVisible | SpecialOfferChannels.WalkIn))">Online + Walk-in</option>
         <option value="@((int)SpecialOfferChannels.OnlineVisible)">Online only</option>
         <option value="@((int)SpecialOfferChannels.WalkIn)">Walk-in only</option>

@@ -126,10 +126,16 @@ public class AccountController : Controller
             return RedirectToAction(nameof(Login), new { returnUrl });
         }
 
-        var redirectUrl = Url.Action(nameof(ExternalLoginCallback), "Account", new { returnUrl, rememberMe });
+        var redirectUrl = Url.Action(nameof(ExternalLoginCallback), "Account");
         var properties = _signInManager.ConfigureExternalAuthenticationProperties(
             GoogleDefaults.AuthenticationScheme,
             redirectUrl);
+        if (!string.IsNullOrWhiteSpace(returnUrl))
+            properties.Items["returnUrl"] = returnUrl;
+        properties.Items["rememberMe"] = rememberMe ? "1" : "0";
+        // Hotel logout cannot end the Google.com session. Force the account picker
+        // so Continue with Google does not silently reuse the last account.
+        properties.SetParameter("prompt", "select_account");
         return Challenge(properties, GoogleDefaults.AuthenticationScheme);
     }
 
@@ -145,6 +151,15 @@ public class AccountController : Controller
             TempData["Error"] = "Google sign-in was cancelled or failed. Try again.";
             return RedirectToAction(nameof(Login), new { returnUrl });
         }
+
+        if (info.AuthenticationProperties?.Items.TryGetValue("returnUrl", out var storedReturn) == true
+            && !string.IsNullOrWhiteSpace(storedReturn))
+        {
+            returnUrl = storedReturn;
+        }
+
+        if (info.AuthenticationProperties?.Items.TryGetValue("rememberMe", out var storedRemember) == true)
+            rememberMe = storedRemember == "1";
 
         var email = info.Principal.FindFirstValue(ClaimTypes.Email)
                     ?? info.Principal.FindFirstValue("email");
@@ -276,9 +291,6 @@ public class AccountController : Controller
 
         if (!model.AcceptedTerms)
         {
-            ModelState.AddModelError(
-                nameof(model.AcceptedTerms),
-                "Please agree to the guest terms, privacy, and integrity commitments to continue.");
             model.Email = email;
             model.DisplayName = displayName;
             model.ReturnUrl = pendingReturnUrl;
@@ -883,15 +895,45 @@ public class AccountController : Controller
     [HttpPost]
     [Authorize]
     [ValidateAntiForgeryToken]
+    [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public async Task<IActionResult> Logout()
     {
         var user = await _userManager.GetUserAsync(User);
         var wasGuest = user is not null && await IsGuestUserAsync(user);
+
+        if (HttpContext.Session.IsAvailable)
+        {
+            GoogleGuestPendingSession.Clear(HttpContext.Session);
+            GoogleStaffConfirmSession.Clear(HttpContext.Session);
+            HttpContext.Session.Clear();
+        }
+
         await _signInManager.SignOutAsync();
         await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+        ExpireTransientAuthCookies();
+
+        Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+        Response.Headers.Pragma = "no-cache";
+
         if (wasGuest)
             return RedirectToAction("Index", "Booking");
         return RedirectToAction(nameof(Login));
+    }
+
+    private void ExpireTransientAuthCookies()
+    {
+        var options = new CookieOptions
+        {
+            Path = "/",
+            HttpOnly = true,
+            SameSite = SameSiteMode.Lax,
+            Secure = Request.IsHttps,
+            Expires = DateTimeOffset.UnixEpoch,
+        };
+        Response.Cookies.Delete("MoriHotel.GoogleCorrelation", options);
+        Response.Cookies.Delete("MoriHotel.Session", options);
+        Response.Cookies.Delete(IdentityConstants.ExternalScheme, options);
+        Response.Cookies.Delete(".AspNetCore.Identity.External", options);
     }
 
     private static bool TryDecodeResetCode(string code, out string decoded)

@@ -38,8 +38,11 @@ public sealed class CreateWalkInRequestValidator : AbstractValidator<CreateWalkI
             .WithMessage("Assign at least one room for the walk-in.");
 
         RuleFor(x => x.ExtraPersons)
-            .InclusiveBetween(0, 1)
-            .WithMessage("Only one extra guest is allowed (₱200 / night).");
+            .GreaterThanOrEqualTo(0)
+            .Must((request, extras) =>
+                extras <= StayTimeFees.MaxExtraPersonsForRooms(
+                    request.Assignments?.Sum(item => item.RoomIds?.Count ?? 0) ?? 0))
+            .WithMessage("At most one extra guest per room is allowed (₱200 / night).");
 
         RuleFor(x => x.Channel)
             .Must(c => c is BookingChannel.WalkIn or BookingChannel.Agoda or BookingChannel.RedDoorz)

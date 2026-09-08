@@ -20,7 +20,7 @@
 
   const BASE_GUESTS_PER_ROOM = 2;
   const MAX_GUESTS_PER_ROOM = 3;
-  const MAX_EXTRA_PERSONS = 1;
+  const MAX_EXTRA_PERSONS_PER_ROOM = 1;
   const EXTRA_PERSON_FEE_PER_NIGHT = 200;
   const MAX_CHILD_AGE = 12;
   const MAX_GUEST_ROOMS = 8;
@@ -885,6 +885,15 @@
     return bookingCart.reduce((sum, line) => sum + line.qty * line.price, 0);
   }
 
+  function cartLoyaltyDeduct(nights) {
+    const n = Math.max(1, Number(nights) || 1);
+    return bookingCart.reduce((sum, line) => {
+      const stay = Number(line.qty || 0) * Number(line.price || 0) * n;
+      const raw = lineLoyaltyDeduct(line, n);
+      return sum + Math.min(Math.max(0, raw), stay);
+    }, 0);
+  }
+
   function selectedCheckInTime() {
     return document.getElementById('modalCheckInTime')?.value || DEFAULT_CHECKIN_TIME;
   }
@@ -919,13 +928,12 @@
     return earlyCheckInFee(rooms) + lateCheckOutFee(rooms);
   }
 
-  /** Extra persons beyond 2 included guests/room, capped at 1 for the booking. */
+  /** Extra persons beyond 2 included guests, one extra allowed per room. */
   function extraPersonsSelected() {
-    const raw = guestRooms.reduce((sum, room) => {
+    return guestRooms.reduce((sum, room) => {
       const total = (Number(room.adults) || 0) + (Number(room.children) || 0);
-      return sum + Math.max(0, total - BASE_GUESTS_PER_ROOM);
+      return sum + Math.min(MAX_EXTRA_PERSONS_PER_ROOM, Math.max(0, total - BASE_GUESTS_PER_ROOM));
     }, 0);
-    return Math.min(MAX_EXTRA_PERSONS, raw);
   }
 
   function extraPersonFee(nights = nightCount(modalCheckIn?.value || '', modalCheckOut?.value || '')) {
@@ -943,20 +951,13 @@
     return total > BASE_GUESTS_PER_ROOM;
   }
 
-  /** Max guests this booking can hold for a given room count (2/room + 1 extra). */
+  /** Max guests this booking can hold for a given room count (2 included + 1 extra per room). */
   function maxPartyForRoomCount(roomCount) {
-    return Math.max(0, roomCount) * BASE_GUESTS_PER_ROOM + MAX_EXTRA_PERSONS;
+    return Math.max(0, roomCount) * MAX_GUESTS_PER_ROOM;
   }
 
   function effectiveGuestsPerRoom() {
     return MAX_GUESTS_PER_ROOM;
-  }
-
-  function bookingAlreadyUsesExtra(exceptRoomIndex = -1) {
-    return guestRooms.some((room, index) => {
-      if (index === exceptRoomIndex) return false;
-      return roomHasExtraGuest(room);
-    });
   }
 
   let lastTimeFeeRoomCount = -1;
@@ -1033,11 +1034,19 @@
         `${tx('booking.feeLateCheckOut', null, 'Late checkout')} (+${hours}h): ${formatMoney(late)}`
       );
     }
+    const extras = extraPersonsSelected();
     if (extra > 0) {
-      parts.push(`${tx('booking.feeExtraPerson', null, 'Extra person')}: ${formatMoney(extra)}`);
-    } else if (extraPersonsSelected() > 0 && nights < 1) {
+      const extraLabel =
+        extras > 1
+          ? `${tx('booking.feeExtraPerson', null, 'Extra person')} (${extras})`
+          : tx('booking.feeExtraPerson', null, 'Extra person');
+      parts.push(`${extraLabel}: ${formatMoney(extra)}`);
+    } else if (extras > 0 && nights < 1) {
+      const unit = `${formatMoney(EXTRA_PERSON_FEE_PER_NIGHT)} ${tx('booking.perNightShort', null, '/ night')}`;
       parts.push(
-        `${tx('booking.feeExtraPerson', null, 'Extra person')}: ${formatMoney(EXTRA_PERSON_FEE_PER_NIGHT)} ${tx('booking.perNightShort', null, '/ night')}`
+        extras > 1
+          ? `${tx('booking.feeExtraPerson', null, 'Extra person')} (${extras}): ${unit}`
+          : `${tx('booking.feeExtraPerson', null, 'Extra person')}: ${unit}`
       );
     }
     hint.hidden = parts.length === 0;
@@ -1096,6 +1105,17 @@
         label: formatOfferCompareBreakdown(line),
         amount: formatMoney(amount),
       });
+      if (nights > 0) {
+        const deduct = Math.min(lineLoyaltyDeduct(line, nights), amount);
+        if (deduct > 0) {
+          const coupon = loyaltyCouponForRoomType(line.roomTypeId);
+          lines.push({
+            label: `Loyalty Coupon · ${line.roomType} · ${loyaltyApplyLabel(coupon?.loyaltyApplyMode)}`,
+            amount: `−${formatMoney(deduct)}`,
+            deduct: true,
+          });
+        }
+      }
     });
 
     const early = earlyCheckInFee(rooms);
@@ -1110,15 +1130,19 @@
         amount: formatMoney(late),
       });
     }
+    const extras = extraPersonsSelected();
     const extra = extraPersonFee(nights);
     if (extra > 0) {
       lines.push({
-        label: `Extra person · ${nights} night${nights === 1 ? '' : 's'}`,
+        label:
+          extras > 1
+            ? `Extra person · ${extras} × ${nights} night${nights === 1 ? '' : 's'}`
+            : `Extra person · ${nights} night${nights === 1 ? '' : 's'}`,
         amount: formatMoney(extra),
       });
-    } else if (extraPersonsSelected() > 0 && nights < 1) {
+    } else if (extras > 0 && nights < 1) {
       lines.push({
-        label: 'Extra person',
+        label: extras > 1 ? `Extra person · ${extras}` : 'Extra person',
         amount: `${formatMoney(EXTRA_PERSON_FEE_PER_NIGHT)} / night`,
       });
     }
@@ -1150,8 +1174,10 @@
     const nightTotal = cartNightlyTotal();
     const nights = nightCount(modalCheckIn?.value || '', modalCheckOut?.value || '');
     const stayTotal = nights > 0 ? nightTotal * nights : 0;
+    const loyalty = nights > 0 ? cartLoyaltyDeduct(nights) : 0;
+    const stayAfter = Math.max(0, stayTotal - loyalty);
     const fees = stayFeesTotal(totalRooms);
-    const grandTotal = nights > 0 ? stayTotal + fees : nightTotal;
+    const grandTotal = nights > 0 ? stayAfter + fees : nightTotal;
     const hasRooms = bookingCart.length > 0;
     const acceptedTerms = document.getElementById('acceptStayTerms')?.checked === true;
     const overCapacity = isGuestCapacityExceeded();
@@ -1232,7 +1258,7 @@
       totalsLines.innerHTML = lines
         .map(
           (line) =>
-            `<li><span>${escapeHtml(line.label)}</span><strong>${escapeHtml(line.amount)}</strong></li>`
+            `<li${line.deduct ? ' class="is-deduct"' : ''}><span>${escapeHtml(line.label)}</span><strong>${escapeHtml(line.amount)}</strong></li>`
         )
         .join('');
       if (nights > 0 && lines.length) {
@@ -1317,10 +1343,37 @@
 
     if (roomCountEl) roomCountEl.textContent = String(cartRoomCount());
     if (nightlyEl) nightlyEl.textContent = formatMoney(cartNightlyTotal());
+    const loyaltyRow = document.getElementById('offerCartLoyaltyRow');
+    const loyaltyLabel = document.getElementById('offerCartLoyaltyLabel');
+    const loyaltyTotal = document.getElementById('offerCartLoyaltyTotal');
+    const stayNights = currentStayNights();
+    const loyaltyAmount = isGoogleGuestSignedIn()
+      ? cartLoyaltyDeduct(stayNights > 0 ? stayNights : 1)
+      : 0;
+    if (loyaltyRow) loyaltyRow.hidden = !(loyaltyAmount > 0);
+    if (loyaltyTotal) loyaltyTotal.textContent = `−${formatMoney(loyaltyAmount)}`;
+    if (loyaltyLabel) {
+      const coupon = bookingCart.map((line) => loyaltyCouponForRoomType(line.roomTypeId)).find(Boolean);
+      loyaltyLabel.textContent = coupon
+        ? `${tx('booking.offerKindLoyalty', null, 'Loyalty Coupon')} · ${loyaltyApplyLabel(coupon.loyaltyApplyMode)}`
+        : tx('booking.offerKindLoyalty', null, 'Loyalty Coupon');
+    }
     const noteEl = document.getElementById('offerCartNote');
     if (noteEl) {
-      if (extraPersonsSelected() > 0) {
-        noteEl.textContent = tx('booking.extraPersonNote', null, `Extra person · ₱${EXTRA_PERSON_FEE_PER_NIGHT.toFixed(0)} / night will be added to your stay total.`);
+      const extras = extraPersonsSelected();
+      if (extras > 0) {
+        noteEl.textContent =
+          extras > 1
+            ? tx(
+                'booking.extraPersonNotePlural',
+                { fee: EXTRA_PERSON_FEE_PER_NIGHT.toFixed(0), count: extras },
+                `${extras} extra persons · ₱${EXTRA_PERSON_FEE_PER_NIGHT.toFixed(0)} / night each will be added to your stay total.`
+              )
+            : tx(
+                'booking.extraPersonNote',
+                null,
+                `Extra person · ₱${EXTRA_PERSON_FEE_PER_NIGHT.toFixed(0)} / night will be added to your stay total.`
+              );
       } else {
         noteEl.textContent = tx('booking.stayTotalAfterDates', null, 'Stay total is calculated after you choose dates.');
       }
@@ -1507,7 +1560,13 @@
                 `${count} room${count === 1 ? '' : 's'} selected · ${total} per night`
               );
         hint.textContent = extras > 0
-          ? `${base} · ${tx('booking.extraPersonFeeNote', { fee: EXTRA_PERSON_FEE_PER_NIGHT.toFixed(0) }, `+${formatMoney(EXTRA_PERSON_FEE_PER_NIGHT)}/night extra person`)}`
+          ? `${base} · ${tx(
+              extras > 1 ? 'booking.extraPersonFeeNotePlural' : 'booking.extraPersonFeeNote',
+              { fee: EXTRA_PERSON_FEE_PER_NIGHT.toFixed(0), count: extras },
+              extras > 1
+                ? `+${formatMoney(EXTRA_PERSON_FEE_PER_NIGHT)}/night × ${extras} extra persons`
+                : `+${formatMoney(EXTRA_PERSON_FEE_PER_NIGHT)}/night extra person`
+            )}`
           : base;
       }
     }
@@ -1537,6 +1596,7 @@
   }
 
   function renderCart() {
+    syncLoyaltyBanner();
     const list = document.getElementById('bookingCartList');
     const empty = document.getElementById('bookingCartEmpty');
     if (!list || !empty) {
@@ -1562,6 +1622,8 @@
       const atCap = line.qty >= line.available;
       const perNight = line.qty * line.price;
       const stayLine = nights > 0 ? perNight * nights : perNight;
+      const couponOff = nights > 0 ? Math.min(lineLoyaltyDeduct(line, nights), stayLine) : 0;
+      const shownTotal = stayLine - couponOff;
       const rateMeta = cartLineRateKind(line);
       const offerTag = cartLineOfferTagHtml(line);
       const li = document.createElement('li');
@@ -1582,7 +1644,7 @@
             <div class="guest-cart-rate">${formatOfferCompareRate(line)}</div>
             <div class="guest-cart-line-total">
               <span class="guest-cart-line-total-label">${formatCartLineTotalLabel(nights)}</span>
-              <strong class="guest-cart-line-total-amount">${formatMoney(stayLine)}</strong>
+              <strong class="guest-cart-line-total-amount">${formatMoney(shownTotal)}</strong>
             </div>
             ${atCap ? `<span class="guest-cart-avail is-max">${tx('booking.limitReached', null, 'Limit reached')}</span>` : ''}
           </div>
@@ -1684,6 +1746,21 @@
         minNights,
       };
     }
+    if (offer?.kind === 'GoogleLoyalty') {
+      const regular = resolveDisplayedRegularPrice(line) || Number(offer.regularPricePerNight || 0);
+      const off = regular > promo ? regular - promo : 0;
+      const offPart = off > 0 ? ` · −${formatMoney(off)}` : '';
+      return {
+        kind: 'loyalty',
+        label: tx(
+          'booking.rateLabelLoyalty',
+          { amount: off > 0 ? formatMoney(off) : '—' },
+          `Loyalty Coupon${offPart}`
+        ),
+        pct,
+        minNights: 0,
+      };
+    }
     if (offer?.kind === 'LimitedTime' || cartLineUsesSpecialOffer(line)) {
       const pctPart = pct > 0 ? ` · −${pct}%` : '';
       return {
@@ -1707,14 +1784,28 @@
 
   function cartLineOfferTagHtml(line) {
     const meta = cartLineRateKind(line);
-    // Always show a rate label so mixed carts stay clear.
     const cls =
       meta.kind === 'stayLonger'
         ? 'guest-cart-offer-tag is-stay-longer'
         : meta.kind === 'limited'
           ? 'guest-cart-offer-tag is-limited'
-          : 'guest-cart-offer-tag is-standard';
-    return `<span class="${cls}">${escapeHtml(meta.label)}</span>`;
+          : meta.kind === 'loyalty'
+            ? 'guest-cart-offer-tag is-loyalty'
+            : 'guest-cart-offer-tag is-standard';
+    const rateTag = `<span class="${cls}">${escapeHtml(meta.label)}</span>`;
+    const coupon = loyaltyCouponForRoomType(line.roomTypeId);
+    if (!coupon) return `<span class="guest-cart-offer-tags">${rateTag}</span>`;
+    const unit = loyaltyCouponAmount(coupon);
+    if (!(unit > 0)) return `<span class="guest-cart-offer-tags">${rateTag}</span>`;
+    const nights = currentStayNights() || 1;
+    const units = loyaltyCouponUnits(coupon.loyaltyApplyMode, nights);
+    const total = unit * units * Number(line.qty || 1);
+    const extra =
+      units * Number(line.qty || 1) > 1 ? ` · −${formatMoney(total)}` : '';
+    const couponTag = `<span class="guest-cart-offer-tag is-loyalty">${escapeHtml(
+      `Loyalty Coupon · −${formatMoney(unit)} · ${loyaltyApplyLabel(coupon.loyaltyApplyMode)}${extra}`
+    )}</span>`;
+    return `<span class="guest-cart-offer-tags">${rateTag}${couponTag}</span>`;
   }
 
   function cartHasSpecialOffer() {
@@ -1738,12 +1829,21 @@
     return false;
   }
 
-  /** Limited Time only — Stay Longer is opted in via its Book button, not auto rate. */
+  function isGoogleGuestSignedIn() {
+    return document.getElementById('rooms')?.getAttribute('data-google-guest') === 'true';
+  }
+
+  function isGoogleLoginEnabled() {
+    return document.getElementById('rooms')?.getAttribute('data-google-login') === 'true';
+  }
+
+  /** Limited Time only. Loyalty Coupon is a peso deduct, not a nightly rate. */
   function activeRateOfferForRoomType(roomTypeId) {
+    const kinds = ['LimitedTime'];
     const offers = (cachedSpecialOffers || []).filter(
       (o) =>
         Number(o.roomTypeId) === Number(roomTypeId)
-        && o.kind === 'LimitedTime'
+        && kinds.includes(o.kind)
         && o.promoPricePerNight != null
         && Number(o.promoPricePerNight) > 0
     );
@@ -1987,7 +2087,7 @@
       regularPrice: Number(
         offer?.regularPricePerNight || line.regularPrice || line.price || 0
       ),
-      cashOnly: true,
+      cashOnly: offerForcesCash(offer, line),
     };
     syncGuestPayMethodUi();
   }
@@ -2035,6 +2135,7 @@
       }
     });
     syncSelectedOfferFromCart();
+    syncLoyaltyBanner();
   }
 
   function resolveDisplayedRegularPrice(line) {
@@ -2060,6 +2161,7 @@
       if (offer && promo > 0 && promo < listPrice) {
         const regular = regularComparePrice(roomTypeId, listPrice, offer);
         const pct = discountPercent(regular, promo);
+        const badge = pct > 0 ? `-${pct}%` : '';
         const occupancy = Number(card.getAttribute('data-occupancy') || 0);
         const basis =
           occupancy > 0
@@ -2072,7 +2174,7 @@
         priceEl.classList.add('is-promo');
         priceEl.innerHTML = `
           <span class="guest-room-price-compare">
-            ${pct > 0 ? `<span class="guest-room-discount-badge">-${pct}%</span>` : ''}
+            ${badge ? `<span class="guest-room-discount-badge">${badge}</span>` : ''}
             <s class="guest-room-price-was">${formatMoney(regular)}</s>
           </span>
           <span class="guest-room-price-now">
@@ -2237,8 +2339,24 @@
     syncGuestPayMethodUi();
   }
 
+  function offerForcesCash(offer, line) {
+    if (offer?.kind === 'GoogleLoyalty') return false;
+    if (offer?.kind === 'LimitedTime' || offer?.kind === 'StayLongerSaveMore') return true;
+    const kind = cartLineRateKind(line).kind;
+    if (kind === 'loyalty') return false;
+    if (kind === 'limited' || kind === 'stayLonger') return true;
+    return Boolean(offer?.cashOnly);
+  }
+
   function hasCashOnlySpecialOffer() {
-    return cartHasSpecialOffer() || Boolean(selectedSpecialOffer?.id);
+    if (selectedSpecialOffer?.cashOnly) return true;
+    return bookingCart.some((line) => {
+      if (!cartLineUsesSpecialOffer(line)) return false;
+      const offer = (cachedSpecialOffers || []).find(
+        (o) => Number(o.id) === Number(line.specialOfferId)
+      );
+      return offerForcesCash(offer, line);
+    });
   }
 
   function syncGuestPayMethodUi() {
@@ -3028,7 +3146,6 @@
   }
 
   function clampGuestRoomsCapacity() {
-    let extraUsed = false;
     for (let i = 0; i < guestRooms.length; i += 1) {
       const room = guestRooms[i];
       let a = Number(room.adults) || 1;
@@ -3036,20 +3153,6 @@
       if (a + c > MAX_GUESTS_PER_ROOM) {
         c = Math.max(0, MAX_GUESTS_PER_ROOM - a);
         if (a > MAX_GUESTS_PER_ROOM) a = MAX_GUESTS_PER_ROOM;
-      }
-      if (a + c > BASE_GUESTS_PER_ROOM) {
-        if (extraUsed) {
-          // Only one extra guest allowed for the whole booking.
-          const roomTotal = BASE_GUESTS_PER_ROOM;
-          if (a > roomTotal) {
-            a = roomTotal;
-            c = 0;
-          } else {
-            c = Math.max(0, roomTotal - a);
-          }
-        } else {
-          extraUsed = true;
-        }
       }
       room.adults = a;
       room.children = c;
@@ -3070,9 +3173,7 @@
         const total = (Number(room.adults) || 0) + (Number(room.children) || 0);
         const overCapacity = total > MAX_GUESTS_PER_ROOM;
         const atCapacity = total >= MAX_GUESTS_PER_ROOM;
-        const wouldUseExtra = total >= BASE_GUESTS_PER_ROOM;
-        const extraBlocked = wouldUseExtra && !roomHasExtraGuest(room) && bookingAlreadyUsesExtra(index);
-        const canInc = total < MAX_GUESTS_PER_ROOM && !extraBlocked;
+        const canInc = total < MAX_GUESTS_PER_ROOM;
         const canDecAdult = (Number(room.adults) || 0) > 1;
         const canDecChild = (Number(room.children) || 0) > 0;
         const hasExtra = roomHasExtraGuest(room);
@@ -3101,9 +3202,7 @@
               </div>`
             : '';
 
-        const tooltipMsg = extraBlocked
-          ? tx('booking.oneExtraOnly', null, 'Only one extra guest (₱200/night) is allowed per booking.')
-          : tx('booking.maxGuestsPerRoom', { n: MAX_GUESTS_PER_ROOM }, `Each room holds up to ${MAX_GUESTS_PER_ROOM} guests. Please add another room for additional guests.`);
+        const tooltipMsg = tx('booking.maxGuestsPerRoom', { n: MAX_GUESTS_PER_ROOM }, `Each room holds up to ${MAX_GUESTS_PER_ROOM} guests. Please add another room for additional guests.`);
         const tooltipAttr = !canInc ? ` data-tooltip="${tooltipMsg}"` : '';
         const titleAttr = !canInc ? ` title="${tooltipMsg}"` : '';
         const extraNote = hasExtra
@@ -3180,11 +3279,6 @@
       return;
     }
 
-    if (delta > 0 && currentTotal >= BASE_GUESTS_PER_ROOM && !roomHasExtraGuest(room) && bookingAlreadyUsesExtra(roomIndex)) {
-      showGuestsHint(tx('booking.oneExtraOnly', null, 'Only one extra guest (₱200/night) is allowed per booking.'));
-      return;
-    }
-
     if (field === 'adults') {
       const next = adults + delta;
       if (next < 1) return;
@@ -3248,10 +3342,10 @@
     if (guestCount > configuredCapacity) {
       const roomsNeeded = Math.max(
         1,
-        Math.ceil(Math.max(0, guestCount - MAX_EXTRA_PERSONS) / BASE_GUESTS_PER_ROOM)
+        Math.ceil(guestCount / MAX_GUESTS_PER_ROOM)
       );
       parts.push(
-        `${guestCount} guests need at least ${roomsNeeded} room${roomsNeeded === 1 ? '' : 's'} (up to ${BASE_GUESTS_PER_ROOM} included per room, plus one extra guest).`
+        `${guestCount} guests need at least ${roomsNeeded} room${roomsNeeded === 1 ? '' : 's'} (up to ${BASE_GUESTS_PER_ROOM} included per room, plus one extra guest per room).`
       );
     }
 
@@ -4036,16 +4130,323 @@
       if (!response.ok) {
         cachedSpecialOffers = [];
         paintRoomCardPrices();
+        syncLoyaltyBanner();
         return cachedSpecialOffers;
       }
       cachedSpecialOffers = await response.json();
       paintRoomCardPrices();
       reapplySpecialOfferPrices();
+      syncLoyaltyBanner();
       return cachedSpecialOffers;
     } catch {
       cachedSpecialOffers = [];
       paintRoomCardPrices();
+      syncLoyaltyBanner();
       return cachedSpecialOffers;
+    }
+  }
+
+  function googleLoyaltyOffers() {
+    return (cachedSpecialOffers || []).filter(
+      (o) => o.kind === 'GoogleLoyalty' && loyaltyCouponAmount(o) > 0
+    );
+  }
+
+  function loyaltyCouponAmount(offer) {
+    if (!offer) return 0;
+    if (Number(offer.discountAmount) > 0) return Number(offer.discountAmount);
+    const regular = Number(offer.regularPricePerNight || 0);
+    const promo = Number(offer.promoPricePerNight || 0);
+    return regular > promo ? regular - promo : 0;
+  }
+
+  function loyaltyCouponUnits(mode, nights) {
+    const n = Math.max(1, Number(nights) || 1);
+    if (mode === 'FirstNight') return 1;
+    if (mode === 'WeeklyReset') return Math.ceil(n / 7);
+    return n;
+  }
+
+  function loyaltyApplyLabel(mode) {
+    if (mode === 'FirstNight') return tx('booking.loyaltyFirstNight', null, 'first night only');
+    if (mode === 'WeeklyReset') return tx('booking.loyaltyWeekly', null, 'once every 7 nights');
+    if (mode === 'FirstBooking') return tx('booking.loyaltyFirstBooking', null, 'first booking only');
+    return tx('booking.loyaltyEveryNight', null, 'every night');
+  }
+
+  function loyaltyCouponForRoomType(roomTypeId, requireSignIn = true) {
+    if (requireSignIn && !isGoogleGuestSignedIn()) return null;
+    return googleLoyaltyOffers().find((o) => Number(o.roomTypeId) === Number(roomTypeId)) || null;
+  }
+
+  function lineLoyaltyDeduct(line, nights, requireSignIn = true) {
+    const offer = loyaltyCouponForRoomType(line?.roomTypeId, requireSignIn);
+    if (!offer) return 0;
+    const unit = loyaltyCouponAmount(offer);
+    if (!(unit > 0)) return 0;
+    const stayNights = Math.max(1, Number(nights) || 1);
+    const units = loyaltyCouponUnits(offer.loyaltyApplyMode, stayNights);
+    return unit * units * Number(line.qty || 1);
+  }
+
+  function loyaltySaveAmount() {
+    const offers = googleLoyaltyOffers();
+    if (!offers.length) return 0;
+    const nights = Math.max(1, currentStayNights() || 1);
+
+    if (bookingCart.length) {
+      return bookingCart.reduce((sum, line) => sum + lineLoyaltyDeduct(line, nights, false), 0);
+    }
+
+    let best = 0;
+    offers.forEach((o) => {
+      const unit = loyaltyCouponAmount(o);
+      const save = unit * loyaltyCouponUnits(o.loyaltyApplyMode, nights);
+      if (save > best) best = save;
+    });
+    return best;
+  }
+
+  function loyaltyIsApplied() {
+    if (!isGoogleGuestSignedIn()) return false;
+    if (bookingCart.length) {
+      return bookingCart.some((line) => loyaltyCouponForRoomType(line.roomTypeId));
+    }
+    const cards = document.querySelectorAll('.guest-room[data-room-type-id]');
+    if (!cards.length) return googleLoyaltyOffers().length > 0;
+    return Array.from(cards).some((card) => {
+      const id = Number(card.getAttribute('data-room-type-id') || 0);
+      return Boolean(loyaltyCouponForRoomType(id));
+    });
+  }
+
+  function loyaltyCampaignKey() {
+    return googleLoyaltyOffers()
+      .map((o) => String(o.id ?? `${o.roomTypeId}:${loyaltyCouponAmount(o)}`))
+      .sort()
+      .join('|');
+  }
+
+  function loyaltyAdDismissed() {
+    const key = loyaltyCampaignKey();
+    if (!key) return true;
+    try {
+      return sessionStorage.getItem('mori.loyaltyAdDismissed') === key;
+    } catch {
+      return false;
+    }
+  }
+
+  function loyaltyReduceMotion() {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  function clearLoyaltyAdHide(banner) {
+    if (banner._loyaltyHideTimer) {
+      window.clearTimeout(banner._loyaltyHideTimer);
+      banner._loyaltyHideTimer = 0;
+    }
+    if (banner._loyaltyHideEnd) {
+      banner.removeEventListener('transitionend', banner._loyaltyHideEnd);
+      banner._loyaltyHideEnd = null;
+    }
+  }
+
+  function showLoyaltyAdEl(banner) {
+    clearLoyaltyAdHide(banner);
+    banner.classList.remove('is-leaving');
+    if (!banner.hidden && banner.classList.contains('is-in')) return;
+    banner.hidden = false;
+    if (loyaltyReduceMotion()) {
+      banner.classList.add('is-in');
+      return;
+    }
+    banner.classList.remove('is-in');
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (banner.hidden || banner.classList.contains('is-leaving')) return;
+        banner.classList.add('is-in');
+      });
+    });
+  }
+
+  function hideLoyaltyAdEl(banner) {
+    if (banner.hidden && !banner.classList.contains('is-leaving')) return;
+    clearLoyaltyAdHide(banner);
+    const finish = () => {
+      clearLoyaltyAdHide(banner);
+      banner.classList.remove('is-in', 'is-leaving');
+      banner.hidden = true;
+    };
+    if (loyaltyReduceMotion() || !banner.classList.contains('is-in')) {
+      finish();
+      return;
+    }
+    banner.classList.add('is-leaving');
+    banner.classList.remove('is-in');
+    const onEnd = (event) => {
+      if (event.target !== banner) return;
+      if (event.propertyName !== 'opacity') return;
+      finish();
+    };
+    banner._loyaltyHideEnd = onEnd;
+    banner.addEventListener('transitionend', onEnd);
+    banner._loyaltyHideTimer = window.setTimeout(finish, 340);
+  }
+
+  function dismissLoyaltyAd() {
+    const key = loyaltyCampaignKey();
+    try {
+      sessionStorage.setItem('mori.loyaltyAdDismissed', key || '1');
+    } catch {
+      /* private mode */
+    }
+    document.querySelectorAll('[data-loyalty-banner]').forEach((banner) => {
+      hideLoyaltyAdEl(banner);
+    });
+  }
+
+  function syncLoyaltyBanner() {
+    const banners = document.querySelectorAll('[data-loyalty-banner]');
+    if (!banners.length) return;
+
+    const hasCampaign = googleLoyaltyOffers().length > 0;
+    const signedIn = isGoogleGuestSignedIn();
+    const show = hasCampaign && !loyaltyAdDismissed() && (signedIn || isGoogleLoginEnabled());
+    const applied = loyaltyIsApplied();
+    const save = loyaltySaveAmount();
+    const saveText = save > 0.004 ? formatMoney(save) : '';
+
+    banners.forEach((banner) => {
+      banner.classList.toggle('is-applied', Boolean(signedIn && applied));
+      const featured = googleLoyaltyOffers()
+        .slice()
+        .sort((a, b) => loyaltyCouponAmount(b) - loyaltyCouponAmount(a))[0];
+      const unit = featured ? loyaltyCouponAmount(featured) : 0;
+      const amountEl = banner.querySelector('[data-loyalty-amount]');
+      const whenEl = banner.querySelector('[data-loyalty-when]');
+      const claimEl = banner.querySelector('[data-loyalty-claim]');
+      const modes = [...new Set(googleLoyaltyOffers().map((o) => o.loyaltyApplyMode))];
+      if (amountEl) {
+        amountEl.textContent = unit > 0.004 ? `−${formatMoney(unit)}` : '';
+      }
+      if (whenEl) {
+        whenEl.textContent =
+          modes.length === 1
+            ? loyaltyApplyLabel(modes[0])
+            : tx('booking.loyaltyQualifying', null, 'On qualifying stays');
+      }
+      const title = banner.querySelector('[data-loyalty-title]');
+      if (title) {
+        if (signedIn && applied) {
+          title.textContent = saveText
+            ? tx(
+                'booking.loyaltyAppliedSave',
+                { amount: saveText },
+                `You save ${saveText} on this stay`
+              )
+            : tx('booking.loyaltyApplied', null, 'Loyalty discount applied');
+        } else if (signedIn) {
+          title.textContent = tx(
+            'booking.loyaltyReady',
+            null,
+            'Applied automatically at checkout'
+          );
+        } else {
+          title.textContent = tx(
+            'booking.loyaltyJoin',
+            null,
+            'A private guest rate — claim to apply'
+          );
+        }
+      }
+      if (claimEl) {
+        claimEl.textContent =
+          signedIn && applied
+            ? tx('booking.loyaltyClaimApplied', null, 'Ready on your stay')
+            : tx('booking.loyaltyClaimReady', null, 'Applied at checkout');
+      }
+      if (show) showLoyaltyAdEl(banner);
+      else hideLoyaltyAdEl(banner);
+    });
+  }
+
+  const BOOK_DRAFT_KEY = 'mori.guestBookDraft';
+
+  function persistBookDraft() {
+    try {
+      sessionStorage.setItem(
+        BOOK_DRAFT_KEY,
+        JSON.stringify({
+          v: 1,
+          guestRooms,
+          bookingCart,
+          checkIn: document.getElementById('modalCheckIn')?.value || '',
+          checkOut: document.getElementById('modalCheckOut')?.value || '',
+          checkInTime: document.getElementById('modalCheckInTime')?.value || '',
+          checkOutTime: document.getElementById('modalCheckOutTime')?.value || '',
+          guestName: document.getElementById('guestName')?.value || '',
+          guestEmail: document.getElementById('guestEmail')?.value || '',
+          guestPhone: document.getElementById('guestPhone')?.value || '',
+        })
+      );
+    } catch {
+      /* quota / private mode */
+    }
+  }
+
+  function restoreBookDraft() {
+    let raw = '';
+    try {
+      raw = sessionStorage.getItem(BOOK_DRAFT_KEY) || '';
+    } catch {
+      return;
+    }
+    if (!raw) return;
+    try {
+      sessionStorage.removeItem(BOOK_DRAFT_KEY);
+    } catch {
+      /* ignore */
+    }
+
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (!data || data.v !== 1) return;
+
+    if (Array.isArray(data.guestRooms) && data.guestRooms.length) {
+      guestRooms = data.guestRooms;
+    }
+    if (Array.isArray(data.bookingCart)) {
+      bookingCart = data.bookingCart;
+    }
+
+    const nameEl = document.getElementById('guestName');
+    const emailEl = document.getElementById('guestEmail');
+    const phoneEl = document.getElementById('guestPhone');
+    if (nameEl && data.guestName) nameEl.value = data.guestName;
+    if (emailEl && data.guestEmail) emailEl.value = data.guestEmail;
+    if (phoneEl && data.guestPhone) phoneEl.value = data.guestPhone;
+
+    if (modalCheckIn && data.checkIn) modalCheckIn.value = data.checkIn;
+    if (modalCheckOut && data.checkOut) modalCheckOut.value = data.checkOut;
+    const inTime = document.getElementById('modalCheckInTime');
+    const outTime = document.getElementById('modalCheckOutTime');
+    if (inTime && data.checkInTime) inTime.value = data.checkInTime;
+    if (outTime && data.checkOutTime) outTime.value = data.checkOutTime;
+
+    try {
+      renderGuestsRooms();
+      syncGuestFlowSummary();
+      if (modalCheckIn && modalCheckOut) {
+        applyDateLimits(modalCheckIn, modalCheckOut);
+      }
+      renderCart();
+    } catch {
+      /* wizard not ready */
     }
   }
 
@@ -4053,6 +4454,7 @@
     const map = {
       LimitedTime: tx('booking.offerKindLimited', null, 'Limited time offer'),
       StayLongerSaveMore: tx('booking.offerKindStayLonger', null, 'Stay longer, save more'),
+      GoogleLoyalty: tx('booking.offerKindLoyalty', null, 'Loyalty Coupon'),
     };
     return map[kind] || kind;
   }
@@ -5149,6 +5551,7 @@
     updateLeadHint(modalCheckIn, modalLeadHint, bookModalForm);
     refreshLiveAvailability(modalCheckIn.value, modalCheckOut?.value || '');
     renderCart();
+    syncLoyaltyBanner();
     refreshRequiredErrorsIfShown();
   });
   modalCheckOut?.addEventListener('change', () => {
@@ -5186,6 +5589,7 @@
     }
     refreshLiveAvailability(modalCheckIn?.value || '', modalCheckOut.value);
     renderCart();
+    syncLoyaltyBanner();
     refreshRequiredErrorsIfShown();
   });
 
@@ -5442,7 +5846,9 @@
         .map((line) => `${line.quantity ?? line.qty}× ${line.roomTypeName ?? line.roomType}`)
         .join(', ');
       const offerNote = selectedSpecialOffer?.id
-        ? ` Special offer${selectedSpecialOffer.title ? ` “${selectedSpecialOffer.title}”` : ''} — pay cash on arrival only.`
+        ? selectedSpecialOffer.cashOnly
+          ? ` Special offer${selectedSpecialOffer.title ? ` “${selectedSpecialOffer.title}”` : ''} — pay cash on arrival only.`
+          : ` Special offer${selectedSpecialOffer.title ? ` “${selectedSpecialOffer.title}”` : ''} applied.`
         : '';
       showSuccess(
         {
@@ -5484,7 +5890,7 @@
     const nextBtn = root.querySelector('[data-room-carousel-next]');
     if (!track || !prevBtn || !nextBtn) return;
 
-    const cards = () => Array.from(track.querySelectorAll('.guest-room, .guest-gallery-room'));
+    const cards = () => Array.from(track.querySelectorAll('.guest-room, .guest-gallery-room, .guest-review-slide'));
 
     function stepSize() {
       const first = cards()[0];
@@ -5631,7 +6037,16 @@
     card.dataset.featurePagerBound = '1';
   });
 
-  // Apply active Limited Time rates on room cards as soon as offers load.
+  // Apply active Limited Time / Google Loyalty rates on room cards as soon as offers load.
+  document.querySelectorAll('[data-loyalty-google-form]').forEach((form) => {
+    form.addEventListener('submit', persistBookDraft);
+  });
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('[data-loyalty-dismiss]')) return;
+    event.preventDefault();
+    dismissLoyaltyAd();
+  });
+  restoreBookDraft();
   loadSpecialOffers();
   initGuestCatalogRealtime();
 
@@ -5677,6 +6092,7 @@
       syncOfferChangeChrome();
     }
     paintRoomCardPrices();
+    syncLoyaltyBanner();
     if (bookModal && !bookModal.hidden) {
       setBookWizardStep(bookWizardStep);
       renderCart();

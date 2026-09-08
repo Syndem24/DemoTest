@@ -53,7 +53,7 @@
 
   const BASE_GUESTS_PER_ROOM = 2;
   const MAX_GUESTS_PER_ROOM = 3;
-  const MAX_EXTRA_PERSONS = 1;
+  const MAX_EXTRA_PERSONS_PER_ROOM = 1;
   const MAX_CHILD_AGE = 12;
   const MAX_GUEST_ROOMS = 8;
   const EARLY_CHECKIN_TIME = '11:30';
@@ -767,9 +767,7 @@
         const total = (Number(room.adults) || 0) + (Number(room.children) || 0);
         const overCapacity = total > MAX_GUESTS_PER_ROOM;
         const atCapacity = total >= MAX_GUESTS_PER_ROOM;
-        const wouldUseExtra = total >= BASE_GUESTS_PER_ROOM;
-        const extraBlocked = wouldUseExtra && !roomHasExtraGuest(room) && bookingAlreadyUsesExtra(index);
-        const canInc = total < MAX_GUESTS_PER_ROOM && !extraBlocked;
+        const canInc = total < MAX_GUESTS_PER_ROOM;
         const canDecAdult = (Number(room.adults) || 0) > 1;
         const canDecChild = (Number(room.children) || 0) > 0;
         const hasExtra = roomHasExtraGuest(room);
@@ -796,9 +794,7 @@
                 </div>
               </div>`
             : '';
-        const tooltipMsg = extraBlocked
-          ? 'Only one extra guest (₱200/night) is allowed per booking.'
-          : `Maximum ${MAX_GUESTS_PER_ROOM} guests per room. Please add another room for additional guests.`;
+        const tooltipMsg = `Maximum ${MAX_GUESTS_PER_ROOM} guests per room. Please add another room for additional guests.`;
         const titleAttr = !canInc ? ` title="${tooltipMsg}"` : '';
         const extraNote = hasExtra
           ? `<p class="guest-guests-extra-note">Extra person · ₱200 / night</p>`
@@ -852,10 +848,6 @@
     const currentTotal = adults + children;
     if (delta > 0 && currentTotal >= MAX_GUESTS_PER_ROOM) {
       showGuestsHint(`Each room holds up to ${MAX_GUESTS_PER_ROOM} guests. Please add another room for additional guests.`);
-      return;
-    }
-    if (delta > 0 && currentTotal >= BASE_GUESTS_PER_ROOM && !roomHasExtraGuest(room) && bookingAlreadyUsesExtra(roomIndex)) {
-      showGuestsHint('Only one extra guest (₱200/night) is allowed per booking.');
       return;
     }
     if (field === 'adults') {
@@ -915,24 +907,18 @@
     return total > BASE_GUESTS_PER_ROOM;
   }
 
-  function bookingAlreadyUsesExtra(exceptRoomIndex = -1) {
-    return guestRooms.some((room, index) => {
-      if (index === exceptRoomIndex) return false;
-      return roomHasExtraGuest(room);
-    });
-  }
-
   function extraPersonsFromGuests() {
-    const raw = guestRooms.reduce((sum, room) => {
+    return guestRooms.reduce((sum, room) => {
       const total = (Number(room.adults) || 0) + (Number(room.children) || 0);
-      return sum + Math.max(0, total - BASE_GUESTS_PER_ROOM);
+      return sum + Math.min(MAX_EXTRA_PERSONS_PER_ROOM, Math.max(0, total - BASE_GUESTS_PER_ROOM));
     }, 0);
-    return Math.min(MAX_EXTRA_PERSONS, raw);
   }
 
   function extraPersonFee() {
-    if (!extraPersonInput?.checked) return 0;
-    return 200 * Math.max(1, nightCount());
+    const extras = extraPersonsFromGuests();
+    const count = extras > 0 ? extras : extraPersonInput?.checked ? 1 : 0;
+    if (count < 1) return 0;
+    return 200 * count * Math.max(1, nightCount());
   }
 
   function syncExtraPersonOption() {
@@ -1285,7 +1271,11 @@
       }
       if (early > 0) lines.push(`<div><span>Early check-in (11:30 AM)</span><strong>${money(early)}</strong></div>`);
       if (late > 0) lines.push(`<div><span>Late check-out (+${lateHours()}h)</span><strong>${money(late)}</strong></div>`);
-      if (extra > 0) lines.push(`<div><span>Extra person</span><strong>${money(extra)}</strong></div>`);
+      if (extra > 0) {
+        const extras = extraPersonsFromGuests() || (extraPersonInput?.checked ? 1 : 0);
+        const extraLabel = extras > 1 ? `Extra person · ${extras}` : 'Extra person';
+        lines.push(`<div><span>${extraLabel}</span><strong>${money(extra)}</strong></div>`);
+      }
       if (!lines.length) lines.push('<div><span>Set stay dates to see pricing</span><strong>—</strong></div>');
       feeBreakdown.innerHTML = lines.join('');
     }
@@ -1801,7 +1791,7 @@
           guestPhone: String(document.getElementById('walkInGuestPhone')?.value || '').trim(),
           checkInAtUtc: toManilaIso(checkInDate.value, checkInTime.value),
           checkoutTimeUtc: toManilaIso(checkOutDate.value, checkOutTime.value),
-          extraPersons: extraPersonInput?.checked ? 1 : 0,
+          extraPersons: extraPersonsFromGuests() || (extraPersonInput?.checked ? 1 : 0),
           assignments: payloadAssignments,
           channel: String(document.getElementById('walkInChannel')?.value || ''),
           arrivalDiscountRequest: String(document.getElementById('walkInArrivalDiscount')?.value || 'None'),

@@ -23,6 +23,8 @@
   const historyPageSize = root.querySelector('[data-shift-history-page-size]');
   const historyCount = root.querySelector('[data-shift-history-count]');
   const ondutyBanner = root.querySelector('[data-shift-onduty-banner]');
+  const idleFlag = root.querySelector('[data-shift-idle-flag]');
+  const lastHandoverBtn = root.querySelector('[data-view-last-handover]');
 
   const openingInput = root.querySelector('[data-shift-opening]');
   const closingInput = root.querySelector('[data-shift-closing]');
@@ -41,7 +43,6 @@
   const noteReadMeta = root.querySelector('[data-shift-note-read-meta]');
   const noteReadBlocks = root.querySelector('[data-shift-note-read-blocks]');
   const noteApplyBtn = root.querySelector('[data-shift-note-apply]');
-  const lastHandoverPanel = root.querySelector('[data-shift-last-handover]');
   const detailsModal = root.querySelector('[data-shift-details-modal]');
   const detailsTitle = root.querySelector('[data-shift-details-title]');
   const detailsMeta = root.querySelector('[data-shift-details-meta]');
@@ -50,6 +51,8 @@
   const detailsGain = root.querySelector('[data-shift-details-gain]');
   const detailsOps = root.querySelector('[data-shift-details-ops]');
   const isAdmin = root.getAttribute('data-is-admin') === 'true';
+  const viewerUserId = root.getAttribute('data-staff-user-id') || '';
+  const onDutyList = root.querySelector('[data-shift-on-duty-list]');
 
   /** @type {any} */
   let current = null;
@@ -233,6 +236,50 @@
     el.textContent = titles.join(' · ');
   }
 
+  function initialsFromName(name) {
+    const parts = String(name || '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!parts.length) return '?';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  function renderOnDuty(people, fallbackShift) {
+    if (!onDutyList) return;
+    const rows = Array.isArray(people) ? people.slice() : [];
+    if (!rows.length && fallbackShift?.isOpen) {
+      rows.push({
+        staffUserId: fallbackShift.staffUserId,
+        staffDisplayName: fallbackShift.staffDisplayName,
+        startedAtUtc: fallbackShift.startedAtUtc,
+      });
+    }
+
+    if (!rows.length) {
+      onDutyList.innerHTML = '<li class="admin-shift-on-duty-empty">No one on shift</li>';
+      return;
+    }
+
+    onDutyList.innerHTML = rows
+      .map((person) => {
+        const name = person.staffDisplayName || 'Staff';
+        const isYou = Boolean(
+          viewerUserId && person.staffUserId && person.staffUserId === viewerUserId
+        );
+        const since = `Since ${phTime(person.startedAtUtc)}`;
+        return `<li class="admin-shift-on-duty-chip${isYou ? ' is-you' : ''}">
+          <span class="admin-shift-on-duty-avatar" aria-hidden="true">${escapeHtml(initialsFromName(name))}</span>
+          <span class="admin-shift-on-duty-meta">
+            <strong>${escapeHtml(name)}</strong>
+            <small>${escapeHtml(isYou ? `You · ${since}` : since)}</small>
+          </span>
+        </li>`;
+      })
+      .join('');
+  }
+
   function renderCurrent(shift) {
     current = shift || null;
     const statusEl = root.querySelector('[data-kpi-status]');
@@ -244,7 +291,14 @@
     if (saveBtn) saveBtn.hidden = !onDuty;
     if (endBtn) endBtn.hidden = !onDuty;
     if (clockSection) clockSection.hidden = onDuty;
-    if (briefingPanel) briefingPanel.hidden = !onDuty;
+    if (briefingPanel) {
+      briefingPanel.hidden = false;
+      briefingPanel.classList.toggle('is-idle', !onDuty);
+    }
+    if (idleFlag) idleFlag.hidden = onDuty;
+    root.querySelectorAll('[data-open-note-modal]').forEach((btn) => {
+      btn.hidden = !onDuty;
+    });
 
     if (onDuty) {
       if (statusEl) statusEl.textContent = 'On shift';
@@ -260,6 +314,10 @@
       if (statusMeta) statusMeta.textContent = 'No open shift';
       if (clockLede) {
         clockLede.textContent = 'Add opening note, then Start in the toolbar.';
+      }
+      if (ondutyBanner) {
+        ondutyBanner.textContent =
+          'Cards are read-only until you start a shift. Use Previous handover notes to read the last desk briefing.';
       }
       if (clockFoot) {
         clockFoot.innerHTML = 'Then press <strong>Start shift</strong> in the top toolbar.';
@@ -358,26 +416,7 @@
 
   function renderLastHandover(shift) {
     lastHandover = shift || null;
-    if (!lastHandoverPanel) return;
-    if (!shift) {
-      lastHandoverPanel.hidden = true;
-      return;
-    }
-    lastHandoverPanel.hidden = false;
-    const meta = root.querySelector('[data-last-handover-meta]');
-    if (meta) {
-      meta.textContent = `${shift.staffDisplayName || 'Staff'} · ended ${phTime(shift.endedAtUtc)} · collected ${money(shift.gain?.totalCollected)}`;
-    }
-    const setPrev = (key, value) => {
-      const el = root.querySelector(`[data-last-preview="${key}"]`);
-      if (el) el.textContent = previewText(value);
-    };
-    setPrev('rooms', shift.roomsBriefing);
-    setPrev('guests', shift.guestsBriefing);
-    setPrev('offers', shift.offersBriefing);
-    setPrev('gain', shift.gainNotes);
-    setPrev('closing', shift.closingNote);
-    setPrev('opening', shift.openingNote);
+    if (lastHandoverBtn) lastHandoverBtn.hidden = !lastHandover;
   }
 
   function escapeHtml(value) {
@@ -396,6 +435,7 @@
   }
 
   function openNoteModal(key) {
+    if (!current?.isOpen) return;
     const meta = noteMeta[key];
     if (!meta || !noteModal || !noteModalInput) return;
     editingKey = key;
@@ -527,6 +567,7 @@
         `/api/admin/shifts?page=${encodeURIComponent(String(historyPage))}&pageSize=${encodeURIComponent(String(size))}`
       );
       renderCurrent(page.current);
+      renderOnDuty(page.onDuty, page.current);
       renderLastHandover(page.lastHandover);
       renderOpsList(root.querySelector('[data-shift-live-ops]'), page.liveHotel, 'live');
       renderOfferTitles(page.liveHotel);
@@ -631,7 +672,7 @@
     void loadPage();
   });
 
-  root.querySelector('[data-view-last-handover]')?.addEventListener('click', () => {
+  lastHandoverBtn?.addEventListener('click', () => {
     if (lastHandover) openHandoverReader(lastHandover);
   });
 

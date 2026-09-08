@@ -20,7 +20,11 @@ public sealed class SpecialOfferDto
     public bool IsActive { get; set; }
     public DateTime StartsAtUtc { get; set; }
     public DateTime EndsAtUtc { get; set; }
+    public bool OpenEnded { get; set; }
     public bool IsCurrentlyActive { get; set; }
+    /// <summary>Peso off the room type base when Kind is GoogleLoyalty.</summary>
+    public decimal? DiscountAmount { get; set; }
+    public LoyaltyApplyMode LoyaltyApplyMode { get; set; }
 }
 
 public sealed class RoomTypePriceOption
@@ -52,6 +56,15 @@ public sealed class UpsertSpecialOfferRequest
     [Range(typeof(decimal), "0.01", "99.99", ErrorMessage = "Discount must be between 0.01% and 99.99%.")]
     public decimal? DiscountPercent { get; set; }
 
+    /// <summary>Fixed peso off each room type base (Loyalty Coupon), e.g. 240.</summary>
+    [Display(Name = "Amount off")]
+    [Range(typeof(decimal), "0.01", "999999.99", ErrorMessage = "Amount off must be at least ₱0.01.")]
+    public decimal? DiscountAmount { get; set; }
+
+    /// <summary>Loyalty Coupon cadence. Ignored for other kinds. Optional in the form; defaults to every night.</summary>
+    [Display(Name = "When to deduct")]
+    public LoyaltyApplyMode? LoyaltyApplyMode { get; set; }
+
     /// <summary>Minimum nights for Stay Longer Save More (e.g. 5 or 7).</summary>
     [Range(2, 365, ErrorMessage = "Minimum stay must be between 2 and 365 nights.")]
     public int? MinNights { get; set; }
@@ -68,12 +81,14 @@ public sealed class UpsertSpecialOfferRequest
     public bool CashOnly { get; set; }
     public bool IsActive { get; set; } = true;
 
+    /// <summary>No end date; stays live until staff deactivate it.</summary>
+    public bool OpenEnded { get; set; }
+
     [Required]
     [DataType(DataType.DateTime)]
     [DisplayFormat(DataFormatString = "{0:yyyy-MM-ddTHH:mm}", ApplyFormatInEditMode = true)]
     public DateTime StartsAtUtc { get; set; }
 
-    [Required]
     [DataType(DataType.DateTime)]
     [DisplayFormat(DataFormatString = "{0:yyyy-MM-ddTHH:mm}", ApplyFormatInEditMode = true)]
     public DateTime EndsAtUtc { get; set; }

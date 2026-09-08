@@ -9,7 +9,22 @@ public enum SpecialOfferKind
     BookNowStayLater = 2,
     StayLongerSaveMore = 3,
     /// <summary>Legacy — no longer creatable in admin.</summary>
-    MonthlyStay = 4
+    MonthlyStay = 4,
+    /// <summary>Online Loyalty Coupon for signed-in Google guests: fixed peso off, with an apply cadence.</summary>
+    GoogleLoyalty = 5
+}
+
+/// <summary>How a Loyalty Coupon peso amount is applied to a stay.</summary>
+public enum LoyaltyApplyMode
+{
+    /// <summary>Deduct the amount from every night.</summary>
+    EveryNight = 0,
+    /// <summary>Deduct once, on the first night only.</summary>
+    FirstNight = 1,
+    /// <summary>Deduct once per 7-night period (resets each week of the stay).</summary>
+    WeeklyReset = 2,
+    /// <summary>Only the guest’s first online booking; then every night of that stay.</summary>
+    FirstBooking = 3
 }
 
 /// <summary>Where the booking was sourced.</summary>
@@ -44,7 +59,7 @@ public enum SpecialOfferChannels
 }
 
 /// <summary>
-/// Table <c>SpecialOffer</c> — promo rate for one <see cref="RoomType"/> (Limited Time or Stay Longer).
+/// Table <c>SpecialOffer</c> — promo rate for one <see cref="RoomType"/> (Limited Time, Stay Longer, or Google Loyalty).
 /// Sibling rows share the same campaign title across room types.
 /// </summary>
 public class SpecialOffer
@@ -58,15 +73,19 @@ public class SpecialOffer
     public decimal RegularPricePerNight { get; set; }
     /// <summary>Promo nightly rate when applicable; null for informational kinds.</summary>
     public decimal? PromoPricePerNight { get; set; }
-    /// <summary>Minimum stay nights for StayLongerSaveMore; null for Limited Time.</summary>
+    /// <summary>Minimum stay nights for StayLongerSaveMore; null for Limited Time and Google Loyalty.</summary>
     public int? MinNights { get; set; }
     public SpecialOfferChannels Channels { get; set; }
         = SpecialOfferChannels.OnlineVisible | SpecialOfferChannels.WalkIn;
     /// <summary>When true, stay payments must be cash.</summary>
     public bool CashOnly { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>Loyalty Coupon only. Other kinds ignore this (stored as EveryNight).</summary>
+    public LoyaltyApplyMode LoyaltyApplyMode { get; set; }
     public DateTime StartsAtUtc { get; set; }
     public DateTime EndsAtUtc { get; set; }
+    /// <summary>When true, the offer has no end date and stays live until deactivated.</summary>
+    public bool OpenEnded { get; set; }
     public int SortOrder { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;

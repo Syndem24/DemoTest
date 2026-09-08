@@ -9,7 +9,7 @@ public sealed class CreateWalkInRequest
     public string GuestPhone { get; set; } = string.Empty;
     public DateTime CheckInAtUtc { get; set; }
     public DateTime CheckoutTimeUtc { get; set; }
-    /// <summary>0 or 1; one extra guest beyond 2 included occupants (₱200/night).</summary>
+    /// <summary>One extra guest per room beyond 2 included occupants (₱200/night each).</summary>
     public int ExtraPersons { get; set; }
     public List<ConfirmRoomAssignmentRequest> Assignments { get; set; } = new();
     /// <summary>WalkIn, FrontDeskExtension, or OTA channel (Agoda/Expedia/…).</summary>
@@ -27,7 +27,7 @@ public sealed class CreateBookingRequest
     public DateTime CheckoutTimeUtc { get; set; }
     public PaymentOption PaymentOption { get; set; }
     public bool AcceptTerms { get; set; }
-    /// <summary>0 or 1; one extra guest beyond 2 included occupants (₱200/night).</summary>
+    /// <summary>One extra guest per room beyond 2 included occupants (₱200/night each).</summary>
     public int ExtraPersons { get; set; }
     public List<CreateBookingItemRequest> Items { get; set; } = new();
     /// <summary>Flag for front desk to verify Senior/PWD ID on arrival.</summary>
@@ -41,8 +41,10 @@ public sealed class UpdateBookingChargesRequest
     public bool EarlyCheckIn { get; set; }
     /// <summary>0–3 hours past noon checkout.</summary>
     public int LateCheckoutHours { get; set; }
-    /// <summary>0 or 1; one extra guest (₱200/night).</summary>
+    /// <summary>One extra guest per room (₱200/night each).</summary>
     public int ExtraPersons { get; set; }
+    /// <summary>0-based stay-room indexes that include an extra person charge.</summary>
+    public List<int> ExtraPersonRoomIndexes { get; set; } = new();
 
     /// <summary>Damage / incidental amount (₱). 0 clears. Legacy when <see cref="Incidentals"/> is empty.</summary>
     public decimal IncidentalAmount { get; set; }
@@ -219,7 +221,7 @@ public sealed class UpdateBookingRequest
     public DateTime CheckInAtUtc { get; set; }
     public DateTime CheckoutTimeUtc { get; set; }
     public PaymentOption? PaymentOption { get; set; }
-    /// <summary>0 or 1; one extra guest beyond 2 included occupants per room (₱200/night).</summary>
+    /// <summary>One extra guest per room beyond 2 included occupants (₱200/night each).</summary>
     public int ExtraPersons { get; set; }
     /// <summary>Total adults across all rooms (data gathering).</summary>
     public int AdultCount { get; set; }
@@ -234,9 +236,10 @@ public sealed class BookingGuestRoomRequest
 {
     public int Adults { get; set; }
     public int Children { get; set; }
+    public bool ExtraPerson { get; set; }
 }
 
-public sealed record BookingGuestRoomDto(int Adults, int Children);
+public sealed record BookingGuestRoomDto(int Adults, int Children, bool ExtraPerson = false);
 
 public sealed record ReservationCalendarEventDto(
     int Id,

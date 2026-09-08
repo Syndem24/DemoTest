@@ -117,6 +117,11 @@ public sealed class GoogleAuthSettings : IGoogleAuthSettings
         return raw.Trim().Trim('"', '\'');
     }
 
+    /// <summary>
+    /// Swaps vault Client ID into Google's authorize URL without encoding scopes as '+'.
+    /// accounts.google.com/signin/oauth/v3/consent returns 401 "malformed" when
+    /// scope uses <c>openid+profile+email</c> instead of <c>openid%20profile%20email</c>.
+    /// </summary>
     public static string ReplaceClientIdInAuthorizeUrl(string redirectUri, string clientId)
     {
         var hashIndex = redirectUri.IndexOf('#');
@@ -129,12 +134,84 @@ public sealed class GoogleAuthSettings : IGoogleAuthSettings
 
         var path = withoutHash[..qIndex];
         var query = QueryHelpers.ParseQuery(withoutHash[qIndex..]);
-        var map = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var pair in query)
-            map[pair.Key] = pair.Value.ToString();
+        var wroteClientId = false;
+        var parts = new List<string>();
 
-        map["client_id"] = clientId;
-        return QueryHelpers.AddQueryString(path, map!) + hash;
+        foreach (var pair in query)
+        {
+            var isClientId = string.Equals(pair.Key, "client_id", StringComparison.OrdinalIgnoreCase);
+            if (pair.Value.Count == 0)
+            {
+                if (isClientId)
+                {
+                    parts.Add("client_id=" + Uri.EscapeDataString(clientId));
+                    wroteClientId = true;
+                }
+
+                continue;
+            }
+
+            foreach (var value in pair.Value)
+            {
+                var encodedKey = Uri.EscapeDataString(pair.Key);
+                var raw = isClientId ? clientId : value ?? string.Empty;
+                parts.Add(encodedKey + "=" + Uri.EscapeDataString(raw));
+                if (isClientId)
+                    wroteClientId = true;
+            }
+        }
+
+        if (!wroteClientId)
+            parts.Add("client_id=" + Uri.EscapeDataString(clientId));
+
+        return path + "?" + string.Join("&", parts) + hash;
+    }
+
+    /// <summary>
+    /// Sets or replaces a Google authorize query value (e.g. prompt=select_account).
+    /// </summary>
+    public static string SetAuthorizeQuery(string redirectUri, string key, string value)
+    {
+        var hashIndex = redirectUri.IndexOf('#');
+        var withoutHash = hashIndex >= 0 ? redirectUri[..hashIndex] : redirectUri;
+        var hash = hashIndex >= 0 ? redirectUri[hashIndex..] : string.Empty;
+
+        var qIndex = withoutHash.IndexOf('?');
+        if (qIndex < 0)
+            return withoutHash + "?" + Uri.EscapeDataString(key) + "=" + Uri.EscapeDataString(value) + hash;
+
+        var path = withoutHash[..qIndex];
+        var query = QueryHelpers.ParseQuery(withoutHash[qIndex..]);
+        var parts = new List<string>();
+        var wrote = false;
+
+        foreach (var pair in query)
+        {
+            if (string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase))
+            {
+                if (!wrote)
+                {
+                    parts.Add(Uri.EscapeDataString(key) + "=" + Uri.EscapeDataString(value));
+                    wrote = true;
+                }
+
+                continue;
+            }
+
+            if (pair.Value.Count == 0)
+            {
+                parts.Add(Uri.EscapeDataString(pair.Key) + "=");
+                continue;
+            }
+
+            foreach (var existing in pair.Value)
+                parts.Add(Uri.EscapeDataString(pair.Key) + "=" + Uri.EscapeDataString(existing ?? string.Empty));
+        }
+
+        if (!wrote)
+            parts.Add(Uri.EscapeDataString(key) + "=" + Uri.EscapeDataString(value));
+
+        return path + "?" + string.Join("&", parts) + hash;
     }
 }
 

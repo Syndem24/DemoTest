@@ -66,7 +66,7 @@ public sealed class SpecialOfferService : ISpecialOfferService
     {
         var now = DateTime.UtcNow;
         var ended = await _db.SpecialOffers
-            .Where(o => o.IsActive && o.EndsAtUtc < now)
+            .Where(o => o.IsActive && !o.OpenEnded && o.EndsAtUtc.Year < 9999 && o.EndsAtUtc < now)
             .ToListAsync(cancellationToken);
         if (ended.Count == 0)
             return;
@@ -155,7 +155,8 @@ public sealed class SpecialOfferService : ISpecialOfferService
                 && o.StartsAtUtc <= now
                 && o.EndsAtUtc >= now
                 && (o.Kind == SpecialOfferKind.LimitedTime
-                    || o.Kind == SpecialOfferKind.StayLongerSaveMore)
+                    || o.Kind == SpecialOfferKind.StayLongerSaveMore
+                    || o.Kind == SpecialOfferKind.GoogleLoyalty)
                 && (o.Channels & SpecialOfferChannels.OnlineVisible) != 0);
 
         if (roomTypeId is > 0)
@@ -202,7 +203,7 @@ public sealed class SpecialOfferService : ISpecialOfferService
 
         var now = DateTime.UtcNow;
         var startUtc = PhilippinesTime.ToUtc(request.StartsAtUtc);
-        var endUtc = PhilippinesTime.ToUtc(request.EndsAtUtc);
+        var endUtc = ResolveEndUtc(request);
 
         if (request.IsActive)
             await EnsureNoActiveKindConflictAsync(request.Kind, excludeIds: null, cancellationToken);
@@ -230,6 +231,8 @@ public sealed class SpecialOfferService : ISpecialOfferService
                 Channels = request.Channels,
                 CashOnly = request.CashOnly,
                 IsActive = request.IsActive,
+                LoyaltyApplyMode = ResolveLoyaltyApplyMode(request),
+                OpenEnded = request.OpenEnded,
                 StartsAtUtc = startUtc,
                 EndsAtUtc = endUtc,
                 SortOrder = 0,
@@ -289,7 +292,7 @@ public sealed class SpecialOfferService : ISpecialOfferService
         var selected = request.RoomTypeIds.ToHashSet();
         var now = DateTime.UtcNow;
         var startUtc = PhilippinesTime.ToUtc(request.StartsAtUtc);
-        var endUtc = PhilippinesTime.ToUtc(request.EndsAtUtc);
+        var endUtc = ResolveEndUtc(request);
 
         if (request.IsActive)
         {
@@ -334,6 +337,8 @@ public sealed class SpecialOfferService : ISpecialOfferService
                 Channels = request.Channels,
                 CashOnly = request.CashOnly,
                 IsActive = request.IsActive,
+                LoyaltyApplyMode = ResolveLoyaltyApplyMode(request),
+                OpenEnded = request.OpenEnded,
                 StartsAtUtc = startUtc,
                 EndsAtUtc = endUtc,
                 SortOrder = 0,
@@ -460,6 +465,7 @@ public sealed class SpecialOfferService : ISpecialOfferService
             sibling.IsActive = true;
             sibling.StartsAtUtc = startUtc;
             sibling.EndsAtUtc = endUtc;
+            sibling.OpenEnded = false;
             sibling.UpdatedAtUtc = now;
         }
 
@@ -521,11 +527,66 @@ public sealed class SpecialOfferService : ISpecialOfferService
     {
         SpecialOfferKind.LimitedTime => "Limited time",
         SpecialOfferKind.StayLongerSaveMore => "Stay longer, save more",
+        SpecialOfferKind.GoogleLoyalty => "Loyalty Coupon",
         SpecialOfferKind.BestAvailableRate => "Best available rate",
         SpecialOfferKind.BookNowStayLater => "Book now, stay later",
         SpecialOfferKind.MonthlyStay => "Monthly stay",
         _ => kind.ToString()
     };
+
+    public static bool IsCreatableKind(SpecialOfferKind kind) =>
+        kind is SpecialOfferKind.LimitedTime
+            or SpecialOfferKind.StayLongerSaveMore
+            or SpecialOfferKind.GoogleLoyalty;
+
+    public static bool IsPercentRateKind(SpecialOfferKind kind) =>
+        kind is SpecialOfferKind.LimitedTime or SpecialOfferKind.StayLongerSaveMore;
+
+    public static bool IsFixedAmountKind(SpecialOfferKind kind) =>
+        kind == SpecialOfferKind.GoogleLoyalty;
+
+    private static LoyaltyApplyMode ResolveLoyaltyApplyMode(UpsertSpecialOfferRequest request) =>
+        request.Kind == SpecialOfferKind.GoogleLoyalty
+            ? request.LoyaltyApplyMode ?? LoyaltyApplyMode.EveryNight
+            : LoyaltyApplyMode.EveryNight;
+
+    public static int LoyaltyCouponUnits(LoyaltyApplyMode mode, int nights)
+    {
+        var n = Math.Max(1, nights);
+        return mode switch
+        {
+            LoyaltyApplyMode.FirstNight => 1,
+            LoyaltyApplyMode.WeeklyReset => (n + 6) / 7,
+            LoyaltyApplyMode.FirstBooking => n,
+            _ => n
+        };
+    }
+
+    public static string LoyaltyApplyModeLabel(LoyaltyApplyMode mode) => mode switch
+    {
+        LoyaltyApplyMode.FirstNight => "First night only",
+        LoyaltyApplyMode.WeeklyReset => "Once every 7 nights",
+        LoyaltyApplyMode.FirstBooking => "First booking only",
+        _ => "Every night"
+    };
+
+    public static decimal LoyaltyCouponAmount(SpecialOffer offer)
+    {
+        if (offer.Kind != SpecialOfferKind.GoogleLoyalty || offer.PromoPricePerNight is not decimal promo)
+            return 0m;
+        var off = offer.RegularPricePerNight - promo;
+        return off > 0 ? decimal.Round(off, 2) : 0m;
+    }
+
+    public static bool IsWalkInPromoKind(SpecialOfferKind kind) =>
+        kind is SpecialOfferKind.LimitedTime or SpecialOfferKind.StayLongerSaveMore;
+
+    /// <summary>
+    /// Limited Time and Stay Longer are always cash on arrival. Loyalty Coupon is never cash-only.
+    /// </summary>
+    public static bool ForcesCashOnArrival(SpecialOffer offer) =>
+        offer.Kind is SpecialOfferKind.LimitedTime or SpecialOfferKind.StayLongerSaveMore
+        || offer.CashOnly;
 
     private static void ApplyFields(
         SpecialOffer entity,
@@ -547,6 +608,8 @@ public sealed class SpecialOfferService : ISpecialOfferService
         entity.Channels = request.Channels;
         entity.CashOnly = request.CashOnly;
         entity.IsActive = request.IsActive;
+        entity.LoyaltyApplyMode = ResolveLoyaltyApplyMode(request);
+        entity.OpenEnded = request.OpenEnded;
         entity.StartsAtUtc = startUtc;
         entity.EndsAtUtc = endUtc;
         entity.UpdatedAtUtc = nowUtc;
@@ -567,7 +630,24 @@ public sealed class SpecialOfferService : ISpecialOfferService
 
         request.RegularPricePerNight = baseRate;
 
-        if (request.Kind is SpecialOfferKind.LimitedTime or SpecialOfferKind.StayLongerSaveMore)
+        if (request.Kind == SpecialOfferKind.GoogleLoyalty)
+        {
+            if (request.DiscountAmount is null || request.DiscountAmount < 0.01m)
+            {
+                throw new ArgumentException(
+                    "Loyalty Coupon requires an amount off of at least ₱0.01 (e.g. 240).");
+            }
+
+            var promo = decimal.Round(baseRate - request.DiscountAmount.Value, 2);
+            if (promo <= 0)
+            {
+                throw new ArgumentException(
+                    $"Loyalty Coupon of ₱{request.DiscountAmount.Value:0.##} must be less than the {roomType.Name} nightly rate (₱{baseRate:0.##}).");
+            }
+
+            request.PromoPricePerNight = promo;
+        }
+        else if (IsPercentRateKind(request.Kind))
         {
             if (request.DiscountPercent is null
                 || request.DiscountPercent is < 0.01m or > 99.99m)
@@ -591,7 +671,7 @@ public sealed class SpecialOfferService : ISpecialOfferService
     }
 
     /// <summary>
-    /// Only one active campaign per kind (Limited Time / Stay Longer). Sibling room-type rows are one campaign.
+    /// Only one active campaign per kind (Limited Time / Stay Longer / Google Loyalty). Sibling room-type rows are one campaign.
     /// </summary>
     private async Task EnsureNoActiveKindConflictAsync(
         SpecialOfferKind kind,
@@ -615,11 +695,31 @@ public sealed class SpecialOfferService : ISpecialOfferService
 
     private static void ValidateShared(UpsertSpecialOfferRequest request)
     {
-        if (request.Kind is not (SpecialOfferKind.LimitedTime or SpecialOfferKind.StayLongerSaveMore))
-            throw new ArgumentException("Only Limited Time and Stay Longer Save More offers can be created.");
+        if (!IsCreatableKind(request.Kind))
+            throw new ArgumentException("Only Limited Time, Stay Longer Save More, and Loyalty Coupon offers can be created.");
 
         if (request.RoomTypeIds.Count == 0)
             throw new ArgumentException("Select at least one room type.");
+
+        if (request.Kind == SpecialOfferKind.GoogleLoyalty)
+        {
+            request.Channels = SpecialOfferChannels.OnlineVisible;
+            request.CashOnly = false;
+            request.Description = null;
+            request.LoyaltyApplyMode ??= LoyaltyApplyMode.EveryNight;
+            if (request.LoyaltyApplyMode is not (
+                    LoyaltyApplyMode.EveryNight
+                    or LoyaltyApplyMode.FirstNight
+                    or LoyaltyApplyMode.WeeklyReset
+                    or LoyaltyApplyMode.FirstBooking))
+            {
+                request.LoyaltyApplyMode = LoyaltyApplyMode.EveryNight;
+            }
+        }
+        else
+        {
+            request.LoyaltyApplyMode = LoyaltyApplyMode.EveryNight;
+        }
 
         if (request.Kind == SpecialOfferKind.StayLongerSaveMore
             && (request.MinNights is null or < 2 or > 365))
@@ -628,8 +728,19 @@ public sealed class SpecialOfferService : ISpecialOfferService
         }
     }
 
+    /// <summary>Manila 23:59 on 9999-12-31 stored as UTC so live-window queries keep working.</summary>
+    public static readonly DateTime OpenEndedSentinelUtc =
+        DateTime.SpecifyKind(new DateTime(9999, 12, 31, 15, 59, 0), DateTimeKind.Utc);
+
+    public static bool IsOpenEnded(DateTime endsAtUtc, bool openEnded) =>
+        openEnded || endsAtUtc.Year >= 9999;
+
+    private static DateTime ResolveEndUtc(UpsertSpecialOfferRequest request) =>
+        request.OpenEnded ? OpenEndedSentinelUtc : PhilippinesTime.ToUtc(request.EndsAtUtc);
+
     /// <summary>
     /// Create/reactivate: start and end must be in the future. Edit: keeping the existing start (already live) is allowed.
+    /// Open-ended offers skip the end date and stay live until deactivated.
     /// </summary>
     private static void ValidateOfferWindow(
         UpsertSpecialOfferRequest request,
@@ -638,21 +749,25 @@ public sealed class SpecialOfferService : ISpecialOfferService
         DateTime? existingEndUtc)
     {
         var start = PhilippinesTime.ToUtc(request.StartsAtUtc);
-        var end = PhilippinesTime.ToUtc(request.EndsAtUtc);
         var nowUtc = DateTime.UtcNow.AddMinutes(-1);
-
-        if (end <= start)
-            throw new ArgumentException("Offer end must be after start.");
 
         var startUnchanged = existingStartUtc is DateTime es
             && TruncateUtcToMinute(start) == TruncateUtcToMinute(AssumeUtc(es));
-        var endUnchanged = existingEndUtc is DateTime ee
-            && TruncateUtcToMinute(end) == TruncateUtcToMinute(AssumeUtc(ee));
-        // On edit, allow past start so staff can update non-date fields for already running/ended windows.
         if (start < nowUtc && !allowPastStartIfUnchanged)
             throw new ArgumentException("Offer start cannot be in the past (Manila time).");
 
-        // End may stay as-is when editing a live offer; a newly chosen end must still be in the future.
+        if (request.OpenEnded)
+            return;
+
+        if (request.EndsAtUtc == default)
+            throw new ArgumentException("Set an end date, or check Stay live until deactivated.");
+
+        var end = PhilippinesTime.ToUtc(request.EndsAtUtc);
+        if (end <= start)
+            throw new ArgumentException("Offer end must be after start.");
+
+        var endUnchanged = existingEndUtc is DateTime ee
+            && TruncateUtcToMinute(end) == TruncateUtcToMinute(AssumeUtc(ee));
         if (end < nowUtc && !endUnchanged)
             throw new ArgumentException("Offer end cannot be in the past (Manila time).");
     }
@@ -671,7 +786,8 @@ public sealed class SpecialOfferService : ISpecialOfferService
     internal static bool IsEligibleForStay(SpecialOffer offer, int nights)
     {
         if (offer.PromoPricePerNight is null) return false;
-        if (offer.Kind == SpecialOfferKind.LimitedTime) return true;
+        if (offer.Kind is SpecialOfferKind.LimitedTime or SpecialOfferKind.GoogleLoyalty)
+            return true;
         if (offer.Kind == SpecialOfferKind.StayLongerSaveMore)
             return offer.MinNights is int min && nights >= min;
         return false;
@@ -691,9 +807,15 @@ public sealed class SpecialOfferService : ISpecialOfferService
         Channels = o.Channels,
         CashOnly = o.CashOnly,
         IsActive = o.IsActive,
-        // EF materializes datetime2 as Unspecified; mark as UTC for correct Manila conversion in UI.
         StartsAtUtc = DateTime.SpecifyKind(o.StartsAtUtc, DateTimeKind.Utc),
         EndsAtUtc = DateTime.SpecifyKind(o.EndsAtUtc, DateTimeKind.Utc),
-        IsCurrentlyActive = o.IsActive && o.StartsAtUtc <= nowUtc && o.EndsAtUtc >= nowUtc
+        OpenEnded = IsOpenEnded(o.EndsAtUtc, o.OpenEnded),
+        IsCurrentlyActive = o.IsActive && o.StartsAtUtc <= nowUtc && o.EndsAtUtc >= nowUtc,
+        DiscountAmount = o.Kind == SpecialOfferKind.GoogleLoyalty && o.PromoPricePerNight is decimal promo && o.RegularPricePerNight > promo
+            ? decimal.Round(o.RegularPricePerNight - promo, 2)
+            : null,
+        LoyaltyApplyMode = o.Kind == SpecialOfferKind.GoogleLoyalty
+            ? o.LoyaltyApplyMode
+            : LoyaltyApplyMode.EveryNight
     };
 }

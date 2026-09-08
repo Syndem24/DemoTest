@@ -1,6 +1,7 @@
 using System.Data;
 using System.Globalization;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using TestingDemo.Data;
@@ -32,15 +33,25 @@ public sealed class BookingService : IBookingService
     private readonly HotelBookingDbContext _db;
     private readonly IWebHostEnvironment _environment;
     private readonly ISystemAuditRecorder _audit;
+    private readonly IHttpContextAccessor _http;
 
     public BookingService(
         HotelBookingDbContext db,
         IWebHostEnvironment environment,
-        ISystemAuditRecorder audit)
+        ISystemAuditRecorder audit,
+        IHttpContextAccessor http)
     {
         _db = db;
         _environment = environment;
         _audit = audit;
+        _http = http;
+    }
+
+    private bool CurrentUserIsGoogleGuest()
+    {
+        var user = _http.HttpContext?.User;
+        return user?.Identity?.IsAuthenticated == true
+            && user.IsInRole(AppRoles.Guest);
     }
 
     private void AuditBooking(
@@ -233,8 +244,7 @@ public sealed class BookingService : IBookingService
                 Channel = BookingChannel.Online,
                 SpecialOfferId = appliedOffer?.Id,
                 ArrivalDiscountRequest = arrivalDiscount,
-                // Online Limited Time promo stays are cash on arrival only.
-                CashOnlyPromo = onLimitedPromo,
+                CashOnlyPromo = offersByType.Values.Any(SpecialOfferService.ForcesCashOnArrival),
                 CreatedAtUtc = nowUtc,
                 UpdatedAtUtc = nowUtc
             };
@@ -267,6 +277,15 @@ public sealed class BookingService : IBookingService
                 StayTimeFees.LateCheckoutHours(checkoutTimeUtc),
                 request.ExtraPersons,
                 typeMeta);
+            await SyncLoyaltyCouponChargeAsync(booking, requireGoogleGuest: true, ct);
+            if (arrivalDiscount != ArrivalDiscountRequest.None
+                && (onLimitedPromo
+                    || booking.Charges.Any(c => c.ChargeType == BookingChargeType.LoyaltyCoupon)))
+            {
+                throw new ArgumentException(
+                    "Senior Citizen / PWD discount cannot be combined with an active special offer promo.");
+            }
+
             RecalculateTotals(booking);
 
             _db.Bookings.Add(booking);
@@ -1670,7 +1689,7 @@ public sealed class BookingService : IBookingService
         ApplyGuestPartyFromRequest(booking, request);
         var early = StayTimeFees.IsEarlyCheckIn(checkInAtUtc);
         var lateHours = StayTimeFees.LateCheckoutHours(checkoutTimeUtc);
-        var extraPersons = Math.Clamp(request.ExtraPersons, 0, StayTimeFees.MaxExtraPersons);
+        var extraPersons = ResolveExtraPersons(booking, request);
         await ReapplyBookingOfferPricesAsync(booking, ct);
         var typeMeta = await LoadRoomTypeMetaAsync(
             booking.Items.Where(line => line.RoomTypeId.HasValue).Select(line => line.RoomTypeId!.Value),
@@ -1690,7 +1709,8 @@ public sealed class BookingService : IBookingService
             .Select(room => new BookingGuestRoomRequest
             {
                 Adults = Math.Clamp(room.Adults, 0, 3),
-                Children = Math.Clamp(room.Children, 0, 3)
+                Children = Math.Clamp(room.Children, 0, 3),
+                ExtraPerson = room.ExtraPerson || room.Adults + room.Children > 2
             })
             .Where(room => room.Adults + room.Children > 0)
             .Take(20)
@@ -1716,10 +1736,62 @@ public sealed class BookingService : IBookingService
             }
         }
 
-        booking.AdultCount = rooms.Sum(r => r.Adults);
-        booking.ChildCount = rooms.Sum(r => r.Children);
+        WriteGuestParty(
+            booking,
+            rooms.Select(r => new BookingGuestRoomDto(r.Adults, r.Children, r.ExtraPerson)));
+    }
+
+    private static int ResolveExtraPersons(Booking booking, UpdateBookingRequest request)
+    {
+        var roomCount = Math.Max(RoomCount(booking), request.GuestRooms?.Count ?? 0);
+        var maxExtras = StayTimeFees.MaxExtraPersonsForRooms(roomCount);
+        if (request.GuestRooms is { Count: > 0 })
+        {
+            var flagged = request.GuestRooms.Count(room => room.ExtraPerson);
+            var fromOccupancy = StayTimeFees.ExtraPersonsFromRooms(
+                request.GuestRooms.Select(room => (room.Adults, room.Children)));
+            return Math.Clamp(Math.Max(flagged, fromOccupancy), 0, maxExtras);
+        }
+
+        return Math.Clamp(request.ExtraPersons, 0, maxExtras);
+    }
+
+    private static int ApplyExtraPersonRoomIndexes(Booking booking, UpdateBookingChargesRequest request)
+    {
+        var party = ParseGuestParty(booking).ToList();
+        var slots = Math.Max(RoomCount(booking), Math.Max(1, party.Count));
+        while (party.Count < slots)
+        {
+            party.Add(new BookingGuestRoomDto(2, 0, false));
+        }
+
+        var indexes = request.ExtraPersonRoomIndexes ?? new List<int>();
+        var extras = indexes.Count > 0 || request.ExtraPersons == 0
+            ? indexes.Where(index => index >= 0 && index < party.Count).Distinct().ToList()
+            : Enumerable.Range(0, Math.Clamp(request.ExtraPersons, 0, party.Count)).ToList();
+
+        party = party
+            .Select((room, index) => room with { ExtraPerson = extras.Contains(index) })
+            .ToList();
+        WriteGuestParty(booking, party);
+        return extras.Count;
+    }
+
+    private static void WriteGuestParty(Booking booking, IEnumerable<BookingGuestRoomDto> rooms)
+    {
+        var list = rooms
+            .Where(room => room.Adults + room.Children > 0)
+            .Take(20)
+            .ToList();
+        booking.AdultCount = list.Sum(room => room.Adults);
+        booking.ChildCount = list.Sum(room => room.Children);
         booking.GuestPartyJson = System.Text.Json.JsonSerializer.Serialize(
-            rooms.Select(r => new { adults = r.Adults, children = r.Children }));
+            list.Select(room => new
+            {
+                adults = room.Adults,
+                children = room.Children,
+                extraPerson = room.ExtraPerson
+            }));
     }
 
     public async Task<BookingDto> UpdateChargesAsync(
@@ -1743,6 +1815,25 @@ public sealed class BookingService : IBookingService
         if (booking.IsArchived)
         {
             throw new BookingConcurrencyException("Bookings in history cannot be edited.");
+        }
+
+        if (booking.Status == BookingStatus.Pending)
+        {
+            var pendingExtras = ApplyExtraPersonRoomIndexes(booking, request);
+            var hasEarly = booking.Charges.Any(c => c.ChargeType == BookingChargeType.EarlyCheckIn);
+            var lateHours = Math.Clamp(
+                booking.Charges.FirstOrDefault(c => c.ChargeType == BookingChargeType.LateCheckout)?.Quantity ?? 0,
+                0,
+                StayTimeFees.MaxLateCheckoutHours);
+            var pendingTypeMeta = await LoadRoomTypeMetaAsync(
+                booking.Items.Where(line => line.RoomTypeId.HasValue).Select(line => line.RoomTypeId!.Value),
+                ct);
+            ReplaceTimeFees(booking, hasEarly, lateHours, pendingExtras, pendingTypeMeta);
+            booking.UpdatedAtUtc = DateTime.UtcNow;
+            RecalculateTotals(booking);
+            AuditBooking(booking, "Booking.ChargesUpdated", "Extra person rooms updated.");
+            await _db.SaveChangesAsync(ct);
+            return MapBooking(booking);
         }
 
         if (booking.Status != BookingStatus.Confirmed)
@@ -1790,11 +1881,12 @@ public sealed class BookingService : IBookingService
         var typeMeta = await LoadRoomTypeMetaAsync(
             booking.Items.Where(line => line.RoomTypeId.HasValue).Select(line => line.RoomTypeId!.Value),
             ct);
+        var extraPersons = ApplyExtraPersonRoomIndexes(booking, request);
         ReplaceTimeFees(
             booking,
             request.EarlyCheckIn,
             request.LateCheckoutHours,
-            request.ExtraPersons,
+            extraPersons,
             typeMeta);
         UpsertReceptionExtras(booking, request, extendNights);
         SyncArrivalDiscountCharge(booking);
@@ -2488,7 +2580,7 @@ public sealed class BookingService : IBookingService
         Booking booking,
         IReadOnlyDictionary<int, (int MaxOccupancy, string Name)> typeMeta)
     {
-        // Extra person (max 1, ₱200/night) is allowed on any room selection.
+        // Extra person (₱200/night) is allowed on every room, one extra guest each.
         _ = booking;
         _ = typeMeta;
         return true;
@@ -2512,7 +2604,8 @@ public sealed class BookingService : IBookingService
         IReadOnlyDictionary<int, (int MaxOccupancy, string Name)> typeMeta)
     {
         lateCheckoutHours = Math.Clamp(lateCheckoutHours, 0, StayTimeFees.MaxLateCheckoutHours);
-        extraPersons = Math.Clamp(extraPersons, 0, StayTimeFees.MaxExtraPersonsOnSingleRoom);
+        var rooms = RoomCount(booking);
+        extraPersons = Math.Clamp(extraPersons, 0, StayTimeFees.MaxExtraPersonsForRooms(rooms));
         if (!BookingAllowsExtraPerson(booking, typeMeta))
         {
             extraPersons = 0;
@@ -2548,7 +2641,6 @@ public sealed class BookingService : IBookingService
             }
         }
 
-        var rooms = RoomCount(booking);
         var nights = StayNights(booking.CheckInAtUtc, booking.CheckoutTimeUtc);
         var now = DateTime.UtcNow;
 
@@ -3066,8 +3158,16 @@ public sealed class BookingService : IBookingService
                             : el.TryGetProperty("Adults", out var a2) ? a2.GetInt32() : 0;
                         var children = el.TryGetProperty("children", out var c) ? c.GetInt32()
                             : el.TryGetProperty("Children", out var c2) ? c2.GetInt32() : 0;
+                        var hasExtraFlag = el.TryGetProperty("extraPerson", out var extraEl)
+                            || el.TryGetProperty("ExtraPerson", out extraEl);
+                        var extra = hasExtraFlag
+                            ? extraEl.ValueKind == System.Text.Json.JsonValueKind.True
+                            : adults + children > StayTimeFees.IncludedGuestsPerRoom;
                         if (adults + children > 0)
-                            list.Add(new BookingGuestRoomDto(Math.Clamp(adults, 0, 3), Math.Clamp(children, 0, 3)));
+                            list.Add(new BookingGuestRoomDto(
+                                Math.Clamp(adults, 0, 3),
+                                Math.Clamp(children, 0, 3),
+                                extra));
                     }
                     if (list.Count > 0) return list;
                 }
@@ -3129,6 +3229,7 @@ public sealed class BookingService : IBookingService
     {
         if (booking.SpecialOfferId is not > 0 && !booking.CashOnlyPromo)
         {
+            await SyncLoyaltyCouponChargeAsync(booking, requireGoogleGuest: false, cancellationToken);
             return;
         }
 
@@ -3151,6 +3252,7 @@ public sealed class BookingService : IBookingService
                 || offer.EndsAtUtc < now
                 || !SpecialOfferService.IsEligibleForStay(offer, nights))
             {
+                await SyncLoyaltyCouponChargeAsync(booking, requireGoogleGuest: false, cancellationToken);
                 return;
             }
 
@@ -3195,6 +3297,109 @@ public sealed class BookingService : IBookingService
                 line.PricePerNight = promo;
             }
         }
+
+        await SyncLoyaltyCouponChargeAsync(booking, requireGoogleGuest: false, cancellationToken);
+    }
+
+    private async Task SyncLoyaltyCouponChargeAsync(
+        Booking booking,
+        bool requireGoogleGuest,
+        CancellationToken cancellationToken)
+    {
+        var hadCoupon = booking.Charges.Any(c => c.ChargeType == BookingChargeType.LoyaltyCoupon);
+        RemoveChargesOfType(booking, BookingChargeType.LoyaltyCoupon);
+
+        if (booking.Channel != BookingChannel.Online)
+            return;
+        if (requireGoogleGuest && !CurrentUserIsGoogleGuest())
+            return;
+        if (!requireGoogleGuest && !hadCoupon && !CurrentUserIsGoogleGuest())
+            return;
+
+        var typeIds = booking.Items
+            .Where(line => line.RoomTypeId is > 0)
+            .Select(line => line.RoomTypeId!.Value)
+            .Distinct()
+            .ToList();
+        if (typeIds.Count == 0)
+            return;
+
+        var now = DateTime.UtcNow;
+        var offers = await _db.SpecialOffers
+            .AsNoTracking()
+            .Where(o => typeIds.Contains(o.RoomTypeId)
+                && o.IsActive
+                && o.Kind == SpecialOfferKind.GoogleLoyalty
+                && o.StartsAtUtc <= now
+                && o.EndsAtUtc >= now
+                && o.PromoPricePerNight != null
+                && (o.Channels & SpecialOfferChannels.OnlineVisible) != 0)
+            .ToListAsync(cancellationToken);
+        if (offers.Count == 0)
+            return;
+
+        var nights = StayNights(booking.CheckInAtUtc, booking.CheckoutTimeUtc);
+        var prior = false;
+        if (offers.Any(o => o.LoyaltyApplyMode == LoyaltyApplyMode.FirstBooking))
+        {
+            prior = await GuestHasPriorOnlineBookingAsync(
+                booking.GuestEmail,
+                booking.Id > 0 ? booking.Id : null,
+                cancellationToken);
+        }
+
+        foreach (var line in booking.Items)
+        {
+            if (line.RoomTypeId is not int roomTypeId)
+                continue;
+            var offer = offers.FirstOrDefault(o => o.RoomTypeId == roomTypeId);
+            if (offer is null)
+                continue;
+            if (offer.LoyaltyApplyMode == LoyaltyApplyMode.FirstBooking && prior)
+                continue;
+
+            var unit = SpecialOfferService.LoyaltyCouponAmount(offer);
+            if (unit <= 0)
+                continue;
+            var units = SpecialOfferService.LoyaltyCouponUnits(offer.LoyaltyApplyMode, nights);
+            var qty = Math.Max(1, line.Quantity);
+            var deduct = decimal.Round(unit * units * qty, 2, MidpointRounding.AwayFromZero);
+            var stayLine = decimal.Round(line.PricePerNight * qty * Math.Max(1, nights), 2);
+            if (deduct > stayLine)
+                deduct = stayLine;
+            if (deduct <= 0)
+                continue;
+
+            var cadence = SpecialOfferService.LoyaltyApplyModeLabel(offer.LoyaltyApplyMode);
+            booking.Charges.Add(new BookingCharge
+            {
+                ChargeType = BookingChargeType.LoyaltyCoupon,
+                Label = $"Loyalty Coupon · {line.RoomTypeName} (−₱{unit:0.##} · {cadence})",
+                Quantity = qty,
+                Nights = units,
+                UnitAmount = -unit,
+                Amount = -deduct,
+                CreatedAtUtc = DateTime.UtcNow
+            });
+        }
+    }
+
+    private async Task<bool> GuestHasPriorOnlineBookingAsync(
+        string email,
+        int? excludeBookingId,
+        CancellationToken cancellationToken)
+    {
+        var normalized = (email ?? string.Empty).Trim();
+        if (normalized.Length == 0)
+            return false;
+
+        var query = _db.Bookings.AsNoTracking()
+            .Where(b => b.Channel == BookingChannel.Online
+                && b.Status != BookingStatus.Cancelled
+                && b.GuestEmail == normalized);
+        if (excludeBookingId is int id)
+            query = query.Where(b => b.Id != id);
+        return await query.AnyAsync(cancellationToken);
     }
 
     private async Task<Dictionary<int, SpecialOffer>> ResolveActiveOnlineRateOffersAsync(

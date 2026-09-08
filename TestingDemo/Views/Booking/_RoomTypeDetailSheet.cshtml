@@ -1,0 +1,53 @@
+@{
+    var browse = ViewData["RoomDetailBrowse"] as bool? == true;
+}
+<div class="wiz-detail-back" data-wiz-detail-back hidden></div>
+<div class="wiz-detail" data-wiz-detail-sheet hidden role="dialog" aria-modal="true" aria-labelledby="wizDetailTitle">
+    <header class="wiz-sheet-head">
+        <h2 id="wizDetailTitle" data-wiz-detail-title></h2>
+        <button type="button" class="wiz-icon-btn wiz-modal-close" data-wiz-detail-close aria-label="Close room details" data-i18n="wiz.closeRoomDetails" data-i18n-attr="aria-label" data-i18n-attr-only>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2.5 2.5l8 8M10.5 2.5l-8 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg>
+        </button>
+    </header>
+    <div class="wiz-detail-body">
+        <section class="wiz-bento" data-wiz-bento aria-label="Room photos" data-i18n="wiz.roomPhotos" data-i18n-attr="aria-label"></section>
+        <details class="wiz-acc" data-wiz-acc="amenities" open>
+            <summary>
+                <span data-i18n="wiz.amenities">Amenities</span>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4.5 6 8.5 10 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            </summary>
+            <div class="wiz-amenity-groups" data-wiz-detail-inclusions></div>
+        </details>
+        <details class="wiz-acc" data-wiz-acc="description">
+            <summary>
+                <span data-i18n="wiz.description">Description</span>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 4.5 6 8.5 10 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            </summary>
+            <div class="wiz-desc" data-wiz-detail-copy></div>
+        </details>
+    </div>
+    <div class="wiz-sheet-foot">
+        <div class="wiz-actions">
+            @if (browse)
+            {
+                <a class="wiz-btn wiz-btn-primary"
+                   asp-controller="Booking"
+                   asp-action="Accommodations"
+                   asp-fragment="rooms"
+                   data-i18n="wiz.startBooking">
+                    Start a booking
+                </a>
+            }
+            else
+            {
+                <button type="button" class="wiz-btn wiz-btn-ghost" data-wiz-to-offer hidden>
+                    <span data-i18n="wiz.viewOffer">View special offer</span>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M3 7h8M8 4l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                </button>
+                <button type="button" class="wiz-btn wiz-btn-primary" data-wiz-detail-book data-i18n="wiz.addToBooking">
+                    Add to Booking
+                </button>
+            }
+        </div>
+    </div>
+</div>

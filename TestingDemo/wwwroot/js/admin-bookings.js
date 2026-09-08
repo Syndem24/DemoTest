@@ -3886,6 +3886,57 @@
     const lateHours = lateCharge ? Number(lateCharge.quantity || 0) : 0;
     const extraCharge = charges.find((c) => String(c.chargeType) === 'ExtraPerson');
     const extraPersons = extraCharge ? Number(extraCharge.quantity || 0) : 0;
+    const extraRoomInputs = [];
+    const extraPersonsForFees = () => extraRoomInputs.filter((input) => input.checked).length;
+
+    function stayFeeRoomSlots() {
+      const guestRooms = booking.guestRooms || booking.GuestRooms || [];
+      const itemSlots = [];
+      (booking.items || []).forEach((line) => {
+        const qty = Math.max(0, Number(line.quantity || 0));
+        const assigned = line.assignedRooms || line.AssignedRooms || [];
+        for (let i = 0; i < qty; i += 1) {
+          itemSlots.push({
+            typeName: line.roomTypeName || line.RoomTypeName || 'Room',
+            roomNumber: assigned[i]?.roomNumber || assigned[i]?.RoomNumber || '',
+          });
+        }
+      });
+      const count = Math.max(itemSlots.length, guestRooms.length, 1);
+      const slots = [];
+      for (let i = 0; i < count; i += 1) {
+        const guest = guestRooms[i] || {};
+        const item = itemSlots[i] || {};
+        const adults = Number(guest.adults ?? guest.Adults ?? 0);
+        const children = Number(guest.children ?? guest.Children ?? 0);
+        const occupancy = adults + children;
+        const flagged = Boolean(guest.extraPerson ?? guest.ExtraPerson);
+        slots.push({
+          index: i,
+          typeName: item.typeName || 'Room',
+          roomNumber: item.roomNumber || '',
+          occupancy,
+          flagged,
+          suggested: occupancy > 2,
+        });
+      }
+      const anyFlag = slots.some((slot) => slot.flagged);
+      slots.forEach((slot, index) => {
+        if (anyFlag) {
+          slot.checked = slot.flagged;
+          return;
+        }
+        if (extraPersons <= 0) {
+          slot.checked = false;
+          return;
+        }
+        const suggested = slots.filter((row) => row.suggested);
+        slot.checked = suggested.length >= extraPersons
+          ? suggested.slice(0, extraPersons).includes(slot)
+          : index < extraPersons;
+      });
+      return slots;
+    }
     const incidentalCharges = charges.filter((c) => String(c.chargeType) === 'Incidental');
     const snackCharges = charges.filter((c) => String(c.chargeType) === 'SnackBeverage');
     const extensionCharge = charges.find((c) => String(c.chargeType) === 'StayExtension');
@@ -4029,6 +4080,7 @@
       detailField('Submitted', formatDateTime(booking.createdAtUtc) || formatDate(booking.createdAtUtc) || '—')
     );
 
+    const extraPersonLocked = Boolean(booking.isArchived);
     const feesDisabled =
       Boolean(booking.isArchived) || displayEnum(booking.status) !== 'Confirmed';
     const occupyingGuest = isGuestOccupying(booking);
@@ -4083,15 +4135,15 @@
     feesTitle.textContent = extrasStage ? 'Checkout · incidental & snacks' : 'Stay fees';
     const feesLede = document.createElement('p');
     feesLede.className = 'admin-booking-fees-lede';
-    feesLede.textContent = feesDisabled
-      ? displayEnum(booking.status) === 'Pending'
-        ? 'Confirm the booking first, then record payment and assign rooms before adding stay fees.'
-        : 'Stay fees are locked for this booking.'
-      : extrasStage
-        ? 'Record incidental damages (multiple allowed) or more snacks. Settle any balance under Price & payments, then Archive when fully paid.'
-        : occupyingGuest
-          ? 'Add early / late / extra person / extend stay, Senior/PWD, and snack & beverage here. Continue to Checkout for incidental damages.'
-          : 'Add early / late / extra person / extend stay, Senior/PWD, and snack & beverage here. Incidental damages unlock at Checkout.';
+    feesLede.textContent = extraPersonLocked
+      ? 'Stay fees are locked for this booking.'
+      : feesDisabled
+        ? 'Confirm the booking first to add early / late / extend stay. You can still choose which rooms have an extra guest.'
+        : extrasStage
+          ? 'Record incidental damages (multiple allowed) or more snacks. Settle any balance under Price & payments, then Archive when fully paid.'
+          : occupyingGuest
+            ? 'Add early / late / extra person / extend stay, Senior/PWD, and snack & beverage here. Continue to Checkout for incidental damages.'
+            : 'Add early / late / extra person / extend stay, Senior/PWD, and snack & beverage here. Incidental damages unlock at Checkout.';
     feesHeadText.append(feesTitle, feesLede);
 
     const feesManageBtn = document.createElement('button');
@@ -4171,7 +4223,8 @@
       trigger.setAttribute('aria-expanded', 'true');
       panel.hidden = false;
       panel.classList.add('is-open');
-      const locked = trigger.classList.contains('is-locked') || feesDisabled;
+      const stayLocked = trigger.dataset.feeLockWithStayFees !== '0' && feesDisabled;
+      const locked = trigger.classList.contains('is-locked') || stayLocked;
       setPanelControlsEnabled(panel, !locked);
     };
 
@@ -4186,15 +4239,17 @@
       buildBody,
       getMeta,
       showTrigger = true,
+      lockWithStayFees = true,
     }) => {
       const trigger = document.createElement('button');
       trigger.type = 'button';
       trigger.className = 'admin-fee-dd-trigger';
       trigger.dataset.feeDd = id;
+      trigger.dataset.feeLockWithStayFees = lockWithStayFees ? '1' : '0';
       trigger.setAttribute('role', 'tab');
       trigger.setAttribute('aria-expanded', 'false');
       trigger.setAttribute('aria-controls', `fee-panel-${id}`);
-      if (locked || feesDisabled) trigger.classList.add('is-locked');
+      if (locked || (lockWithStayFees && feesDisabled)) trigger.classList.add('is-locked');
       if (!showTrigger) trigger.hidden = true;
 
       const triggerLabel = document.createElement('span');
@@ -4245,6 +4300,7 @@
         getMeta,
         refreshMeta,
         showTrigger: Boolean(showTrigger),
+        lockWithStayFees: Boolean(lockWithStayFees),
       });
       refreshMeta();
       return { trigger, panel, refreshMeta };
@@ -4272,12 +4328,7 @@
     });
     lateSelect.value = String(Math.min(3, Math.max(0, lateHours)));
 
-    const extraInput = document.createElement('input');
-    extraInput.type = 'checkbox';
-    extraInput.dataset.feeExtra = '1';
-    extraInput.checked = extraPersons > 0;
-    extraInput.disabled = true;
-    if (!allowsExtraPerson) extraInput.dataset.keepDisabled = '1';
+    const extraRoomLocked = !allowsExtraPerson;
 
     const onSpecialOffer = Boolean(booking.specialOfferId || booking.cashOnlyPromo);
     const arrivalSelect = document.createElement('select');
@@ -4677,26 +4728,53 @@
     registerFeeCategory({
       id: 'extra',
       title: 'Extra person',
-      hint: '₱200 / night · max 1',
-      locked: !allowsExtraPerson,
+      hint: '₱200 / night · choose a room for each extra guest',
+      locked: !allowsExtraPerson || extraPersonLocked,
+      lockWithStayFees: false,
       showTrigger: !extrasStage,
       buildBody: () => {
-        const row = document.createElement('label');
-        row.className = `admin-booking-fee-option${allowsExtraPerson ? '' : ' is-disabled'}`;
-        row.append(
-          extraInput,
-          Object.assign(document.createElement('span'), {
-            textContent: allowsExtraPerson
-              ? 'Add one extra person for this stay'
-              : 'Not available for this room setup',
-          })
-        );
-        return [row];
+        extraRoomInputs.length = 0;
+        const list = document.createElement('div');
+        list.className = 'admin-booking-fee-room-list';
+        stayFeeRoomSlots().forEach((slot) => {
+          const row = document.createElement('label');
+          row.className = `admin-booking-fee-option admin-booking-fee-room${allowsExtraPerson ? '' : ' is-disabled'}`;
+          const input = document.createElement('input');
+          input.type = 'checkbox';
+          input.dataset.feeExtraRoom = String(slot.index);
+          input.checked = Boolean(slot.checked);
+          input.disabled = extraPersonLocked || extraRoomLocked;
+          if (extraPersonLocked || extraRoomLocked) input.dataset.keepDisabled = '1';
+          input.addEventListener('change', () => refreshAllFeeMeta());
+          extraRoomInputs.push(input);
+          const copy = document.createElement('span');
+          const title = [slot.typeName, slot.roomNumber ? `#${slot.roomNumber}` : '']
+            .filter(Boolean)
+            .join(' ');
+          copy.innerHTML =
+            `<strong>Room ${slot.index + 1}${title ? ` · ${escapeHtml(title)}` : ''}</strong>` +
+            `<small>${
+              slot.suggested
+                ? '3 guests recorded · ₱200 / night'
+                : 'Add one extra guest · ₱200 / night'
+            }</small>`;
+          row.append(input, copy);
+          list.append(row);
+        });
+        if (!allowsExtraPerson) {
+          const empty = document.createElement('p');
+          empty.className = 'admin-booking-fees-manage-empty';
+          empty.textContent = 'Not available for this room setup.';
+          return [empty];
+        }
+        return [list];
       },
-      getMeta: () =>
-        extraInput.checked
-          ? { active: true, text: money(200 * nights) }
-          : { active: false, text: '' },
+      getMeta: () => {
+        const extras = extraPersonsForFees();
+        return extras > 0
+          ? { active: true, text: money(200 * nights * extras) }
+          : { active: false, text: '' };
+      },
     });
 
     registerFeeCategory({
@@ -4835,7 +4913,7 @@
     const clearFeeCategory = (id) => {
       if (id === 'early') earlyInput.checked = false;
       if (id === 'late') lateSelect.value = '0';
-      if (id === 'extra' && !extraInput.dataset.keepDisabled) extraInput.checked = false;
+      if (id === 'extra') extraRoomInputs.forEach((input) => { input.checked = false; });
       if (id === 'incidental') {
         incidentalLines.splice(0, incidentalLines.length);
         clearIncidentalDraft();
@@ -4901,11 +4979,12 @@
         const actions = document.createElement('div');
         actions.className = 'admin-booking-fees-manage-actions';
 
+        const catLocked = extraPersonLocked || (cat.lockWithStayFees !== false && feesDisabled);
         const editBtn = document.createElement('button');
         editBtn.type = 'button';
         editBtn.className = 'admin-booking-fees-manage-edit';
         editBtn.textContent = 'Edit';
-        editBtn.disabled = feesDisabled;
+        editBtn.disabled = catLocked;
         editBtn.addEventListener('click', () => {
           feesManageList.hidden = true;
           feesManageBtn.setAttribute('aria-expanded', 'false');
@@ -4918,12 +4997,14 @@
           deleteBtn.type = 'button';
           deleteBtn.className = 'admin-booking-fees-manage-delete';
           deleteBtn.textContent = 'Delete';
-          deleteBtn.disabled = feesDisabled;
+          deleteBtn.disabled = catLocked;
           deleteBtn.addEventListener('click', () => {
             clearFeeCategory(cat.id);
             refreshAllFeeMeta();
             feesMsg.hidden = false;
-            feesMsg.textContent = 'Cleared — click Save stay fees to apply.';
+            feesMsg.textContent = feesDisabled
+              ? 'Cleared — click Save extra person rooms to apply.'
+              : 'Cleared — click Save stay fees to apply.';
           });
           actions.append(deleteBtn);
         } else {
@@ -4950,7 +5031,6 @@
     [
       earlyInput,
       lateSelect,
-      extraInput,
       arrivalSelect,
       incidentalAmountInput,
       incidentalNoteInput,
@@ -4973,7 +5053,7 @@
         refreshFeeManageList();
       }
     });
-    if (feesDisabled) feesManageBtn.disabled = true;
+    if (extraPersonLocked) feesManageBtn.disabled = true;
 
     feesLayout.append(feeTriggers, feePanels);
 
@@ -4991,7 +5071,10 @@
       return {
         earlyCheckIn: Boolean(earlyInput.checked),
         lateCheckoutHours: Number(lateSelect.value || 0),
-        extraPersons: Boolean(extraInput.checked) ? 1 : 0,
+        extraPersons: extraPersonsForFees(),
+        extraPersonRoomIndexes: extraRoomInputs
+          .filter((input) => input.checked)
+          .map((input) => Number(input.dataset.feeExtraRoom)),
         incidentalAmount: 0,
         incidentalNote: null,
         incidentals: incidentalLines.map((line) => ({
@@ -5039,8 +5122,13 @@
       if (payload.extraPersons > 0) {
         const charge = findCharge('ExtraPerson');
         lines.push({
-          label: 'Extra person',
-          amount: charge ? Number(charge.amount || 0) : 200 * nights,
+          label:
+            payload.extraPersons > 1
+              ? `Extra person · ${payload.extraPersons}`
+              : 'Extra person',
+          amount: charge
+            ? Number(charge.amount || 0)
+            : 200 * nights * payload.extraPersons,
         });
       }
       if (payload.arrivalDiscountRequest === 'SeniorCitizen') {
@@ -5168,11 +5256,11 @@
       okBtn.focus();
     };
 
-    if (!feesDisabled) {
+    if (!extraPersonLocked) {
       const saveFeesBtn = document.createElement('button');
       saveFeesBtn.type = 'button';
       saveFeesBtn.className = 'admin-booking-fees-save';
-      saveFeesBtn.textContent = 'Save stay fees';
+      saveFeesBtn.textContent = feesDisabled ? 'Save extra person rooms' : 'Save stay fees';
       saveFeesBtn.addEventListener('click', async () => {
         saveFeesBtn.disabled = true;
         closeAllFeeDropdowns();
@@ -5947,9 +6035,15 @@
       row.classList.add('is-needs-type');
     }
 
+    const indexEl = document.createElement('strong');
+    indexEl.className = 'admin-booking-edit-room-index';
+    indexEl.dataset.editRoomIndex = '1';
+    indexEl.textContent = 'Room';
+
     const typeLabel = document.createElement('label');
     typeLabel.className = 'admin-booking-edit-room-type';
     const typeCaption = document.createElement('span');
+    typeCaption.dataset.editRoomTypeCaption = '1';
     typeCaption.textContent = 'Room type';
     const typeSelect = document.createElement('select');
     typeSelect.dataset.roomTypeSelect = '1';
@@ -5965,49 +6059,69 @@
       const opt = document.createElement('option');
       opt.value = String(type.roomTypeId);
       opt.textContent = type.name;
+      opt.dataset.roomTypeName = type.name;
       if (!needsType && Number(type.roomTypeId) === Number(roomTypeId)) opt.selected = true;
       typeSelect.append(opt);
     });
     typeLabel.append(typeCaption, typeSelect);
 
-    const qtyLabel = document.createElement('label');
-    qtyLabel.className = 'admin-booking-edit-room-qty';
-    const qtyCaption = document.createElement('span');
-    qtyCaption.textContent = 'Qty';
     const qtyInput = document.createElement('input');
-    qtyInput.type = 'number';
-    qtyInput.min = '0';
-    qtyInput.max = '20';
-    qtyInput.value = String(quantity ?? 1);
+    qtyInput.type = 'hidden';
+    qtyInput.value = String(Math.max(1, Number(quantity) || 1));
     qtyInput.dataset.roomQty = '1';
-    qtyInput.required = true;
-    qtyLabel.append(qtyCaption, qtyInput);
 
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.className = 'admin-booking-edit-room-remove';
     removeBtn.dataset.removeRoomLine = '1';
     removeBtn.textContent = 'Remove';
-    // Room count is controlled from Guest head count; Edit rooms only assigns types.
     removeBtn.hidden = true;
-    qtyInput.readOnly = true;
-    qtyInput.tabIndex = -1;
-    qtyLabel.classList.add('is-locked');
-    qtyLabel.title = 'Room quantity follows Guest head count';
 
-    row.append(typeLabel, qtyLabel, removeBtn);
+    row.append(indexEl, typeLabel, qtyInput, removeBtn);
     return row;
+  }
+
+  function numberEditRoomLines(form) {
+    if (!form) return;
+    form.querySelectorAll('[data-edit-room-line]').forEach((row, index) => {
+      const label = row.querySelector('[data-edit-room-index]');
+      const selected = row.querySelector('[data-room-type-select] option:checked');
+      const chosen =
+        selected?.value && (selected.dataset.roomTypeName || selected.textContent || '').trim();
+      if (label) label.textContent = `Room ${index + 1}`;
+      const caption = row.querySelector('[data-edit-room-type-caption]');
+      if (caption) caption.textContent = chosen || 'Room type';
+    });
   }
 
   function readEditRoomLines(form) {
     return Array.from(form.querySelectorAll('[data-edit-room-line]')).map((row) => {
       const roomTypeId = Number(row.querySelector('[data-room-type-select]')?.value || 0);
-      const quantity = Number(row.querySelector('[data-room-qty]')?.value || 0);
+      const quantity = Math.max(1, Number(row.querySelector('[data-room-qty]')?.value || 1));
+      const selected = row.querySelector('[data-room-type-select] option:checked');
       const roomTypeName =
-        row.querySelector('[data-room-type-select] option:checked')?.textContent?.trim() || 'Room';
+        selected?.dataset.roomTypeName?.trim() || selected?.textContent?.trim() || 'Room';
       const needsType = row.dataset.needsType === '1' || !roomTypeId;
       return { roomTypeId, quantity, roomTypeName, needsType };
     });
+  }
+
+  function aggregateEditRoomLines(lines) {
+    const byType = new Map();
+    (lines || []).forEach((line) => {
+      if (!line?.roomTypeId || line.quantity <= 0) return;
+      const current = byType.get(line.roomTypeId);
+      if (current) {
+        current.quantity += line.quantity;
+        return;
+      }
+      byType.set(line.roomTypeId, {
+        roomTypeId: line.roomTypeId,
+        roomTypeName: line.roomTypeName || 'Room',
+        quantity: line.quantity,
+      });
+    });
+    return Array.from(byType.values());
   }
 
   function wireEditRoomLine(row, form, onChange) {
@@ -6115,7 +6229,7 @@
     const extra = charges.find(
       (c) => String(c.chargeType ?? c.ChargeType ?? '') === 'ExtraPerson'
     );
-    return Math.min(1, Math.max(0, Number(extra?.quantity ?? extra?.Quantity ?? 0)));
+    return Math.max(0, Number(extra?.quantity ?? extra?.Quantity ?? 0));
   }
 
   function normalizeEditGuestRooms(booking, roomQtyFallback, extraFallback) {
@@ -6273,7 +6387,7 @@
     const needsAvailPreview = true;
     const BASE_GUESTS_PER_ROOM = 2;
     const MAX_GUESTS_PER_ROOM = 3;
-    const MAX_EXTRA_PERSONS = 1;
+    const MAX_EXTRA_PERSONS_PER_ROOM = 1;
     detailBody.replaceChildren();
     detailActions.replaceChildren();
 
@@ -6353,7 +6467,7 @@
     const headLede = document.createElement('p');
     headLede.className = 'admin-booking-edit-section-lede';
     headLede.textContent =
-      'Same as guest booking: each room has its own adults / children. Max 3 guests per room (2 included). One extra guest for the stay adds ₱200 / night. Use Add another room here — a type row appears under Edit rooms for you to assign.';
+      'Same as guest booking: each room has its own adults / children. Max 3 guests per room (2 included). Each room may add one extra guest for ₱200 / night. Use Add another room here — a type row appears under Edit rooms for you to assign.';
     const addRoomFromHeadBtn = document.createElement('button');
     addRoomFromHeadBtn.type = 'button';
     addRoomFromHeadBtn.className = 'admin-booking-edit-add-room-from-head';
@@ -6451,7 +6565,7 @@
     detailActions.append(backButton, saveButton);
 
     function maxPartyForRoomCount(roomCount) {
-      return Math.max(0, roomCount) * BASE_GUESTS_PER_ROOM + MAX_EXTRA_PERSONS;
+      return Math.max(0, roomCount) * MAX_GUESTS_PER_ROOM;
     }
 
     function minRoomsForParty(guestTotal) {
@@ -6476,16 +6590,8 @@
       return (Number(room?.adults) || 0) + (Number(room?.children) || 0) > BASE_GUESTS_PER_ROOM;
     }
 
-    function bookingAlreadyUsesExtra(exceptIndex = -1) {
-      return editGuestRooms.some((room, index) => {
-        if (index === exceptIndex) return false;
-        return roomHasExtraGuest(room);
-      });
-    }
-
     function clampEditGuestRooms() {
-      let extraUsed = false;
-      editGuestRooms.forEach((room, index) => {
+      editGuestRooms.forEach((room) => {
         let a = Math.max(0, Number(room.adults) || 0);
         let c = Math.max(0, Number(room.children) || 0);
         if (a < 1 && c < 1) a = 1;
@@ -6494,18 +6600,6 @@
           if (a > MAX_GUESTS_PER_ROOM) {
             a = MAX_GUESTS_PER_ROOM;
             c = 0;
-          }
-        }
-        if (a + c > BASE_GUESTS_PER_ROOM) {
-          if (extraUsed) {
-            if (a > BASE_GUESTS_PER_ROOM) {
-              a = BASE_GUESTS_PER_ROOM;
-              c = 0;
-            } else {
-              c = Math.max(0, BASE_GUESTS_PER_ROOM - a);
-            }
-          } else {
-            extraUsed = true;
           }
         }
         room.adults = a;
@@ -6518,11 +6612,10 @@
     }
 
     function computeExtraPersons() {
-      const raw = editGuestRooms.reduce((sum, room) => {
+      return editGuestRooms.reduce((sum, room) => {
         const total = (Number(room.adults) || 0) + (Number(room.children) || 0);
-        return sum + Math.max(0, total - BASE_GUESTS_PER_ROOM);
+        return sum + Math.min(MAX_EXTRA_PERSONS_PER_ROOM, Math.max(0, total - BASE_GUESTS_PER_ROOM));
       }, 0);
-      return Math.min(MAX_EXTRA_PERSONS, raw);
     }
 
     function syncHeadCountUi() {
@@ -6548,7 +6641,11 @@
             .reduce((sum, line) => sum + line.quantity, 0);
       const typeGap = Math.max(0, rooms - Math.max(typeLinesQty, 0));
       let statusText = `${total} guest${total === 1 ? '' : 's'} · ${rooms} room${rooms === 1 ? '' : 's'}`;
-      if (extras > 0) statusText += ' · includes ₱200 / night extra person';
+      if (extras > 0) {
+        statusText += extras > 1
+          ? ` · includes ${extras} extra persons · ₱200 / night each`
+          : ' · includes ₱200 / night extra person';
+      }
       else statusText += ` · within included capacity (${included})`;
       if (typeGap > 0) {
         statusText += ` · assign type for ${typeGap} new room${typeGap === 1 ? '' : 's'} under Edit rooms`;
@@ -6565,10 +6662,7 @@
       headRoomsList.replaceChildren();
       editGuestRooms.forEach((room, index) => {
         const total = (Number(room.adults) || 0) + (Number(room.children) || 0);
-        const wouldUseExtra = total >= BASE_GUESTS_PER_ROOM;
-        const extraBlocked =
-          wouldUseExtra && !roomHasExtraGuest(room) && bookingAlreadyUsesExtra(index);
-        const canInc = total < MAX_GUESTS_PER_ROOM && !extraBlocked;
+        const canInc = total < MAX_GUESTS_PER_ROOM;
         const card = document.createElement('article');
         card.className = `admin-booking-edit-guest-room${total >= MAX_GUESTS_PER_ROOM ? ' is-at-capacity' : ''}${roomHasExtraGuest(room) ? ' has-extra-person' : ''}`;
         card.dataset.editGuestRoom = String(index);
@@ -6604,9 +6698,7 @@
         });
         adultsStepper._setButtons({ canDec: room.adults > 1, canInc });
         childrenStepper._setButtons({ canDec: room.children > 0, canInc });
-        const blockMsg = extraBlocked
-          ? 'Only one extra guest (₱200/night) is allowed per booking.'
-          : `Each room holds up to ${MAX_GUESTS_PER_ROOM} guests. Add another room for more guests.`;
+        const blockMsg = `Each room holds up to ${MAX_GUESTS_PER_ROOM} guests. Add another room for more guests.`;
         adultsStepper.title = canInc ? '' : blockMsg;
         childrenStepper.title = canInc ? '' : blockMsg;
         counters.append(adultsStepper, childrenStepper);
@@ -6648,21 +6740,22 @@
     let availOk = false;
     let availTimer = null;
     let lastNoAvailKey = '';
+    /** @type {Map<number, any>} */
+    let lastAvailByType = new Map();
 
     function updateRoomsPreview() {
       if (hardEdit) {
         roomsCategory.setPreview(roomsEditPreview(booking));
         return;
       }
-      const lines = readEditRoomLines(form)
-        .filter((line) => line.quantity > 0)
-        .map((line) =>
-          line.needsType || !line.roomTypeId
-            ? `${line.quantity}× Select type`
-            : `${line.quantity}× ${line.roomTypeName || 'Room'}`
-        );
+      const rows = readEditRoomLines(form).filter((line) => line.quantity > 0);
+      const typed = aggregateEditRoomLines(
+        rows.filter((line) => !line.needsType && line.roomTypeId)
+      ).map((line) => `${line.quantity}× ${line.roomTypeName || 'Room'}`);
+      const pending = rows.filter((line) => line.needsType || !line.roomTypeId).length;
+      if (pending > 0) typed.push(`${pending}× Select type`);
       roomsCategory.setPreview(
-        lines.length ? lines.join(' · ') : 'No rooms selected — add a room type'
+        typed.length ? typed.join(' · ') : 'No rooms selected — add a room type'
       );
     }
 
@@ -6692,10 +6785,43 @@
       );
     }
 
+    function applyRoomTypeAvailabilityFilters() {
+      if (hardEdit) return;
+      const rows = Array.from(form.querySelectorAll('[data-edit-room-line]'));
+      rows.forEach((row) => {
+        const select = row.querySelector('[data-room-type-select]');
+        if (!select) return;
+        const currentId = Number(select.value || 0);
+        const usedByOthers = new Map();
+        rows.forEach((other) => {
+          if (other === row) return;
+          const id = Number(other.querySelector('[data-room-type-select]')?.value || 0);
+          const qty = Number(other.querySelector('[data-room-qty]')?.value || 0);
+          if (id > 0 && qty > 0) {
+            usedByOthers.set(id, (usedByOthers.get(id) || 0) + qty);
+          }
+        });
+        Array.from(select.options).forEach((opt) => {
+          const id = Number(opt.value || 0);
+          if (!id) return;
+          const slot = lastAvailByType.get(id);
+          const remaining = slot ? Number(slot.remaining ?? slot.Remaining ?? 0) : 0;
+          const left = remaining - (usedByOthers.get(id) || 0);
+          const selected = id === currentId;
+          const blocked = lastAvailByType.size > 0 && !selected && left < 1;
+          opt.disabled = blocked;
+          const baseName = opt.dataset.roomTypeName || opt.textContent;
+          opt.textContent = blocked ? `${baseName} · none left` : baseName;
+        });
+      });
+    }
+
     function onRoomsChanged() {
+      numberEditRoomLines(form);
       updateRoomsPreview();
       syncHeadCountUi();
       syncRoomsAttention();
+      applyRoomTypeAvailabilityFilters();
       scheduleAvailRefresh();
     }
 
@@ -6769,9 +6895,12 @@
           ? booking.items
           : [{ roomTypeId: types[0].roomTypeId, quantity: 1 }];
         items.forEach((line) => {
-          const row = createEditRoomLine(types, line.roomTypeId, line.quantity);
-          wireEditRoomLine(row, form, onRoomsChanged);
-          roomFields.append(row);
+          const qty = Math.max(1, Number(line.quantity || 1));
+          for (let i = 0; i < qty; i += 1) {
+            const row = createEditRoomLine(types, line.roomTypeId, 1);
+            wireEditRoomLine(row, form, onRoomsChanged);
+            roomFields.append(row);
+          }
         });
         // Head-count cards are the room-count source: pad type rows when party has more rooms.
         const headRooms = Math.max(1, editGuestRooms.length);
@@ -6782,6 +6911,7 @@
           appendNeedsTypeRoomLine(types, { silent: true });
           typedQty += 1;
         }
+        numberEditRoomLines(form);
         updateRoomsPreview();
         syncHeadCountUi();
         syncRoomsAttention();
@@ -6839,8 +6969,12 @@
         const rows = await apiFetch(
           `/api/admin/bookings/${booking.id}/availability?${query.toString()}`
         );
-        const byType = new Map((rows || []).map((row) => [Number(row.roomTypeId), row]));
-        const needed = requiredLines();
+        const byType = new Map(
+          (rows || []).map((row) => [Number(row.roomTypeId ?? row.RoomTypeId), row])
+        );
+        lastAvailByType = byType;
+        applyRoomTypeAvailabilityFilters();
+        const needed = aggregateEditRoomLines(requiredLines());
         availList.replaceChildren();
         let insufficient = false;
         const shortLines = [];
@@ -6956,7 +7090,7 @@
 
     if (needsAvailPreview) {
       if (hardEdit) {
-        void refreshEditAvailability();
+      void refreshEditAvailability();
       }
     }
   }
@@ -6971,12 +7105,12 @@
           roomTypeId: Number(line.roomTypeId),
           quantity: Number(line.quantity || 0),
         }))
-      : readEditRoomLines(form)
-          .filter((line) => line.quantity > 0)
-          .map((line) => ({
-            roomTypeId: line.roomTypeId,
-            quantity: line.quantity,
-          }));
+      : aggregateEditRoomLines(
+          readEditRoomLines(form).filter((line) => line.quantity > 0 && line.roomTypeId)
+        ).map((line) => ({
+          roomTypeId: line.roomTypeId,
+          quantity: line.quantity,
+        }));
 
     button.disabled = true;
     errorElement.hidden = true;
@@ -6996,7 +7130,7 @@
             String(data.get('checkOut') || ''),
             String(data.get('checkOutTime') || '12:00')
           ),
-          extraPersons: Math.min(1, Math.max(0, Number(data.get('extraPersons') || 0))),
+          extraPersons: Math.max(0, Number(data.get('extraPersons') || 0)),
           adultCount: Math.max(0, Number(data.get('adultCount') || 0)),
           childCount: Math.max(0, Number(data.get('childCount') || 0)),
           guestRooms: (() => {
@@ -7037,7 +7171,7 @@
         window.showMoriNotice(message, 'error');
       } else {
         errorElement.textContent = message;
-        errorElement.hidden = false;
+      errorElement.hidden = false;
       }
     } finally {
       button.disabled = false;
@@ -8212,13 +8346,13 @@
       return;
     }
 
-    await Promise.all([refreshNotifications(), refreshActiveBookingPanel()]);
-    reservationCalendar?.refetchEvents();
+      await Promise.all([refreshNotifications(), refreshActiveBookingPanel()]);
+      reservationCalendar?.refetchEvents();
   }
 
   function wireRealtime() {
     if (!window.MoriAdminRealtime) {
-      beginPolling();
+        beginPolling();
       return;
     }
 

@@ -220,6 +220,10 @@ try
                 context.Options.ClientId = id!;
                 context.Options.ClientSecret = secret!;
                 context.RedirectUri = GoogleAuthSettings.ReplaceClientIdInAuthorizeUrl(context.RedirectUri, id!);
+                context.RedirectUri = GoogleAuthSettings.SetAuthorizeQuery(
+                    context.RedirectUri,
+                    "prompt",
+                    "select_account");
                 context.Response.Redirect(context.RedirectUri);
             };
         });
@@ -258,6 +262,7 @@ try
     builder.Services.AddScoped<ISpecialOfferService, SpecialOfferService>();
     builder.Services.AddScoped<IDashboardAnalyticsService, DashboardAnalyticsService>();
     builder.Services.AddScoped<IStaffShiftService, StaffShiftService>();
+    builder.Services.AddScoped<IStayReviewService, StayReviewService>();
 
     builder.Services.AddResponseCompression(options =>
     {

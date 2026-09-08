@@ -608,8 +608,14 @@ namespace TestingDemo.Data.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("nvarchar(40)");
 
+                    b.Property<int>("LoyaltyApplyMode")
+                        .HasColumnType("int");
+
                     b.Property<int?>("MinNights")
                         .HasColumnType("int");
+
+                    b.Property<bool>("OpenEnded")
+                        .HasColumnType("bit");
 
                     b.Property<decimal?>("PromoPricePerNight")
                         .HasPrecision(18, 2)

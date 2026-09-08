@@ -1,10 +1,11 @@
 @{
     ViewData["Title"] = "Shift";
     var staffName = ViewData["StaffDisplayName"] as string ?? "Staff";
+    var staffUserId = ViewData["StaffUserId"] as string ?? "";
     var isAdmin = ViewData["IsAdminManager"] as bool? == true;
 }
 
-<div class="admin-flush-page admin-shift-page" data-admin-shifts data-is-admin="@(isAdmin ? "true" : "false")">
+<div class="admin-flush-page admin-shift-page" data-admin-shifts data-is-admin="@(isAdmin ? "true" : "false")" data-staff-user-id="@staffUserId">
     @Html.AntiForgeryToken()
 
     <header class="admin-shift-hero" aria-labelledby="shiftPageTitle">
@@ -14,6 +15,12 @@
             <p class="admin-shift-lede">
                 Status and hotel totals stay on screen. Briefing notes open in panels or a quick editor — less scrolling, same handover flow.
             </p>
+            <div class="admin-shift-on-duty" data-shift-on-duty>
+                <p class="admin-shift-on-duty-label" id="shiftOnDutyLabel">On duty</p>
+                <ul class="admin-shift-on-duty-list" data-shift-on-duty-list aria-labelledby="shiftOnDutyLabel">
+                    <li class="admin-shift-on-duty-empty">No one on shift</li>
+                </ul>
+            </div>
         </div>
         <div class="admin-shift-status-card" data-shift-kpis aria-live="polite">
             <p class="admin-shift-status-label">Status</p>
@@ -87,45 +94,6 @@
         </article>
     </section>
 
-    @* Incoming handover from previous desk shift — always readable *@
-    <section class="admin-shift-handover" data-shift-last-handover hidden aria-label="Previous handover">
-        <header class="admin-shift-handover-head">
-            <div>
-                <h2>Previous handover</h2>
-                <p data-last-handover-meta>Notes left by the last closed shift</p>
-            </div>
-            <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-view-last-handover>
-                Read full briefing
-            </button>
-        </header>
-        <div class="admin-shift-handover-grid" data-last-handover-grid>
-            <article>
-                <h3>Rooms</h3>
-                <p data-last-preview="rooms">—</p>
-            </article>
-            <article>
-                <h3>Guests</h3>
-                <p data-last-preview="guests">—</p>
-            </article>
-            <article>
-                <h3>Offers</h3>
-                <p data-last-preview="offers">—</p>
-            </article>
-            <article>
-                <h3>Gain / cash</h3>
-                <p data-last-preview="gain">—</p>
-            </article>
-            <article class="admin-shift-handover-wide">
-                <h3>Closing note</h3>
-                <p data-last-preview="closing">—</p>
-            </article>
-            <article class="admin-shift-handover-wide">
-                <h3>Opening note (that shift)</h3>
-                <p data-last-preview="opening">—</p>
-            </article>
-        </div>
-    </section>
-
     @* Off-shift: opening note accordion *@
     <section class="admin-shift-accordion" data-shift-clock aria-label="Start shift">
         <details class="admin-shift-acc" open>
@@ -149,20 +117,24 @@
         </details>
     </section>
 
-    @* On-duty: briefing as accordion + edit modal *@
-    <section class="admin-shift-briefing-board" data-shift-briefing hidden aria-label="Handover briefing">
+    @* Handover notes stay visible off-shift; editing unlocks after Start shift *@
+    <section class="admin-shift-briefing-board is-idle" data-shift-briefing aria-label="Handover briefing">
         <div class="admin-shift-briefing-head">
             <div>
                 <h2>Handover notes</h2>
-                <p data-shift-onduty-banner>Expand a category or use Edit for a focused writer.</p>
+                <p class="admin-shift-idle-flag" data-shift-idle-flag>Shift not started yet</p>
+                <p data-shift-onduty-banner>Cards are read-only until you start a shift.</p>
             </div>
+            <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-view-last-handover hidden>
+                Previous handover notes
+            </button>
         </div>
 
         <div class="admin-shift-note-grid" role="list">
             <article class="admin-shift-note-card" role="listitem" data-note-card="rooms">
                 <header>
                     <h3>Rooms</h3>
-                    <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-open-note-modal="rooms">Edit</button>
+                    <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-open-note-modal="rooms" hidden>Edit</button>
                 </header>
                 <p class="admin-shift-note-preview" data-note-preview="rooms">No notes yet.</p>
                 <textarea hidden maxlength="4000" data-shift-rooms></textarea>
@@ -170,7 +142,7 @@
             <article class="admin-shift-note-card" role="listitem" data-note-card="guests">
                 <header>
                     <h3>Guests</h3>
-                    <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-open-note-modal="guests">Edit</button>
+                    <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-open-note-modal="guests" hidden>Edit</button>
                 </header>
                 <p class="admin-shift-note-preview" data-note-preview="guests">No notes yet.</p>
                 <textarea hidden maxlength="4000" data-shift-guests></textarea>
@@ -178,7 +150,7 @@
             <article class="admin-shift-note-card" role="listitem" data-note-card="offers">
                 <header>
                     <h3>Special offers</h3>
-                    <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-open-note-modal="offers">Edit</button>
+                    <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-open-note-modal="offers" hidden>Edit</button>
                 </header>
                 <p class="admin-shift-note-preview" data-note-preview="offers">No notes yet.</p>
                 <textarea hidden maxlength="4000" data-shift-offers></textarea>
@@ -186,7 +158,7 @@
             <article class="admin-shift-note-card" role="listitem" data-note-card="gain">
                 <header>
                     <h3>Gain / cash</h3>
-                    <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-open-note-modal="gain">Edit</button>
+                    <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-open-note-modal="gain" hidden>Edit</button>
                 </header>
                 <p class="admin-shift-note-preview" data-note-preview="gain">No notes yet.</p>
                 <textarea hidden maxlength="2000" data-shift-gain-notes></textarea>
@@ -194,7 +166,7 @@
             <article class="admin-shift-note-card admin-shift-note-card-wide" role="listitem" data-note-card="closing">
                 <header>
                     <h3>Closing note</h3>
-                    <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-open-note-modal="closing">Edit</button>
+                    <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-open-note-modal="closing" hidden>Edit</button>
                 </header>
                 <p class="admin-shift-note-preview" data-note-preview="closing">No notes yet.</p>
                 <textarea hidden maxlength="2000" data-shift-closing></textarea>

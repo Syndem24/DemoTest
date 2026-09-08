@@ -58,6 +58,11 @@ public sealed record StaffShiftDto(
     StaffShiftGainDto Gain,
     StaffShiftOpsDto Ops);
 
+public sealed record StaffOnDutyDto(
+    string StaffUserId,
+    string StaffDisplayName,
+    DateTime StartedAtUtc);
+
 public sealed record StaffShiftPageDto(
     StaffShiftDto? Current,
     /// <summary>Most recently ended desk shift (any staff) — for the next handover to read.</summary>
@@ -66,4 +71,5 @@ public sealed record StaffShiftPageDto(
     int RecentTotal,
     int RecentPage,
     int RecentPageSize,
-    StaffShiftOpsDto LiveHotel);
+    StaffShiftOpsDto LiveHotel,
+    IReadOnlyList<StaffOnDutyDto> OnDuty);

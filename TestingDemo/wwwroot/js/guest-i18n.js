@@ -1,7 +1,7 @@
 (() => {
   const STORAGE_KEY = 'moriGuestLang';
   /** Bump when locale JSON keys change so browsers fetch fresh files. */
-  const LOCALES_VERSION = '2026-09-03-profile-nav';
+  const LOCALES_VERSION = '2026-09-09-guest-wiz';
   const LOCALES = [
     { code: 'en', label: 'English', native: 'English' },
     { code: 'ja', label: '日本語', native: '日本語' },
@@ -120,6 +120,14 @@
     });
   }
 
+  function applyPageTitle() {
+    const el = document.querySelector('title[data-i18n-page-title]');
+    if (!el) return;
+    const key = el.getAttribute('data-i18n-page-title');
+    if (!key) return;
+    el.textContent = `${t(key)} - ${t('nav.brand')}`;
+  }
+
   function applyPage() {
     if (!dict || applying) return;
     applying = true;
@@ -129,6 +137,7 @@
       document.querySelectorAll('[data-i18n]').forEach(applyElement);
       applyAvailabilityBadges();
       applyGuestMeta();
+      applyPageTitle();
       syncNavControl();
       document.dispatchEvent(
         new CustomEvent('mori:langchange', { detail: { lang: current, t } })

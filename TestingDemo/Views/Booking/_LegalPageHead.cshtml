@@ -1,0 +1,29 @@
+@{
+    var legalPage = ViewData["LegalPage"] as string ?? string.Empty;
+    var isPrivacy = string.Equals(legalPage, "privacy", StringComparison.OrdinalIgnoreCase);
+    var fromAgreement = ViewBag.ReturnToGuestAgreement as bool? == true ? "guest-agreement" : null;
+    var titleId = isPrivacy ? "guestPrivacyTitle" : "guestTermsTitle";
+    var title = isPrivacy ? "Privacy policy" : "Terms and policies";
+    var titleKey = isPrivacy ? "legal.privacyTitle" : "legal.termsTitle";
+    var ledeKey = isPrivacy ? "legal.privacyLede" : "legal.termsLede";
+}
+<header class="guest-legal-head">
+    <partial name="_LegalBack" />
+    <p class="guest-eyebrow is-ruled" data-i18n="legal.brand">Mori International Hotel</p>
+    <h1 id="@titleId" data-i18n="@titleKey">@title</h1>
+    <p class="guest-section-copy" data-i18n="@ledeKey">@ViewData["LegalLede"]</p>
+    <nav class="guest-legal-switch" aria-label="Hotel policies" data-i18n="legal.policiesAria" data-i18n-attr="aria-label">
+        <a class="guest-btn guest-btn-ghost guest-btn-sm @(isPrivacy ? "is-current" : null)"
+           asp-controller="Booking"
+           asp-action="PrivacyPolicy"
+           asp-route-from="@fromAgreement"
+           aria-current="@(isPrivacy ? "page" : null)"
+           data-i18n="legal.privacyTitle">Privacy policy</a>
+        <a class="guest-btn guest-btn-ghost guest-btn-sm @(!isPrivacy ? "is-current" : null)"
+           asp-controller="Booking"
+           asp-action="Terms"
+           asp-route-from="@fromAgreement"
+           aria-current="@(!isPrivacy ? "page" : null)"
+           data-i18n="legal.termsTitle">Terms and policies</a>
+    </nav>
+</header>

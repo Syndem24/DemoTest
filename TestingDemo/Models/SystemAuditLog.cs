@@ -17,7 +17,8 @@ public enum SystemAuditDomain
     SpecialOffer = 3,
     Configuration = 4,
     File = 5,
-    Shift = 6
+    Shift = 6,
+    Review = 7
 }
 
 /// <summary>

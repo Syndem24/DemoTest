@@ -2577,6 +2577,21 @@ a:hover {
   background: var(--navy-soft);
 }
 
+.offer-room-type-option.is-select-all {
+  position: sticky;
+  top: -0.55rem;
+  z-index: 1;
+  margin: -0.55rem -0.65rem 0.25rem;
+  padding: 0.65rem 1.05rem 0.55rem;
+  border-bottom: 1px solid var(--navy-line);
+  border-radius: 10px 10px 0 0;
+  background: var(--white);
+}
+
+.offer-room-type-option.is-select-all:hover {
+  background: var(--navy-soft);
+}
+
 .offer-room-type-check {
   flex: 0 0 auto;
   width: 1.1rem;
@@ -2708,6 +2723,19 @@ a:hover {
   min-width: 0;
 }
 
+.admin-offers-form .validation-summary-errors,
+.admin-offers-form .validation-summary-valid {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .admin-offers-fields-2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2760,6 +2788,45 @@ a:hover {
   cursor: pointer;
 }
 
+.admin-offers-apply {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0 0 0.35rem;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.admin-offers-apply legend {
+  margin-bottom: 0.25rem;
+}
+
+.admin-offers-apply-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--navy-line);
+  border-radius: 10px;
+  background: var(--white);
+  color: var(--navy);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.admin-offers-apply-option:hover,
+.admin-offers-apply-option:focus-within {
+  border-color: var(--teal);
+  background: rgba(26, 166, 166, 0.08);
+}
+
+.admin-offers-apply-option input {
+  margin-top: 0.2rem;
+  accent-color: var(--teal);
+  cursor: pointer;
+}
+
 .admin-offers-cash-check {
   display: inline-flex;
   align-items: center;
@@ -2785,6 +2852,18 @@ a:hover {
 .admin-offers-cash-check:focus-within {
   outline: 2px solid var(--teal);
   outline-offset: 2px;
+}
+
+.admin-offers-open-ended {
+  margin: 0.7rem 0 0.25rem;
+}
+
+.admin-offers-open-ended-hint {
+  margin: 0 0 0.85rem;
+  max-width: 42rem;
+  color: rgba(11, 31, 58, 0.68);
+  font-size: 0.82rem;
+  line-height: 1.4;
 }
 
 .admin-offers-form .form-control,
@@ -5983,6 +6062,42 @@ body.is-exporting {
   opacity: 0.55;
 }
 
+.admin-booking-fee-room-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.admin-booking-fee-room {
+  align-items: flex-start;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--navy) 12%, var(--white));
+  background: color-mix(in srgb, var(--navy) 3%, var(--white));
+  cursor: pointer;
+}
+
+.admin-booking-fee-room input {
+  margin-top: 0.2rem;
+  cursor: pointer;
+}
+
+.admin-booking-fee-room span {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.admin-booking-fee-room strong {
+  font-size: 0.86rem;
+  font-weight: 750;
+}
+
+.admin-booking-fee-room small {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--navy) 58%, var(--white));
+}
+
 .admin-booking-fee-option select {
   width: 100%;
   min-width: 0;
@@ -8939,9 +9054,16 @@ body.admin-cal-day-open {
 
 .admin-booking-edit-room-line {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) 5.5rem auto;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
   gap: 0.65rem;
   align-items: end;
+}
+
+.admin-booking-edit-room-index {
+  padding-bottom: 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--navy);
 }
 
 .admin-booking-edit-room-remove {
@@ -10391,7 +10513,7 @@ body.hotel-confirm-open {
   }
 
   .admin-booking-edit-room-line {
-    grid-template-columns: 1fr;
+    grid-template-columns: 4.5rem minmax(0, 1fr);
   }
 
   .admin-booking-detail-actions > button:not(.admin-booking-action-icon) {
@@ -10694,7 +10816,7 @@ body.hotel-photo-zoom-open {
 
 .admin-flush-kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
   gap: 12px;
   margin: 0;
   padding: 0;
@@ -10703,13 +10825,26 @@ body.hotel-photo-zoom-open {
 }
 
 .admin-flush-kpis li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-width: 0;
   min-height: 88px;
-  padding: 16px;
+  padding: 12px 10px;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(16px);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  container-type: inline-size;
+}
+
+.admin-flush-kpis span,
+.admin-flush-kpis strong,
+.admin-flush-kpis em {
+  max-width: 100%;
 }
 
 .admin-flush-kpis span {
@@ -10723,18 +10858,30 @@ body.hotel-photo-zoom-open {
 
 .admin-flush-kpis strong {
   display: block;
-  margin-top: 4px;
-  font-size: clamp(1.6rem, 2.2vw, 2rem);
-  line-height: 1.1;
+  margin-top: 0.2rem;
+  font-size: clamp(0.92rem, 16cqi, 1.2rem);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
   color: #ffffff;
 }
 
 .admin-flush-kpis em {
   display: block;
-  margin-top: 4px;
+  margin-top: 0.2rem;
   font-style: normal;
   font-size: 0.78rem;
   color: rgba(241, 245, 249, 0.7);
+}
+
+.admin-payments-hero .admin-flush-kpis {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 640px) {
+  .admin-flush-kpis,
+  .admin-payments-hero .admin-flush-kpis {
+    grid-template-columns: 1fr;
+  }
 }
 
 .admin-flush-banner {
@@ -11783,7 +11930,7 @@ body.hotel-photo-zoom-open {
 
 @media (min-width: 1100px) {
   .admin-flush-hero {
-    grid-template-columns: minmax(0, 1.15fr) minmax(18rem, 0.85fr);
+    grid-template-columns: minmax(0, 1fr) minmax(24rem, 1.05fr);
     align-items: center;
   }
 
@@ -12581,6 +12728,87 @@ body.hotel-photo-zoom-open {
   opacity: 0.88;
 }
 
+.admin-shift-on-duty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.55rem;
+  margin: 0.7rem 0 0;
+}
+
+.admin-shift-on-duty-label {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.admin-shift-on-duty-list {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+}
+
+.admin-shift-on-duty-chip,
+.admin-shift-on-duty-empty {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  padding: 0.22rem 0.7rem 0.22rem 0.26rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.admin-shift-on-duty-empty {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.admin-shift-on-duty-avatar {
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  background: var(--teal);
+  color: var(--white);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.admin-shift-on-duty-meta {
+  min-width: 0;
+  display: grid;
+  line-height: 1.2;
+}
+
+.admin-shift-on-duty-meta strong {
+  font-size: 0.82rem;
+  font-weight: 750;
+  color: var(--white);
+}
+
+.admin-shift-on-duty-meta small {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.admin-shift-on-duty-chip.is-you {
+  border-color: color-mix(in srgb, var(--teal) 55%, var(--white));
+  background: color-mix(in srgb, var(--teal) 28%, transparent);
+}
+
 .admin-shift-status-card {
   display: flex;
   flex-direction: column;
@@ -12954,6 +13182,11 @@ body.hotel-photo-zoom-open {
 }
 
 .admin-shift-briefing-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
   margin-bottom: 0.75rem;
   text-align: left;
 }
@@ -12968,6 +13201,24 @@ body.hotel-photo-zoom-open {
   margin: 0.25rem 0 0;
   font-size: 0.82rem;
   color: color-mix(in srgb, var(--navy) 55%, var(--white));
+}
+
+.admin-shift-idle-flag {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.4rem;
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--navy) 16%, var(--white));
+  background: color-mix(in srgb, var(--navy) 6%, var(--white));
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  color: var(--navy);
+}
+
+.admin-shift-briefing-board.is-idle .admin-shift-note-card {
+  opacity: 0.78;
 }
 
 .admin-shift-note-grid {
@@ -13594,6 +13845,290 @@ body.admin-shift-modal-open {
   .admin-shift-details-bento {
     grid-template-columns: 1fr;
   }
+}
+
+/* Admin review moderation */
+.admin-reviews-list {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.admin-reviews-empty {
+  margin: 0;
+  color: rgba(11, 31, 58, 0.65);
+}
+
+.admin-reviews-card {
+  border: 1px solid var(--navy-line);
+  border-radius: 14px;
+  background: var(--white);
+  padding: 0.95rem;
+  box-shadow: 0 8px 26px rgba(11, 31, 58, 0.08);
+}
+
+.admin-reviews-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.admin-reviews-page-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-reviews-page-size span {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: rgba(11, 31, 58, 0.76);
+}
+
+.admin-reviews-page-size select {
+  border: 1px solid var(--navy-line);
+  border-radius: 8px;
+  padding: 0.24rem 0.45rem;
+  background: var(--white);
+}
+
+.admin-reviews-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.admin-reviews-card-head strong {
+  color: var(--navy);
+}
+
+.admin-reviews-card-head p {
+  margin: 0.2rem 0 0;
+  color: rgba(11, 31, 58, 0.7);
+  font-size: 0.86rem;
+}
+
+.admin-reviews-comment {
+  margin: 0.7rem 0 0;
+  color: rgba(11, 31, 58, 0.84);
+  line-height: 1.5;
+}
+
+.admin-reviews-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-reviews-tags li {
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.73rem;
+  color: color-mix(in srgb, var(--teal) 40%, var(--navy));
+  background: color-mix(in srgb, var(--teal) 12%, white);
+  border: 1px solid color-mix(in srgb, var(--teal) 24%, white);
+}
+
+.admin-reviews-reply-meta {
+  margin: 0.75rem 0 0;
+  font-size: 0.82rem;
+  color: rgba(11, 31, 58, 0.6);
+}
+
+.admin-reviews-list-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.admin-reviews-status-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.9rem;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.admin-reviews-status-tag.is-replied {
+  color: #0f766e;
+  background: rgba(20, 184, 166, 0.14);
+  border: 1px solid rgba(15, 118, 110, 0.2);
+}
+
+.admin-reviews-status-tag.is-pending {
+  color: #92400e;
+  background: rgba(245, 158, 11, 0.16);
+  border: 1px solid rgba(146, 64, 14, 0.18);
+}
+
+.admin-reviews-reply-field {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.7rem;
+}
+
+.admin-reviews-reply-field span {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: rgba(11, 31, 58, 0.76);
+}
+
+.admin-reviews-template-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.admin-reviews-template-btn {
+  border: 1px solid color-mix(in srgb, var(--teal) 30%, var(--navy-line));
+  background: color-mix(in srgb, var(--teal) 8%, white);
+  color: color-mix(in srgb, var(--teal) 45%, var(--navy));
+  border-radius: 999px;
+  padding: 0.2rem 0.58rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+
+.admin-reviews-template-btn:hover {
+  background: color-mix(in srgb, var(--teal) 14%, white);
+  border-color: var(--teal);
+}
+
+.admin-reviews-template-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--teal) 45%, white);
+  outline-offset: 2px;
+}
+
+.admin-reviews-reply-field textarea {
+  width: 100%;
+  min-height: 5.8rem;
+  resize: vertical;
+  border: 1px solid var(--navy-line);
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  color: var(--navy);
+  background: #fff;
+}
+
+.admin-reviews-reply-field textarea:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--teal) 45%, white);
+  outline-offset: 2px;
+}
+
+.admin-reviews-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.7rem;
+}
+
+.admin-reviews-actions-list {
+  justify-content: flex-end;
+}
+
+.admin-reviews-view-btn {
+  width: auto;
+  min-width: 8.5rem;
+  min-height: 2.15rem;
+  padding: 0 1rem;
+  border-radius: 10px;
+}
+
+.admin-reviews-scoreline {
+  margin: 0.65rem 0 0;
+  font-size: 0.84rem;
+  color: rgba(11, 31, 58, 0.72);
+}
+
+.admin-reviews-detail-meta {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.55rem;
+  color: rgba(11, 31, 58, 0.7);
+}
+
+.admin-reviews-detail-meta strong {
+  color: var(--navy);
+}
+
+.admin-reviews-modal[hidden] {
+  display: none;
+}
+
+.admin-reviews-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.admin-reviews-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(11, 31, 58, 0.45);
+}
+
+.admin-reviews-modal-card {
+  position: relative;
+  width: min(62rem, 100%);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--white);
+  border: 1px solid var(--navy-line);
+  border-radius: 14px;
+  box-shadow: 0 22px 70px rgba(11, 31, 58, 0.24);
+  overflow: hidden;
+}
+
+.admin-reviews-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid var(--navy-line);
+}
+
+.admin-reviews-modal-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.admin-reviews-modal-close {
+  border: 1px solid var(--navy-line);
+  border-radius: 999px;
+  width: 2.1rem;
+  height: 2.1rem;
+  background: var(--white);
+  color: var(--navy);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.admin-reviews-modal-body {
+  padding: 0.95rem 1rem 1.15rem;
+  overflow: auto;
+}
+
+body.admin-reviews-modal-open {
+  overflow: hidden;
 }
 
 

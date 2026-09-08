@@ -1,5 +1,8 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using TestingDemo.Data;
 using TestingDemo.DTOs;
 using TestingDemo.Models;
 using TestingDemo.Services;
@@ -11,10 +14,12 @@ namespace TestingDemo.Controllers;
 public sealed class SpecialOffersApiController : ControllerBase
 {
     private readonly ISpecialOfferService _offers;
+    private readonly HotelBookingDbContext _db;
 
-    public SpecialOffersApiController(ISpecialOfferService offers)
+    public SpecialOffersApiController(ISpecialOfferService offers, HotelBookingDbContext db)
     {
         _offers = offers;
+        _db = db;
     }
 
     /// <summary>Active offers for guest accommodations (online-visible only).</summary>
@@ -24,7 +29,27 @@ public sealed class SpecialOffersApiController : ControllerBase
         [FromQuery] int? roomTypeId,
         CancellationToken cancellationToken)
     {
-        var list = await _offers.GetActiveForGuestAsync(roomTypeId, cancellationToken);
+        var list = (await _offers.GetActiveForGuestAsync(roomTypeId, cancellationToken)).ToList();
+        if (User.IsInRole(AppRoles.Guest))
+        {
+            var email = (User.FindFirstValue(ClaimTypes.Email) ?? string.Empty).Trim();
+            if (email.Length > 0)
+            {
+                var prior = await _db.Bookings.AsNoTracking().AnyAsync(
+                    b => b.Channel == BookingChannel.Online
+                        && b.Status != BookingStatus.Cancelled
+                        && b.GuestEmail == email,
+                    cancellationToken);
+                if (prior)
+                {
+                    list = list
+                        .Where(o => o.Kind != SpecialOfferKind.GoogleLoyalty
+                            || o.LoyaltyApplyMode != LoyaltyApplyMode.FirstBooking)
+                        .ToList();
+                }
+            }
+        }
+
         return Ok(list);
     }
 
