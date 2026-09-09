@@ -1,6 +1,15 @@
 using TestingDemo.Models;
+using TestingDemo.Services.Chat;
 
 namespace TestingDemo.Services;
+
+/// <summary>
+/// Legacy probe used by older DI wiring. Prefer <see cref="IChatOrchestrator"/>.
+/// </summary>
+public interface IGeminiChatClient
+{
+    Task<GeminiChatResult> CompleteAsync(string prompt, CancellationToken cancellationToken = default);
+}
 
 public sealed class GeminiChatResult
 {
@@ -8,40 +17,25 @@ public sealed class GeminiChatResult
     public string Message { get; init; } = string.Empty;
 }
 
-public interface IGeminiChatClient
-{
-    Task<GeminiChatResult> CompleteAsync(string prompt, CancellationToken cancellationToken = default);
-}
-
-/// <summary>
-/// Promise stub: reports whether a Gemini key is stored. No live chatbot calls yet.
-/// </summary>
 public sealed class GeminiChatClient : IGeminiChatClient
 {
-    private readonly ISecureConfigStore _vault;
+    private readonly IChatLlmProvider _gemini;
 
-    public GeminiChatClient(ISecureConfigStore vault)
+    public GeminiChatClient(IEnumerable<IChatLlmProvider> providers)
     {
-        _vault = vault;
+        _gemini = providers.First(p => p.Kind == ChatProviderKind.Gemini);
     }
 
     public async Task<GeminiChatResult> CompleteAsync(string prompt, CancellationToken cancellationToken = default)
     {
         _ = prompt;
-        var configured = await _vault.HasValueAsync(SecureSettingKeys.GeminiApiKey, cancellationToken);
-        if (!configured)
-        {
-            return new GeminiChatResult
-            {
-                IsConfigured = false,
-                Message = "Gemini is not configured."
-            };
-        }
-
+        var configured = await _gemini.IsConfiguredAsync(cancellationToken);
         return new GeminiChatResult
         {
-            IsConfigured = true,
-            Message = "Gemini key is stored. Chatbot UI is not implemented yet."
+            IsConfigured = configured,
+            Message = configured
+                ? "Gemini key is stored."
+                : "Gemini is not configured."
         };
     }
 }

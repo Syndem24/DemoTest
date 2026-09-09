@@ -1,14 +1,16 @@
-"""Generate docs/HotelDb-Schema.docx from the analyzed HotelDb schema."""
+"""Generate docs/HotelDb-Schema.docx from the current HotelDb schema guide."""
 from pathlib import Path
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 NAVY = RGBColor(0x0B, 0x1F, 0x3A)
 TEAL = RGBColor(0x0D, 0x94, 0x88)
 OUT = Path(__file__).resolve().parent / "HotelDb-Schema.docx"
+OUT_FALLBACK = Path(__file__).resolve().parent / "HotelDb-Schema-updated.docx"
 
 
 def set_run_font(run, size=11, bold=False, color=NAVY):
@@ -30,36 +32,11 @@ def add_body(doc, text):
     p = doc.add_paragraph()
     run = p.add_run(text)
     set_run_font(run)
-    p.paragraph_format.space_after = Pt(8)
+    p.paragraph_format.space_after = Pt(6)
     return p
 
 
-def add_table(doc, rows):
-    table = doc.add_table(rows=len(rows), cols=2)
-    table.style = "Table Grid"
-    table.autofit = True
-    for i, (left, right) in enumerate(rows):
-        c0, c1 = table.rows[i].cells
-        c0.text = ""
-        c1.text = ""
-        r0 = c0.paragraphs[0].add_run(left)
-        r1 = c1.paragraphs[0].add_run(right)
-        set_run_font(r0, size=10, bold=(i == 0), color=NAVY)
-        set_run_font(r1, size=10, bold=(i == 0), color=NAVY)
-        if i == 0:
-            for cell in table.rows[0].cells:
-                shading = cell._tePr if False else cell._tc.get_or_add_tcPr()
-                fill = shading.makeelement(
-                    qn("w:shd"),
-                    {qn("w:fill"): "E6F7F7", qn("w:val"): "clear"},
-                )
-                shading.append(fill)
-    doc.add_paragraph()
-
-
 def shade_header_row(table):
-    from docx.oxml import OxmlElement
-
     for cell in table.rows[0].cells:
         tc_pr = cell._tc.get_or_add_tcPr()
         shd = OxmlElement("w:shd")
@@ -68,38 +45,37 @@ def shade_header_row(table):
         tc_pr.append(shd)
 
 
-def entity(doc, name, purpose, attrs):
-    add_heading(doc, name, 2)
-    add_body(doc, purpose)
-    add_heading(doc, "Attributes", 3)
-    table = doc.add_table(rows=1 + len(attrs), cols=2)
+def add_grid(doc, headers, rows):
+    table = doc.add_table(rows=1 + len(rows), cols=len(headers))
     table.style = "Table Grid"
-    hdr = table.rows[0].cells
-    hdr[0].text = ""
-    hdr[1].text = ""
-    h0 = hdr[0].paragraphs[0].add_run("Attribute")
-    h1 = hdr[1].paragraphs[0].add_run("What it is for")
-    set_run_font(h0, size=10, bold=True)
-    set_run_font(h1, size=10, bold=True)
+    for i, h in enumerate(headers):
+        table.rows[0].cells[i].text = ""
+        run = table.rows[0].cells[i].paragraphs[0].add_run(h)
+        set_run_font(run, size=9, bold=True)
     shade_header_row(table)
-    for i, (col, meaning) in enumerate(attrs, start=1):
-        table.rows[i].cells[0].text = ""
-        table.rows[i].cells[1].text = ""
-        r0 = table.rows[i].cells[0].paragraphs[0].add_run(col)
-        r1 = table.rows[i].cells[1].paragraphs[0].add_run(meaning)
-        set_run_font(r0, size=10, bold=True)
-        set_run_font(r1, size=10)
+    for r, row in enumerate(rows, start=1):
+        for c, val in enumerate(row):
+            table.rows[r].cells[c].text = ""
+            run = table.rows[r].cells[c].paragraphs[0].add_run(val)
+            set_run_font(run, size=9, bold=(c == 0))
     doc.add_paragraph()
+
+
+def entity(doc, name, er_type, purpose, attrs, relationships):
+    add_heading(doc, f"{name} — {er_type}", 2)
+    add_body(doc, purpose)
+    add_body(doc, f"Relationships: {relationships}")
+    add_heading(doc, "Attributes", 3)
+    add_grid(doc, ["Attribute", "What it is for"], attrs)
 
 
 def main():
     doc = Document()
     section = doc.sections[0]
-    section.left_margin = Inches(0.9)
-    section.right_margin = Inches(0.9)
+    section.left_margin = Inches(0.75)
+    section.right_margin = Inches(0.75)
 
     title = doc.add_paragraph()
-    title.alignment = WD_ALIGN_PARAGRAPH.LEFT
     run = title.add_run("Mori International Hotel")
     set_run_font(run, size=22, bold=True, color=NAVY)
 
@@ -109,360 +85,401 @@ def main():
 
     add_body(
         doc,
-        "Simple guide to the live SQL Server database (HotelDb.mdf). "
-        "Dates are stored in UTC. The app shows them in Philippines time. "
-        "A Markdown copy of this guide is docs/HotelDb-Schema.md.",
+        "Guide to the live SQL Server database (HotelBookingDbContext). "
+        "Dates are stored in UTC; the app shows Philippines time. "
+        "Markdown source: docs/HotelDb-Schema.md.",
     )
 
-    add_heading(doc, "How the hotel data fits together", 1)
-    for line in [
-        "1. RoomType = a category you sell (Queen, Twin).",
-        "2. Room = one physical door (101, 102) of that type.",
-        "3. Booking = one guest stay.",
-        "4. BookingItem = how many of each room type are on that stay.",
-        "5. BookingRoomAssignment = which door number was given to the guest.",
-        "6. BookingCharge = extra fees (early check-in, extra person, snacks).",
-        "7. PaymentRecord = money received or voided for that stay.",
-        "8. SpecialOffer = a promo price on one room type.",
-        "9. StaffAccount + StaffRole = who can log in to admin.",
-        "10. SystemFlushLog = audit of export PDF then delete old records.",
-    ]:
-        add_body(doc, line)
+    add_heading(doc, "Entity type legend", 1)
+    add_grid(
+        doc,
+        ["Type", "Meaning"],
+        [
+            ("Strong", "Own primary key; independent identity."),
+            ("Weak / dependent", "Surrogate key; lifecycle owned by a parent (often cascade)."),
+            ("Associative", "Bridge resolving many-to-many / assignment."),
+            ("Identity satellite", "ASP.NET Identity support table (composite key)."),
+        ],
+    )
 
+    add_heading(doc, "Master list", 1)
+    add_grid(
+        doc,
+        ["Table", "ER type", "PK", "Relationships"],
+        [
+            ("RoomType", "Strong", "RoomTypeId", "1→N Room, SpecialOffer; optional BookingItem"),
+            ("Room", "Strong", "Id", "N→1 RoomType; used by BookingRoomAssignment"),
+            ("Booking", "Strong", "Id", "opt→SpecialOffer; 1→N Item/Charge/Payment; 1→0..1 StayReview"),
+            ("BookingItem", "Weak / dependent", "Id", "N→1 Booking; opt→RoomType; 1→N Assignment"),
+            ("BookingRoomAssignment", "Associative", "Id", "BookingItem ↔ Room; unique pair"),
+            ("BookingCharge", "Weak / dependent", "Id", "N→1 Booking"),
+            ("PaymentRecord", "Weak / dependent", "Id", "N→1 Booking"),
+            ("SpecialOffer", "Strong", "Id", "N→1 RoomType; optional Booking"),
+            ("StayReview", "Weak / dependent", "Id", "N→1 Booking; unique BookingId"),
+            ("StaffRole", "Strong", "Id", "1→N StaffUser"),
+            ("StaffUser", "Strong", "Id", "N→1 StaffRole; logins/tokens/reset/shifts"),
+            ("StaffExternalLogin", "Identity satellite", "Provider+Key", "N→1 StaffUser"),
+            ("StaffAuthToken", "Identity satellite", "User+Provider+Name", "N→1 StaffUser"),
+            ("StaffPasswordResetCode", "Weak / dependent", "Id", "→ StaffUser (UserId)"),
+            ("StaffShift", "Strong", "Id", "→ StaffUser (StaffUserId)"),
+            ("SecureSetting", "Strong", "Id", "Standalone vault"),
+            ("SystemAuditLog", "Strong", "Id", "Append-only; no FK"),
+            ("SystemFlushLog", "Strong", "Id", "Export metadata"),
+        ],
+    )
+
+    add_heading(doc, "Relationship overview", 1)
     add_body(
         doc,
         "RoomType has many Rooms and SpecialOffers. "
-        "A Booking has BookingItems, BookingCharges, and PaymentRecords. "
-        "A BookingItem has BookingRoomAssignments to Rooms. "
-        "StaffAccount points at one StaffRole (RoleId).",
+        "Booking has Items, Charges, Payments, and optional StayReview. "
+        "BookingItem assigns Rooms through BookingRoomAssignment (associative). "
+        "StaffUser has one StaffRole via RoleId.",
     )
 
     add_heading(doc, "1. Inventory", 1)
     entity(
         doc,
         "RoomType",
-        "The sellable room category (name, nightly rate, photos, occupancy). Individual door numbers are not here; they live in Room.",
+        "Strong",
+        "Sellable room category (name, rate, photos, occupancy). Door numbers live in Room.",
         [
-            ("RoomTypeId", "Unique id for this category."),
-            ("Name", "Display name, e.g. Queen Room. Must be unique."),
-            ("Description", "Longer text shown to guests."),
-            ("CreatedAt", "When this type was created (UTC)."),
-            ("Inclusions", "Amenities list stored as JSON (wifi, breakfast, …)."),
-            ("Images", "Photo paths stored as JSON."),
-            ("PricePerNight", "Standard nightly rate before any promo."),
-            ("MaxOccupancy", "How many guests this type can hold."),
-            ("BedCount", "How many beds."),
+            ("RoomTypeId", "Primary key."),
+            ("Name", "Unique display name."),
+            ("Description", "Guest-facing text."),
+            ("CreatedAt", "Created (UTC)."),
+            ("Inclusions", "Amenities JSON list."),
+            ("Images", "Photo paths JSON."),
+            ("PricePerNight", "Standard nightly rate."),
+            ("MaxOccupancy", "Max guests."),
+            ("BedCount", "Beds."),
         ],
+        "1→N Room; 1→N SpecialOffer; optional parent of BookingItem.RoomTypeId.",
     )
     entity(
         doc,
         "Room",
-        "One physical guest room (the door number staff assign at check-in).",
+        "Strong",
+        "One physical guest room (door number).",
         [
-            ("Id", "Unique id for this door."),
-            ("RoomTypeId", "Which category this room belongs to (RoomType)."),
-            ("RoomNumber", "Door number shown to staff, e.g. 101. Must be unique."),
-            ("Status", "Available, Unavailable, Occupied, or Cleaning (shown as Maintaining)."),
+            ("Id", "Primary key."),
+            ("RoomTypeId", "FK → RoomType."),
+            ("RoomNumber", "Unique door number."),
+            ("Status", "Available, Unavailable, Occupied, Cleaning (UI: Maintaining)."),
         ],
+        "N→1 RoomType; referenced by BookingRoomAssignment.",
     )
 
     add_heading(doc, "2. Guest stays", 1)
     entity(
         doc,
         "Booking",
-        "One guest stay — online book, walk-in, or OTA. This is the main stay record.",
+        "Strong",
+        "One guest stay (online, walk-in, or OTA).",
         [
-            ("Id", "Unique id."),
-            ("Reference", "Public confirmation code. Unique."),
-            ("GuestName", "Guest full name."),
-            ("GuestEmail", "Guest email."),
-            ("GuestPhone", "Guest phone."),
-            ("CheckInAtUtc", "Planned arrival (UTC)."),
-            ("CheckoutTimeUtc", "Planned departure (UTC)."),
-            ("Kind", "Booking (near arrival) or Reservation (further ahead)."),
-            ("PaymentOption", "Full or Half due when they book."),
+            ("Id", "Primary key."),
+            ("Reference", "Unique confirmation code."),
+            ("GuestName / GuestEmail / GuestPhone", "Guest contact."),
+            ("CheckInAtUtc / CheckoutTimeUtc", "Stay window (UTC)."),
+            ("Kind", "Booking or Reservation."),
+            ("PaymentOption", "Full or Half."),
             ("Status", "Pending, Confirmed, Rejected, Cancelled, CheckedOut."),
-            ("Channel", "Online, WalkIn, FrontDeskExtension, Agoda, Expedia, RedDoorz, OtherThirdParty."),
-            ("ArrivalDiscountRequest", "None, SeniorCitizen, or Pwd — claimed at arrival."),
-            ("CashOnlyPromo", "If true, this stay must be paid in cash."),
-            ("SpecialOfferId", "Optional promo that was applied."),
-            ("TotalAmount", "Stay total (rooms + fees)."),
-            ("AmountDueNow", "How much was required at booking time."),
-            ("CreatedAtUtc", "When the stay was created."),
-            ("UpdatedAtUtc", "Last change."),
-            ("IsArchived", "True when moved to admin history (not deleted)."),
-            ("ArchivedAtUtc", "When it was archived."),
-            ("IsNotificationCleared", "Hidden from the admin bell until something new happens."),
-            ("ArrivalWarningSentAtUtc", "Set when the arriving-soon warning was shown."),
-            ("PendingCallWarningSentAtUtc", "Set when the call-pending-guest warning was shown."),
-            ("CheckoutWarningSentAtUtc", "Set when the checkout-soon warning was shown."),
+            ("Channel", "Online, WalkIn, FrontDeskExtension, OTAs, Other."),
+            ("ArrivalDiscountRequest", "None / SeniorCitizen / Pwd."),
+            ("CashOnlyPromo", "Cash-only stay."),
+            ("SpecialOfferId", "Optional promo FK."),
+            ("TotalAmount / AmountDueNow", "Money totals."),
+            ("AdultCount / ChildCount / GuestPartyJson", "Party size."),
+            ("CreatedAtUtc / UpdatedAtUtc", "Timestamps."),
+            ("IsArchived / ArchivedAtUtc", "History flag."),
+            ("IsNotificationCleared", "Admin bell hide."),
+            ("ArrivalWarningSentAtUtc / PendingCallWarningSentAtUtc / CheckoutWarningSentAtUtc", "Warning stamps."),
         ],
+        "opt→SpecialOffer; 1→N BookingItem, BookingCharge, PaymentRecord; 1→0..1 StayReview.",
     )
     entity(
         doc,
         "BookingItem",
-        "One line on the stay: how many of a room type at this nightly rate. Physical room numbers are assigned later.",
+        "Weak / dependent",
+        "Room-type line on a stay (qty × nightly rate).",
         [
-            ("Id", "Unique id."),
-            ("BookingId", "Which stay this line belongs to."),
-            ("RoomTypeId", "Room category. Can be empty if that type was later removed."),
-            ("RoomTypeName", "Name copied at booking time so history still makes sense."),
-            ("Quantity", "How many rooms of this type."),
-            ("PricePerNight", "Nightly rate used for this line (regular or promo)."),
+            ("Id", "Primary key."),
+            ("BookingId", "FK → Booking (cascade)."),
+            ("RoomTypeId", "Optional FK → RoomType."),
+            ("RoomTypeName", "Name snapshot."),
+            ("Quantity", "Room count."),
+            ("PricePerNight", "Line rate."),
         ],
+        "N→1 Booking; optional N→1 RoomType; 1→N BookingRoomAssignment. Unique (BookingId, RoomTypeId).",
     )
     entity(
         doc,
         "BookingRoomAssignment",
-        "Links a real door (Room) to a stay line after reception assigns room numbers. This is not inventory.",
+        "Associative",
+        "Assigns a physical Room to a BookingItem line.",
         [
-            ("Id", "Unique id."),
-            ("BookingItemId", "Which stay line this assignment belongs to."),
-            ("RoomId", "Which physical room was given to the guest."),
+            ("Id", "Primary key."),
+            ("BookingItemId", "FK → BookingItem (cascade)."),
+            ("RoomId", "FK → Room (restrict)."),
         ],
+        "Bridges BookingItem ↔ Room. Unique (BookingItemId, RoomId).",
     )
     entity(
         doc,
         "BookingCharge",
-        "Extra money on the stay besides the nightly room rate.",
+        "Weak / dependent",
+        "Extra fees on a stay.",
         [
-            ("Id", "Unique id."),
-            ("BookingId", "Which stay."),
+            ("Id", "Primary key."),
+            ("BookingId", "FK → Booking (cascade)."),
             ("ChargeType", "EarlyCheckIn, LateCheckout, ExtraPerson, Incidental, ServiceFee, SnackBeverage, StayExtension."),
-            ("Label", "Text shown on the bill."),
-            ("Quantity", "Count: rooms, hours, or extra persons."),
-            ("Nights", "Multiplier for extra-person fees; usually 1 otherwise."),
-            ("UnitAmount", "Price per unit."),
-            ("Amount", "Line total."),
-            ("CreatedAtUtc", "When the fee was added."),
+            ("Label / Quantity / Nights / UnitAmount / Amount", "Bill line fields."),
+            ("CreatedAtUtc", "When added."),
         ],
+        "N→1 Booking.",
+    )
+    entity(
+        doc,
+        "StayReview",
+        "Weak / dependent",
+        "Guest review for one stay (unique BookingId).",
+        [
+            ("Id", "Primary key."),
+            ("BookingId", "FK → Booking (cascade), unique."),
+            ("GuestUserId / DisplayName", "Guest identity."),
+            ("OverallRating / StaffRating / ComfortRating / FacilitiesRating", "Scores."),
+            ("WouldRecommend / Comment / TagsJson", "Feedback."),
+            ("IsPublished", "Public visibility."),
+            ("HotelReply / HotelReplyAtUtc / HotelReplyBy", "Hotel response."),
+            ("CreatedAtUtc / UpdatedAtUtc", "Timestamps."),
+        ],
+        "N→1 Booking (1:1 enforced).",
     )
 
     add_heading(doc, "3. Money", 1)
     entity(
         doc,
         "PaymentRecord",
-        "Company log of money posted against a stay. Rows are not edited; a bad payment is voided.",
+        "Weak / dependent",
+        "Posted or voided payment against a stay.",
         [
-            ("Id", "Unique id."),
-            ("BookingId", "Which stay this payment belongs to."),
+            ("Id", "Primary key."),
+            ("BookingId", "FK → Booking (cascade)."),
             ("ReceiptNumber", "Unique receipt code."),
-            ("EventType", "Deposit, ArrivalPayment, BalanceSettlement, Refund, Adjustment."),
-            ("Method", "Cash, EWallet, BankTransfer, or legacy Card / Maya / Other."),
-            ("Amount", "Money amount."),
-            ("StayTotalAtPosting", "Stay total at the moment this was posted."),
-            ("BalanceAfter", "Remaining balance after this row."),
-            ("PaidAtUtc", "When it was posted."),
-            ("ReceivedBy", "Staff name who recorded it."),
-            ("Notes", "Optional comment."),
-            ("Status", "Posted or Voided."),
-            ("ExternalReference", "E-wallet / InstaPay reference from the guest receipt."),
-            ("BankTransferReference", "Bank / InstaPay clearing reference."),
-            ("ReceiptImagePath", "Saved photo of a digital receipt."),
-            ("VoidedAtUtc", "When it was voided (if ever)."),
-            ("VoidReason", "Why it was voided."),
-            ("VoidedBy", "Who voided it."),
+            ("EventType / Method / Status", "Deposit…; Cash/EWallet/…; Posted/Voided."),
+            ("Amount / StayTotalAtPosting / BalanceAfter", "Money fields."),
+            ("PaidAtUtc / ReceivedBy / Notes", "Posting metadata."),
+            ("ExternalReference / BankTransferReference / ReceiptImagePath", "Transfer + image."),
+            ("VoidedAtUtc / VoidReason / VoidedBy", "Void fields."),
         ],
+        "N→1 Booking.",
     )
 
     add_heading(doc, "4. Promos", 1)
     entity(
         doc,
         "SpecialOffer",
-        "A promo rate for one room type. The same campaign title can appear on several room types as sibling rows.",
+        "Strong",
+        "Promo rate for one room type.",
         [
-            ("Id", "Unique id."),
-            ("RoomTypeId", "Which room type this promo applies to."),
-            ("Kind", "LimitedTime or StayLongerSaveMore (older kinds exist but are not created anymore)."),
-            ("Title", "Campaign name."),
-            ("Description", "Optional details."),
-            ("RegularPricePerNight", "Was / comparison price."),
-            ("PromoPricePerNight", "Promo nightly rate."),
-            ("MinNights", "Minimum nights for Stay Longer; empty for Limited Time."),
-            ("Channels", "Where it shows: Online, Walk-in, Front desk, third-party (visibility only)."),
-            ("CashOnly", "If true, the stay must be paid in cash."),
-            ("IsActive", "Whether staff still treat it as on."),
-            ("StartsAtUtc", "Promo start."),
-            ("EndsAtUtc", "Promo end."),
-            ("SortOrder", "Display order."),
-            ("CreatedAtUtc", "Created."),
-            ("UpdatedAtUtc", "Last edit."),
+            ("Id", "Primary key."),
+            ("RoomTypeId", "FK → RoomType (cascade)."),
+            ("Kind / Title / Description", "Campaign."),
+            ("RegularPricePerNight / PromoPricePerNight / MinNights", "Pricing."),
+            ("Channels / CashOnly / IsActive / LoyaltyApplyMode", "Rules."),
+            ("StartsAtUtc / EndsAtUtc / OpenEnded / SortOrder", "Schedule."),
+            ("CreatedAtUtc / UpdatedAtUtc", "Timestamps."),
         ],
+        "N→1 RoomType; optional Booking.SpecialOfferId.",
     )
 
-    add_heading(doc, "5. Staff login", 1)
+    add_heading(doc, "5. Staff / auth", 1)
     add_body(
         doc,
-        "Staff log in with StaffAccount. Job title is StaffRole, stored as StaffAccount.RoleId (one role per person). "
-        "Google extras are StaffAccountLogin and StaffAccountToken. Who changed an account is StaffAccountAudit.",
+        "Tables: StaffUser, StaffRole, StaffExternalLogin, StaffAuthToken, StaffPasswordResetCode, StaffShift "
+        "(see StaffAuthSchema).",
     )
     entity(
         doc,
         "StaffRole",
-        "Job titles used by admin security. Typical names: AdminManager, Receptionist (and a reserved Guest name).",
+        "Strong",
+        "Admin roles (AdminManager, Receptionist, reserved Guest).",
         [
-            ("Id", "Unique id (text)."),
-            ("Name", "Role name shown in the app."),
-            ("NormalizedName", "Uppercase copy used for lookups."),
-            ("ConcurrencyStamp", "Stops two people overwriting the role at the same time."),
+            ("Id", "Primary key (string)."),
+            ("Name / NormalizedName", "Role name."),
+            ("ConcurrencyStamp", "Concurrency token."),
         ],
+        "1→N StaffUser.",
     )
     entity(
         doc,
-        "StaffAccount",
-        "One staff login (username, password, profile). This is the real user table.",
+        "StaffUser",
+        "Strong",
+        "Staff login profile (ApplicationUser / Identity).",
         [
-            ("Id", "Unique id (text)."),
-            ("UserName", "Login name."),
-            ("NormalizedUserName", "Uppercase copy for lookups."),
-            ("Email", "Work email."),
-            ("NormalizedEmail", "Uppercase copy for lookups."),
-            ("EmailConfirmed", "Whether email was confirmed."),
-            ("PasswordHash", "Encrypted password (never plain text)."),
-            ("SecurityStamp", "Invalidates old cookies when the account changes."),
-            ("ConcurrencyStamp", "Stops two edits colliding."),
-            ("PhoneNumber", "Staff phone."),
-            ("PhoneNumberConfirmed", "Whether phone was confirmed."),
-            ("TwoFactorEnabled", "Reserved for 2FA."),
-            ("LockoutEnd", "If set in the future, the account is locked until then."),
-            ("LockoutEnabled", "Whether lockout is allowed."),
-            ("AccessFailedCount", "Failed login attempts."),
-            ("FullName", "Display name in admin."),
-            ("BirthDate", "Date of birth."),
-            ("Address", "Address."),
-            ("MustChangePassword", "Force password change on next login (temp password)."),
-            ("GoogleEmail", "Gmail used for verify / future 2FA."),
-            ("NormalizedGoogleEmail", "Uppercase Gmail for unique lookup."),
-            ("GoogleVerificationStatus", "NotLinked, PendingGoogleVerification, or GoogleVerified."),
-            ("RoleId", "Which StaffRole this person has."),
+            ("Id", "Primary key (string)."),
+            ("UserName / Email / PasswordHash / …", "Identity columns."),
+            ("FullName / BirthDate / Address", "Profile."),
+            ("MustChangePassword", "Force password change."),
+            ("RoleId", "FK → StaffRole."),
+            ("GoogleEmail / NormalizedGoogleEmail / GoogleVerificationStatus", "Google recovery."),
+            ("DashboardLayoutJson", "Dashboard layout."),
         ],
+        "N→1 StaffRole; 1→N logins, tokens, reset codes; shifts by StaffUserId.",
     )
     entity(
         doc,
-        "StaffAccountLogin",
-        "External login link (Google). One row per provider key.",
+        "StaffExternalLogin",
+        "Identity satellite",
+        "External login link (e.g. Google).",
         [
-            ("LoginProvider", "Provider name, e.g. Google."),
-            ("ProviderKey", "Id from that provider."),
-            ("ProviderDisplayName", "Label for the provider."),
-            ("UserId", "Which StaffAccount this belongs to."),
+            ("LoginProvider + ProviderKey", "Composite PK."),
+            ("ProviderDisplayName", "Label."),
+            ("UserId", "FK → StaffUser."),
         ],
+        "N→1 StaffUser.",
     )
     entity(
         doc,
-        "StaffAccountToken",
-        "Auth tokens for a staff account (verify email, 2FA, recovery).",
+        "StaffAuthToken",
+        "Identity satellite",
+        "Auth tokens for a staff user.",
         [
-            ("UserId", "Which staff account."),
-            ("LoginProvider", "Token group / provider."),
-            ("Name", "Token name."),
+            ("UserId + LoginProvider + Name", "Composite PK."),
             ("Value", "Token value."),
         ],
+        "N→1 StaffUser.",
     )
     entity(
         doc,
-        "StaffAccountAudit",
-        "Who created, edited, or disabled a staff account. Can be flushed from Flush logs.",
+        "StaffPasswordResetCode",
+        "Weak / dependent",
+        "OTP / reset codes for staff password recovery.",
         [
-            ("Id", "Unique id."),
-            ("Action", "What happened (create, edit, disable, …)."),
-            ("TargetUserId", "The staff account that was changed."),
-            ("PerformedByUserId", "The staff account that did the change."),
-            ("RoleAssigned", "Role at the time of the action."),
-            ("AtUtc", "When it happened."),
+            ("Id", "Primary key."),
+            ("UserId / NormalizedEmail / CodeHash", "Target + hash."),
+            ("CreatedAtUtc / ExpiresAtUtc / ConsumedAtUtc / FailedAttempts", "Lifecycle."),
         ],
+        "Logically N→1 StaffUser.",
+    )
+    entity(
+        doc,
+        "StaffShift",
+        "Strong",
+        "Staff open/close shift with handover notes.",
+        [
+            ("Id", "Primary key."),
+            ("StaffUserId / StaffDisplayName", "Owner."),
+            ("StartedAtUtc / EndedAtUtc", "Open/closed."),
+            ("OpeningNote / ClosingNote / briefing fields / ClosingSummaryJson", "Handover."),
+            ("CreatedAtUtc / UpdatedAtUtc", "Timestamps."),
+        ],
+        "Logically N→1 StaffUser; one open shift per staff.",
     )
 
-    add_heading(doc, "6. Records / flush", 1)
+    add_heading(doc, "6. Settings, audit, export", 1)
+    entity(
+        doc,
+        "SecureSetting",
+        "Strong",
+        "Encrypted vault for SMTP, Gemini, Groq, Google OAuth, etc.",
+        [
+            ("Id", "Primary key."),
+            ("Key", "Unique key."),
+            ("Ciphertext", "Encrypted value."),
+            ("UpdatedUtc", "Last update."),
+        ],
+        "Standalone.",
+    )
+    entity(
+        doc,
+        "SystemAuditLog",
+        "Strong",
+        "Append-only operational audit trail (not deleted by flush).",
+        [
+            ("Id", "Primary key (long)."),
+            ("AtUtc / Intent / Domain / Action", "What happened."),
+            ("ActorUserId / ActorDisplayName", "Who."),
+            ("TargetType / TargetId / TargetLabel", "What."),
+            ("Reason / Summary", "Details."),
+        ],
+        "Standalone (string actor ids).",
+    )
     entity(
         doc,
         "SystemFlushLog",
-        "After staff export history or payments to PDF (or flush staff audit) and delete those rows, this table remembers who did it. Entries are kept about 7 days (expiry is calculated in code, not stored as a column).",
+        "Strong",
+        "Metadata after retention export actions (~7-day app retention).",
         [
-            ("Id", "Unique id."),
-            ("Kind", "BookingHistory, Payments, or StaffAudit."),
-            ("FlushedAtUtc", "When the flush ran."),
-            ("PerformedBy", "Staff name typed for the flush."),
-            ("RecordCount", "How many rows were exported / deleted."),
-            ("FileName", "PDF or zip file name if one was downloaded."),
-            ("Summary", "Short description of what was flushed."),
+            ("Id", "Primary key."),
+            ("Kind", "BookingHistory, Payments, StaffAudit."),
+            ("FlushedAtUtc / PerformedBy / RecordCount / FileName / Summary", "Export metadata."),
         ],
+        "Standalone.",
     )
 
-    add_heading(doc, "7. EF helper table", 1)
+    add_heading(doc, "7. EF helper", 1)
     entity(
         doc,
         "__EFMigrationsHistory",
-        "Entity Framework’s list of schema updates already applied. Not hotel data. Do not edit by hand.",
+        "Strong (tooling)",
+        "EF list of applied schema updates. Not hotel data.",
         [
-            ("MigrationId", "Name of a schema update that already ran."),
-            ("ProductVersion", "EF version that applied it."),
+            ("MigrationId", "Applied migration name."),
+            ("ProductVersion", "EF version."),
+        ],
+        "None.",
+    )
+
+    add_heading(doc, "Renames / removals", 1)
+    add_grid(
+        doc,
+        ["Old / wrong", "Current"],
+        [
+            ("StaffAccount table name", "StaffUser"),
+            ("StaffAccountLogin / Token", "StaffExternalLogin / StaffAuthToken"),
+            ("StaffAccountRole / Claims", "Dropped; use StaffUser.RoleId"),
+            ("StaffAccountAudit", "SystemAuditLog (Account domain)"),
         ],
     )
 
-    add_heading(doc, "Tables removed on purpose", 1)
-    add_body(doc, "These used to exist. They are not in HotelDb now.")
-    gone = doc.add_table(rows=5, cols=2)
-    gone.style = "Table Grid"
-    gone.rows[0].cells[0].text = ""
-    gone.rows[0].cells[1].text = ""
-    a = gone.rows[0].cells[0].paragraphs[0].add_run("Old table")
-    b = gone.rows[0].cells[1].paragraphs[0].add_run("Why it went away")
-    set_run_font(a, size=10, bold=True)
-    set_run_font(b, size=10, bold=True)
-    shade_header_row(gone)
-    removed = [
-        ("StaffUser", "Unused leftover from before Identity login."),
-        ("StaffAccountRole", "Role was merged onto StaffAccount.RoleId."),
-        ("StaffAccountClaim", "Empty; not used."),
-        ("StaffRoleClaim", "Empty; not used."),
-    ]
-    for i, (name, why) in enumerate(removed, start=1):
-        gone.rows[i].cells[0].text = ""
-        gone.rows[i].cells[1].text = ""
-        r0 = gone.rows[i].cells[0].paragraphs[0].add_run(name)
-        r1 = gone.rows[i].cells[1].paragraphs[0].add_run(why)
-        set_run_font(r0, size=10, bold=True)
-        set_run_font(r1, size=10)
-    doc.add_paragraph()
-
     add_heading(doc, "Code map", 1)
-    add_body(doc, "Models live under TestingDemo/Models/. Table names are set in TestingDemo/Data/HotelBookingDbContext.cs.")
-    code = [
-        ("RoomType", "RoomType"),
-        ("Room", "Room"),
-        ("Booking", "Booking"),
-        ("BookingItem", "BookingItem"),
-        ("BookingRoomAssignment", "BookingRoomAssignment"),
-        ("BookingCharge", "BookingCharge"),
-        ("PaymentRecord", "PaymentRecord"),
-        ("SpecialOffer", "SpecialOffer"),
-        ("StaffAccount", "ApplicationUser"),
-        ("StaffRole", "IdentityRole"),
-        ("StaffAccountLogin", "Identity user login"),
-        ("StaffAccountToken", "Identity user token"),
-        ("StaffAccountAudit", "StaffAccountAudit"),
-        ("SystemFlushLog", "SystemFlushLog"),
-    ]
-    cmap = doc.add_table(rows=1 + len(code), cols=2)
-    cmap.style = "Table Grid"
-    cmap.rows[0].cells[0].text = ""
-    cmap.rows[0].cells[1].text = ""
-    h0 = cmap.rows[0].cells[0].paragraphs[0].add_run("Table")
-    h1 = cmap.rows[0].cells[1].paragraphs[0].add_run("C# type")
-    set_run_font(h0, size=10, bold=True)
-    set_run_font(h1, size=10, bold=True)
-    shade_header_row(cmap)
-    for i, (tbl, typ) in enumerate(code, start=1):
-        cmap.rows[i].cells[0].text = ""
-        cmap.rows[i].cells[1].text = ""
-        r0 = cmap.rows[i].cells[0].paragraphs[0].add_run(tbl)
-        r1 = cmap.rows[i].cells[1].paragraphs[0].add_run(typ)
-        set_run_font(r0, size=10, bold=True)
-        set_run_font(r1, size=10)
+    add_body(doc, "Models: TestingDemo/Models/. Context: TestingDemo/Data/HotelBookingDbContext.cs.")
+    add_grid(
+        doc,
+        ["Table", "C# type"],
+        [
+            ("RoomType", "RoomType"),
+            ("Room", "Room"),
+            ("Booking", "Booking"),
+            ("BookingItem", "BookingItem"),
+            ("BookingRoomAssignment", "BookingRoomAssignment"),
+            ("BookingCharge", "BookingCharge"),
+            ("PaymentRecord", "PaymentRecord"),
+            ("SpecialOffer", "SpecialOffer"),
+            ("StayReview", "StayReview"),
+            ("StaffUser", "ApplicationUser"),
+            ("StaffRole", "IdentityRole"),
+            ("StaffExternalLogin", "Identity user login"),
+            ("StaffAuthToken", "Identity user token"),
+            ("StaffPasswordResetCode", "StaffPasswordResetCode"),
+            ("StaffShift", "StaffShift"),
+            ("SecureSetting", "SecureSetting"),
+            ("SystemAuditLog", "SystemAuditLog"),
+            ("SystemFlushLog", "SystemFlushLog"),
+        ],
+    )
 
-    doc.save(OUT)
-    print(f"Wrote {OUT}")
+    target = OUT
+    try:
+        doc.save(target)
+    except PermissionError:
+        target = OUT_FALLBACK
+        doc.save(target)
+        print(f"Primary docx locked; wrote {target}")
+        print("Close Word and re-run to overwrite HotelDb-Schema.docx.")
+        return
+    print(f"Wrote {target}")
 
 
 if __name__ == "__main__":

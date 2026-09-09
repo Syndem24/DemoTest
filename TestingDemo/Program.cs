@@ -17,7 +17,9 @@ using TestingDemo.Data;
 using TestingDemo.Hubs;
 using TestingDemo.Middleware;
 using TestingDemo.Models;
+using TestingDemo.Options;
 using TestingDemo.Services;
+using TestingDemo.Services.Chat;
 using TestingDemo.Validators;
 
 try
@@ -70,6 +72,16 @@ try
                 _ => new FixedWindowRateLimiterOptions
                 {
                     PermitLimit = 5,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                    AutoReplenishment = true
+                }));
+        options.AddPolicy("guest-chat", context =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 12,
                     Window = TimeSpan.FromMinutes(1),
                     QueueLimit = 0,
                     AutoReplenishment = true
@@ -257,6 +269,34 @@ try
     builder.Services.AddScoped<IStaffEmailSender, SmtpStaffEmailSender>();
     builder.Services.AddScoped<IStaffOnboardingEmailSender, SmtpStaffEmailSender>();
     builder.Services.AddScoped<IStaffPasswordResetCodeService, StaffPasswordResetCodeService>();
+    builder.Services.Configure<ChatbotOptions>(
+        builder.Configuration.GetSection(ChatbotOptions.SectionName));
+    builder.Services.AddHttpClient("chat-gemini", client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(20);
+    });
+    builder.Services.AddHttpClient("chat-groq", client =>
+    {
+        client.BaseAddress = new Uri("https://api.groq.com/");
+        client.Timeout = TimeSpan.FromSeconds(20);
+    });
+    builder.Services.AddHttpClient("chat-translate", client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(12);
+        client.DefaultRequestHeaders.TryAddWithoutValidation(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "*/*");
+    });
+    builder.Services.AddSingleton<ChatProviderUsageTracker>();
+    builder.Services.AddScoped<IChatGuardrails, ChatGuardrails>();
+    builder.Services.AddScoped<IChatPublicContextBuilder, ChatPublicContextBuilder>();
+    builder.Services.AddScoped<IChatConversationStore, ChatConversationStore>();
+    builder.Services.AddScoped<IChatRuleMatchTranslator, ChatRuleMatchTranslator>();
+    builder.Services.AddScoped<IChatRuleEngine, ChatRuleEngine>();
+    builder.Services.AddScoped<IChatLlmProvider, GeminiChatProvider>();
+    builder.Services.AddScoped<IChatLlmProvider, GroqChatProvider>();
+    builder.Services.AddScoped<IChatOrchestrator, ChatOrchestrator>();
     builder.Services.AddScoped<IGeminiChatClient, GeminiChatClient>();
     builder.Services.AddScoped<IStaffAccountCreateService, StaffAccountCreateService>();
     builder.Services.AddScoped<ISpecialOfferService, SpecialOfferService>();

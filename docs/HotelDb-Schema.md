@@ -1,327 +1,454 @@
 # Mori International Hotel — HotelDb schema
 
-Simple guide to the live SQL Server database (`HotelDb.mdf`).  
-Dates are stored in **UTC**. The app shows them in **Philippines time**.
+Guide to the live SQL Server database used by TestingDemo (`HotelBookingDbContext`).  
+Dates are stored in **UTC**. The app displays them in **Philippines time**.
 
-Open this file in Cursor, or open `HotelDb-Schema.docx` in Word.
+Open this file in Cursor, or regenerate `HotelDb-Schema.docx` with:
 
-## How the hotel data fits together
+```powershell
+python docs/generate-hoteldb-schema-doc.py
+```
 
-1. **RoomType** = a category you sell (Queen, Twin).  
-2. **Room** = one physical door (101, 102) of that type.  
-3. **Booking** = one guest stay.  
-4. **BookingItem** = how many of each room type are on that stay.  
-5. **BookingRoomAssignment** = which door number was given to the guest.  
-6. **BookingCharge** = extra fees (early check-in, extra person, snacks).  
-7. **PaymentRecord** = money received or voided for that stay.  
-8. **SpecialOffer** = a promo price on one room type.  
-9. **StaffAccount** + **StaffRole** = who can log in to admin.  
-10. **SystemFlushLog** = audit of “export PDF then delete old records.”
+---
+
+## Entity type legend (ER)
+
+| Type | Meaning in this schema |
+|---|---|
+| **Strong** | Has its own primary key; can exist without depending on another hotel entity’s identity. |
+| **Weak / dependent** | Has a surrogate key, but lifecycle is owned by a parent (usually cascade delete). |
+| **Associative** | Bridge / junction resolving a many-to-many (or assignment) between two entities. |
+| **Identity satellite** | ASP.NET Identity support tables keyed by user + provider (composite). |
+
+---
+
+## Master list — entity type, key, relationships
+
+| Table | C# type | ER type | Primary key | Relationships |
+|---|---|---|---|---|
+| **RoomType** | `RoomType` | Strong | `RoomTypeId` | 1 → N `Room`; 1 → N `SpecialOffer`; referenced by `BookingItem` (optional) |
+| **Room** | `Room` | Strong | `Id` | N → 1 `RoomType`; referenced by `BookingRoomAssignment` |
+| **Booking** | `Booking` | Strong | `Id` | optional N → 1 `SpecialOffer`; 1 → N `BookingItem`, `BookingCharge`, `PaymentRecord`; 1 → 0..1 `StayReview` |
+| **BookingItem** | `BookingItem` | Weak / dependent | `Id` | N → 1 `Booking` (cascade); optional N → 1 `RoomType`; 1 → N `BookingRoomAssignment` |
+| **BookingRoomAssignment** | `BookingRoomAssignment` | **Associative** | `Id` | N → 1 `BookingItem` (cascade); N → 1 `Room` (restrict); unique `(BookingItemId, RoomId)` |
+| **BookingCharge** | `BookingCharge` | Weak / dependent | `Id` | N → 1 `Booking` (cascade) |
+| **PaymentRecord** | `PaymentRecord` | Weak / dependent | `Id` | N → 1 `Booking` (cascade); unique `ReceiptNumber` |
+| **SpecialOffer** | `SpecialOffer` | Strong | `Id` | N → 1 `RoomType` (cascade); optionally referenced by `Booking` |
+| **StayReview** | `StayReview` | Weak / dependent | `Id` | N → 1 `Booking` (cascade); unique `BookingId` (one review per stay) |
+| **StaffRole** | `IdentityRole` | Strong | `Id` (string) | 1 → N `StaffUser` via `RoleId` |
+| **StaffUser** | `ApplicationUser` | Strong | `Id` (string) | N → 1 `StaffRole`; 1 → N logins/tokens/reset codes |
+| **StaffExternalLogin** | Identity login | Identity satellite | `(LoginProvider, ProviderKey)` | N → 1 `StaffUser` |
+| **StaffAuthToken** | Identity token | Identity satellite | `(UserId, LoginProvider, Name)` | N → 1 `StaffUser` |
+| **StaffPasswordResetCode** | `StaffPasswordResetCode` | Weak / dependent | `Id` | logically N → 1 `StaffUser` (`UserId`) |
+| **StaffShift** | `StaffShift` | Strong | `Id` | logically N → 1 `StaffUser` (`StaffUserId`; no EF nav FK required) |
+| **SecureSetting** | `SecureSetting` | Strong | `Id` | none (vault rows keyed by unique `Key`) |
+| **SystemAuditLog** | `SystemAuditLog` | Strong | `Id` | none (append-only; actor ids are strings) |
+| **SystemFlushLog** | `SystemFlushLog` | Strong | `Id` | none (export metadata; ~7-day retention in app) |
+| **__EFMigrationsHistory** | EF internal | Strong (tooling) | `MigrationId` | none |
+
+---
+
+## Relationship diagram
 
 ```
 RoomType ──< Room
     │
-    └──< SpecialOffer
-
-Booking ──< BookingItem ──< BookingRoomAssignment >── Room
+    ├──< SpecialOffer
+    │         ↑ (optional)
+    │         │
+Booking ──────┘
+    │
+    ├──< BookingItem >── RoomType (optional)
+    │         │
+    │         └──< BookingRoomAssignment >── Room     ← associative
     │
     ├──< BookingCharge
-    └──< PaymentRecord
+    ├──< PaymentRecord
+    └──< StayReview (0..1)
 
-StaffRole <── StaffAccount ──< StaffAccountLogin
-                         └──< StaffAccountToken
-StaffAccount ── (ids in) StaffAccountAudit
+StaffRole <── StaffUser ──< StaffExternalLogin
+                    │    └──< StaffAuthToken
+                    ├──< StaffPasswordResetCode
+                    └──  StaffShift (by StaffUserId)
+
+SecureSetting          (standalone vault)
+SystemAuditLog         (standalone append-only)
+SystemFlushLog         (standalone export log)
 ```
+
+Cardinality notes:
+
+- **RoomType → Room**: one-to-many (restrict delete on type if rooms exist).  
+- **BookingItem ↔ Room**: many-to-many via **BookingRoomAssignment**.  
+- **Booking → StayReview**: one-to-zero-or-one.  
+- **StaffUser → StaffRole**: many-to-one (`RoleId`, set-null on role delete).
 
 ---
 
 ## 1. Inventory
 
-### RoomType
+### RoomType — **Strong**
 
-**What it is for:** The sellable room category (name, nightly rate, photos, how many guests it holds). Individual door numbers are **not** here; they live in `Room`.
+**Purpose:** Sellable room category (Queen, Twin, …). Door numbers are **not** here.
 
-| Attribute | What it is for |
-|---|---|
-| RoomTypeId | Unique id for this category. |
-| Name | Display name, e.g. Queen Room. Must be unique. |
-| Description | Longer text shown to guests. |
-| CreatedAt | When this type was created (UTC). |
-| Inclusions | Amenities list stored as JSON (wifi, breakfast, …). |
-| Images | Photo paths stored as JSON. |
-| PricePerNight | Standard nightly rate before any promo. |
-| MaxOccupancy | How many guests this type can hold. |
-| BedCount | How many beds. |
+| Attribute | Type / notes | Meaning |
+|---|---|---|
+| RoomTypeId | PK, int | Unique id. |
+| Name | string, unique | Display name. |
+| Description | string? | Guest-facing description. |
+| CreatedAt | DateTime UTC | Created. |
+| Inclusions | JSON list | Amenities (wifi, breakfast, …). |
+| Images | JSON list | Photo paths. |
+| PricePerNight | decimal(18,2) | Standard nightly rate. |
+| MaxOccupancy | int | Max guests. |
+| BedCount | int | Beds. |
 
-### Room
+**Relationships:** 1→N `Room`, 1→N `SpecialOffer`; optional parent of `BookingItem.RoomTypeId`.
 
-**What it is for:** One physical guest room (the door number staff assign at check-in).
+### Room — **Strong**
 
-| Attribute | What it is for |
-|---|---|
-| Id | Unique id for this door. |
-| RoomTypeId | Which category this room belongs to (`RoomType`). |
-| RoomNumber | Door number shown to staff, e.g. 101. Must be unique. |
-| Status | Housekeeping / occupancy: Available, Unavailable, Occupied, Cleaning (shown as “Maintaining”). |
+**Purpose:** One physical guest room (door number).
+
+| Attribute | Type / notes | Meaning |
+|---|---|---|
+| Id | PK, int | Unique id. |
+| RoomTypeId | FK → RoomType | Category. |
+| RoomNumber | string, unique | Door number (e.g. 101). |
+| Status | enum string | Available, Unavailable, Occupied, Cleaning (UI: Maintaining). |
+
+**Relationships:** N→1 `RoomType`; referenced by `BookingRoomAssignment`.
 
 ---
 
 ## 2. Guest stays
 
-### Booking
+### Booking — **Strong**
 
-**What it is for:** One guest stay — online book, walk-in, or OTA. This is the main stay record.
+**Purpose:** One guest stay (online, walk-in, or OTA).
 
-| Attribute | What it is for |
-|---|---|
-| Id | Unique id. |
-| Reference | Public confirmation code guests and staff search by. Unique. |
-| GuestName | Guest full name. |
-| GuestEmail | Guest email. |
-| GuestPhone | Guest phone. |
-| CheckInAtUtc | Planned arrival (UTC). |
-| CheckoutTimeUtc | Planned departure (UTC). |
-| Kind | Booking (near arrival) or Reservation (further ahead). |
-| PaymentOption | Full or Half due when they book. |
-| Status | Pending, Confirmed, Rejected, Cancelled, CheckedOut. |
-| Channel | Where it came from: Online, WalkIn, FrontDeskExtension, Agoda, Expedia, RedDoorz, OtherThirdParty. |
-| ArrivalDiscountRequest | Guest may claim Senior or PWD at arrival (None / SeniorCitizen / Pwd). |
-| CashOnlyPromo | If true, this stay must be paid in cash (walk-in limited-time promo). |
-| SpecialOfferId | Optional promo that was applied (`SpecialOffer`). |
-| TotalAmount | Stay total (rooms + fees). |
-| AmountDueNow | How much was required at booking time. |
-| CreatedAtUtc | When the stay was created. |
-| UpdatedAtUtc | Last change. |
-| IsArchived | True when moved to admin history (not deleted). |
-| ArchivedAtUtc | When it was archived. |
-| IsNotificationCleared | Hidden from the admin bell until something new happens. |
-| ArrivalWarningSentAtUtc | Set when the “guest arriving soon” warning was shown. |
-| PendingCallWarningSentAtUtc | Set when the “call pending guest” warning was shown. |
-| CheckoutWarningSentAtUtc | Set when the “checkout soon” warning was shown. |
+| Attribute | Type / notes | Meaning |
+|---|---|---|
+| Id | PK, int | Unique id. |
+| Reference | string, unique | Public confirmation code. |
+| GuestName | string | Guest name. |
+| GuestEmail | string | Guest email. |
+| GuestPhone | string | Guest phone. |
+| CheckInAtUtc | DateTime | Planned arrival (UTC). |
+| CheckoutTimeUtc | DateTime | Planned departure (UTC). |
+| Kind | enum | Booking or Reservation. |
+| PaymentOption | enum | Full or Half due at book. |
+| Status | enum | Pending, Confirmed, Rejected, Cancelled, CheckedOut. |
+| Channel | enum | Online, WalkIn, FrontDeskExtension, Agoda, Expedia, RedDoorz, OtherThirdParty. |
+| ArrivalDiscountRequest | enum | None, SeniorCitizen, Pwd. |
+| CashOnlyPromo | bool | Cash-only stay. |
+| SpecialOfferId | FK? → SpecialOffer | Optional promo applied. |
+| TotalAmount | decimal | Stay total. |
+| AmountDueNow | decimal | Amount due at booking. |
+| AdultCount | int | Adults. |
+| ChildCount | int | Children under 12. |
+| GuestPartyJson | string? | Per-room headcounts JSON. |
+| CreatedAtUtc | DateTime | Created. |
+| UpdatedAtUtc | DateTime | Last change. |
+| IsArchived | bool | In history (not deleted). |
+| ArchivedAtUtc | DateTime? | When archived. |
+| IsNotificationCleared | bool | Hidden from admin bell. |
+| ArrivalWarningSentAtUtc | DateTime? | Arrival warning stamped. |
+| PendingCallWarningSentAtUtc | DateTime? | Pending-call warning stamped. |
+| CheckoutWarningSentAtUtc | DateTime? | Checkout warning stamped. |
 
-### BookingItem
+**Relationships:** optional N→1 `SpecialOffer`; 1→N `BookingItem`, `BookingCharge`, `PaymentRecord`; 1→0..1 `StayReview`.
 
-**What it is for:** One line on the stay: “2 × Queen at this nightly rate.” Physical room numbers are assigned later.
+### BookingItem — **Weak / dependent**
 
-| Attribute | What it is for |
-|---|---|
-| Id | Unique id. |
-| BookingId | Which stay this line belongs to. |
-| RoomTypeId | Room category. Can be empty if that type was later removed; the name snapshot stays. |
-| RoomTypeName | Name copied at booking time so history still makes sense. |
-| Quantity | How many rooms of this type. |
-| PricePerNight | Nightly rate used for this line (regular or promo). |
+**Purpose:** Room-type line on a stay (qty × nightly rate).
 
-### BookingRoomAssignment
+| Attribute | Type / notes | Meaning |
+|---|---|---|
+| Id | PK, int | Unique id. |
+| BookingId | FK → Booking (cascade) | Parent stay. |
+| RoomTypeId | FK? → RoomType | Category (nullable if type removed). |
+| RoomTypeName | string | Name snapshot at book time. |
+| Quantity | int | Rooms of this type. |
+| PricePerNight | decimal | Line nightly rate. |
 
-**What it is for:** Links a real door (`Room`) to a stay line after reception assigns room numbers. This is **not** inventory.
+**Unique:** `(BookingId, RoomTypeId)`.  
+**Relationships:** N→1 `Booking`; optional N→1 `RoomType`; 1→N `BookingRoomAssignment`.
 
-| Attribute | What it is for |
-|---|---|
-| Id | Unique id. |
-| BookingItemId | Which stay line this assignment belongs to. |
-| RoomId | Which physical room was given to the guest. |
+### BookingRoomAssignment — **Associative**
 
-### BookingCharge
+**Purpose:** Assigns a physical `Room` to a `BookingItem` line.
 
-**What it is for:** Extra money on the stay besides the nightly room rate.
+| Attribute | Type / notes | Meaning |
+|---|---|---|
+| Id | PK, int | Unique id. |
+| BookingItemId | FK → BookingItem (cascade) | Stay line. |
+| RoomId | FK → Room (restrict) | Physical room. |
 
-| Attribute | What it is for |
-|---|---|
-| Id | Unique id. |
-| BookingId | Which stay. |
-| ChargeType | EarlyCheckIn, LateCheckout, ExtraPerson, Incidental, ServiceFee, SnackBeverage, StayExtension. |
-| Label | Text shown on the bill. |
-| Quantity | Count: rooms, hours, or extra persons. |
-| Nights | Multiplier for extra-person fees; usually 1 otherwise. |
-| UnitAmount | Price per unit. |
-| Amount | Line total. |
-| CreatedAtUtc | When the fee was added. |
+**Unique:** `(BookingItemId, RoomId)`.  
+**Relationships:** bridges `BookingItem` ↔ `Room`.
+
+### BookingCharge — **Weak / dependent**
+
+**Purpose:** Extra fees on a stay.
+
+| Attribute | Type / notes | Meaning |
+|---|---|---|
+| Id | PK, int | Unique id. |
+| BookingId | FK → Booking (cascade) | Parent stay. |
+| ChargeType | enum | EarlyCheckIn, LateCheckout, ExtraPerson, Incidental, ServiceFee, SnackBeverage, StayExtension. |
+| Label | string | Bill label. |
+| Quantity | int | Units. |
+| Nights | int | Extra-person nights multiplier. |
+| UnitAmount | decimal | Per unit. |
+| Amount | decimal | Line total. |
+| CreatedAtUtc | DateTime | When added. |
+
+**Relationships:** N→1 `Booking`.
+
+### StayReview — **Weak / dependent**
+
+**Purpose:** Guest review for one completed stay.
+
+| Attribute | Type / notes | Meaning |
+|---|---|---|
+| Id | PK, int | Unique id. |
+| BookingId | FK → Booking (cascade), unique | One review per stay. |
+| GuestUserId | string | Guest account id. |
+| DisplayName | string | Public name. |
+| OverallRating | byte | Overall score. |
+| StaffRating | byte | Staff score. |
+| ComfortRating | byte | Comfort score. |
+| FacilitiesRating | byte | Facilities score. |
+| WouldRecommend | bool? | Recommend flag. |
+| Comment | string? | Free text. |
+| TagsJson | string? | Tag list JSON. |
+| IsPublished | bool | Visible on public site. |
+| HotelReply | string? | Hotel response. |
+| HotelReplyAtUtc | DateTime? | Reply time. |
+| HotelReplyBy | string? | Staff who replied. |
+| CreatedAtUtc | DateTime | Created. |
+| UpdatedAtUtc | DateTime | Updated. |
+
+**Relationships:** N→1 `Booking` (1:1 enforced by unique `BookingId`).
 
 ---
 
 ## 3. Money
 
-### PaymentRecord
+### PaymentRecord — **Weak / dependent**
 
-**What it is for:** Company log of money posted against a stay. Rows are not edited; a bad payment is **voided**.
+**Purpose:** Posted (or voided) payment against a stay. Rows are not edited; bad payments are voided.
 
-| Attribute | What it is for |
-|---|---|
-| Id | Unique id. |
-| BookingId | Which stay this payment belongs to. |
-| ReceiptNumber | Unique receipt code. |
-| EventType | Deposit, ArrivalPayment, BalanceSettlement, Refund, Adjustment. |
-| Method | Cash, EWallet, BankTransfer, or legacy Card / Maya / Other. |
-| Amount | Money amount. |
-| StayTotalAtPosting | Stay total at the moment this was posted. |
-| BalanceAfter | Remaining balance after this row. |
-| PaidAtUtc | When it was posted. |
-| ReceivedBy | Staff name who recorded it. |
-| Notes | Optional comment. |
-| Status | Posted or Voided. |
-| ExternalReference | E-wallet / InstaPay reference from the guest receipt. |
-| BankTransferReference | Bank / InstaPay clearing reference. |
-| ReceiptImagePath | Saved photo of a digital receipt. |
-| VoidedAtUtc | When it was voided (if ever). |
-| VoidReason | Why it was voided. |
-| VoidedBy | Who voided it. |
+| Attribute | Type / notes | Meaning |
+|---|---|---|
+| Id | PK, int | Unique id. |
+| BookingId | FK → Booking (cascade) | Parent stay. |
+| ReceiptNumber | string, unique | Receipt code. |
+| EventType | enum | Deposit, ArrivalPayment, BalanceSettlement, Refund, Adjustment. |
+| Method | enum | Cash, EWallet, BankTransfer, Card, Maya, Other. |
+| Amount | decimal | Amount. |
+| StayTotalAtPosting | decimal | Stay total when posted. |
+| BalanceAfter | decimal | Remaining balance. |
+| PaidAtUtc | DateTime | Posted at. |
+| ReceivedBy | string | Staff name. |
+| Notes | string? | Comment. |
+| Status | enum | Posted or Voided. |
+| ExternalReference | string? | E-wallet / InstaPay ref. |
+| BankTransferReference | string? | Bank clearing ref. |
+| ReceiptImagePath | string? | Receipt image path. |
+| VoidedAtUtc | DateTime? | Void time. |
+| VoidReason | string? | Void reason. |
+| VoidedBy | string? | Who voided. |
+
+**Relationships:** N→1 `Booking`.
 
 ---
 
 ## 4. Promos
 
-### SpecialOffer
+### SpecialOffer — **Strong**
 
-**What it is for:** A promo rate for **one** room type. The same campaign title can appear on several room types as sibling rows.
+**Purpose:** Promo rate for **one** room type (sibling rows for multi-type campaigns).
 
-| Attribute | What it is for |
-|---|---|
-| Id | Unique id. |
-| RoomTypeId | Which room type this promo applies to. |
-| Kind | LimitedTime or StayLongerSaveMore (older kinds exist but are not created anymore). |
-| Title | Campaign name. |
-| Description | Optional details. |
-| RegularPricePerNight | “Was” / comparison price. |
-| PromoPricePerNight | Promo nightly rate. |
-| MinNights | Minimum nights for Stay Longer; empty for Limited Time. |
-| Channels | Bit flags for where it shows: Online, Walk-in, Front desk, third-party (visibility only). |
-| CashOnly | If true, the stay must be paid in cash. |
-| IsActive | Whether staff still treat it as on. |
-| StartsAtUtc | Promo start. |
-| EndsAtUtc | Promo end. |
-| SortOrder | Display order. |
-| CreatedAtUtc | Created. |
-| UpdatedAtUtc | Last edit. |
+| Attribute | Type / notes | Meaning |
+|---|---|---|
+| Id | PK, int | Unique id. |
+| RoomTypeId | FK → RoomType (cascade) | Target type. |
+| Kind | enum | LimitedTime, StayLongerSaveMore, (legacy kinds may exist). |
+| Title | string | Campaign name. |
+| Description | string? | Details. |
+| RegularPricePerNight | decimal | Comparison / “was” price. |
+| PromoPricePerNight | decimal? | Promo nightly rate. |
+| MinNights | int? | Min nights (Stay Longer). |
+| Channels | flags int | Online / walk-in / front desk / third-party visibility. |
+| CashOnly | bool | Cash-only. |
+| IsActive | bool | Active flag. |
+| LoyaltyApplyMode | enum int | Loyalty application mode. |
+| StartsAtUtc | DateTime | Start. |
+| EndsAtUtc | DateTime | End. |
+| OpenEnded | bool | No hard end when true. |
+| SortOrder | int | Display order. |
+| CreatedAtUtc | DateTime | Created. |
+| UpdatedAtUtc | DateTime | Updated. |
+
+**Relationships:** N→1 `RoomType`; optionally referenced by `Booking.SpecialOfferId`.
 
 ---
 
-## 5. Staff login
+## 5. Staff / auth
 
-Staff log in with **StaffAccount**. Job title is **StaffRole**, stored as `StaffAccount.RoleId` (one role per person).  
-Google sign-in extras are **StaffAccountLogin** and **StaffAccountToken**.  
-Who changed an account is **StaffAccountAudit**.
+Table names come from `StaffAuthSchema` (`StaffUser`, `StaffRole`, `StaffExternalLogin`, `StaffAuthToken`, `StaffPasswordResetCode`).
 
-### StaffRole
+### StaffRole — **Strong**
 
-**What it is for:** Job titles used by admin security. Typical names: `AdminManager`, `Receptionist` (and a reserved `Guest` name).
-
-| Attribute | What it is for |
+| Attribute | Meaning |
 |---|---|
-| Id | Unique id (text). |
-| Name | Role name shown in the app. |
-| NormalizedName | Uppercase copy used for lookups. |
-| ConcurrencyStamp | Stops two people overwriting the role at the same time. |
+| Id | PK (string). |
+| Name | Role name (`AdminManager`, `Receptionist`, reserved `Guest`). |
+| NormalizedName | Lookup form. |
+| ConcurrencyStamp | Concurrency token. |
 
-### StaffAccount
+**Relationships:** 1→N `StaffUser`.
 
-**What it is for:** One staff login (username, password, profile). This is the real user table.
+### StaffUser (`ApplicationUser`) — **Strong**
 
-| Attribute | What it is for |
+| Attribute | Meaning |
 |---|---|
-| Id | Unique id (text). |
-| UserName | Login name. |
-| NormalizedUserName | Uppercase copy for lookups. |
-| Email | Work email. |
-| NormalizedEmail | Uppercase copy for lookups. |
-| EmailConfirmed | Whether email was confirmed. |
-| PasswordHash | Encrypted password (never plain text). |
-| SecurityStamp | Invalidates old cookies when the account changes. |
-| ConcurrencyStamp | Stops two edits colliding. |
-| PhoneNumber | Staff phone. |
-| PhoneNumberConfirmed | Whether phone was confirmed. |
-| TwoFactorEnabled | Reserved for 2FA. |
-| LockoutEnd | If set in the future, the account is locked until then. |
-| LockoutEnabled | Whether lockout is allowed. |
-| AccessFailedCount | Failed login attempts. |
-| FullName | Display name in admin. |
-| BirthDate | Date of birth. |
+| Id | PK (string). |
+| UserName / NormalizedUserName | Login. |
+| Email / NormalizedEmail / EmailConfirmed | Email. |
+| PasswordHash | Hashed password. |
+| SecurityStamp / ConcurrencyStamp | Identity stamps. |
+| PhoneNumber / PhoneNumberConfirmed | Phone. |
+| TwoFactorEnabled | 2FA flag. |
+| LockoutEnd / LockoutEnabled / AccessFailedCount | Lockout. |
+| FullName | Display name. |
+| BirthDate | DOB. |
 | Address | Address. |
-| MustChangePassword | Force password change on next login (temp password). |
-| GoogleEmail | Gmail used for verify / future 2FA. |
-| NormalizedGoogleEmail | Uppercase Gmail for unique lookup. |
-| GoogleVerificationStatus | NotLinked, PendingGoogleVerification, or GoogleVerified. |
-| RoleId | Which `StaffRole` this person has (AdminManager or Receptionist). |
+| MustChangePassword | Force change on next login. |
+| RoleId | FK → StaffRole (set-null). |
+| GoogleEmail / NormalizedGoogleEmail | Recovery Gmail. |
+| GoogleVerificationStatus | NotLinked / Pending / GoogleVerified. |
+| DashboardLayoutJson | Admin dashboard layout. |
 
-### StaffAccountLogin
+**Relationships:** N→1 `StaffRole`; 1→N external logins, tokens, reset codes; shifts by `StaffUserId`.
 
-**What it is for:** External login link (Google). One row per provider key.
+### StaffExternalLogin — **Identity satellite**
 
-| Attribute | What it is for |
+| Attribute | Meaning |
 |---|---|
-| LoginProvider | Provider name, e.g. Google. |
-| ProviderKey | Id from that provider. |
-| ProviderDisplayName | Label for the provider. |
-| UserId | Which `StaffAccount` this belongs to. |
+| LoginProvider + ProviderKey | Composite PK. |
+| ProviderDisplayName | Label. |
+| UserId | FK → StaffUser. |
 
-### StaffAccountToken
+### StaffAuthToken — **Identity satellite**
 
-**What it is for:** Auth tokens for a staff account (verify email, 2FA, recovery).
-
-| Attribute | What it is for |
+| Attribute | Meaning |
 |---|---|
-| UserId | Which staff account. |
-| LoginProvider | Token group / provider. |
-| Name | Token name. |
+| UserId + LoginProvider + Name | Composite PK. |
 | Value | Token value. |
 
-### StaffAccountAudit
+### StaffPasswordResetCode — **Weak / dependent**
 
-**What it is for:** Who created, edited, or disabled a staff account. Can be flushed from Flush logs.
-
-| Attribute | What it is for |
+| Attribute | Meaning |
 |---|---|
-| Id | Unique id. |
-| Action | What happened (create, edit, disable, …). |
-| TargetUserId | The staff account that was changed. |
-| PerformedByUserId | The staff account that did the change. |
-| RoleAssigned | Role at the time of the action. |
-| AtUtc | When it happened. |
+| Id | PK. |
+| UserId | Staff user id. |
+| NormalizedEmail | Email snapshot. |
+| CodeHash | Hashed OTP. |
+| CreatedAtUtc / ExpiresAtUtc | Validity window. |
+| ConsumedAtUtc | Used time. |
+| FailedAttempts | Fail count. |
+
+### StaffShift — **Strong**
+
+| Attribute | Meaning |
+|---|---|
+| Id | PK. |
+| StaffUserId | Staff who owns the shift. |
+| StaffDisplayName | Name snapshot. |
+| StartedAtUtc / EndedAtUtc | Open/closed. |
+| OpeningNote / ClosingNote | Notes. |
+| RoomsBriefing / GuestsBriefing / OffersBriefing / GainNotes | Handover text. |
+| ClosingSummaryJson | Structured close summary. |
+| CreatedAtUtc / UpdatedAtUtc | Audit timestamps. |
+
+**Constraint:** at most one open shift per staff (`EndedAtUtc IS NULL` unique filter).
 
 ---
 
-## 6. Records / flush
+## 6. Settings, audit, export metadata
 
-### SystemFlushLog
+### SecureSetting — **Strong**
 
-**What it is for:** After staff export history or payments to PDF (or flush staff audit) and delete those rows, this table remembers who did it. Entries are kept about **7 days** (expiry is calculated in code, not stored as a column).
+**Purpose:** Encrypted vault (SMTP, Gemini, Groq, Google OAuth, …).
 
-| Attribute | What it is for |
+| Attribute | Meaning |
 |---|---|
-| Id | Unique id. |
-| Kind | BookingHistory, Payments, or StaffAudit. |
-| FlushedAtUtc | When the flush ran. |
-| PerformedBy | Staff name typed for the flush. |
-| RecordCount | How many rows were exported / deleted. |
-| FileName | PDF (or zip) file name if one was downloaded. |
-| Summary | Short description of what was flushed. |
+| Id | PK. |
+| Key | Unique setting key. |
+| Ciphertext | Encrypted value. |
+| UpdatedUtc | Last update. |
+
+### SystemAuditLog — **Strong** (append-only)
+
+**Purpose:** Operational audit trail (account, booking, payment, room, offer actions). **Not deleted** by flush.
+
+| Attribute | Meaning |
+|---|---|
+| Id | PK (long). |
+| AtUtc | When. |
+| Intent | Create / Update / Delete / Other. |
+| Domain | Account, Booking, Payment, Room, Offer, System, …. |
+| Action | Action code. |
+| ActorUserId / ActorDisplayName | Who. |
+| TargetType / TargetId / TargetLabel | What. |
+| Reason | Optional reason. |
+| Summary | Human summary. |
+
+### SystemFlushLog — **Strong**
+
+**Purpose:** Metadata after retention **export** actions (app retains ~7 days).
+
+| Attribute | Meaning |
+|---|---|
+| Id | PK. |
+| Kind | BookingHistory, Payments, StaffAudit. |
+| FlushedAtUtc | When. |
+| PerformedBy | Staff name entered. |
+| RecordCount | Rows in export. |
+| FileName | PDF/ZIP name. |
+| Summary | Short description. |
 
 ---
 
-## 7. EF helper table
+## 7. EF helper
 
 ### __EFMigrationsHistory
 
-**What it is for:** Entity Framework’s list of schema updates already applied. Not hotel data. Do not edit by hand.
-
----
-
-## Tables that were removed on purpose
-
-These used to exist. They are **not** in HotelDb now:
-
-| Old table | Why it went away |
+| Attribute | Meaning |
 |---|---|
-| StaffUser | Unused leftover from before Identity login. |
-| StaffAccountRole | Role was merged onto `StaffAccount.RoleId`. |
-| StaffAccountClaim | Empty; not used. |
-| StaffRoleClaim | Empty; not used. |
+| MigrationId | Applied migration name. |
+| ProductVersion | EF version. |
+
+Not hotel business data — do not edit by hand.
 
 ---
 
-## Code map (where to look)
+## Tables removed on purpose
 
-| Table | C# type | Configured in |
+| Old / wrong name | Status |
+|---|---|
+| StaffAccount (as table name) | Renamed to **StaffUser** |
+| StaffAccountLogin / StaffAccountToken | Renamed to **StaffExternalLogin** / **StaffAuthToken** |
+| StaffAccountRole / StaffAccountClaim / StaffRoleClaim | Dropped; role is `StaffUser.RoleId` |
+| StaffAccountAudit | Replaced by **SystemAuditLog** (Account domain) |
+
+---
+
+## Code map
+
+| Table | C# type | Config |
 |---|---|---|
 | RoomType | `RoomType` | `HotelBookingDbContext` |
 | Room | `Room` | same |
@@ -331,11 +458,15 @@ These used to exist. They are **not** in HotelDb now:
 | BookingCharge | `BookingCharge` | same |
 | PaymentRecord | `PaymentRecord` | same |
 | SpecialOffer | `SpecialOffer` | same |
-| StaffAccount | `ApplicationUser` | same |
-| StaffRole | `IdentityRole` | same |
-| StaffAccountLogin | Identity login | same |
-| StaffAccountToken | Identity token | same |
-| StaffAccountAudit | `StaffAccountAudit` | same |
+| StayReview | `StayReview` | same |
+| StaffUser | `ApplicationUser` | `StaffAuthSchema.UserTable` |
+| StaffRole | `IdentityRole` | `StaffAuthSchema.RoleTable` |
+| StaffExternalLogin | Identity login | `StaffAuthSchema.ExternalLoginTable` |
+| StaffAuthToken | Identity token | `StaffAuthSchema.AuthTokenTable` |
+| StaffPasswordResetCode | `StaffPasswordResetCode` | same |
+| StaffShift | `StaffShift` | same |
+| SecureSetting | `SecureSetting` | same |
+| SystemAuditLog | `SystemAuditLog` | same |
 | SystemFlushLog | `SystemFlushLog` | same |
 
-Models live under `TestingDemo/Models/`.
+Models: `TestingDemo/Models/`. Context: `TestingDemo/Data/HotelBookingDbContext.cs`.

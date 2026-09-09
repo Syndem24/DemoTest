@@ -302,6 +302,11 @@
     <div class="guest-toast" id="guestToast" hidden role="status" aria-live="polite"></div>
     @await RenderSectionAsync("GuestChrome", required: false)
 
+    @if (!isAuthPage)
+    {
+        <partial name="_HotelChatWidget" />
+    }
+
     <div class="guest-lang-popup" data-guest-lang-popup hidden>
         <div class="guest-lang-popup-card" role="dialog" aria-modal="true" aria-labelledby="guestLangTitle">
             <h2 id="guestLangTitle" data-i18n="lang.title">Choose your language</h2>
@@ -341,6 +346,10 @@
     <script src="~/js/mori-input-filters.js" asp-append-version="true"></script>
     <script src="~/js/booking-ui.js" asp-append-version="true"></script>
     <script src="~/js/guest-cookie-consent.js" asp-append-version="true"></script>
+    @if (!isAuthPage)
+    {
+        <script src="~/js/hotel-chat.js" asp-append-version="true"></script>
+    }
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

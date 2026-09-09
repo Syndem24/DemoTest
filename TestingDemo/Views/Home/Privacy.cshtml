@@ -12,7 +12,7 @@
                 <h1>Integration</h1>
             </div>
         </div>
-        <p>Store Gmail SMTP, Gemini, and Google OAuth credentials encrypted in the hotel vault. Outbound mail uses the <strong>Mori International Hotel™</strong> brand and logo. Leave a secret blank to keep the current value.</p>
+        <p>Store Gmail SMTP, Gemini, Groq, and Google OAuth credentials encrypted in the hotel vault. Outbound mail uses the <strong>Mori International Hotel™</strong> brand and logo. Leave a secret blank to keep the current value.</p>
     </header>
 
     <form asp-controller="Home" asp-action="Privacy" method="post" class="admin-integration-form">
@@ -78,16 +78,20 @@
                 <header class="admin-integration-card-head">
                     <div class="admin-settings-hub-icon is-navy" aria-hidden="true">
                         <svg viewBox="0 0 24 24">
-                            <path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"/>
+                            <path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4l4 4 4-4h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6V6h12v8z"/>
                         </svg>
                     </div>
                     <div class="admin-integration-card-copy">
-                        <h2>Gemini</h2>
-                        <p>Reserved for a future chatbot. Saving a key here does not turn chat on.</p>
+                        <h2>AI Integration</h2>
+                        <p>Mori Assistant: FAQ rules first (rooms, rates, book, location…). Gemini only when UseGeminiFallback is on and no rule matched. Translate helps non-English rule matching.</p>
                     </div>
-                    @if (Model.GeminiConfigured)
+                    @if (Model.GeminiConfigured || Model.GroqConfigured)
                     {
-                        <span class="admin-integration-status is-on">Configured</span>
+                        <span class="admin-integration-status is-on">
+                            @(Model.GeminiConfigured && Model.GroqConfigured
+                                ? "Both set"
+                                : Model.GeminiConfigured ? "Gemini set" : "Groq set")
+                        </span>
                     }
                     else
                     {
@@ -96,10 +100,6 @@
                 </header>
 
                 <div class="admin-settings-fields is-single admin-integration-fields">
-                    <div class="admin-settings-field">
-                        <label asp-for="GeminiKeyName" class="form-label"></label>
-                        <input asp-for="GeminiKeyName" class="form-control" autocomplete="off" placeholder="Optional label" />
-                    </div>
                     <div class="admin-settings-field">
                         <label asp-for="GeminiApiKey" class="form-label"></label>
                         <div class="admin-settings-password-group @(Model.GeminiConfigured ? "is-configured-secret" : null)">
@@ -112,9 +112,11 @@
                                    class="form-control"
                                    type="password"
                                    autocomplete="new-password"
-                                   placeholder="@(Model.GeminiConfigured ? "Leave blank to keep" : "Gemini API key")"
-                                   aria-describedby="@(Model.GeminiConfigured ? "gemini-secret-hint" : null)" />
+                                   spellcheck="false"
+                                   placeholder="@(Model.GeminiConfigured ? "Leave blank to keep current key" : "Paste API key from Google AI Studio")"
+                                   aria-describedby="gemini-api-hint@(Model.GeminiConfigured ? " gemini-secret-hint" : null)" />
                         </div>
+                        <p id="gemini-api-hint" class="admin-integration-secret-hint">Primary AI. Stored encrypted; never shown again after save.</p>
                         @if (Model.GeminiConfigured)
                         {
                             <p id="gemini-secret-hint" class="admin-integration-secret-hint">A Gemini API key is already stored. Leave blank to keep it.</p>
@@ -123,6 +125,51 @@
                             <input asp-for="ClearGeminiKey" data-clear-configured-secret="GeminiApiKey" />
                             <span>Remove stored Gemini API key</span>
                         </label>
+                    </div>
+
+                    <div class="admin-settings-field">
+                        <label asp-for="GeminiKeyName" class="form-label">Gemini key nickname</label>
+                        <input asp-for="GeminiKeyName"
+                               class="form-control"
+                               autocomplete="off"
+                               maxlength="80"
+                               placeholder="e.g. Mori production Gemini" />
+                    </div>
+
+                    <div class="admin-settings-field">
+                        <label asp-for="GroqApiKey" class="form-label"></label>
+                        <div class="admin-settings-password-group @(Model.GroqConfigured ? "is-configured-secret" : null)">
+                            @if (Model.GroqConfigured)
+                            {
+                                <span class="admin-integration-secret-mask" aria-hidden="true">••••••••••••</span>
+                            }
+                            <input asp-for="GroqApiKey"
+                                   id="GroqApiKey"
+                                   class="form-control"
+                                   type="password"
+                                   autocomplete="new-password"
+                                   spellcheck="false"
+                                   placeholder="@(Model.GroqConfigured ? "Leave blank to keep current key" : "Paste API key from Groq Console")"
+                                   aria-describedby="groq-api-hint@(Model.GroqConfigured ? " groq-secret-hint" : null)" />
+                        </div>
+                        <p id="groq-api-hint" class="admin-integration-secret-hint">Backup AI when Gemini is missing or out of quota. Stored encrypted.</p>
+                        @if (Model.GroqConfigured)
+                        {
+                            <p id="groq-secret-hint" class="admin-integration-secret-hint">A Groq API key is already stored. Leave blank to keep it.</p>
+                        }
+                        <label class="admin-settings-check">
+                            <input asp-for="ClearGroqKey" data-clear-configured-secret="GroqApiKey" />
+                            <span>Remove stored Groq API key</span>
+                        </label>
+                    </div>
+
+                    <div class="admin-settings-field">
+                        <label asp-for="GroqKeyName" class="form-label">Groq key nickname</label>
+                        <input asp-for="GroqKeyName"
+                               class="form-control"
+                               autocomplete="off"
+                               maxlength="80"
+                               placeholder="e.g. Mori backup Groq" />
                     </div>
                 </div>
             </article>

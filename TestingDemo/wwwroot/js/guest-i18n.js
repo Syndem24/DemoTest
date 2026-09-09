@@ -1,7 +1,7 @@
 (() => {
   const STORAGE_KEY = 'moriGuestLang';
   /** Bump when locale JSON keys change so browsers fetch fresh files. */
-  const LOCALES_VERSION = '2026-09-09-guest-wiz';
+  const LOCALES_VERSION = '2026-09-09-mori-chat-ui';
   const LOCALES = [
     { code: 'en', label: 'English', native: 'English' },
     { code: 'ja', label: '日本語', native: '日本語' },

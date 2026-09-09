@@ -27,9 +27,22 @@ public sealed class IntegrationSettingsViewModel
     [Display(Name = "Clear Gemini API key")]
     public bool ClearGeminiKey { get; set; }
 
-    [Display(Name = "Gemini key name")]
+    [Display(Name = "Gemini nickname")]
     [StringLength(80)]
     public string? GeminiKeyName { get; set; }
+
+    [DataType(DataType.Password)]
+    [Display(Name = "Groq API key")]
+    public string? GroqApiKey { get; set; }
+
+    public bool GroqConfigured { get; set; }
+
+    [Display(Name = "Clear Groq API key")]
+    public bool ClearGroqKey { get; set; }
+
+    [Display(Name = "Groq nickname")]
+    [StringLength(80)]
+    public string? GroqKeyName { get; set; }
 
     [Display(Name = "Show Continue with Google on login")]
     public bool GoogleLoginEnabled { get; set; }

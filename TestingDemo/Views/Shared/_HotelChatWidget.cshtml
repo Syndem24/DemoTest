@@ -1,0 +1,118 @@
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@{
+    var tokens = Antiforgery.GetAndStoreTokens(Context);
+}
+
+<div id="moriHotelChat"
+     class="hotel-chat"
+     data-hotel-chat
+     hidden
+     data-welcome-url="/api/chat/welcome"
+     data-message-url="/api/chat/message"
+     data-storage-key="mori.chat.v1">
+    <div id="hotelChatAntiForgery" hidden>
+        <input type="hidden" name="__RequestVerificationToken" value="@tokens.RequestToken" />
+    </div>
+
+    <button type="button"
+            class="hotel-chat-fab"
+            data-hotel-chat-toggle
+            aria-expanded="false"
+            aria-controls="hotelChatPanel"
+            data-i18n="chat.open"
+            data-i18n-attr="aria-label"
+            data-i18n-attr-only
+            aria-label="Open Mori Assistant">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" width="22" height="22">
+            <path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.2L4 17.2V4h16v12z"/>
+        </svg>
+    </button>
+
+    <section id="hotelChatPanel"
+             class="hotel-chat-panel"
+             data-hotel-chat-panel
+             hidden
+             role="dialog"
+             aria-modal="false"
+             aria-labelledby="hotelChatTitle">
+        <header class="hotel-chat-head">
+            <div class="hotel-chat-brand">
+                <span class="hotel-chat-avatar" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
+                        <path fill="currentColor" d="M12 2a5 5 0 015 5v1.1A7.5 7.5 0 0119.5 15v1H21v2H3v-2h1.5v-1A7.5 7.5 0 017 8.1V7a5 5 0 015-5zm0 2a3 3 0 00-3 3v1.25c0 .2-.05.4-.14.57A5.5 5.5 0 005.5 16H18.5a5.5 5.5 0 00-3.36-7.18 1.2 1.2 0 01-.14-.57V7a3 3 0 00-3-3z"/>
+                    </svg>
+                </span>
+                <div class="hotel-chat-brand-copy">
+                    <p class="hotel-chat-eyebrow" data-i18n="chat.eyebrow">AI helper</p>
+                    <h2 id="hotelChatTitle" class="hotel-chat-title" data-hotel-chat-title data-i18n="chat.title">Mori Assistant</h2>
+                    <p class="hotel-chat-status">
+                        <span class="hotel-chat-status-dot" aria-hidden="true"></span>
+                        <span data-i18n="chat.statusOnline">Online</span>
+                    </p>
+                </div>
+            </div>
+            <div class="hotel-chat-actions">
+                <button type="button"
+                        class="hotel-chat-icon-btn"
+                        data-hotel-chat-expand
+                        aria-pressed="false"
+                        data-i18n="chat.expand"
+                        data-i18n-attr="aria-label"
+                        data-i18n-attr-only
+                        aria-label="Make chat larger">
+                    <svg class="hotel-chat-icon-expand" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+                        <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm12-9h-5v2h3v3h2V5zM5 5v5h2V7h3V5H5zm14 9h-2v3h-3v2h5v-5z"/>
+                    </svg>
+                    <svg class="hotel-chat-icon-collapse" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" hidden>
+                        <path fill="currentColor" d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
+                    </svg>
+                </button>
+                <button type="button"
+                        class="hotel-chat-icon-btn hotel-chat-close"
+                        data-hotel-chat-close
+                        data-i18n="chat.close"
+                        data-i18n-attr="aria-label"
+                        data-i18n-attr-only
+                        aria-label="Close chat">
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+                        <path fill="currentColor" d="M18.3 5.71L12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.7 2.88 18.3 9.17 12 2.88 5.71 4.29 4.3l6.3 6.29L16.89 4.3z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <div class="hotel-chat-messages" data-hotel-chat-messages role="log" aria-live="polite"></div>
+
+        <div class="hotel-chat-chips" data-hotel-chat-chips hidden></div>
+
+        <div class="hotel-chat-composer">
+            <form class="hotel-chat-form" data-hotel-chat-form>
+                <label class="visually-hidden" for="hotelChatInput" data-i18n="chat.inputLabel">Message</label>
+                <div class="hotel-chat-input-shell">
+                    <textarea id="hotelChatInput"
+                              class="hotel-chat-input"
+                              data-hotel-chat-input
+                              rows="1"
+                              maxlength="500"
+                              autocomplete="off"
+                              enterkeyhint="send"
+                              aria-label="Message"></textarea>
+                    <button type="submit"
+                            class="hotel-chat-send"
+                            data-hotel-chat-send
+                            data-i18n="chat.send"
+                            data-i18n-attr="aria-label"
+                            aria-label="Send">
+                        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+                            <path fill="currentColor" d="M3.4 20.6l17.45-7.48a1 1 0 000-1.84L3.4 3.8a.75.75 0 00-1.07.86l2.3 7.02L13 12l-8.37.32-2.3 7.02a.75.75 0 001.07.86z"/>
+                        </svg>
+                        <span class="hotel-chat-send-label" data-i18n="chat.send">Send</span>
+                    </button>
+                </div>
+            </form>
+            <p class="hotel-chat-privacy" data-i18n="chat.privacy">
+                AI replies may use Google or Groq. We do not look up your reservation in chat. Call the desk for booking help.
+            </p>
+        </div>
+    </section>
+</div>

@@ -108,6 +108,23 @@ public class HomeController : Controller
             changedKeys.Add("GeminiApiKey");
         }
 
+        if (!string.IsNullOrWhiteSpace(model.GroqKeyName))
+        {
+            await _vault.SetAsync(SecureSettingKeys.GroqKeyName, model.GroqKeyName.Trim(), cancellationToken);
+            changedKeys.Add("GroqKeyName");
+        }
+
+        if (model.ClearGroqKey)
+        {
+            await _vault.RemoveAsync(SecureSettingKeys.GroqApiKey, cancellationToken);
+            changedKeys.Add("GroqApiKey");
+        }
+        else if (!string.IsNullOrWhiteSpace(model.GroqApiKey))
+        {
+            await _vault.SetAsync(SecureSettingKeys.GroqApiKey, model.GroqApiKey.Trim(), cancellationToken);
+            changedKeys.Add("GroqApiKey");
+        }
+
         var googleChanged = false;
         var enabledFlag = model.GoogleLoginEnabled ? GoogleAuthSettings.EnabledTrue : "false";
         var currentEnabled = await _vault.GetAsync(SecureSettingKeys.GoogleLoginEnabled, cancellationToken) ?? "false";
@@ -252,6 +269,8 @@ public class HomeController : Controller
             SmtpPasswordConfigured = await _vault.HasValueAsync(SecureSettingKeys.EmailPassword, cancellationToken),
             GeminiConfigured = await _vault.HasValueAsync(SecureSettingKeys.GeminiApiKey, cancellationToken),
             GeminiKeyName = await _vault.GetAsync(SecureSettingKeys.GeminiKeyName, cancellationToken),
+            GroqConfigured = await _vault.HasValueAsync(SecureSettingKeys.GroqApiKey, cancellationToken),
+            GroqKeyName = await _vault.GetAsync(SecureSettingKeys.GroqKeyName, cancellationToken),
             GoogleLoginEnabled = await _googleAuth.IsEnabledAsync(cancellationToken),
             GoogleClientId = await _vault.GetAsync(SecureSettingKeys.GoogleClientId, cancellationToken),
             GoogleClientSecretConfigured = await _vault.HasValueAsync(SecureSettingKeys.GoogleClientSecret, cancellationToken)
@@ -264,13 +283,16 @@ public class HomeController : Controller
     {
         model.SmtpPassword = null;
         model.GeminiApiKey = null;
+        model.GroqApiKey = null;
         model.GoogleClientSecret = null;
         model.CurrentPassword = string.Empty;
         model.SmtpPasswordConfigured = await _vault.HasValueAsync(SecureSettingKeys.EmailPassword, cancellationToken);
         model.GeminiConfigured = await _vault.HasValueAsync(SecureSettingKeys.GeminiApiKey, cancellationToken);
+        model.GroqConfigured = await _vault.HasValueAsync(SecureSettingKeys.GroqApiKey, cancellationToken);
         model.GoogleClientSecretConfigured = await _vault.HasValueAsync(SecureSettingKeys.GoogleClientSecret, cancellationToken);
         model.SenderEmail ??= await _vault.GetAsync(SecureSettingKeys.EmailSender, cancellationToken);
         model.GeminiKeyName ??= await _vault.GetAsync(SecureSettingKeys.GeminiKeyName, cancellationToken);
+        model.GroqKeyName ??= await _vault.GetAsync(SecureSettingKeys.GroqKeyName, cancellationToken);
         model.GoogleClientId ??= await _vault.GetAsync(SecureSettingKeys.GoogleClientId, cancellationToken);
         return model;
     }

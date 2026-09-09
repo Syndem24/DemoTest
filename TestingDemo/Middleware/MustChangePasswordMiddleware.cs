@@ -5,6 +5,7 @@ namespace TestingDemo.Middleware;
 
 /// <summary>
 /// Forces MustChangePassword users onto the change-password page (not Identity lockout).
+/// Also gates Google guests who still have no local PasswordHash.
 /// </summary>
 public sealed class MustChangePasswordMiddleware
 {
@@ -23,7 +24,7 @@ public sealed class MustChangePasswordMiddleware
             if (!IsExempt(path))
             {
                 var user = await userManager.GetUserAsync(context.User);
-                if (user?.MustChangePassword == true)
+                if (user is not null && await NeedsPasswordPageAsync(user, userManager))
                 {
                     context.Response.Redirect("/Account/ChangePassword");
                     return;
@@ -32,6 +33,24 @@ public sealed class MustChangePasswordMiddleware
         }
 
         await _next(context);
+    }
+
+    private static async Task<bool> NeedsPasswordPageAsync(
+        ApplicationUser user,
+        UserManager<ApplicationUser> userManager)
+    {
+        if (user.MustChangePassword)
+            return true;
+
+        if (!string.IsNullOrEmpty(user.PasswordHash))
+            return false;
+
+        if (!await userManager.IsInRoleAsync(user, AppRoles.Guest))
+            return false;
+
+        user.MustChangePassword = true;
+        await userManager.UpdateAsync(user);
+        return true;
     }
 
     private static bool IsExempt(PathString path)

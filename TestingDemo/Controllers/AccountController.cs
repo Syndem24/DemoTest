@@ -84,9 +84,11 @@ public class AccountController : Controller
             return View(model);
         }
 
-        if (await IsGuestUserAsync(user))
+        if (await IsGuestUserAsync(user) && string.IsNullOrEmpty(user.PasswordHash))
         {
-            ModelState.AddModelError(string.Empty, "Guest accounts sign in with Google. Use Continue with Google.");
+            ModelState.AddModelError(
+                string.Empty,
+                "Finish setting up this guest account with Google first. After you create a password, you can sign in with email or Google.");
             return View(model);
         }
 
@@ -99,6 +101,7 @@ public class AccountController : Controller
         if (result.Succeeded)
         {
             _logger.LogInformation("User {User} logged in.", user.UserName);
+            await EnsureGuestPasswordGateAsync(user);
             if (user.MustChangePassword)
                 return RedirectToAction(nameof(ChangePassword));
 
@@ -203,6 +206,9 @@ public class AccountController : Controller
             await _signInManager.SignInAsync(existingByLogin, rememberMe);
             await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
             _logger.LogInformation("Guest {User} signed in with Google.", existingByLogin.UserName);
+            await EnsureGuestPasswordGateAsync(existingByLogin);
+            if (existingByLogin.MustChangePassword)
+                return RedirectToAction(nameof(ChangePassword));
             return await RedirectAfterSignInAsync(existingByLogin, returnUrl);
         }
 
@@ -224,6 +230,9 @@ public class AccountController : Controller
 
             await _signInManager.SignInAsync(existingByEmail, rememberMe);
             await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+            await EnsureGuestPasswordGateAsync(existingByEmail);
+            if (existingByEmail.MustChangePassword)
+                return RedirectToAction(nameof(ChangePassword));
             return await RedirectAfterSignInAsync(existingByEmail, returnUrl);
         }
 
@@ -332,6 +341,9 @@ public class AccountController : Controller
 
             await _signInManager.SignInAsync(existing, rememberMe);
             await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+            await EnsureGuestPasswordGateAsync(existing);
+            if (existing.MustChangePassword)
+                return RedirectToAction(nameof(ChangePassword));
             return await RedirectAfterSignInAsync(existing, pendingReturnUrl ?? model.ReturnUrl);
         }
 
@@ -347,6 +359,8 @@ public class AccountController : Controller
         await _signInManager.SignInAsync(guest, rememberMe);
         await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
         _logger.LogInformation("Created guest {User} via Google after agreement.", guest.UserName);
+        if (guest.MustChangePassword)
+            return RedirectToAction(nameof(ChangePassword));
         return await RedirectAfterSignInAsync(guest, pendingReturnUrl ?? model.ReturnUrl);
     }
 
@@ -674,7 +688,7 @@ public class AccountController : Controller
         if (!ModelState.IsValid)
             return View("Settings", await BuildSettingsModelAsync(user, passwordModel: model, activeSection: "password"));
 
-        var change = await _userManager.ChangePasswordAsync(user, model.CurrentPassword, model.NewPassword);
+        var change = await _userManager.ChangePasswordAsync(user, model.CurrentPassword ?? string.Empty, model.NewPassword);
         if (!change.Succeeded)
         {
             AddPasswordChangeErrors(change.Errors, sectionModelPrefix: "Password");
@@ -694,9 +708,14 @@ public class AccountController : Controller
 
     [HttpGet]
     [Authorize]
-    public IActionResult ChangePassword()
+    public async Task<IActionResult> ChangePassword()
     {
-        return View(new ChangePasswordViewModel());
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+            return Challenge();
+
+        await EnsureGuestPasswordGateAsync(user);
+        return View(BuildChangePasswordModel(user));
     }
 
     [HttpPost]
@@ -704,12 +723,36 @@ public class AccountController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ChangePassword(ChangePasswordViewModel model)
     {
-        if (!ModelState.IsValid)
-            return View(model);
-
         var user = await _userManager.GetUserAsync(User);
         if (user is null)
             return Challenge();
+
+        await EnsureGuestPasswordGateAsync(user);
+        var firstSetup = string.IsNullOrEmpty(user.PasswordHash);
+        model.IsFirstPasswordSetup = firstSetup;
+        // Google / account email is always fixed; username may be edited on first setup only.
+        model.Email = user.Email;
+        ModelState.Remove(nameof(model.Email));
+
+        if (firstSetup)
+        {
+            if (string.IsNullOrWhiteSpace(model.UserName))
+            {
+                ModelState.AddModelError(nameof(model.UserName), "Username is required.");
+            }
+        }
+        else
+        {
+            model.UserName = user.UserName;
+            ModelState.Remove(nameof(model.UserName));
+            if (string.IsNullOrWhiteSpace(model.CurrentPassword))
+            {
+                ModelState.AddModelError(nameof(model.CurrentPassword), "Current password is required.");
+            }
+        }
+
+        if (!ModelState.IsValid)
+            return View(model);
 
         if (string.Equals(model.CurrentPassword, model.NewPassword, StringComparison.Ordinal))
         {
@@ -719,7 +762,34 @@ public class AccountController : Controller
             return View(model);
         }
 
-        var change = await _userManager.ChangePasswordAsync(user, model.CurrentPassword, model.NewPassword);
+        if (firstSetup)
+        {
+            var desiredUserName = model.UserName!.Trim();
+            model.UserName = desiredUserName;
+            if (!string.Equals(user.UserName, desiredUserName, StringComparison.Ordinal))
+            {
+                var setUserName = await _userManager.SetUserNameAsync(user, desiredUserName);
+                if (!setUserName.Succeeded)
+                {
+                    AddIdentityErrors(setUserName);
+                    return View(model);
+                }
+            }
+        }
+
+        IdentityResult change;
+        if (firstSetup)
+        {
+            change = await _userManager.AddPasswordAsync(user, model.NewPassword);
+        }
+        else
+        {
+            change = await _userManager.ChangePasswordAsync(
+                user,
+                model.CurrentPassword!,
+                model.NewPassword);
+        }
+
         if (!change.Succeeded)
         {
             AddPasswordChangeErrors(change.Errors);
@@ -731,9 +801,19 @@ public class AccountController : Controller
         await _userManager.UpdateSecurityStampAsync(user);
         await _signInManager.RefreshSignInAsync(user);
 
-        await RecordAccountActivityAsync(user.Id, "Password.Update", "Password");
-        _logger.LogInformation("User {User} changed password (must-change cleared).", user.UserName);
-        TempData["Message"] = "Password updated.";
+        await RecordAccountActivityAsync(
+            user.Id,
+            firstSetup ? "Password.Set" : "Password.Update",
+            "Password");
+        _logger.LogInformation(
+            "User {User} {Action} password (must-change cleared).",
+            user.UserName,
+            firstSetup ? "set" : "changed");
+        TempData["Message"] = firstSetup ? "Password saved. You can sign in with email or Google." : "Password updated.";
+
+        if (await IsGuestUserAsync(user))
+            return await RedirectAfterSignInAsync(user, null);
+
         TempData["PromptStartShift"] = "1";
         return RedirectToAction("Index", "Dashboard");
     }
@@ -1025,6 +1105,31 @@ public class AccountController : Controller
         return roles.Contains(AppRoles.Guest);
     }
 
+    /// <summary>
+    /// Guests without a local password must create one before using the site
+    /// (first Google sign-up and older password-less accounts).
+    /// </summary>
+    private async Task EnsureGuestPasswordGateAsync(ApplicationUser user)
+    {
+        if (!await IsGuestUserAsync(user))
+            return;
+        if (!string.IsNullOrEmpty(user.PasswordHash))
+            return;
+        if (user.MustChangePassword)
+            return;
+
+        user.MustChangePassword = true;
+        await _userManager.UpdateAsync(user);
+    }
+
+    private static ChangePasswordViewModel BuildChangePasswordModel(ApplicationUser user) =>
+        new()
+        {
+            IsFirstPasswordSetup = string.IsNullOrEmpty(user.PasswordHash),
+            Email = user.Email,
+            UserName = user.UserName
+        };
+
     private async Task<IActionResult> RedirectAfterSignInAsync(ApplicationUser? user, string? returnUrl)
     {
         if (user is null || !await IsStaffUserAsync(user))
@@ -1075,7 +1180,7 @@ public class AccountController : Controller
             Email = email,
             EmailConfirmed = true,
             FullName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim(),
-            MustChangePassword = false,
+            MustChangePassword = true,
             GoogleVerificationStatus = GoogleVerificationStatus.NotLinked
         };
 
@@ -1130,6 +1235,8 @@ public class AccountController : Controller
 
             if (field is not null && !string.IsNullOrWhiteSpace(sectionModelPrefix))
                 ModelState.AddModelError($"{sectionModelPrefix}.{field}", error.Description);
+            else if (field is not null)
+                ModelState.AddModelError(field, error.Description);
             else
                 ModelState.AddModelError(string.Empty, error.Description);
         }

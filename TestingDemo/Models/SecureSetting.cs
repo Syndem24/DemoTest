@@ -14,6 +14,8 @@ public static class SecureSettingKeys
     public const string EmailPassword = "EmailSettings.Password";
     public const string GeminiApiKey = "Gemini.ApiKey";
     public const string GeminiKeyName = "Gemini.KeyName";
+    public const string GroqApiKey = "Groq.ApiKey";
+    public const string GroqKeyName = "Groq.KeyName";
     public const string GoogleClientId = "Authentication.Google.ClientId";
     public const string GoogleClientSecret = "Authentication.Google.ClientSecret";
     public const string GoogleLoginEnabled = "Authentication.Google.LoginEnabled";
