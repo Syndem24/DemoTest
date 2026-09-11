@@ -15,9 +15,6 @@
     var adminPaymentsActive = string.Equals(controller, "AdminPayments", StringComparison.OrdinalIgnoreCase)
         ? "is-active"
         : string.Empty;
-    var adminShiftsActive = string.Equals(controller, "AdminShifts", StringComparison.OrdinalIgnoreCase)
-        ? "is-active"
-        : string.Empty;
     var createActive = string.Equals(controller, "Rooms", StringComparison.OrdinalIgnoreCase)
         && string.Equals(action, "Create", StringComparison.OrdinalIgnoreCase)
         ? "is-active"
@@ -49,10 +46,6 @@
         || isRoomsController;
     var userDisplayName = User.Identity?.Name ?? "Account";
     var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? string.Empty;
-    var promptStartShift = TempData["PromptStartShift"] as string;
-    var showShiftStartNudge = (isAdminManager || isReceptionist)
-        && string.Equals(promptStartShift, "1", StringComparison.Ordinal)
-        && string.IsNullOrEmpty(adminShiftsActive);
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -129,15 +122,6 @@
                     <path d="M3 6h18v12H3V6zm2 2v8h14V8H5zm2 2h4v2H7v-2zm6 0h4v2h-4v-2zm-6 3h10v2H7v-2z"/>
                 </svg>
                 <span>Payments</span>
-            </a>
-            <a class="hotel-sidebar-link @adminShiftsActive"
-               asp-controller="AdminShifts"
-               asp-action="Index"
-               title="Staff shift and handover briefing">
-                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                    <path d="M12 1a11 11 0 1 0 11 11A11 11 0 0 0 12 1zm0 2a9 9 0 1 1-9 9 9 9 0 0 1 9-9zm-.75 2.5h1.5v5.2l3.6 2.1-.75 1.3-4.35-2.55V5.5z"/>
-                </svg>
-                <span>Shift</span>
             </a>
             @if (isAdminManager)
             {
@@ -317,38 +301,6 @@
             </span>
         </div>
     </div>
-    @if (User.IsInRole("AdminManager") || User.IsInRole("Receptionist"))
-    {
-        <div class="admin-logout-shift-confirm" data-logout-shift-confirm hidden>
-            <button type="button" class="admin-logout-shift-backdrop" data-logout-shift-cancel aria-label="Cancel log out"></button>
-            <section class="admin-logout-shift-dialog" role="dialog" aria-modal="true" aria-labelledby="logoutShiftTitle">
-                <h2 id="logoutShiftTitle">You're on shift</h2>
-                <p data-logout-shift-body>You still have an open desk shift. End it now, or keep it open and log out?</p>
-                <div class="admin-logout-shift-actions">
-                    <button type="button" class="admin-shift-btn admin-shift-btn-secondary" data-logout-shift-cancel>Cancel</button>
-                    <button type="button" class="admin-shift-btn admin-shift-btn-ghost" data-logout-shift-keep>Not yet — log out</button>
-                    <button type="button" class="admin-shift-btn admin-shift-btn-primary" data-logout-shift-end>End shift &amp; log out</button>
-                </div>
-            </section>
-        </div>
-    }
-    @if (showShiftStartNudge)
-    {
-        <div class="admin-shift-start-nudge" data-shift-start-nudge hidden>
-            <button type="button" class="admin-shift-start-nudge-backdrop" data-shift-start-nudge-dismiss aria-label="Dismiss start shift reminder"></button>
-            <section class="admin-shift-start-nudge-card" role="dialog" aria-modal="true" aria-labelledby="shiftStartNudgeTitle">
-                <p class="admin-shift-start-nudge-kicker">Desk reminder</p>
-                <h2 id="shiftStartNudgeTitle">No one is on shift</h2>
-                <p>Start a desk shift so handover notes and shift totals stay clear for the team.</p>
-                <div class="admin-shift-start-nudge-actions">
-                    <a class="admin-shift-btn admin-shift-btn-primary" asp-controller="AdminShifts" asp-action="Index">
-                        Go to Shift
-                    </a>
-                </div>
-                <p class="admin-shift-start-nudge-hint">Click outside this card to dismiss</p>
-            </section>
-        </div>
-    }
     @if (!string.IsNullOrEmpty(adminBookingsActive))
     {
         <script>

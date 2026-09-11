@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type HTMLAttributes } from 'react'
 import { createStaffUser } from '../staffApi'
+import { generateStaffCredentials, type GeneratedStaffCredentials } from '../staffCredentialGenerator'
 import type { CreateStaffUserPayload, StaffRole } from '../staffTypes'
 import { filterMoriInput, type MoriInputFilterKind } from '../inputFilters'
+import { PhilippinesAddressFields } from './PhilippinesAddressFields'
 
 type FieldErrors = Partial<Record<keyof CreateStaffUserPayload, string>>
 
@@ -22,7 +24,7 @@ const FIELD_DOM_SUFFIX: Record<keyof CreateStaffUserPayload, string> = {
   fullName: 'fullName',
   userName: 'userName',
   birthDate: 'birthDate',
-  address: 'address',
+  address: 'street',
   loginEmail: 'loginEmail',
   phoneNumber: 'phone',
   role: 'role',
@@ -115,6 +117,8 @@ export function CreateStaffUserApp() {
   const [errors, setErrors] = useState<FieldErrors>({})
   const [submitting, setSubmitting] = useState(false)
   const [alert, setAlert] = useState<{ message: string; field: keyof CreateStaffUserPayload | null } | null>(null)
+  const [generated, setGenerated] = useState<GeneratedStaffCredentials | null>(null)
+  const generateOkRef = useRef<HTMLButtonElement>(null)
 
   const showAlert = (message: string, field: keyof CreateStaffUserPayload | null) => {
     setAlert({ message, field })
@@ -124,6 +128,28 @@ export function CreateStaffUserApp() {
     const field = alert?.field ?? null
     setAlert(null)
     focusField(formId, field)
+  }
+
+  const openGeneratePreview = () => {
+    const next = generateStaffCredentials(form.fullName, form.birthDate)
+    setGenerated(next)
+  }
+
+  const applyGenerated = (next: GeneratedStaffCredentials) => {
+    setForm((prev) => ({
+      ...prev,
+      userName: next.userName,
+      temporaryPassword: next.password,
+      confirmTemporaryPassword: next.password,
+    }))
+    setErrors((prev) => ({
+      ...prev,
+      userName: undefined,
+      temporaryPassword: undefined,
+      confirmTemporaryPassword: undefined,
+    }))
+    setGenerated(null)
+    focusField(formId, 'temporaryPassword')
   }
 
   useEffect(() => {
@@ -142,6 +168,18 @@ export function CreateStaffUserApp() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [alert, formId])
+
+  useEffect(() => {
+    if (!generated) return
+    generateOkRef.current?.focus()
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setGenerated(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [generated])
 
   const setField = <K extends keyof CreateStaffUserPayload>(key: K, value: CreateStaffUserPayload[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -237,11 +275,60 @@ export function CreateStaffUserApp() {
         </div>
       ) : null}
 
+      {generated ? (
+        <div className="sc-alert-popup" role="presentation" onClick={() => setGenerated(null)}>
+          <div
+            className="sc-alert-popup-card sc-generate-popup-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`${formId}-generate-title`}
+            aria-describedby={`${formId}-generate-message`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id={`${formId}-generate-title`}>Generated login details</h2>
+            <p id={`${formId}-generate-message`}>{generated.summary}</p>
+            <dl className="sc-generate-creds">
+              <div>
+                <dt>Username</dt>
+                <dd>
+                  <code>{generated.userName}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Temporary password</dt>
+                <dd>
+                  <code>{generated.password}</code>
+                </dd>
+              </div>
+            </dl>
+            <p className="sc-generate-hint">
+              Give both to the employee. They must change the password on first login.
+            </p>
+            <div className="sc-alert-popup-actions sc-generate-actions">
+              <button type="button" className="sc-btn sc-btn-secondary" onClick={openGeneratePreview}>
+                Generate again
+              </button>
+              <button type="button" className="sc-btn sc-btn-ghost" onClick={() => setGenerated(null)}>
+                Cancel
+              </button>
+              <button
+                ref={generateOkRef}
+                type="button"
+                className="sc-btn sc-btn-primary"
+                onClick={() => applyGenerated(generated)}
+              >
+                Use these
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <form className="sc-card" onSubmit={onSubmit} noValidate>
         <section className="sc-section" aria-labelledby={`${formId}-identity`}>
           <div className="sc-section-head">
             <h2 id={`${formId}-identity`}>Employee identity</h2>
-            <p>Staff name and account details.</p>
+            <p>Staff name and birth date.</p>
           </div>
           <div className="sc-grid">
             <Field
@@ -256,17 +343,6 @@ export function CreateStaffUserApp() {
               onBlur={() => onBlurValidate('fullName')}
             />
             <Field
-              id={`${formId}-userName`}
-              label="Username"
-              value={form.userName}
-              error={errors.userName}
-              autoComplete="off"
-              placeholder="e.g. ana.reyes"
-              filterKind="username"
-              onChange={(value) => setField('userName', value)}
-              onBlur={() => onBlurValidate('userName')}
-            />
-            <Field
               id={`${formId}-birthDate`}
               label="Birth date"
               type="date"
@@ -275,18 +351,6 @@ export function CreateStaffUserApp() {
               autoComplete="bday"
               onChange={(value) => setField('birthDate', value)}
               onBlur={() => onBlurValidate('birthDate')}
-            />
-            <Field
-              id={`${formId}-address`}
-              label="Address"
-              value={form.address}
-              error={errors.address}
-              autoComplete="street-address"
-              placeholder="Street, city, province"
-              multiline
-              className="sc-span-2"
-              onChange={(value) => setField('address', value)}
-              onBlur={() => onBlurValidate('address')}
             />
           </div>
         </section>
@@ -307,23 +371,30 @@ export function CreateStaffUserApp() {
               inputMode="email"
               placeholder="e.g. ana.reyes@gmail.com"
               filterKind="email"
+              className="sc-span-2"
               onChange={(value) => setField('loginEmail', value)}
               onBlur={() => onBlurValidate('loginEmail')}
             />
-            <Field
-              id={`${formId}-phone`}
-              label="Phone"
-              type="tel"
-              value={form.phoneNumber}
-              error={errors.phoneNumber}
-              autoComplete="tel"
-              inputMode="tel"
-              placeholder="e.g. +63 917 123 4567"
-              filterKind="phone"
-              onChange={(value) => setField('phoneNumber', value)}
-              onBlur={() => onBlurValidate('phoneNumber')}
-            />
           </div>
+        </section>
+
+        <section className="sc-section" aria-labelledby={`${formId}-address`}>
+          <div className="sc-section-head">
+            <h2 id={`${formId}-address`}>Address &amp; phone</h2>
+            <p>Pick Philippine location from official PSGC lists, then add street and phone.</p>
+          </div>
+          <PhilippinesAddressFields
+            formId={formId}
+            address={form.address}
+            phoneNumber={form.phoneNumber}
+            addressError={errors.address}
+            phoneError={errors.phoneNumber}
+            onAddressChange={(value) => setField('address', value)}
+            onPhoneChange={(value) => setField('phoneNumber', value)}
+            onAddressBlur={() => onBlurValidate('address')}
+            onPhoneBlur={() => onBlurValidate('phoneNumber')}
+            filterPhone={(value) => filterMoriInput('phone', value)}
+          />
         </section>
 
         <section className="sc-section" aria-labelledby={`${formId}-access`}>
@@ -355,11 +426,32 @@ export function CreateStaffUserApp() {
         </section>
 
         <section className="sc-section" aria-labelledby={`${formId}-staff-password`}>
-          <div className="sc-section-head">
-            <h2 id={`${formId}-staff-password`}>Employee password</h2>
-            <p>Give this to the employee. They change it on first login.</p>
+          <div className="sc-section-head sc-section-head-row">
+            <div>
+              <h2 id={`${formId}-staff-password`}>Login credentials</h2>
+              <p>Username and temporary password for the employee. They change the password on first login.</p>
+            </div>
+            <button
+              type="button"
+              className="sc-btn sc-btn-secondary sc-generate-btn"
+              onClick={openGeneratePreview}
+            >
+              Auto-generate username &amp; password
+            </button>
           </div>
           <div className="sc-grid">
+            <Field
+              id={`${formId}-userName`}
+              label="Username"
+              value={form.userName}
+              error={errors.userName}
+              autoComplete="off"
+              placeholder="e.g. ana.reyes"
+              filterKind="username"
+              className="sc-span-2"
+              onChange={(value) => setField('userName', value)}
+              onBlur={() => onBlurValidate('userName')}
+            />
             <Field
               id={`${formId}-tempPassword`}
               label="New password"

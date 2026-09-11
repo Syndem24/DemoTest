@@ -40,7 +40,6 @@ python docs/generate-hoteldb-schema-doc.py
 | **StaffExternalLogin** | Identity login | Identity satellite | `(LoginProvider, ProviderKey)` | N → 1 `StaffUser` |
 | **StaffAuthToken** | Identity token | Identity satellite | `(UserId, LoginProvider, Name)` | N → 1 `StaffUser` |
 | **StaffPasswordResetCode** | `StaffPasswordResetCode` | Weak / dependent | `Id` | logically N → 1 `StaffUser` (`UserId`) |
-| **StaffShift** | `StaffShift` | Strong | `Id` | logically N → 1 `StaffUser` (`StaffUserId`; no EF nav FK required) |
 | **SecureSetting** | `SecureSetting` | Strong | `Id` | none (vault rows keyed by unique `Key`) |
 | **SystemAuditLog** | `SystemAuditLog` | Strong | `Id` | none (append-only; actor ids are strings) |
 | **SystemFlushLog** | `SystemFlushLog` | Strong | `Id` | none (export metadata; ~7-day retention in app) |
@@ -68,8 +67,7 @@ Booking ──────┘
 
 StaffRole <── StaffUser ──< StaffExternalLogin
                     │    └──< StaffAuthToken
-                    ├──< StaffPasswordResetCode
-                    └──  StaffShift (by StaffUserId)
+                    └──< StaffPasswordResetCode
 
 SecureSetting          (standalone vault)
 SystemAuditLog         (standalone append-only)
@@ -360,21 +358,6 @@ Table names come from `StaffAuthSchema` (`StaffUser`, `StaffRole`, `StaffExterna
 | ConsumedAtUtc | Used time. |
 | FailedAttempts | Fail count. |
 
-### StaffShift — **Strong**
-
-| Attribute | Meaning |
-|---|---|
-| Id | PK. |
-| StaffUserId | Staff who owns the shift. |
-| StaffDisplayName | Name snapshot. |
-| StartedAtUtc / EndedAtUtc | Open/closed. |
-| OpeningNote / ClosingNote | Notes. |
-| RoomsBriefing / GuestsBriefing / OffersBriefing / GainNotes | Handover text. |
-| ClosingSummaryJson | Structured close summary. |
-| CreatedAtUtc / UpdatedAtUtc | Audit timestamps. |
-
-**Constraint:** at most one open shift per staff (`EndedAtUtc IS NULL` unique filter).
-
 ---
 
 ## 6. Settings, audit, export metadata
@@ -464,7 +447,6 @@ Not hotel business data — do not edit by hand.
 | StaffExternalLogin | Identity login | `StaffAuthSchema.ExternalLoginTable` |
 | StaffAuthToken | Identity token | `StaffAuthSchema.AuthTokenTable` |
 | StaffPasswordResetCode | `StaffPasswordResetCode` | same |
-| StaffShift | `StaffShift` | same |
 | SecureSetting | `SecureSetting` | same |
 | SystemAuditLog | `SystemAuditLog` | same |
 | SystemFlushLog | `SystemFlushLog` | same |

@@ -39,10 +39,17 @@
   let paymentsTotalPages = 1;
   let paymentsSearch = '';
   let paymentsMethod = '';
+  let paymentsPaidOn = '';
+  let paymentsReceivedBy = '';
   let paymentsSearchTimer = null;
   let selectedPayment = null;
   let flushLogsCache = [];
 
+  const dayFilterModal = document.querySelector('[data-payments-day-filter-modal]');
+  const dayFilterDayInput = dayFilterModal?.querySelector('[data-payments-filter-day]');
+  const dayFilterStaffSelect = dayFilterModal?.querySelector('[data-payments-filter-staff]');
+  const dayFilterError = dayFilterModal?.querySelector('[data-payments-day-filter-error]');
+  const filterChip = root.querySelector('[data-payments-filter-chip]');
   const PH_TZ = 'Asia/Manila';
   const PH_LOCALE = 'en-PH';
 
@@ -183,7 +190,10 @@
       });
       if (paymentsSearch) query.set('search', paymentsSearch);
       if (paymentsMethod) query.set('method', paymentsMethod);
+      if (paymentsPaidOn) query.set('paidOn', paymentsPaidOn);
+      if (paymentsReceivedBy) query.set('receivedBy', paymentsReceivedBy);
       const payload = await apiFetch(`/api/admin/payments?${query}`);
+      syncFilterChip();
       paymentsTotalPages = Math.max(
         1,
         Math.ceil(Number(payload.total || 0) / Number(payload.pageSize || 25))
@@ -221,7 +231,10 @@
         const cell = document.createElement('td');
         cell.colSpan = 10;
         cell.className = 'admin-bookings-loading';
-        cell.textContent = 'No payments recorded yet.';
+        cell.textContent =
+          paymentsPaidOn || paymentsReceivedBy
+            ? 'No payments match this day / staff filter.'
+            : 'No payments recorded yet.';
         row.appendChild(cell);
         paymentsList.appendChild(row);
         return;
@@ -792,7 +805,102 @@
     }
   }
 
+  function syncFilterChip() {
+    if (!filterChip) return;
+    const parts = [];
+    if (paymentsPaidOn) parts.push(`Day ${paymentsPaidOn}`);
+    if (paymentsReceivedBy) parts.push(paymentsReceivedBy);
+    if (!parts.length) {
+      filterChip.hidden = true;
+      filterChip.textContent = '';
+      return;
+    }
+    filterChip.hidden = false;
+    filterChip.textContent = `Filtered · ${parts.join(' · ')}`;
+  }
+
+  function manilaTodayIso() {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: PH_TZ }).format(new Date());
+  }
+
+  async function loadCollectorsIntoSelect() {
+    if (!dayFilterStaffSelect) return;
+    const current = paymentsReceivedBy || dayFilterStaffSelect.value || '';
+    try {
+      const names = await apiFetch('/api/admin/payments/collectors');
+      dayFilterStaffSelect.innerHTML = '<option value="">All staff</option>';
+      (Array.isArray(names) ? names : []).forEach((name) => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        dayFilterStaffSelect.appendChild(option);
+      });
+      dayFilterStaffSelect.value = current;
+    } catch {
+      dayFilterStaffSelect.innerHTML = '<option value="">All staff</option>';
+    }
+  }
+
+  function setDayFilterError(message) {
+    if (!dayFilterError) return;
+    if (!message) {
+      dayFilterError.hidden = true;
+      dayFilterError.textContent = '';
+      return;
+    }
+    dayFilterError.hidden = false;
+    dayFilterError.textContent = message;
+  }
+
+  async function openDayFilterModal() {
+    if (!dayFilterModal) return;
+    setDayFilterError('');
+    if (dayFilterDayInput) dayFilterDayInput.value = paymentsPaidOn || manilaTodayIso();
+    await loadCollectorsIntoSelect();
+    if (dayFilterStaffSelect) dayFilterStaffSelect.value = paymentsReceivedBy || '';
+    dayFilterModal.hidden = false;
+    dayFilterDayInput?.focus();
+  }
+
+  function closeDayFilterModal() {
+    if (!dayFilterModal) return;
+    dayFilterModal.hidden = true;
+    setDayFilterError('');
+  }
+
+  function applyDayFilter() {
+    const day = dayFilterDayInput?.value?.trim() || '';
+    const staff = dayFilterStaffSelect?.value?.trim() || '';
+    if (!day && !staff) {
+      setDayFilterError('Choose a day and/or a staff collector.');
+      return;
+    }
+    paymentsPaidOn = day;
+    paymentsReceivedBy = staff;
+    paymentsPage = 1;
+    closeDayFilterModal();
+    refreshPayments();
+  }
+
+  function clearDayFilter() {
+    paymentsPaidOn = '';
+    paymentsReceivedBy = '';
+    if (dayFilterDayInput) dayFilterDayInput.value = '';
+    if (dayFilterStaffSelect) dayFilterStaffSelect.value = '';
+    paymentsPage = 1;
+    closeDayFilterModal();
+    refreshPayments();
+  }
+
   root.querySelector('[data-payments-refresh]')?.addEventListener('click', () => refreshPayments());
+  root.querySelector('[data-payments-day-filter]')?.addEventListener('click', () => {
+    void openDayFilterModal();
+  });
+  dayFilterModal?.querySelectorAll('[data-payments-day-filter-close]').forEach((button) => {
+    button.addEventListener('click', closeDayFilterModal);
+  });
+  dayFilterModal?.querySelector('[data-payments-day-filter-apply]')?.addEventListener('click', applyDayFilter);
+  dayFilterModal?.querySelector('[data-payments-day-filter-clear]')?.addEventListener('click', clearDayFilter);
   flushButton?.addEventListener('click', openFlushModal);
   flushLogToggle?.addEventListener('click', () => {
     const open = flushLogToggle.getAttribute('aria-expanded') === 'true';
@@ -868,6 +976,10 @@
     }
     if (paymentRefundModal && !paymentRefundModal.hidden) {
       closeRefundModal();
+      return;
+    }
+    if (dayFilterModal && !dayFilterModal.hidden) {
+      closeDayFilterModal();
       return;
     }
     if (flushDetailModal && !flushDetailModal.hidden) {

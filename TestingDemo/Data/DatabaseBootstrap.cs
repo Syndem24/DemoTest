@@ -35,7 +35,7 @@ public static class DatabaseBootstrap
             EnsureStaffPasswordResetCodeTable(db);
             EnsureSystemAuditLogTable(db);
             EnsureStaffDashboardLayoutColumn(db);
-            EnsureStaffShiftTable(db);
+            DropStaffShiftTableIfExists(db);
             EnsureStayReviewTable(db);
             EnsureLoyaltyApplyModeColumn(db);
             EnsureSpecialOfferOpenEndedColumn(db);
@@ -52,7 +52,7 @@ public static class DatabaseBootstrap
                 EnsurePaymentRecordTable(db);
                 EnsureBookingChargeTable(db);
                 EnsureBookingGuestHeadCountColumns(db);
-                EnsureStaffShiftTable(db);
+                DropStaffShiftTableIfExists(db);
                 EnsureStayReviewTable(db);
             }
         }
@@ -406,7 +406,7 @@ public static class DatabaseBootstrap
                         OR COL_LENGTH(N'dbo.StaffAccount', N'RoleId') IS NULL
                         OR OBJECT_ID(N'[dbo].[SystemFlushLog]', N'U') IS NULL
                         OR OBJECT_ID(N'[dbo].[SystemAuditLog]', N'U') IS NULL
-                        OR OBJECT_ID(N'[dbo].[StaffShift]', N'U') IS NULL
+                        OR OBJECT_ID(N'[dbo].[StaffShift]', N'U') IS NOT NULL
                         OR OBJECT_ID(N'[dbo].[StayReview]', N'U') IS NULL
                     THEN 1 ELSE 0 END
                     """;
@@ -989,44 +989,19 @@ public static class DatabaseBootstrap
         }
     }
 
-    private static void EnsureStaffShiftTable(HotelBookingDbContext db)
+    private static void DropStaffShiftTableIfExists(HotelBookingDbContext db)
     {
         try
         {
             db.Database.ExecuteSqlRaw(
                 """
-                IF OBJECT_ID(N'dbo.StaffShift', N'U') IS NULL
-                BEGIN
-                    CREATE TABLE [dbo].[StaffShift] (
-                        [Id] int NOT NULL IDENTITY,
-                        [StaffUserId] nvarchar(450) NOT NULL,
-                        [StaffDisplayName] nvarchar(120) NOT NULL,
-                        [StartedAtUtc] datetime2 NOT NULL,
-                        [EndedAtUtc] datetime2 NULL,
-                        [OpeningNote] nvarchar(2000) NULL,
-                        [ClosingNote] nvarchar(2000) NULL,
-                        [RoomsBriefing] nvarchar(4000) NULL,
-                        [GuestsBriefing] nvarchar(4000) NULL,
-                        [OffersBriefing] nvarchar(4000) NULL,
-                        [GainNotes] nvarchar(2000) NULL,
-                        [ClosingSummaryJson] nvarchar(max) NULL,
-                        [CreatedAtUtc] datetime2 NOT NULL,
-                        [UpdatedAtUtc] datetime2 NOT NULL,
-                        CONSTRAINT [PK_StaffShift] PRIMARY KEY ([Id])
-                    );
-                    CREATE INDEX [IX_StaffShift_StaffUserId_StartedAtUtc]
-                        ON [dbo].[StaffShift] ([StaffUserId], [StartedAtUtc]);
-                    CREATE INDEX [IX_StaffShift_EndedAtUtc]
-                        ON [dbo].[StaffShift] ([EndedAtUtc]);
-                    CREATE UNIQUE INDEX [IX_StaffShift_StaffUserId_Open]
-                        ON [dbo].[StaffShift] ([StaffUserId])
-                        WHERE [EndedAtUtc] IS NULL;
-                END
+                IF OBJECT_ID(N'dbo.StaffShift', N'U') IS NOT NULL
+                    DROP TABLE [dbo].[StaffShift];
                 """);
         }
         catch
         {
-            // Ignore if table exists or transient schema check
+            // Ignore if already dropped or transient schema check
         }
     }
 

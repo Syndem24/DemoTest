@@ -1,5 +1,5 @@
-/* Customer booking site — three colors: navy, white, teal
-   Fluid / scalable layout across phone → desktop */
+﻿/* Customer booking site â€” three colors: navy, white, teal
+   Fluid / scalable layout across phone â†’ desktop */
 .guest-shell {
   --guest-pad: clamp(0.85rem, 3.5vw, 2.5rem);
   --guest-max: 70rem;
@@ -64,7 +64,7 @@
   background: var(--white);
 }
 
-/* Transparent until scroll / menu open — navy text for daytime hero contrast */
+/* Transparent until scroll / menu open â€” navy text for daytime hero contrast */
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) {
   background: transparent;
   border-bottom-color: transparent;
@@ -1416,7 +1416,7 @@
   gap: 0.75rem;
 }
 
-/* Compact gallery wall — inspired by A5/A4/A3 balance, sized to fit the viewport */
+/* Compact gallery wall â€” inspired by A5/A4/A3 balance, sized to fit the viewport */
 .guest-gallery-wall {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1483,7 +1483,7 @@
   transition: transform 220ms ease, filter 220ms ease;
 }
 
-/* Lounge spans wide — keep seating/art in frame instead of cropping the sofa */
+/* Lounge spans wide â€” keep seating/art in frame instead of cropping the sofa */
 .guest-gallery-wall-tile.is-a4 .guest-gallery-wall-photo img {
   object-position: center 38%;
 }
@@ -1803,7 +1803,7 @@
   padding-top: clamp(1.25rem, 3vw, 2rem);
 }
 
-/* Accommodations — editorial suite catalogue (linen field + architectural hairlines) */
+/* Accommodations â€” editorial suite catalogue (linen field + architectural hairlines) */
 .guest-hero .guest-hero-media.guest-hero-tour {
   background: var(--navy-soft);
 }
@@ -1916,7 +1916,7 @@
   line-height: 1.55;
 }
 
-/* Accommodations hero — soft entrance without scroll */
+/* Accommodations hero â€” soft entrance without scroll */
 @keyframes guest-hero-panel-in {
   from {
     opacity: 0;
@@ -1974,7 +1974,7 @@
   transition: opacity 600ms ease;
 }
 
-/* Accommodations canvas: white hallway (Mori interior — palms, black railings, bright atrium) */
+/* Accommodations canvas: white hallway (Mori interior â€” palms, black railings, bright atrium) */
 .guest-shell--rooms {
   background-color: var(--white);
   background-image:
@@ -2116,7 +2116,7 @@
   color: var(--teal);
 }
 
-/* Japanese hotel scroll cadence — rooms page (load cascade + gentle scroll for below-fold) */
+/* Japanese hotel scroll cadence â€” rooms page (load cascade + gentle scroll for below-fold) */
 .guest-rooms-page .guest-reveal--ink {
   transform: translateY(0.55rem) scale(0.994);
   filter: saturate(0.96);
@@ -2416,7 +2416,7 @@
   scroll-snap-stop: always;
 }
 
-/* One card: fixed centered width (do not tie to .is-scrollable — that caused size thrash) */
+/* One card: fixed centered width (do not tie to .is-scrollable â€” that caused size thrash) */
 .guest-room-feature-carousel .guest-room-features:has(> .guest-room-feature:only-child) {
   justify-content: center;
 }
@@ -2801,7 +2801,7 @@
   font-size: 0.78rem;
 }
 
-/* Base “From ₱…” list price only — do not restyle promo badge / compare row. */
+/* Base â€œFrom â‚±â€¦â€ list price only â€” do not restyle promo badge / compare row. */
 .guest-room-feature-price:not(.is-promo) > span {
   font-size: clamp(1.15rem, 1rem + 0.5vw, 1.4rem);
   font-weight: 800;
@@ -3282,7 +3282,7 @@
   border: 0;
 }
 
-/* Booking wizard — wide enough on desktop that one step fits without inner scroll */
+/* Booking wizard â€” wide enough on desktop that one step fits without inner scroll */
 .guest-modal-dialog-lg.guest-modal-dialog-book {
   width: min(calc(100% - 1.5rem), 44rem);
   max-height: min(92dvh, 58rem);
@@ -3656,7 +3656,7 @@
   margin-top: 0.1rem;
 }
 
-/* Cart line frames by rate type — navy vs teal so mixes are obvious */
+/* Cart line frames by rate type â€” navy vs teal so mixes are obvious */
 .guest-offer-cart-item.is-rate-stayLonger,
 .guest-cart-item.is-rate-stayLonger {
   border: 1.5px solid rgba(11, 31, 58, 0.45);
@@ -4143,7 +4143,7 @@
     grid-column: 1 / -1;
   }
 
-  /* Wizard shows one step — keep content full-width and centered in the dialog */
+  /* Wizard shows one step â€” keep content full-width and centered in the dialog */
   .guest-book-modal-form.is-wizard {
     grid-template-columns: minmax(0, 1fr);
     justify-items: stretch;
@@ -4262,7 +4262,7 @@
   display: none;
 }
 
-/* Landing reviews → contact: Accommodations palms, gutters only (no hallway illusion) */
+/* Landing reviews â†’ contact: Accommodations palms, gutters only (no hallway illusion) */
 .guest-landing-grove {
   position: relative;
   left: 50%;
@@ -4616,7 +4616,7 @@
   }
 }
 
-/* Contact — light, quiet contrast to the dark gallery / room-types band */
+/* Contact â€” light, quiet contrast to the dark gallery / room-types band */
 .guest-contact {
   position: relative;
   left: 50%;
@@ -4930,7 +4930,7 @@
   color: var(--navy);
 }
 
-/* —— Staff authentication (login / change password) —— */
+/* â€”â€” Staff authentication (login / change password) â€”â€” */
 .guest-shell--auth {
   background: var(--white);
 }
@@ -6509,7 +6509,7 @@
   margin-bottom: 0;
 }
 
-/* Calm header wash: navy mist into a whisper of teal — readable, not a solid bar */
+/* Calm header wash: navy mist into a whisper of teal â€” readable, not a solid bar */
 .guest-details-header,
 .guest-guests-head,
 .guest-offers-head,
@@ -6555,7 +6555,7 @@
   background: var(--teal);
 }
 
-/* Details Modal Header — thin sticky bar, flush to modal top */
+/* Details Modal Header â€” thin sticky bar, flush to modal top */
 .guest-details-header {
   position: sticky;
   top: 0;
@@ -6918,7 +6918,7 @@
 }
 
 .guest-acc[open]>summary::after {
-  content: "−";
+  content: "âˆ’";
 }
 
 .guest-acc>summary:hover {
@@ -7295,7 +7295,7 @@
   backdrop-filter: none;
 }
 
-/* Close stays in the corner while the dialog scrolls — button only, not the header */
+/* Close stays in the corner while the dialog scrolls â€” button only, not the header */
 .guest-modal-dialog > .guest-modal-close {
   position: sticky;
   top: 0.7rem;
@@ -7431,7 +7431,7 @@ body.guest-modal-open.guest-shell--clay.guest-shell--rooms .guest-main {
     right: 0.15rem;
   }
 
-  /* Accommodations already has Continue — hide redundant nav CTA on phones */
+  /* Accommodations already has Continue â€” hide redundant nav CTA on phones */
   .guest-shell--rooms .guest-nav-cta {
     display: none;
   }
@@ -7537,7 +7537,7 @@ body.guest-modal-open.guest-shell--clay.guest-shell--rooms .guest-main {
   }
 }
 
-/* Guest count → offer → booking flow */
+/* Guest count â†’ offer â†’ booking flow */
 .guest-flow-bar {
   display: flex;
   flex-wrap: wrap;
@@ -7937,7 +7937,7 @@ body.guest-modal-open.guest-shell--clay.guest-shell--rooms .guest-main {
 .guest-modal-dialog-offers {
   width: min(100% - 1.25rem, clamp(36rem, 92vw, 72rem));
   max-height: min(94vh, 56rem);
-  /* Scroll the room list, not the whole dialog — keeps Back/Continue pinned */
+  /* Scroll the room list, not the whole dialog â€” keeps Back/Continue pinned */
   overflow: hidden;
   overflow-y: hidden;
   padding: 0 1rem 0;
@@ -8408,12 +8408,12 @@ body.guest-modal-open.guest-shell--clay.guest-shell--rooms .guest-main {
 }
 
 .guest-offers-selection-status:not(.is-empty)::after {
-  content: " · View cart";
+  content: " Â· View cart";
   font-weight: 650;
   color: rgba(11, 31, 58, 0.62);
 }
 
-/* Mobile / tablet only — desktop has the Your rooms sidebar */
+/* Mobile / tablet only â€” desktop has the Your rooms sidebar */
 @media (max-width: 899.98px) {
   .guest-offers-selection-status {
     display: block;
@@ -9976,6 +9976,12 @@ body.guest-modal-open .guest-loyalty-ad.is-in:not(.is-leaving) {
   flex-direction: column;
 }
 
+.guest-shell--full-bleed:not(.guest-shell--dark-page) {
+  background:
+    radial-gradient(ellipse 80% 50% at 10% 0%, color-mix(in srgb, var(--teal) 8%, transparent), transparent 55%),
+    linear-gradient(180deg, #f4f8fa 0%, #eef4f6 48%, #f7fafb 100%);
+}
+
 .guest-shell--dark-page .guest-main,
 .guest-shell--full-bleed .guest-main {
   width: 100% !important;
@@ -9985,6 +9991,22 @@ body.guest-modal-open .guest-loyalty-ad.is-in:not(.is-leaving) {
   flex: 1;
   display: flex;
   flex-direction: column;
+}
+
+.guest-shell--full-bleed:not(.guest-shell--dark-page) .guest-portal-reviews-page {
+  background: transparent;
+  width: 100%;
+  max-width: none;
+  flex: 1;
+}
+
+.guest-shell--full-bleed .guest-portal-reviews-hero {
+  left: auto;
+  right: auto;
+  margin-left: 0;
+  margin-right: 0;
+  width: 100%;
+  max-width: none;
 }
 
 .guest-shell--dark-page .guest-nav {
@@ -10522,7 +10544,7 @@ body.guest-lang-popup-open {
   }
 }
 
-/* Staff password reset — 6-digit OTP */
+/* Staff password reset â€” 6-digit OTP */
 .guest-auth-card-otp .guest-auth-card-header h1 {
   font-size: clamp(1.35rem, 2.5vw, 1.65rem);
 }
@@ -10603,7 +10625,7 @@ body.guest-lang-popup-open {
   color: #8b2e2e;
 }
 
-/* Staff auth — submit loading overlay */
+/* Staff auth â€” submit loading overlay */
 .guest-auth-loading[hidden] {
   display: none !important;
 }
@@ -10725,7 +10747,7 @@ body.guest-auth-is-loading {
   }
 }
 
-/* ── Accommodations: hallway-clay (white atrium + matte cards — Mori corridor inspiration) ── */
+/* â”€â”€ Accommodations: hallway-clay (white atrium + matte cards â€” Mori corridor inspiration) â”€â”€ */
 .guest-shell--clay {
   --clay-surface: var(--white);
   --clay-card: var(--white);
@@ -10801,7 +10823,7 @@ body.guest-auth-is-loading {
   background-position: center;
 }
 
-/* Phase 2 — atrium layers (pebbles, mezzanine, rails, doors, hallway wash, ceiling pulse) */
+/* Phase 2 â€” atrium layers (pebbles, mezzanine, rails, doors, hallway wash, ceiling pulse) */
 @keyframes guest-hall-ceiling-pulse {
   0%,
   100% {
@@ -11129,7 +11151,7 @@ body.guest-auth-is-loading {
   box-shadow: var(--clay-shadow-pressed);
 }
 
-/* Primary actions stay solid teal — not clay (WCAG + affordance) */
+/* Primary actions stay solid teal â€” not clay (WCAG + affordance) */
 .guest-shell--clay .guest-btn-primary {
   box-shadow: 0 10px 24px rgba(11, 31, 58, 0.22);
 }
@@ -11262,7 +11284,839 @@ body.guest-auth-is-loading {
     transition: border-color 0.01ms, box-shadow 0.01ms;
   }
 }
-/* —— Guest stay reviews (public + portal) —— */
+/* â€”â€” Guest stay reviews portal (photo hero + star modal) â€”â€” */
+.guest-portal-reviews-page {
+  --gpr-navy-deep: #061122;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  color: var(--navy);
+  background:
+    radial-gradient(ellipse 80% 50% at 10% 0%, color-mix(in srgb, var(--teal) 10%, transparent), transparent 55%),
+    linear-gradient(180deg, #f4f8fa 0%, #eef4f6 48%, #f7fafb 100%);
+}
+
+.guest-portal-reviews-hero {
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  width: 100vw;
+  max-width: 100vw;
+  overflow: hidden;
+  color: #fff;
+  background: var(--gpr-navy-deep);
+  min-height: clamp(20rem, 48vw, 28rem);
+}
+
+.guest-portal-reviews-hero-media {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.guest-portal-reviews-hero-media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, rgba(6, 17, 34, 0.78) 0%, rgba(11, 31, 58, 0.5) 52%, rgba(11, 31, 58, 0.32) 100%);
+  pointer-events: none;
+}
+
+.guest-portal-reviews-hero-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 38%;
+  display: block;
+  transform: none;
+}
+
+.guest-portal-reviews-hero-fade {
+  display: none;
+}
+
+.guest-portal-reviews-hero-glow {
+  position: absolute;
+  top: 34%;
+  right: 4%;
+  width: min(28rem, 72vw);
+  height: 18rem;
+  background: radial-gradient(ellipse, rgba(26, 166, 166, 0.2), transparent 70%);
+  filter: blur(48px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.guest-portal-reviews-hero-inner {
+  position: relative;
+  z-index: 2;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding:
+    max(5rem, calc(env(safe-area-inset-top) + 4.25rem))
+    clamp(1.1rem, 3.5vw, 2rem)
+    clamp(3.25rem, 7vw, 4.75rem);
+}
+
+.guest-portal-reviews-crumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 1rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.guest-portal-reviews-crumb a {
+  color: #fff;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 200ms ease, color 200ms ease;
+  cursor: pointer;
+}
+
+.guest-portal-reviews-crumb a:hover,
+.guest-portal-reviews-crumb a:focus-visible {
+  color: color-mix(in srgb, var(--teal) 55%, white);
+  border-bottom-color: color-mix(in srgb, var(--teal) 55%, white);
+  outline: none;
+}
+
+.guest-portal-reviews-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 0.85rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.guest-portal-reviews-chip-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--teal);
+  box-shadow: 0 0 0 3px rgba(26, 166, 166, 0.28);
+}
+
+.guest-portal-reviews-hero h1 {
+  margin: 0 0 0.75rem;
+  max-width: 16ch;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(2.35rem, 5.5vw, 3.6rem);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+
+.guest-portal-reviews-hero-lede {
+  margin: 0;
+  max-width: 38rem;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: clamp(0.98rem, 1.5vw, 1.08rem);
+  line-height: 1.6;
+}
+
+.guest-portal-reviews-body {
+  position: relative;
+  z-index: 2;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: clamp(1.5rem, 3.5vw, 2.25rem) clamp(1.1rem, 3.5vw, 2rem) clamp(2.5rem, 5vw, 3.5rem);
+}
+
+.guest-reviews-portal-block {
+  margin-top: 1.75rem;
+}
+
+.guest-reviews-portal-block-head {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 0.95rem;
+}
+
+.guest-reviews-portal-block-head h2 {
+  margin: 0;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(1.45rem, 2.4vw, 1.85rem);
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.guest-reviews-portal-block-head p {
+  margin: 0;
+  color: color-mix(in srgb, var(--navy) 58%, white);
+  font-size: 0.92rem;
+}
+
+.guest-reviews-portal-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.guest-reviews-portal-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(11, 31, 58, 0.08);
+  background: #fff;
+  box-shadow:
+    0 14px 34px rgba(11, 31, 58, 0.07),
+    0 1px 0 rgba(255, 255, 255, 0.8) inset;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.guest-reviews-portal-card:hover {
+  border-color: color-mix(in srgb, var(--teal) 35%, rgba(11, 31, 58, 0.1));
+  box-shadow: 0 18px 40px rgba(11, 31, 58, 0.1);
+}
+
+.guest-reviews-portal-card.is-mine {
+  grid-template-columns: 1fr auto;
+  padding: 1rem 1.1rem;
+}
+
+.guest-reviews-portal-card-media {
+  width: clamp(5.5rem, 16vw, 7.25rem);
+  align-self: stretch;
+  min-height: 6.5rem;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--navy) 12%, white);
+}
+
+.guest-reviews-portal-card-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.guest-reviews-portal-card-body {
+  min-width: 0;
+  padding: 0.95rem 0;
+}
+
+.guest-reviews-portal-card.is-eligible .guest-reviews-portal-card-body {
+  padding-right: 0.25rem;
+}
+
+.guest-reviews-portal-card.is-eligible .guest-btn,
+.guest-reviews-portal-card.is-mine .guest-btn,
+.guest-reviews-portal-card.is-mine .guest-reviews-locked {
+  margin-right: 1rem;
+}
+
+.guest-reviews-portal-kicker {
+  margin: 0 0 0.2rem !important;
+  font-size: 0.72rem !important;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--teal) 45%, var(--navy)) !important;
+}
+
+.guest-reviews-portal-card strong {
+  display: block;
+  font-size: 1.02rem;
+  color: var(--navy);
+}
+
+.guest-reviews-portal-card p {
+  margin: 0.28rem 0 0;
+  color: color-mix(in srgb, var(--navy) 68%, white);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.guest-reviews-portal-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.85rem;
+}
+
+.guest-reviews-portal-card-top .guest-review-stars {
+  font-size: 0.95rem;
+}
+
+.guest-reviews-portal-card-top .guest-review-stars svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  fill: currentColor;
+}
+
+.guest-reviews-empty-card {
+  display: grid;
+  grid-template-columns: minmax(0, 9rem) 1fr;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+  border-radius: 18px;
+  border: 1px solid rgba(11, 31, 58, 0.08);
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(11, 31, 58, 0.06);
+  justify-items: stretch;
+}
+
+.guest-reviews-empty-card.is-soft {
+  display: block;
+  padding: 1.15rem 1.2rem;
+}
+
+.guest-reviews-empty-visual {
+  min-height: 8rem;
+  overflow: hidden;
+}
+
+.guest-reviews-empty-visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.guest-reviews-empty-copy {
+  display: grid;
+  gap: 0.55rem;
+  align-content: center;
+  justify-items: start;
+  padding: 1.1rem 1.2rem;
+}
+
+.guest-reviews-empty-sub {
+  margin: 0;
+  color: color-mix(in srgb, var(--navy) 58%, white);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.guest-reviews-portal-card small {
+  display: block;
+  margin-top: 0.35rem;
+  color: color-mix(in srgb, var(--navy) 48%, white);
+}
+
+.guest-reviews-portal-message {
+  margin: 0 0 0.25rem;
+  padding: 0.75rem 0.95rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--teal) 28%, white);
+  background: color-mix(in srgb, var(--teal) 12%, white);
+  color: var(--navy);
+}
+
+.guest-reviews-portal-message.is-error {
+  border-color: color-mix(in srgb, #b00020 24%, white);
+  background: color-mix(in srgb, #b00020 10%, white);
+}
+
+.guest-reviews-locked {
+  font-size: 0.82rem;
+  color: color-mix(in srgb, var(--navy) 50%, white);
+}
+
+.guest-reviews-portal-foot {
+  margin-top: 1.75rem;
+}
+
+.guest-review-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.08rem;
+  color: color-mix(in srgb, var(--navy) 18%, white);
+}
+
+.guest-review-stars .is-on {
+  color: var(--teal);
+}
+
+.guest-review-stars svg {
+  display: block;
+  width: 1rem;
+  height: 1rem;
+  fill: currentColor;
+}
+
+.guest-review-modal[hidden] {
+  display: none !important;
+}
+
+.guest-review-modal:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.guest-review-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(6, 17, 34, 0.55);
+  backdrop-filter: blur(5px);
+  cursor: pointer;
+}
+
+.guest-review-modal-card {
+  position: relative;
+  z-index: 1;
+  width: min(48rem, calc(100vw - 1.5rem));
+  max-height: min(44rem, 92vh);
+  height: auto;
+  overflow: hidden;
+  padding: 0;
+  border-radius: 22px;
+  background: #fff;
+  border: 1px solid color-mix(in srgb, var(--navy) 10%, white);
+  box-shadow: 0 22px 56px rgba(11, 31, 58, 0.28);
+  color: var(--navy);
+  display: flex;
+  flex-direction: column;
+}
+
+.guest-review-modal-header {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr auto;
+  gap: 0.85rem;
+  align-items: start;
+  margin: 0;
+  padding: 1rem 1.05rem 0.95rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--navy) 8%, white);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--teal) 8%, white), white 70%);
+  flex: 0 0 auto;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.guest-review-modal-visual {
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--navy) 10%, white);
+  box-shadow: 0 8px 18px rgba(11, 31, 58, 0.12);
+}
+
+.guest-review-modal-visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.guest-review-modal-card h3 {
+  margin: 0;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(1.35rem, 2.4vw, 1.7rem);
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.guest-review-modal-head-copy {
+  display: grid;
+  gap: 0.28rem;
+  min-width: 0;
+}
+
+.guest-review-modal-lede {
+  margin: 0;
+  max-width: 34rem;
+  color: color-mix(in srgb, var(--navy) 62%, white);
+  line-height: 1.45;
+  font-size: 0.92rem;
+}
+
+.guest-review-modal-x {
+  border: 0;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--navy) 5%, white);
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--navy);
+  flex: 0 0 auto;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.guest-review-modal-x svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  fill: currentColor;
+  display: block;
+}
+
+.guest-review-modal-x:hover,
+.guest-review-modal-x:focus-visible {
+  background: color-mix(in srgb, var(--teal) 16%, white);
+  color: color-mix(in srgb, var(--teal) 25%, var(--navy));
+  outline: none;
+}
+
+.guest-review-modal-x:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 45%, white);
+}
+
+.guest-review-modal-card form {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: block;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 1rem 1.15rem 1.1rem;
+}
+
+.guest-review-modal-card form > * + * {
+  margin-top: 0.85rem;
+}
+
+.guest-review-modal-panel {
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--navy) 8%, white);
+  background: color-mix(in srgb, var(--white) 92%, var(--teal) 8%);
+  box-shadow: 0 10px 24px rgba(11, 31, 58, 0.04);
+}
+
+.guest-review-rating-panel {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--teal) 10%, white), white);
+}
+
+.guest-review-rating-hint {
+  margin: 0 0 0.85rem;
+  color: color-mix(in srgb, var(--navy) 58%, white);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.guest-review-rating-grid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.guest-star-field {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--navy) 8%, white);
+  background: #fff;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.guest-star-field.is-rated {
+  border-color: color-mix(in srgb, var(--teal) 36%, white);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 12%, transparent);
+}
+
+.guest-star-field-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+  font-weight: 650;
+  color: var(--navy);
+}
+
+.guest-star-field-copy em {
+  color: var(--teal);
+  font-style: normal;
+}
+
+.guest-star-value {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--teal) 35%, var(--navy));
+}
+
+.guest-star-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+}
+
+.guest-star-btn {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0.2rem;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 10px;
+  background: transparent;
+  color: color-mix(in srgb, var(--navy) 18%, white);
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  transition: color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.guest-star-btn svg {
+  width: 1.45rem;
+  height: 1.45rem;
+  fill: currentColor;
+  display: block;
+}
+
+.guest-star-btn:hover,
+.guest-star-btn:focus-visible {
+  background: color-mix(in srgb, var(--teal) 10%, white);
+  outline: none;
+}
+
+.guest-star-btn:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 40%, white);
+}
+
+.guest-star-btn.is-on,
+.guest-star-btn.is-preview {
+  color: var(--teal);
+}
+
+.guest-star-btn.is-on {
+  transform: translateY(-1px);
+}
+
+.guest-review-field {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.guest-review-modal-panel.guest-review-field,
+.guest-review-modal-panel.guest-review-field:last-child {
+  margin: 0;
+}
+
+.guest-review-field span em {
+  color: var(--teal);
+  font-style: normal;
+}
+
+.guest-review-field textarea {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--navy) 16%, white);
+  padding: 0.7rem 0.8rem;
+  font: inherit;
+  color: var(--navy);
+  background: white;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.guest-review-field textarea:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--teal) 55%, white);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 22%, white);
+}
+
+.guest-review-field-grow {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.guest-review-field-grow textarea {
+  min-height: 6.5rem;
+  max-height: 10rem;
+  line-height: 1.6;
+  resize: vertical;
+  display: block;
+}
+
+.guest-review-tags-panel {
+  display: block;
+}
+
+.guest-review-tags-panel legend {
+  padding: 0;
+  margin-bottom: 0.55rem;
+  font-weight: 650;
+  color: var(--navy);
+}
+
+.guest-review-tags-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-content: flex-start;
+}
+
+.guest-review-tag-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  margin: 0;
+  padding: 0.42rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--navy) 14%, white);
+  background: #fff;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--navy);
+  cursor: pointer;
+  transition: border-color 180ms ease, background 180ms ease, color 180ms ease;
+}
+
+.guest-review-tag-chip input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  border: 0;
+}
+
+.guest-review-tag-chip:has(input:checked) {
+  border-color: color-mix(in srgb, var(--teal) 50%, white);
+  background: color-mix(in srgb, var(--teal) 14%, white);
+  color: color-mix(in srgb, var(--teal) 30%, var(--navy));
+}
+
+.guest-review-tag-chip:hover,
+.guest-review-tag-chip:focus-within {
+  border-color: color-mix(in srgb, var(--teal) 40%, white);
+}
+
+.guest-review-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  margin-top: 0;
+  padding: 0.55rem 1.15rem;
+  border-top: 1px solid color-mix(in srgb, var(--navy) 8%, white);
+  background: #fff;
+  flex: 0 0 auto;
+  z-index: 3;
+  box-shadow: none;
+}
+
+.guest-review-modal-actions .guest-btn {
+  flex: 0 0 auto;
+  min-height: 2.35rem;
+  padding-block: 0.4rem;
+}
+
+.guest-review-modal-actions .guest-btn-ghost {
+  color: var(--navy);
+  border-color: color-mix(in srgb, var(--navy) 22%, white);
+  background: #fff;
+}
+
+.guest-review-modal-actions .guest-btn-ghost:hover {
+  background: color-mix(in srgb, var(--navy) 5%, white);
+  color: var(--navy);
+  border-color: color-mix(in srgb, var(--navy) 35%, white);
+}
+
+body.guest-review-modal-open {
+  overflow: hidden;
+}
+
+@media (max-width: 720px) {
+  .guest-reviews-portal-card.is-eligible {
+    grid-template-columns: 5rem 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .guest-reviews-portal-card.is-eligible .guest-btn {
+    grid-column: 1 / -1;
+    margin: 0 0.9rem 0.9rem;
+    width: calc(100% - 1.8rem);
+  }
+
+  .guest-reviews-empty-card {
+    grid-template-columns: 1fr;
+  }
+
+  .guest-reviews-empty-visual {
+    min-height: 7rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .guest-review-modal-header {
+    grid-template-columns: 1fr auto;
+  }
+
+  .guest-review-modal-visual {
+    display: none;
+  }
+
+  .guest-review-modal-card {
+    width: 100%;
+    max-height: 96vh;
+    height: auto;
+    border-radius: 18px;
+  }
+
+  .guest-review-modal-actions {
+    padding: 0.5rem 0.9rem;
+  }
+
+  .guest-star-btn {
+    width: 2.55rem;
+    height: 2.55rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guest-portal-reviews-hero-media img,
+  .guest-reviews-portal-card,
+  .guest-star-btn,
+  .guest-review-tag-chip,
+  .guest-review-modal-x {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* Public homepage review cards keep letter-star fallback if needed */
+.guest-reviews .guest-review-stars:not(:has(svg)) {
+  letter-spacing: 0.02em;
+}
+
+.guest-reviews-score:focus-visible,
+.guest-reviews-nav:focus-visible,
+.guest-reviews-dot:focus-visible,
+.guest-reviews-modal-close:focus-visible,
+.guest-star-btn:focus-visible,
+.guest-review-modal-x:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--teal) 55%, white);
+  outline-offset: 2px;
+}
+
 .guest-reviews .guest-section-head {
   flex-direction: column;
   align-items: center;
@@ -11584,6 +12438,13 @@ body.guest-auth-is-loading {
   color: var(--teal);
 }
 
+.guest-review-stars svg {
+  width: 1rem;
+  height: 1rem;
+  fill: currentColor;
+  display: block;
+}
+
 .guest-review-comment {
   margin: 0;
   flex: 1;
@@ -11853,300 +12714,8 @@ body.guest-public-reviews-open .guest-nav {
   }
 }
 
-.guest-portal-reviews {
-  width: min(var(--guest-max), 100%);
-  margin-inline: auto;
-  padding: clamp(2rem, 5vw, 3.5rem) var(--guest-pad) clamp(3rem, 6vw, 4.5rem);
-}
 
-.guest-reviews-portal-block {
-  margin-top: 1.5rem;
-}
-
-.guest-reviews-portal-block h2 {
-  margin: 0 0 0.75rem;
-  font-size: 1.15rem;
-  color: var(--navy);
-}
-
-.guest-reviews-portal-list {
-  display: grid;
-  gap: 0.65rem;
-}
-
-.guest-reviews-portal-card {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.9rem 1rem;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--navy) 10%, white);
-  background: white;
-}
-
-.guest-reviews-portal-card p {
-  margin: 0.25rem 0 0;
-  color: color-mix(in srgb, var(--navy) 68%, white);
-  font-size: 0.9rem;
-}
-
-.guest-reviews-empty-card {
-  display: grid;
-  gap: 0.55rem;
-  justify-items: start;
-  padding: 1rem 1.05rem;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--navy) 10%, white);
-  background: white;
-}
-
-.guest-reviews-empty-sub {
-  margin: 0;
-  color: color-mix(in srgb, var(--navy) 58%, white);
-  font-size: 0.9rem;
-  line-height: 1.45;
-}
-
-.guest-reviews-portal-card small {
-  display: block;
-  margin-top: 0.25rem;
-  color: color-mix(in srgb, var(--navy) 48%, white);
-}
-
-.guest-reviews-portal-message {
-  margin: 0.75rem 0 0;
-  padding: 0.65rem 0.8rem;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--teal) 12%, white);
-  color: var(--navy);
-}
-
-.guest-reviews-portal-message.is-error {
-  background: color-mix(in srgb, #b00020 10%, white);
-}
-
-.guest-reviews-locked {
-  font-size: 0.82rem;
-  color: color-mix(in srgb, var(--navy) 50%, white);
-}
-
-.guest-reviews-portal-foot {
-  margin-top: 1.5rem;
-}
-
-.guest-review-modal[hidden] {
-  display: none !important;
-}
-
-.guest-review-modal:not([hidden]) {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-}
-
-.guest-review-modal-backdrop {
-  position: absolute;
-  inset: 0;
-  border: 0;
-  background: rgba(11, 31, 58, 0.45);
-  cursor: pointer;
-}
-
-.guest-review-modal-card {
-  position: relative;
-  z-index: 1;
-  width: min(58rem, 100%);
-  min-height: min(48rem, 92vh);
-  max-height: 92vh;
-  overflow: hidden;
-  padding: 1.1rem 1.15rem 1rem;
-  border-radius: 22px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--teal) 7%, white), white 18%),
-    white;
-  border: 1px solid color-mix(in srgb, var(--navy) 10%, white);
-  box-shadow: 0 18px 48px rgba(11, 31, 58, 0.22);
-  color: var(--navy);
-  display: flex;
-  flex-direction: column;
-}
-
-.guest-review-modal-card header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-  padding-bottom: 0.85rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--navy) 8%, white);
-  flex: 0 0 auto;
-}
-
-.guest-review-modal-card h3 {
-  margin: 0;
-  font-size: clamp(1.3rem, 2vw, 1.65rem);
-}
-
-.guest-review-modal-head-copy {
-  display: grid;
-  gap: 0.3rem;
-}
-
-.guest-review-modal-lede {
-  margin: 0;
-  max-width: 38rem;
-  color: color-mix(in srgb, var(--navy) 62%, white);
-  line-height: 1.45;
-  font-size: 0.95rem;
-}
-
-.guest-review-modal-x {
-  border: 0;
-  background: transparent;
-  font-size: 1.4rem;
-  line-height: 1;
-  cursor: pointer;
-  color: var(--navy);
-}
-
-.guest-review-modal-card form {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
-  overflow: auto;
-  padding-right: 0.2rem;
-  padding-bottom: 1.2rem;
-}
-
-.guest-review-modal-panel {
-  padding: 0.95rem 1rem;
-  border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--navy) 8%, white);
-  background: color-mix(in srgb, var(--white) 92%, var(--teal) 8%);
-  box-shadow: 0 10px 24px rgba(11, 31, 58, 0.05);
-}
-
-.guest-review-rating-panel {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--teal) 8%, white), white);
-}
-
-.guest-review-rating-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.9rem 1rem;
-}
-
-.guest-review-field {
-  display: grid;
-  gap: 0.35rem;
-  margin: 0 0 0.85rem;
-}
-
-.guest-review-modal-panel.guest-review-field,
-.guest-review-modal-panel.guest-review-field:last-child {
-  margin: 0;
-}
-
-.guest-review-field span em {
-  color: var(--teal);
-  font-style: normal;
-}
-
-.guest-review-field select,
-.guest-review-field textarea {
-  width: 100%;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--navy) 16%, white);
-  padding: 0.55rem 0.65rem;
-  font: inherit;
-  color: var(--navy);
-  background: white;
-}
-
-.guest-review-field select {
-  min-height: 3rem;
-}
-
-.guest-review-field-grow {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.guest-review-field-grow textarea {
-  min-height: 15rem;
-  height: min(22rem, 42vh);
-  line-height: 1.65;
-  resize: vertical;
-  display: block;
-}
-
-.guest-review-radio {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  margin-right: 0.85rem;
-  font-size: 0.9rem;
-}
-
-.guest-review-tags-pick {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.4rem 0.75rem;
-}
-
-.guest-review-tags-pick label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.86rem;
-}
-
-.guest-review-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0;
-  padding: 0.95rem 0 0.15rem;
-  border-top: 1px solid color-mix(in srgb, var(--navy) 8%, white);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), white 38%);
-  flex: 0 0 auto;
-  z-index: 2;
-  box-shadow: 0 -8px 20px rgba(11, 31, 58, 0.04);
-}
-
-body.guest-review-modal-open {
-  overflow: hidden;
-}
-
-@media (max-width: 560px) {
-  .guest-review-modal-card {
-    width: 100%;
-    min-height: 0;
-    max-height: 96vh;
-    border-radius: 18px;
-  }
-
-  .guest-review-rating-grid,
-  .guest-review-tags-pick {
-    grid-template-columns: 1fr;
-  }
-
-  .guest-review-field-grow textarea {
-    min-height: 11rem;
-    height: 15rem;
-  }
-}
-
-/* Guest page loader — Sam Herbert puff.svg (MIT) + Mori navy/teal exit */
+/* Guest page loader â€” Sam Herbert puff.svg (MIT) + Mori navy/teal exit */
 .guest-page-loader {
   position: fixed;
   inset: 0;
@@ -12384,7 +12953,7 @@ body.guest-review-modal-open {
   }
 }
 
-/* Cookie consent — first-party, equal Accept / Reject, navy/teal only */
+/* Cookie consent â€” first-party, equal Accept / Reject, navy/teal only */
 html.guest-cookies-on {
   scroll-padding-bottom: var(--guest-cookie-h, 0px);
 }
@@ -12544,7 +13113,7 @@ html.guest-cookies-on {
   color: #fff;
 }
 
-/* —— Mori Assistant (guest chatbot) —— */
+/* â€”â€” Mori Assistant (guest chatbot) â€”â€” */
 .hotel-chat {
   --hotel-chat-ink: var(--navy, #0b1f3a);
   --hotel-chat-ink-soft: #102844;

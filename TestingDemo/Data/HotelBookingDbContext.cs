@@ -33,7 +33,6 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<SpecialOffer> SpecialOffers => Set<SpecialOffer>();
     public DbSet<SecureSetting> SecureSettings => Set<SecureSetting>();
     public DbSet<StaffPasswordResetCode> StaffPasswordResetCodes => Set<StaffPasswordResetCode>();
-    public DbSet<StaffShift> StaffShifts => Set<StaffShift>();
     public DbSet<StayReview> StayReviews => Set<StayReview>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -307,27 +306,6 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany(b => b.PaymentRecords)
                 .HasForeignKey(e => e.BookingId)
                 .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<StaffShift>(entity =>
-        {
-            entity.ToTable("StaffShift");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.StaffUserId).HasMaxLength(450).IsRequired();
-            entity.Property(e => e.StaffDisplayName).HasMaxLength(120).IsRequired();
-            entity.Property(e => e.OpeningNote).HasMaxLength(2000);
-            entity.Property(e => e.ClosingNote).HasMaxLength(2000);
-            entity.Property(e => e.RoomsBriefing).HasMaxLength(4000);
-            entity.Property(e => e.GuestsBriefing).HasMaxLength(4000);
-            entity.Property(e => e.OffersBriefing).HasMaxLength(4000);
-            entity.Property(e => e.GainNotes).HasMaxLength(2000);
-            entity.Property(e => e.ClosingSummaryJson).HasColumnType("nvarchar(max)");
-            entity.HasIndex(e => new { e.StaffUserId, e.StartedAtUtc });
-            entity.HasIndex(e => e.EndedAtUtc);
-            // One open shift per staff (EndedAtUtc IS NULL).
-            entity.HasIndex(e => e.StaffUserId)
-                .IsUnique()
-                .HasFilter("[EndedAtUtc] IS NULL");
         });
 
         modelBuilder.Entity<StayReview>(entity =>

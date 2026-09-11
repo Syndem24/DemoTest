@@ -117,11 +117,10 @@ def main():
             ("SpecialOffer", "Strong", "Id", "N→1 RoomType; optional Booking"),
             ("StayReview", "Weak / dependent", "Id", "N→1 Booking; unique BookingId"),
             ("StaffRole", "Strong", "Id", "1→N StaffUser"),
-            ("StaffUser", "Strong", "Id", "N→1 StaffRole; logins/tokens/reset/shifts"),
+            ("StaffUser", "Strong", "Id", "N→1 StaffRole; logins/tokens/reset"),
             ("StaffExternalLogin", "Identity satellite", "Provider+Key", "N→1 StaffUser"),
             ("StaffAuthToken", "Identity satellite", "User+Provider+Name", "N→1 StaffUser"),
             ("StaffPasswordResetCode", "Weak / dependent", "Id", "→ StaffUser (UserId)"),
-            ("StaffShift", "Strong", "Id", "→ StaffUser (StaffUserId)"),
             ("SecureSetting", "Strong", "Id", "Standalone vault"),
             ("SystemAuditLog", "Strong", "Id", "Append-only; no FK"),
             ("SystemFlushLog", "Strong", "Id", "Export metadata"),
@@ -296,7 +295,7 @@ def main():
     add_heading(doc, "5. Staff / auth", 1)
     add_body(
         doc,
-        "Tables: StaffUser, StaffRole, StaffExternalLogin, StaffAuthToken, StaffPasswordResetCode, StaffShift "
+        "Tables: StaffUser, StaffRole, StaffExternalLogin, StaffAuthToken, StaffPasswordResetCode "
         "(see StaffAuthSchema).",
     )
     entity(
@@ -361,20 +360,6 @@ def main():
             ("CreatedAtUtc / ExpiresAtUtc / ConsumedAtUtc / FailedAttempts", "Lifecycle."),
         ],
         "Logically N→1 StaffUser.",
-    )
-    entity(
-        doc,
-        "StaffShift",
-        "Strong",
-        "Staff open/close shift with handover notes.",
-        [
-            ("Id", "Primary key."),
-            ("StaffUserId / StaffDisplayName", "Owner."),
-            ("StartedAtUtc / EndedAtUtc", "Open/closed."),
-            ("OpeningNote / ClosingNote / briefing fields / ClosingSummaryJson", "Handover."),
-            ("CreatedAtUtc / UpdatedAtUtc", "Timestamps."),
-        ],
-        "Logically N→1 StaffUser; one open shift per staff.",
     )
 
     add_heading(doc, "6. Settings, audit, export", 1)
@@ -463,7 +448,6 @@ def main():
             ("StaffExternalLogin", "Identity user login"),
             ("StaffAuthToken", "Identity user token"),
             ("StaffPasswordResetCode", "StaffPasswordResetCode"),
-            ("StaffShift", "StaffShift"),
             ("SecureSetting", "SecureSetting"),
             ("SystemAuditLog", "SystemAuditLog"),
             ("SystemFlushLog", "SystemFlushLog"),

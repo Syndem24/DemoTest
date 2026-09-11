@@ -11,6 +11,9 @@ public sealed class PaymentService : IPaymentService
 {
     public static readonly TimeSpan FlushLogRetention = TimeSpan.FromDays(7);
 
+    /// <summary>Cap rows loaded into memory for a single export+delete flush.</summary>
+    private const int MaxFlushPaymentsPerRun = 2_000;
+
     private readonly HotelBookingDbContext _db;
     private readonly IWebHostEnvironment _environment;
     private readonly ISystemAuditRecorder _audit;
@@ -273,7 +276,9 @@ public sealed class PaymentService : IPaymentService
         PaymentMethod? method,
         int page,
         int pageSize,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        DateOnly? paidOnManila = null,
+        string? receivedBy = null)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
@@ -295,6 +300,22 @@ public sealed class PaymentService : IPaymentService
             {
                 query = query.Where(p => p.Method == method.Value);
             }
+        }
+
+        if (paidOnManila is DateOnly day)
+        {
+            var dayStartLocal = day.ToDateTime(TimeOnly.MinValue);
+            var dayStartUtc = PhilippinesTime.ToUtc(
+                DateTime.SpecifyKind(dayStartLocal, DateTimeKind.Unspecified));
+            var dayEndUtc = PhilippinesTime.ToUtc(
+                DateTime.SpecifyKind(dayStartLocal.AddDays(1), DateTimeKind.Unspecified));
+            query = query.Where(p => p.PaidAtUtc >= dayStartUtc && p.PaidAtUtc < dayEndUtc);
+        }
+
+        if (!string.IsNullOrWhiteSpace(receivedBy))
+        {
+            var collector = receivedBy.Trim();
+            query = query.Where(p => p.ReceivedBy == collector);
         }
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -319,9 +340,11 @@ public sealed class PaymentService : IPaymentService
             .SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0m;
         var totalRefunded = Math.Abs(postedRefundEvents) + Math.Abs(voidedReceipts);
 
-        var items = await query
-            .OrderByDescending(p => p.PaidAtUtc)
-            .ThenByDescending(p => p.Id)
+        var ordered = paidOnManila.HasValue || !string.IsNullOrWhiteSpace(receivedBy)
+            ? query.OrderBy(p => p.PaidAtUtc).ThenBy(p => p.ReceivedBy).ThenBy(p => p.Id)
+            : query.OrderByDescending(p => p.PaidAtUtc).ThenByDescending(p => p.Id);
+
+        var items = await ordered
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -333,6 +356,19 @@ public sealed class PaymentService : IPaymentService
             total,
             totalCollected,
             totalRefunded);
+    }
+
+    public async Task<IReadOnlyList<string>> GetCollectorsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await _db.PaymentRecords
+            .AsNoTracking()
+            .Where(p => p.Status == PaymentRecordStatus.Posted && p.ReceivedBy != "")
+            .Select(p => p.ReceivedBy)
+            .Distinct()
+            .OrderBy(name => name)
+            .Take(200)
+            .ToListAsync(cancellationToken);
     }
 
     public async Task<BookingPaymentSummaryDto?> GetBookingSummaryAsync(
@@ -398,6 +434,7 @@ public sealed class PaymentService : IPaymentService
             cancellationToken);
 
         // Only completed / archived stays — keep payment rows for active bookings.
+        // Cap batch size so PDF build cannot OOM on large archives; re-run flush for the rest.
         var payments = await _db.PaymentRecords
             .Include(p => p.Booking)
             .Where(p =>
@@ -405,8 +442,9 @@ public sealed class PaymentService : IPaymentService
                 || p.Booking.Status == BookingStatus.CheckedOut
                 || p.Booking.Status == BookingStatus.Cancelled
                 || p.Booking.Status == BookingStatus.Rejected)
-            .OrderByDescending(p => p.PaidAtUtc)
-            .ThenByDescending(p => p.Id)
+            .OrderBy(p => p.PaidAtUtc)
+            .ThenBy(p => p.Id)
+            .Take(MaxFlushPaymentsPerRun)
             .ToListAsync(cancellationToken);
 
         if (payments.Count == 0)
@@ -421,6 +459,10 @@ public sealed class PaymentService : IPaymentService
         var logoPath = Path.Combine(_environment.WebRootPath, "Images", "Logo.png");
         var pdfBytes = PaymentFlushPdfBuilder.Build(payments, performedBy, flushedAtUtc, logoPath);
         var summary = BuildFlushSummary(payments);
+        if (payments.Count >= MaxFlushPaymentsPerRun)
+        {
+            summary += $" Export capped at {MaxFlushPaymentsPerRun} rows; run flush again if more remain.";
+        }
         var receiptPaths = payments
             .Select(p => p.ReceiptImagePath)
             .Where(path => !string.IsNullOrWhiteSpace(path))

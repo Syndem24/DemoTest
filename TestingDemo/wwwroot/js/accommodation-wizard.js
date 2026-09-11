@@ -98,6 +98,13 @@
   let stayPromptActive = false;
   let lastNightsShown = 0;
   let lastConfirm = null;
+  let farCheckInAck = '';
+  /** @type {((ok: boolean) => void) | null} */
+  let farCheckInResolver = null;
+
+  const farCheckInBack = document.querySelector('[data-wiz-far-checkin-back]');
+  const farCheckInSheet = document.querySelector('[data-wiz-far-checkin-sheet]');
+  const farCheckInCopy = document.querySelector('[data-wiz-far-checkin-copy]');
 
   function manilaToday() {
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
@@ -114,6 +121,54 @@
     const end = parseYmd(b);
     if (start == null || end == null) return 0;
     return Math.max(0, Math.round((end - start) / 86400000));
+  }
+
+  /** Check-in on or after the same calendar day next month (Manila). Soft warning only. */
+  function isOneMonthOrMoreAhead(ymd) {
+    const today = manilaToday();
+    const [y, m, d] = String(today).split('-').map(Number);
+    if (!y || !m || !d) return false;
+    const threshold = Date.UTC(y, m, d);
+    const check = parseYmd(ymd);
+    return check != null && check >= threshold;
+  }
+
+  function closeFarCheckInDialog(confirmed) {
+    if (farCheckInSheet) farCheckInSheet.hidden = true;
+    if (farCheckInBack) farCheckInBack.hidden = true;
+    const resolve = farCheckInResolver;
+    farCheckInResolver = null;
+    if (typeof resolve === 'function') resolve(Boolean(confirmed));
+  }
+
+  function openFarCheckInDialog(checkInYmd) {
+    return new Promise((resolve) => {
+      farCheckInResolver = resolve;
+      const dateLabel = fmtDay(checkInYmd, {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+      const timeLabel = '2:00 PM';
+      if (farCheckInCopy) {
+        farCheckInCopy.textContent = t('wiz.farCheckInCopy', {
+          date: dateLabel,
+          time: timeLabel,
+        });
+      }
+      if (farCheckInBack) farCheckInBack.hidden = false;
+      if (farCheckInSheet) farCheckInSheet.hidden = false;
+      farCheckInSheet?.querySelector('[data-wiz-far-checkin-yes]')?.focus();
+    });
+  }
+
+  async function ensureFarCheckInConfirmed(checkInYmd = checkInEl?.value || '') {
+    if (!isOneMonthOrMoreAhead(checkInYmd)) return true;
+    if (farCheckInAck === checkInYmd) return true;
+    const ok = await openFarCheckInDialog(checkInYmd);
+    if (ok) farCheckInAck = checkInYmd;
+    return ok;
   }
 
   function fmtDay(ymd, opts) {
@@ -368,12 +423,14 @@
     if (!ymd || ymd < manilaToday()) return;
     if (pickMode === 'in' || !checkInEl.value) {
       checkInEl.value = ymd;
+      if (farCheckInAck && farCheckInAck !== ymd) farCheckInAck = '';
       if (checkOutEl) checkOutEl.value = '';
       applyDateLimits();
       pulseSearchTab('in');
       pickMode = 'out';
     } else if (ymd <= checkInEl.value) {
       checkInEl.value = ymd;
+      if (farCheckInAck && farCheckInAck !== ymd) farCheckInAck = '';
       checkOutEl.value = '';
       applyDateLimits();
       pulseSearchTab('in');
@@ -391,6 +448,7 @@
   function clearStayDates() {
     if (checkInEl) checkInEl.value = '';
     if (checkOutEl) checkOutEl.value = '';
+    farCheckInAck = '';
     pickMode = 'in';
     calMonth = monthFromYmd(manilaToday());
     applyDateLimits();
@@ -2120,7 +2178,7 @@
     pendingOfferId = 0;
   }
 
-  function confirmDateAdjust() {
+  async function confirmDateAdjust() {
     clearDateAdjustErrors();
     const checkIn = dateInEl?.value || '';
     const checkOut = dateOutEl?.value || '';
@@ -2139,6 +2197,7 @@
       ok = false;
     }
     if (!ok) return;
+    if (!(await ensureFarCheckInConfirmed(checkIn))) return;
     const offerId = pendingOfferId;
     if (checkInEl) checkInEl.value = checkIn;
     if (checkOutEl) checkOutEl.value = checkOut;
@@ -2434,6 +2493,12 @@
       }
       return;
     }
+    if (!(await ensureFarCheckInConfirmed())) {
+      setDrawerStep('summary');
+      closeDrawer();
+      setStep(1);
+      return;
+    }
     const guest = guestPayload();
     const offer = selectedRateOffer();
     const arrivalDiscountRequest = cartHasRateOffer() ? 'None' : arrivalDiscountValue();
@@ -2562,13 +2627,14 @@
     clearStayDates();
   });
 
-  root.querySelector('[data-wiz-next="1"]')?.addEventListener('click', () => {
+  root.querySelector('[data-wiz-next="1"]')?.addEventListener('click', async () => {
     if (!validateDates()) return;
     if (!occupancyReady()) {
       openStayEditor({ prompt: true });
       if (!childAgesComplete()) focusFirstMissingChildAge();
       return;
     }
+    if (!(await ensureFarCheckInConfirmed())) return;
     setStep(2);
   });
   root.querySelector('[data-wiz-change-dates]')?.addEventListener('click', () => setStep(1));
@@ -2739,9 +2805,18 @@
   document.querySelector('[data-wiz-date-confirm]')?.addEventListener('click', () => confirmDateAdjust());
   dateBack?.addEventListener('click', () => closeDateAdjust());
 
+  farCheckInBack?.addEventListener('click', () => closeFarCheckInDialog(false));
+  document.querySelector('[data-wiz-far-checkin-close]')?.addEventListener('click', () => closeFarCheckInDialog(false));
+  document.querySelector('[data-wiz-far-checkin-change]')?.addEventListener('click', () => closeFarCheckInDialog(false));
+  document.querySelector('[data-wiz-far-checkin-yes]')?.addEventListener('click', () => closeFarCheckInDialog(true));
+
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     if (document.body.classList.contains('hotel-photo-zoom-open')) return;
+    if (farCheckInSheet && !farCheckInSheet.hidden) {
+      closeFarCheckInDialog(false);
+      return;
+    }
     if (dateSheet && !dateSheet.hidden) {
       closeDateAdjust();
       return;

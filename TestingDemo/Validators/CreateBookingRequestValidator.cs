@@ -9,15 +9,18 @@ public sealed class CreateBookingRequestValidator : AbstractValidator<CreateBook
     public CreateBookingRequestValidator()
     {
         RuleFor(x => x.GuestName)
+            .NotNull()
             .NotEmpty()
             .MaximumLength(120);
 
         RuleFor(x => x.GuestEmail)
+            .NotNull()
             .NotEmpty()
             .EmailAddress()
             .MaximumLength(254);
 
         RuleFor(x => x.GuestPhone)
+            .NotNull()
             .NotEmpty()
             .MaximumLength(40)
             .Matches(@"^[+\d][\d\s\-().]*$")
@@ -29,20 +32,29 @@ public sealed class CreateBookingRequestValidator : AbstractValidator<CreateBook
 
         RuleFor(x => x.CheckoutTimeUtc)
             .Must((request, checkout) => PhilippinesTime.ToUtc(checkout) > PhilippinesTime.ToUtc(request.CheckInAtUtc))
-            .WithMessage("Check-out must be after check-in.");
+            .WithMessage("Check-out must be after check-in.")
+            .Must((request, checkout) =>
+            {
+                var checkIn = PhilippinesTime.ToUtc(request.CheckInAtUtc);
+                var checkOut = PhilippinesTime.ToUtc(checkout);
+                var nights = (PhilippinesTime.ToManila(checkOut).Date - PhilippinesTime.ToManila(checkIn).Date).Days;
+                return nights <= 365;
+            })
+            .WithMessage("Stay cannot exceed 365 nights.");
 
         RuleFor(x => x.AcceptTerms)
             .Equal(true)
             .WithMessage("You must read and accept the Terms of Stay.");
 
         RuleFor(x => x.ExtraPersons)
-            .GreaterThanOrEqualTo(0)
+            .InclusiveBetween(0, 40)
             .Must((request, extras) =>
                 extras <= StayTimeFees.MaxExtraPersonsForRooms(
                     request.Items?.Sum(item => item.Quantity) ?? 0))
             .WithMessage("At most one extra guest per room is allowed (₱200 / night).");
 
         RuleFor(x => x.Items)
+            .NotNull()
             .NotEmpty()
             .Must(items => items.Count <= 10)
             .WithMessage("A booking can contain at most 10 room selections.");

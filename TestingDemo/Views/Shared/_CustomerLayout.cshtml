@@ -9,6 +9,7 @@
         || string.Equals(controller, "Staff", StringComparison.OrdinalIgnoreCase)
         || string.Equals(controller, "GoogleVerification", StringComparison.OrdinalIgnoreCase);
     var immersive = ViewData["GuestImmersive"] as bool? == true || isAccommodations;
+    var isFullBleed = ViewData["GuestFullBleed"] as bool? == true;
     var isAuthPage = ViewData["GuestAuthPage"] as bool? == true || isStaffAuth;
     var isAuthLogin = string.Equals(controller, "Account", StringComparison.OrdinalIgnoreCase)
         && (string.Equals(action, "Login", StringComparison.OrdinalIgnoreCase)
@@ -34,6 +35,8 @@
         shellClass = "guest-shell guest-shell--auth";
     else if (isAccommodations)
         shellClass = "guest-shell guest-shell--immersive guest-shell--rooms guest-shell--wiz";
+    else if (isFullBleed)
+        shellClass = "guest-shell guest-shell--immersive guest-shell--full-bleed";
     else if (immersive)
         shellClass = "guest-shell guest-shell--immersive";
     else

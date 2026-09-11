@@ -38,6 +38,11 @@ public interface IPaymentService
         PaymentMethod? method,
         int page,
         int pageSize,
+        CancellationToken cancellationToken = default,
+        DateOnly? paidOnManila = null,
+        string? receivedBy = null);
+
+    Task<IReadOnlyList<string>> GetCollectorsAsync(
         CancellationToken cancellationToken = default);
 
     Task<BookingPaymentSummaryDto?> GetBookingSummaryAsync(

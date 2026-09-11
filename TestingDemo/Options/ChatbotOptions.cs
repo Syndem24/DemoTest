@@ -49,6 +49,9 @@ public sealed class ChatbotPublicProfile
 
     public string BookPath { get; set; } = "/Booking/Accommodations";
 
+    /// <summary>Guest portal page for writing stay reviews (Google sign-in).</summary>
+    public string ReviewsPath { get; set; } = "/GuestPortal/Reviews";
+
     public string CheckIn { get; set; } = "14:00";
 
     public string EarlyCheckIn { get; set; } = "11:30";

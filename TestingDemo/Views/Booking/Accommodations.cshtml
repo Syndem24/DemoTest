@@ -636,6 +636,28 @@
     </div>
 </aside>
 
+<div class="wiz-far-checkin-back" data-wiz-far-checkin-back hidden></div>
+<div class="wiz-far-checkin-dlg" data-wiz-far-checkin-sheet hidden role="dialog" aria-modal="true" aria-labelledby="wizFarCheckInTitle">
+    <header class="wiz-sheet-head">
+        <div>
+            <p class="wiz-kicker" style="margin:0 0 0.2rem;" data-i18n="wiz.farCheckInKicker">Date check</p>
+            <h2 id="wizFarCheckInTitle" data-i18n="wiz.farCheckInTitle">Confirm your check-in</h2>
+        </div>
+        <button type="button" class="wiz-icon-btn wiz-modal-close" data-wiz-far-checkin-close aria-label="Close" data-i18n="wiz.close" data-i18n-attr="aria-label" data-i18n-attr-only>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2.5 2.5l8 8M10.5 2.5l-8 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </button>
+    </header>
+    <div class="wiz-far-checkin-body">
+        <p class="wiz-lede" data-wiz-far-checkin-copy></p>
+    </div>
+    <div class="wiz-sheet-foot">
+        <div class="wiz-actions">
+            <button type="button" class="wiz-btn wiz-btn-ghost" data-wiz-far-checkin-change data-i18n="wiz.farCheckInChange">Change date</button>
+            <button type="button" class="wiz-btn wiz-btn-primary" data-wiz-far-checkin-yes data-i18n="wiz.farCheckInYes">Yes, continue</button>
+        </div>
+    </div>
+</div>
+
 <p class="wiz-toast" data-wiz-toast hidden role="status" aria-live="polite"></p>
 
 @section Scripts {

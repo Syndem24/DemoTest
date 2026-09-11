@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using TestingDemo.DTOs;
 using TestingDemo.Hubs;
 using TestingDemo.Services;
@@ -15,15 +16,18 @@ public sealed class BookingsApiController : ControllerBase
     private readonly IBookingService _bookingService;
     private readonly IValidator<CreateBookingRequest> _validator;
     private readonly IHubContext<BookingNotificationsHub, IBookingNotificationsClient> _hub;
+    private readonly ILogger<BookingsApiController> _logger;
 
     public BookingsApiController(
         IBookingService bookingService,
         IValidator<CreateBookingRequest> validator,
-        IHubContext<BookingNotificationsHub, IBookingNotificationsClient> hub)
+        IHubContext<BookingNotificationsHub, IBookingNotificationsClient> hub,
+        ILogger<BookingsApiController> logger)
     {
         _bookingService = bookingService;
         _validator = validator;
         _hub = hub;
+        _logger = logger;
     }
 
     [HttpGet("availability")]
@@ -44,15 +48,25 @@ public sealed class BookingsApiController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Guest availability check failed for {CheckIn} → {Checkout}", checkInAtUtc, checkoutTimeUtc);
+            return BadRequest(new { message = "Those dates could not be checked. Please pick valid check-in and check-out dates." });
+        }
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
     [EnableRateLimiting("guest-bookings")]
     public async Task<ActionResult<CreateBookingResponse>> Create(
-        [FromBody] CreateBookingRequest request,
+        [FromBody] CreateBookingRequest? request,
         CancellationToken cancellationToken)
     {
+        if (request is null)
+        {
+            return BadRequest(new { message = "Booking details are required." });
+        }
+
         var validation = await _validator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
@@ -98,9 +112,29 @@ public sealed class BookingsApiController : ControllerBase
                 availability = ex.Availability
             });
         }
+        catch (BookingConcurrencyException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
         catch (ArgumentException ex)
         {
             return BadRequest(new { message = ex.Message });
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogWarning(ex, "Guest booking save failed (database).");
+            return Conflict(new
+            {
+                message = "We could not complete that booking right now. Please try again in a moment."
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected guest booking failure.");
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                message = "Something went wrong while submitting your booking. Please try again."
+            });
         }
     }
 }

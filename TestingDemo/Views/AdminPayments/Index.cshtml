@@ -47,7 +47,9 @@
                     <option value="Other">Other (legacy)</option>
                 </select>
             </label>
+            <button type="button" class="admin-booking-refresh" data-payments-day-filter>Filter by day / staff</button>
             <button type="button" class="admin-booking-refresh" data-payments-refresh>Refresh</button>
+            <p class="admin-payments-filter-chip" data-payments-filter-chip hidden></p>
         </div>
         <p class="admin-bookings-message" data-payments-message role="status" hidden></p>
         <div class="admin-bookings-table-wrap admin-payments-table-wrap">
@@ -136,6 +138,38 @@
         <footer class="admin-payment-refund-actions">
             <button type="button" class="admin-payment-refund-cancel" data-payment-refund-cancel>Cancel</button>
             <button type="button" class="admin-payment-refund-submit" data-payment-refund-confirm>Refund payment</button>
+        </footer>
+    </section>
+</div>
+
+<div class="admin-payment-refund-overlay" data-payments-day-filter-modal hidden>
+    <button type="button" class="admin-payment-refund-backdrop" data-payments-day-filter-close aria-label="Close day filter"></button>
+    <section class="admin-payment-refund-dialog admin-payments-day-filter-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentsDayFilterTitle">
+        <header class="admin-payment-refund-head">
+            <div class="admin-payment-refund-head-copy">
+                <p class="admin-payment-refund-kicker">Payments</p>
+                <h2 id="paymentsDayFilterTitle">Filter by day / staff</h2>
+            </div>
+            <button type="button" class="admin-payment-refund-close" data-payments-day-filter-close aria-label="Close">&times;</button>
+        </header>
+        <div class="admin-payment-refund-body admin-payments-day-filter-body">
+            <p>Show payments collected on a Manila calendar day, optionally limited to one staff name.</p>
+            <label class="admin-payment-refund-reason">
+                <span>Day (Philippines)</span>
+                <input type="date" data-payments-filter-day />
+            </label>
+            <label class="admin-payment-refund-reason">
+                <span>Collected by</span>
+                <select data-payments-filter-staff>
+                    <option value="">All staff</option>
+                </select>
+            </label>
+            <p class="admin-payment-refund-error" data-payments-day-filter-error role="alert" hidden></p>
+        </div>
+        <footer class="admin-payment-refund-actions">
+            <button type="button" class="admin-payment-refund-cancel" data-payments-day-filter-clear>Clear</button>
+            <button type="button" class="admin-payment-refund-cancel" data-payments-day-filter-close>Cancel</button>
+            <button type="button" class="admin-payment-refund-submit" data-payments-day-filter-apply>Apply</button>
         </footer>
     </section>
 </div>

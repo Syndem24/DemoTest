@@ -301,7 +301,6 @@ try
     builder.Services.AddScoped<IStaffAccountCreateService, StaffAccountCreateService>();
     builder.Services.AddScoped<ISpecialOfferService, SpecialOfferService>();
     builder.Services.AddScoped<IDashboardAnalyticsService, DashboardAnalyticsService>();
-    builder.Services.AddScoped<IStaffShiftService, StaffShiftService>();
     builder.Services.AddScoped<IStayReviewService, StayReviewService>();
 
     builder.Services.AddResponseCompression(options =>

@@ -814,7 +814,6 @@ public class AccountController : Controller
         if (await IsGuestUserAsync(user))
             return await RedirectAfterSignInAsync(user, null);
 
-        TempData["PromptStartShift"] = "1";
         return RedirectToAction("Index", "Dashboard");
     }
 
@@ -1139,7 +1138,6 @@ public class AccountController : Controller
             return RedirectToAction("Index", "Booking");
         }
 
-        TempData["PromptStartShift"] = "1";
         return RedirectToLocal(returnUrl);
     }
 

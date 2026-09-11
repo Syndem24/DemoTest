@@ -3504,6 +3504,70 @@ body.wiz-lock .wiz-sticky {
   background: var(--wiz-navy);
 }
 
+.wiz-far-checkin-back {
+  position: fixed;
+  inset: 0;
+  z-index: 1120;
+  background: rgba(4, 13, 26, 0.55);
+}
+
+.wiz-far-checkin-dlg {
+  position: fixed;
+  z-index: 1121;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(92vw, 26rem);
+  max-height: min(88vh, 28rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(4, 13, 26, 0.38);
+}
+
+.wiz-far-checkin-dlg[hidden],
+.wiz-far-checkin-back[hidden] {
+  display: none !important;
+}
+
+.wiz-far-checkin-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.25rem 1.2rem 0.85rem;
+}
+
+.wiz-far-checkin-body .wiz-lede {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--wiz-text-sub);
+  white-space: pre-line;
+}
+
+.wiz-far-checkin-dlg .wiz-sheet-foot .wiz-actions {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.wiz-far-checkin-dlg .wiz-btn-ghost,
+.wiz-far-checkin-dlg .wiz-btn-primary {
+  flex: 1 1 8rem;
+  cursor: pointer;
+  min-height: 2.75rem;
+  transition: background 180ms var(--wiz-ease), color 180ms var(--wiz-ease), border-color 180ms var(--wiz-ease);
+}
+
+.wiz-far-checkin-dlg .wiz-btn-primary:focus-visible,
+.wiz-far-checkin-dlg .wiz-btn-ghost:focus-visible,
+.wiz-far-checkin-dlg .wiz-modal-close:focus-visible {
+  outline: 3px solid var(--wiz-teal);
+  outline-offset: 2px;
+}
+
 .wiz-stay-back {
   position: fixed;
   inset: 0;

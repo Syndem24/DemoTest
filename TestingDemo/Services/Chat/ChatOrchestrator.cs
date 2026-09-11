@@ -60,7 +60,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         var profile = _options.PublicProfile;
         var name = string.IsNullOrWhiteSpace(_options.AssistantName) ? "Mori Assistant" : _options.AssistantName.Trim();
         var reply =
-            $"Hello — I’m {name} for {profile.HotelName}. Ask about rooms, rates, offers, check-in, location, or how to book. I cannot look up personal reservations.";
+            $"Hello — I’m {name} for {profile.HotelName}. Ask about rooms, rates, offers, check-in, location, reviews, or how to book. I cannot look up personal reservations.";
 
         return Task.FromResult(new ChatWelcomeResponse
         {
@@ -73,7 +73,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             {
                 "What rooms are available?",
                 "What time is check-in?",
-                "Any guest offers right now?",
+                "How do I leave a review?",
                 "How do I book online?"
             }
         });

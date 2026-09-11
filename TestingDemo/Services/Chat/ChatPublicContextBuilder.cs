@@ -20,7 +20,7 @@ public sealed class ChatPublicContextBuilder : IChatPublicContextBuilder
     private readonly ChatbotOptions _options;
     private readonly IMemoryCache _cache;
 
-    private const string CacheKey = "chatbot.public-context.v1";
+    private const string CacheKey = "chatbot.public-context.v2";
 
     public ChatPublicContextBuilder(
         IRoomService rooms,
@@ -81,6 +81,13 @@ public sealed class ChatPublicContextBuilder : IChatPublicContextBuilder
         sb.AppendLine($"Phones: {profile.PhonePrimary}; {profile.PhoneSecondary}");
         sb.AppendLine($"Check-in: {profile.CheckIn} (early option {profile.EarlyCheckIn}); Check-out: {profile.CheckOut}");
         sb.AppendLine($"Book online: {profile.BookPath}");
+        sb.AppendLine($"Leave a stay review: {profile.ReviewsPath}");
+        sb.AppendLine(
+            "How guests leave reviews: After checkout only. Sign in with Google on the home page "
+            + "(“Sign in with Google to leave a review”) or open the reviews portal while signed in as a guest. "
+            + "Eligible stays match the booking email. Rate overall, staff/service, comfort, and facilities (1–5), "
+            + "optional comment, then submit. Published reviews show on the home page Reviews section. "
+            + "Guests can edit a review for a short time after posting. Chat cannot submit reviews.");
         sb.AppendLine("Available room types (no physical room numbers):");
         if (available.Count == 0)
         {

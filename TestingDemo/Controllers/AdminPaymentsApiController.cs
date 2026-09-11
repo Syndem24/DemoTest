@@ -41,11 +41,27 @@ public sealed class AdminPaymentsApiController : ControllerBase
     public async Task<ActionResult<PagedPaymentsDto>> GetPayments(
         [FromQuery] string? search,
         [FromQuery] PaymentMethod? method,
+        [FromQuery] DateOnly? paidOn,
+        [FromQuery] string? receivedBy,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 25,
         CancellationToken cancellationToken = default)
     {
-        return Ok(await _paymentService.GetPagedAsync(search, method, page, pageSize, cancellationToken));
+        return Ok(await _paymentService.GetPagedAsync(
+            search,
+            method,
+            page,
+            pageSize,
+            cancellationToken,
+            paidOn,
+            receivedBy));
+    }
+
+    [HttpGet("collectors")]
+    public async Task<ActionResult<IReadOnlyList<string>>> GetCollectors(
+        CancellationToken cancellationToken)
+    {
+        return Ok(await _paymentService.GetCollectorsAsync(cancellationToken));
     }
 
     [HttpGet("{id:int}")]

@@ -147,12 +147,9 @@ public sealed class StayReviewService : IStayReviewService
         CancellationToken cancellationToken = default)
     {
         var emails = BuildEmailSet(email, googleEmail);
-        var reviewedIds = await _db.StayReviews.AsNoTracking()
-            .Where(r => r.GuestUserId == guestUserId)
-            .Select(r => r.BookingId)
-            .ToListAsync(cancellationToken);
-
         var eligible = new List<StayReviewEligibleStayDto>();
+        var matchedBookingIds = new HashSet<int>();
+
         if (emails.Count > 0)
         {
             var stays = await _db.Bookings.AsNoTracking()
@@ -162,8 +159,24 @@ public sealed class StayReviewService : IStayReviewService
                 .Select(b => new { b.Id, b.Reference, b.CheckInAtUtc, b.CheckoutTimeUtc, b.GuestName, b.GuestEmail })
                 .ToListAsync(cancellationToken);
 
-            eligible = stays
-                .Where(b => EmailMatches(b.GuestEmail, emails) && !reviewedIds.Contains(b.Id))
+            var matchedStays = stays
+                .Where(b => EmailMatches(b.GuestEmail, emails))
+                .ToList();
+
+            foreach (var stay in matchedStays)
+                matchedBookingIds.Add(stay.Id);
+
+            // Any review on the booking blocks a second write — not only reviews by this user id.
+            var reviewedOnMatched = matchedBookingIds.Count == 0
+                ? new HashSet<int>()
+                : (await _db.StayReviews.AsNoTracking()
+                    .Where(r => matchedBookingIds.Contains(r.BookingId))
+                    .Select(r => r.BookingId)
+                    .ToListAsync(cancellationToken))
+                    .ToHashSet();
+
+            eligible = matchedStays
+                .Where(b => !reviewedOnMatched.Contains(b.Id))
                 .Take(20)
                 .Select(b => new StayReviewEligibleStayDto(
                     b.Id,
@@ -174,14 +187,17 @@ public sealed class StayReviewService : IStayReviewService
                 .ToList();
         }
 
+        // Own reviews + reviews on email-matched stays (so Edit shows when GuestUserId differs).
         var mineRows = await _db.StayReviews.AsNoTracking()
-            .Where(r => r.GuestUserId == guestUserId)
+            .Where(r => r.GuestUserId == guestUserId
+                        || (matchedBookingIds.Count > 0 && matchedBookingIds.Contains(r.BookingId)))
             .OrderByDescending(r => r.CreatedAtUtc)
             .Take(40)
             .Select(r => new
             {
                 r.Id,
                 r.BookingId,
+                r.GuestUserId,
                 Reference = r.Booking.Reference,
                 Checkout = r.Booking.CheckoutTimeUtc,
                 r.OverallRating,
@@ -292,8 +308,20 @@ public sealed class StayReviewService : IStayReviewService
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken)
             ?? throw new KeyNotFoundException("Review was not found.");
 
-        if (!string.Equals(review.GuestUserId, guestUserId, StringComparison.Ordinal))
-            throw new UnauthorizedAccessException("You can only edit your own review.");
+        var ownsByUserId = string.Equals(review.GuestUserId, guestUserId, StringComparison.Ordinal);
+        if (!ownsByUserId)
+        {
+            // Allow edit when the stay email matches this guest (review may predate current user id).
+            var user = await _db.Users.AsNoTracking()
+                .Where(u => u.Id == guestUserId)
+                .Select(u => new { u.Email, u.GoogleEmail })
+                .FirstOrDefaultAsync(cancellationToken);
+            var emails = BuildEmailSet(user?.Email, user?.GoogleEmail);
+            if (!EmailMatches(review.Booking.GuestEmail, emails))
+                throw new UnauthorizedAccessException("You can only edit your own review.");
+
+            review.GuestUserId = guestUserId;
+        }
 
         if (DateTime.UtcNow - review.CreatedAtUtc > EditWindow)
             throw new InvalidOperationException("The edit window for this review has closed.");

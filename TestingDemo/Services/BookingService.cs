@@ -154,11 +154,19 @@ public sealed class BookingService : IBookingService
         CreateBookingRequest request,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(request);
+
         var checkInAtUtc = PhilippinesTime.ToUtc(request.CheckInAtUtc);
         var checkoutTimeUtc = PhilippinesTime.ToUtc(request.CheckoutTimeUtc);
         ValidateDates(checkInAtUtc, checkoutTimeUtc);
 
-        var requestedItems = request.Items
+        var items = request.Items ?? [];
+        if (items.Count == 0)
+        {
+            throw new ArgumentException("Select at least one room type.");
+        }
+
+        var requestedItems = items
             .GroupBy(line => line.RoomTypeId)
             .Select(group => new CreateBookingItemRequest
             {
@@ -233,9 +241,9 @@ public sealed class BookingService : IBookingService
             var booking = new Booking
             {
                 Reference = CreateReference(),
-                GuestName = request.GuestName.Trim(),
-                GuestEmail = request.GuestEmail.Trim(),
-                GuestPhone = request.GuestPhone.Trim(),
+                GuestName = (request.GuestName ?? string.Empty).Trim(),
+                GuestEmail = (request.GuestEmail ?? string.Empty).Trim(),
+                GuestPhone = (request.GuestPhone ?? string.Empty).Trim(),
                 CheckInAtUtc = checkInAtUtc,
                 CheckoutTimeUtc = checkoutTimeUtc,
                 PaymentOption = PaymentOption.Full,
@@ -427,9 +435,9 @@ public sealed class BookingService : IBookingService
         var booking = new Booking
         {
             Reference = CreateReference(),
-            GuestName = request.GuestName.Trim(),
-            GuestEmail = request.GuestEmail.Trim(),
-            GuestPhone = request.GuestPhone.Trim(),
+            GuestName = (request.GuestName ?? string.Empty).Trim(),
+            GuestEmail = (request.GuestEmail ?? string.Empty).Trim(),
+            GuestPhone = (request.GuestPhone ?? string.Empty).Trim(),
             CheckInAtUtc = checkInAtUtc,
             CheckoutTimeUtc = checkoutTimeUtc,
             PaymentOption = PaymentOption.Full,
@@ -447,6 +455,12 @@ public sealed class BookingService : IBookingService
         foreach (var assignment in assignments)
         {
             var sample = roomsById[assignment.RoomIds[0]];
+            if (sample.RoomType is null)
+            {
+                throw new ArgumentException(
+                    $"Room {sample.RoomNumber} is missing a room type and cannot be booked.");
+            }
+
             var price = sample.RoomType.PricePerNight;
             if (offersByType.TryGetValue(assignment.RoomTypeId, out var typeOffer)
                 && typeOffer.PromoPricePerNight is decimal promo)
@@ -2173,6 +2187,7 @@ public sealed class BookingService : IBookingService
         }
 
         var rooms = await _db.Rooms
+            .Include(room => room.RoomType)
             .Where(room => allRequestedIds.Contains(room.Id))
             .ToListAsync(cancellationToken);
 
@@ -2495,6 +2510,8 @@ public sealed class BookingService : IBookingService
         return ids.ToHashSet();
     }
 
+    private const int MaxStayNights = 365;
+
     private static void ValidateDates(
         DateTime checkInAtUtc,
         DateTime checkoutTimeUtc,
@@ -2508,6 +2525,13 @@ public sealed class BookingService : IBookingService
         if (checkoutTimeUtc <= checkInAtUtc)
         {
             throw new ArgumentException("Check-out must be after check-in.");
+        }
+
+        var nights = (PhilippinesTime.ToManila(checkoutTimeUtc).Date
+            - PhilippinesTime.ToManila(checkInAtUtc).Date).Days;
+        if (nights > MaxStayNights)
+        {
+            throw new ArgumentException($"Stay cannot exceed {MaxStayNights} nights.");
         }
     }
 
