@@ -3,11 +3,11 @@ namespace TestingDemo.Models;
 public enum PaymentMethod
 {
     Cash = 0,
-    /// <summary>Legacy. Prefer EWallet or BankTransfer for new payments.</summary>
+    /// <summary>Legacy. Prefer EWallet for new payments.</summary>
     Card = 1,
-    /// <summary>GCash, Maya, PayPal, and other e-wallets (value kept from former GCash).</summary>
+    /// <summary>E-wallet via hotel InstaPay QR (value kept from former GCash).</summary>
     EWallet = 2,
-    /// <summary>InstaPay QR / bank transfer to hotel profile.</summary>
+    /// <summary>Legacy InstaPay/bank transfer; treat as EWallet in UI.</summary>
     BankTransfer = 3,
     /// <summary>Legacy catch-all.</summary>
     Other = 4,
@@ -54,7 +54,7 @@ public class PaymentRecord
     public string? ExternalReference { get; set; }
 
     /// <summary>
-    /// Bank transfer / InstaPay clearing reference when Method is BankTransfer.
+    /// Legacy clearing reference (BankTransfer). Prefer ExternalReference for new payments.
     /// </summary>
     public string? BankTransferReference { get; set; }
 

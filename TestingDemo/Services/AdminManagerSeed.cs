@@ -12,8 +12,11 @@ public sealed class IdentityBootstrapOptions
 {
     public const string SectionName = "Identity";
 
-    /// <summary>When false, first-run AdminManager seed never runs (use in production after bootstrap).</summary>
-    public bool AllowBootstrapSeed { get; set; } = true;
+    /// <summary>
+    /// When false (default), first-run AdminManager seed never runs.
+    /// Enable only for local first-boot via Development config / user secrets — never in production.
+    /// </summary>
+    public bool AllowBootstrapSeed { get; set; }
 }
 
 public interface IAdminManagerSeed
@@ -80,18 +83,29 @@ public sealed class AdminManagerSeed : IAdminManagerSeed
 
         await _users.AddToRoleAsync(user, AppRoles.AdminManager);
 
-        // One-time retrieve — logger category AdminManagerSeed / console. Never commit or put in appsettings.
+        // Never log or print the password. Write once to a user-only local file outside the web root.
+        var credPath = WriteFirstRunCredentialsFile(user.UserName!, tempPassword);
         _logger.LogWarning(
-            "FIRST-RUN AdminManager created. Username={UserName}. TemporaryPassword={Password}. Change this password on first login.",
+            "FIRST-RUN AdminManager created. Username={UserName}. Temporary password written to {CredentialPath} (not logged). Change password on first login.",
             user.UserName,
-            tempPassword);
-        Console.WriteLine();
-        Console.WriteLine("======== FIRST-RUN ADMIN CREDENTIALS ========");
-        Console.WriteLine($"Username: {user.UserName}");
-        Console.WriteLine($"Temporary password: {tempPassword}");
-        Console.WriteLine("Change password on first login. This will not be shown again.");
-        Console.WriteLine("=============================================");
-        Console.WriteLine();
+            credPath);
+    }
+
+    private static string WriteFirstRunCredentialsFile(string userName, string temporaryPassword)
+    {
+        var dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "MoriInternationalHotel");
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, "first-run-admin.txt");
+        var body =
+            $"CreatedUtc={DateTime.UtcNow:O}{Environment.NewLine}" +
+            $"Username={userName}{Environment.NewLine}" +
+            $"TemporaryPassword={temporaryPassword}{Environment.NewLine}" +
+            "Change this password on first login, then delete this file." +
+            Environment.NewLine;
+        File.WriteAllText(path, body);
+        return path;
     }
 
     private async Task EnsureRoleAsync(string roleName)

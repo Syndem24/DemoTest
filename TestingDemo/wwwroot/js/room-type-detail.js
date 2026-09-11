@@ -52,9 +52,31 @@
     const raw = String(name || '').trim();
     if (!raw) return '';
     const lower = raw.toLowerCase();
+    let normalized = raw;
+    if (lower === 'wifi' || lower === 'wi-fi') normalized = 'Wi-Fi';
+    else if (lower === 'smart tv' || lower === 'tv set') normalized = 'Smart TV';
+    else normalized = raw.charAt(0).toUpperCase() + raw.slice(1);
+    return window.MoriI18n?.translateInclusionItem?.(normalized)
+      || window.MoriI18n?.translateInclusionItem?.(raw)
+      || normalized;
+  }
+
+  function amenitySourceLabel(name) {
+    const raw = String(name || '').trim();
+    if (!raw) return '';
+    const lower = raw.toLowerCase();
     if (lower === 'wifi' || lower === 'wi-fi') return 'Wi-Fi';
     if (lower === 'smart tv' || lower === 'tv set') return 'Smart TV';
-    return raw.charAt(0).toUpperCase() + raw.slice(1);
+    return raw;
+  }
+
+  async function localizeAmenityLabel(name) {
+    const source = amenitySourceLabel(name);
+    const mapped = window.MoriI18n?.translateInclusionItem?.(source);
+    if (mapped && mapped !== source) return mapped;
+    if ((window.MoriI18n?.getLang?.() || 'en') === 'en') return displayAmenity(name);
+    const translated = await window.MoriI18n?.translateContent?.(source);
+    return translated || displayAmenity(name);
   }
 
   function amenityIcon(name) {
@@ -116,7 +138,7 @@
     return images.length ? images : fallback ? [fallback] : [];
   }
 
-  function renderAmenities(card) {
+  async function renderAmenities(card) {
     const host = detail.querySelector('[data-wiz-detail-inclusions]');
     if (!host) return;
     const items = parseJsonList(card, 'data-inclusions');
@@ -125,10 +147,21 @@
       host.innerHTML = `<p class="wiz-amenity-empty">${t('wiz.noAmenities')}</p>`;
       return;
     }
-    host.innerHTML = groups
+    const localized = await Promise.all(
+      groups.map(async (group) => ({
+        label: group.label,
+        items: await Promise.all(
+          group.items.map(async (item) => ({
+            item,
+            label: await localizeAmenityLabel(item),
+          }))
+        ),
+      }))
+    );
+    host.innerHTML = localized
       .map((group) => `<section class="wiz-amenity-group">
         <h3>${escapeHtml(group.label)}</h3>
-        <ul>${group.items.map((item) => `<li><span class="wiz-amenity-icon">${amenityIcon(item)}</span><span>${escapeHtml(displayAmenity(item))}</span></li>`).join('')}</ul>
+        <ul>${group.items.map((entry) => `<li><span class="wiz-amenity-icon">${amenityIcon(entry.item)}</span><span>${escapeHtml(entry.label)}</span></li>`).join('')}</ul>
       </section>`)
       .join('');
   }
@@ -170,14 +203,18 @@
     window.openPhotoZoom(items, galleryIndex);
   }
 
-  function openDetail(card) {
+  async function openDetail(card) {
     lastFocus = document.activeElement;
     openCard = card;
+    const rawName = card.getAttribute('data-room-type') || '';
+    const rawDesc = card.getAttribute('data-description') || '';
     const title = detail.querySelector('[data-wiz-detail-title]');
-    if (title) title.textContent = card.getAttribute('data-room-type') || '';
+    if (title) {
+      title.textContent = window.MoriI18n?.translateRoomTypeName?.(rawName) || rawName;
+    }
     const copy = detail.querySelector('[data-wiz-detail-copy]');
-    if (copy) copy.innerHTML = formatDescription(card.getAttribute('data-description'));
-    renderAmenities(card);
+    if (copy) copy.innerHTML = formatDescription(rawDesc);
+    void renderAmenities(card);
     renderGallery(card, detail.querySelector('[data-wiz-bento]'));
     const amenities = detail.querySelector('[data-wiz-acc="amenities"]');
     const description = detail.querySelector('[data-wiz-acc="description"]');
@@ -187,6 +224,15 @@
     if (detailBack) detailBack.hidden = false;
     detail.hidden = false;
     detail.querySelector('[data-wiz-detail-close]')?.focus();
+
+    const [name, desc] = await Promise.all([
+      window.MoriI18n?.translateContent?.(rawName) ?? rawName,
+      window.MoriI18n?.translateContent?.(rawDesc) ?? rawDesc,
+    ]);
+    if (openCard !== card) return;
+    if (title) title.textContent = name || rawName;
+    if (copy) copy.innerHTML = formatDescription(desc || rawDesc);
+    galleryName = name || rawName || t('wiz.guestRoom');
   }
 
   function closeDetail() {
@@ -234,7 +280,7 @@
   });
 
   document.addEventListener('mori:langchange', () => {
-    if (openCard && detail && !detail.hidden) openDetail(openCard);
+    if (openCard && detail && !detail.hidden) void openDetail(openCard);
   });
 
   const hash = String(location.hash || '').replace(/^#/, '');

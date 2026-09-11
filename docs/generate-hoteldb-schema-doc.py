@@ -11,6 +11,7 @@ NAVY = RGBColor(0x0B, 0x1F, 0x3A)
 TEAL = RGBColor(0x0D, 0x94, 0x88)
 OUT = Path(__file__).resolve().parent / "HotelDb-Schema.docx"
 OUT_FALLBACK = Path(__file__).resolve().parent / "HotelDb-Schema-updated.docx"
+OUT_ALWAYS_UPDATED = Path(__file__).resolve().parent / "HotelDb-Schema-updated.docx"
 
 
 def set_run_font(run, size=11, bold=False, color=NAVY):
@@ -87,7 +88,9 @@ def main():
         doc,
         "Guide to the live SQL Server database (HotelBookingDbContext). "
         "Dates are stored in UTC; the app shows Philippines time. "
-        "Markdown source: docs/HotelDb-Schema.md.",
+        f"Generated {__import__('datetime').date.today().isoformat()}. "
+        "Markdown source: docs/HotelDb-Schema.md. "
+        "Also written to HotelDb-Schema-updated.docx.",
     )
 
     add_heading(doc, "Entity type legend", 1)
@@ -324,7 +327,7 @@ def main():
             ("GoogleEmail / NormalizedGoogleEmail / GoogleVerificationStatus", "Google recovery."),
             ("DashboardLayoutJson", "Dashboard layout."),
         ],
-        "N→1 StaffRole; 1→N logins, tokens, reset codes; shifts by StaffUserId.",
+        "N→1 StaffRole; 1→N logins, tokens, reset codes.",
     )
     entity(
         doc,
@@ -457,13 +460,20 @@ def main():
     target = OUT
     try:
         doc.save(target)
+        print(f"Wrote {target}")
     except PermissionError:
         target = OUT_FALLBACK
         doc.save(target)
         print(f"Primary docx locked; wrote {target}")
         print("Close Word and re-run to overwrite HotelDb-Schema.docx.")
-        return
-    print(f"Wrote {target}")
+
+    # Always refresh the -updated copy when primary succeeded (or write it if fallback).
+    if target != OUT_ALWAYS_UPDATED:
+        try:
+            doc.save(OUT_ALWAYS_UPDATED)
+            print(f"Wrote {OUT_ALWAYS_UPDATED}")
+        except PermissionError:
+            print(f"Could not write {OUT_ALWAYS_UPDATED} (file open in Word).")
 
 
 if __name__ == "__main__":

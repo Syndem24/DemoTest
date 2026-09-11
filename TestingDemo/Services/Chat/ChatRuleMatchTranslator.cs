@@ -18,11 +18,18 @@ public interface IChatRuleMatchTranslator
     Task<ChatMatchPrepareResult> PrepareForMatchingAsync(
         string text,
         string? uiLangHint,
+        string? stickyReplyLanguage = null,
         CancellationToken cancellationToken = default);
 
     Task<string> ToGuestLanguageAsync(
         string reply,
         string replyLanguage,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Public guest-facing translate (reviews). Returns null on failure.</summary>
+    Task<string?> TranslatePublicAsync(
+        string text,
+        string targetLanguage,
         CancellationToken cancellationToken = default);
 }
 
@@ -55,16 +62,19 @@ public sealed class ChatRuleMatchTranslator : IChatRuleMatchTranslator
     public async Task<ChatMatchPrepareResult> PrepareForMatchingAsync(
         string text,
         string? uiLangHint,
+        string? stickyReplyLanguage = null,
         CancellationToken cancellationToken = default)
     {
         var trimmed = (text ?? string.Empty).Trim();
         var uiHint = NormalizeHint(uiLangHint);
         var uiReplyLang = HintToGtx(uiHint);
+        var stickyGtx = HintToGtx(NormalizeHint(stickyReplyLanguage));
         var scriptLang = DetectScriptLanguage(trimmed);
+        var cebuanoHint = DetectCebuanoOrBisayaRequest(trimmed);
 
         if (trimmed.Length == 0)
         {
-            var emptyLang = scriptLang ?? uiReplyLang;
+            var emptyLang = cebuanoHint ?? scriptLang ?? (IsEnglishTarget(stickyGtx) ? uiReplyLang : stickyGtx);
             return new ChatMatchPrepareResult
             {
                 OriginalText = trimmed,
@@ -74,7 +84,12 @@ public sealed class ChatRuleMatchTranslator : IChatRuleMatchTranslator
             };
         }
 
-        if (scriptLang is null && MostlyAscii.IsMatch(trimmed) && LooksLikeEnglishFaq(trimmed))
+        // English FAQ while guest already asked for Bisaya — keep sticky Cebuano replies.
+        if (cebuanoHint is null
+            && scriptLang is null
+            && MostlyAscii.IsMatch(trimmed)
+            && LooksLikeEnglishFaq(trimmed)
+            && IsEnglishTarget(stickyGtx))
         {
             return new ChatMatchPrepareResult
             {
@@ -85,11 +100,26 @@ public sealed class ChatRuleMatchTranslator : IChatRuleMatchTranslator
             };
         }
 
-        var cacheKey = "chat.match.prep.v3:" + trimmed.ToLowerInvariant();
+        if (cebuanoHint is null
+            && scriptLang is null
+            && MostlyAscii.IsMatch(trimmed)
+            && LooksLikeEnglishFaq(trimmed)
+            && !IsEnglishTarget(stickyGtx))
+        {
+            return new ChatMatchPrepareResult
+            {
+                OriginalText = trimmed,
+                MatchText = trimmed,
+                ReplyLanguage = stickyGtx,
+                LanguageHint = GtxToHint(stickyGtx)
+            };
+        }
+
+        var cacheKey = "chat.match.prep.v4:" + stickyGtx + ":" + trimmed.ToLowerInvariant();
         if (_cache.TryGetValue(cacheKey, out ChatMatchPrepareResult? cached) && cached is not null)
             return cached;
 
-        var sourceHint = scriptLang ?? "auto";
+        var sourceHint = cebuanoHint ?? scriptLang ?? "auto";
         try
         {
             var (english, detected) = await TranslateAsync(trimmed, sourceHint, "en", cancellationToken);
@@ -97,7 +127,11 @@ public sealed class ChatRuleMatchTranslator : IChatRuleMatchTranslator
                 (english, detected) = await TranslateAsync(trimmed, "auto", "en", cancellationToken);
 
             var matchText = string.IsNullOrWhiteSpace(english) ? trimmed : english.Trim();
-            var replyLang = ResolveReplyLanguage(detected, scriptLang, uiReplyLang);
+            // Local Cebuano book phrasing often mistranslates — keep book intent for rules.
+            if (cebuanoHint == "ceb" && LooksLikeCebuanoBookAsk(trimmed) && !LooksLikeEnglishBookAsk(matchText))
+                matchText = "how do I book online reservation";
+
+            var replyLang = ResolveReplyLanguage(detected, scriptLang, cebuanoHint, stickyGtx, uiReplyLang);
             var result = new ChatMatchPrepareResult
             {
                 OriginalText = trimmed,
@@ -111,11 +145,14 @@ public sealed class ChatRuleMatchTranslator : IChatRuleMatchTranslator
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
         {
             _logger.LogDebug(ex, "Rule-match translate failed; using original + script language.");
-            var replyLang = scriptLang ?? uiReplyLang;
+            var replyLang = ResolveReplyLanguage(null, scriptLang, cebuanoHint, stickyGtx, uiReplyLang);
+            var matchText = trimmed;
+            if (cebuanoHint == "ceb" && LooksLikeCebuanoBookAsk(trimmed))
+                matchText = "how do I book online reservation";
             return new ChatMatchPrepareResult
             {
                 OriginalText = trimmed,
-                MatchText = trimmed,
+                MatchText = matchText,
                 ReplyLanguage = replyLang,
                 LanguageHint = GtxToHint(replyLang)
             };
@@ -162,6 +199,49 @@ public sealed class ChatRuleMatchTranslator : IChatRuleMatchTranslator
         }
     }
 
+    public async Task<string?> TranslatePublicAsync(
+        string text,
+        string targetLanguage,
+        CancellationToken cancellationToken = default)
+    {
+        var trimmed = (text ?? string.Empty).Trim();
+        if (trimmed.Length == 0)
+            return null;
+
+        if (trimmed.Length > 6000)
+            trimmed = trimmed[..6000];
+
+        var tl = HintToGtx(NormalizeHint(targetLanguage));
+        if (string.IsNullOrWhiteSpace(tl))
+            tl = "en";
+
+        var cacheKey = "chat.public.tr.v1." + tl + ":" + trimmed;
+        if (_cache.TryGetValue(cacheKey, out string? cached) && !string.IsNullOrWhiteSpace(cached))
+            return cached;
+
+        try
+        {
+            var translated = await TranslateChunksAsync(trimmed, "auto", tl, cancellationToken);
+            if (string.IsNullOrWhiteSpace(translated)
+                || string.Equals(translated.Trim(), trimmed, StringComparison.OrdinalIgnoreCase))
+            {
+                translated = await TranslateViaMyMemoryAsync(trimmed, "auto", tl, cancellationToken);
+            }
+
+            if (string.IsNullOrWhiteSpace(translated))
+                return null;
+
+            var result = translated.Trim();
+            _cache.Set(cacheKey, result, TimeSpan.FromHours(6));
+            return result;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            _logger.LogDebug(ex, "Public translate to {Lang} failed.", tl);
+            return null;
+        }
+    }
+
     private async Task<string?> TranslateViaMyMemoryAsync(
         string text,
         string source,
@@ -201,9 +281,11 @@ public sealed class ChatRuleMatchTranslator : IChatRuleMatchTranslator
     private static string MapMyMemoryLang(string gtx) =>
         gtx switch
         {
+            "auto" => "Autodetect",
             "zh-CN" or "zh" => "zh-CN",
             "zh-TW" => "zh-TW",
             "fil" or "tl" => "tl",
+            "ceb" or "bisaya" => "ceb",
             _ => gtx
         };
 
@@ -302,16 +384,76 @@ public sealed class ChatRuleMatchTranslator : IChatRuleMatchTranslator
         }
     }
 
-    private static string ResolveReplyLanguage(string? detected, string? scriptLang, string uiReplyLang)
+    private static string ResolveReplyLanguage(
+        string? detected,
+        string? scriptLang,
+        string? cebuanoHint,
+        string stickyGtx,
+        string uiReplyLang)
     {
+        if (!string.IsNullOrWhiteSpace(cebuanoHint))
+            return cebuanoHint!;
+
         if (!string.IsNullOrWhiteSpace(scriptLang))
             return scriptLang!;
 
         var mapped = MapDetectedToGtx(detected);
+        if (!string.IsNullOrWhiteSpace(mapped) && !IsEnglishTarget(mapped))
+            return mapped!;
+
+        if (!IsEnglishTarget(stickyGtx))
+            return stickyGtx;
+
         if (!string.IsNullOrWhiteSpace(mapped))
             return mapped!;
 
         return IsEnglishTarget(uiReplyLang) ? "en" : uiReplyLang;
+    }
+
+    /// <summary>
+    /// Cebuano/Bisaya is Latin script — detect by markers or an explicit “speak Bisaya” request.
+    /// </summary>
+    internal static string? DetectCebuanoOrBisayaRequest(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var lower = text.ToLowerInvariant();
+        if (lower.Contains("bisaya", StringComparison.Ordinal)
+            || lower.Contains("binisaya", StringComparison.Ordinal)
+            || lower.Contains("cebuano", StringComparison.Ordinal)
+            || lower.Contains("sugbuanon", StringComparison.Ordinal))
+            return "ceb";
+
+        foreach (var marker in new[]
+                 {
+                     "unsaon", "unsa ", "nako", "akoang", "akoa", "reserba", "pareserba",
+                     "pagbook", "pag-book", "kanus-a", "kanusa", "pila ka", "asa mo",
+                     "naa moy", "wala koy", "salamat kaayo", "maayong", "pwede ba",
+                     "pwedi ba", "kung pwede", "sa akoang", "among booking"
+                 })
+        {
+            if (lower.Contains(marker, StringComparison.Ordinal))
+                return "ceb";
+        }
+
+        return null;
+    }
+
+    private static bool LooksLikeCebuanoBookAsk(string text)
+    {
+        var lower = (text ?? string.Empty).ToLowerInvariant();
+        return lower.Contains("reserba", StringComparison.Ordinal)
+               || lower.Contains("book", StringComparison.Ordinal)
+               || lower.Contains("booking", StringComparison.Ordinal)
+               || lower.Contains("reserve", StringComparison.Ordinal);
+    }
+
+    private static bool LooksLikeEnglishBookAsk(string text)
+    {
+        var lower = (text ?? string.Empty).ToLowerInvariant();
+        return lower.Contains("book", StringComparison.Ordinal)
+               || lower.Contains("reserv", StringComparison.Ordinal);
     }
 
     internal static string? DetectScriptLanguage(string text)
@@ -358,7 +500,7 @@ public sealed class ChatRuleMatchTranslator : IChatRuleMatchTranslator
             "zh-tw" or "zh-hant" => "zh-TW",
             "ru" => "ru",
             "tl" or "fil" or "tgl" => "tl",
-            "ceb" => "ceb",
+            "ceb" or "bisaya" or "cebuano" => "ceb",
             _ => code.Length is >= 2 and <= 8 ? code : null
         };
     }
@@ -372,6 +514,10 @@ public sealed class ChatRuleMatchTranslator : IChatRuleMatchTranslator
             return "zh-Hans";
         if (code.Equals("tl", StringComparison.OrdinalIgnoreCase))
             return "fil";
+        if (code.Equals("bisaya", StringComparison.OrdinalIgnoreCase)
+            || code.Equals("cebuano", StringComparison.OrdinalIgnoreCase)
+            || code.Equals("ceb", StringComparison.OrdinalIgnoreCase))
+            return "ceb";
         return code;
     }
 
@@ -380,6 +526,7 @@ public sealed class ChatRuleMatchTranslator : IChatRuleMatchTranslator
         {
             "zh-Hans" => "zh-CN",
             "fil" or "tl" => "tl",
+            "ceb" or "bisaya" or "cebuano" => "ceb",
             "ja" => "ja",
             "ko" => "ko",
             "ru" => "ru",
@@ -390,7 +537,8 @@ public sealed class ChatRuleMatchTranslator : IChatRuleMatchTranslator
         gtx switch
         {
             "zh-CN" or "zh-TW" or "zh" => "zh-Hans",
-            "tl" or "fil" or "ceb" => "fil",
+            "tl" or "fil" => "fil",
+            "ceb" or "bisaya" or "cebuano" => "ceb",
             "ja" => "ja",
             "ko" => "ko",
             "ru" => "ru",

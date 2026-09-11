@@ -23,12 +23,13 @@ if ($Setup) {
 
 # Free leftover app locks (file lock / old debug session) before start.
 Get-Process -Name TestingDemo -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process -Name netcoredbg -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Get-NetTCPConnection -LocalPort 5288 -ErrorAction SilentlyContinue |
     Select-Object -ExpandProperty OwningProcess -Unique |
     ForEach-Object {
         try { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } catch { }
     }
-Start-Sleep -Milliseconds 500
+Start-Sleep -Milliseconds 800
 
 Write-Host ""
 Write-Host "Starting app at http://localhost:5288 ..." -ForegroundColor Cyan

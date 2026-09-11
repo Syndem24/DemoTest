@@ -128,9 +128,28 @@ public sealed class GeminiChatProvider : IChatLlmProvider
 
     private static string BuildSystem(ChatCompletionRequest request)
     {
-        var lang = string.IsNullOrWhiteSpace(request.LanguageHint) ? "en" : request.LanguageHint;
+        var lang = ExpandLanguageHint(request.LanguageHint);
         return
-            $"{request.SystemInstruction}\n\nHOTEL_CONTEXT (trusted, use only this for facts):\n{request.HotelContext}\n\nReply in language hint '{lang}' when the guest writes in that language. Never invent bookings, confirmation codes, room numbers, or payments.";
+            $"{request.SystemInstruction}\n\nHOTEL_CONTEXT (trusted — use only these facts):\n{request.HotelContext}\n\n"
+            + $"Tone: warm hotel receptionist, human and kind. Reply fully in {lang}. "
+            + "If the guest asked several things, cover each one naturally. Never invent bookings, confirmation codes, room numbers, or payments.";
+    }
+
+    private static string ExpandLanguageHint(string? hint)
+    {
+        if (string.IsNullOrWhiteSpace(hint))
+            return "English";
+        return hint.Trim().ToLowerInvariant() switch
+        {
+            "ceb" or "bisaya" or "cebuano" => "Cebuano (Bisaya)",
+            "fil" or "tl" => "Filipino (Tagalog)",
+            "zh-hans" or "zh" or "zh-cn" => "Chinese (Simplified)",
+            "ja" => "Japanese",
+            "ko" => "Korean",
+            "ru" => "Russian",
+            "en" => "English",
+            _ => hint
+        };
     }
 
     private static bool LooksLikeQuota(string body) =>
@@ -192,13 +211,21 @@ public sealed class GroqChatProvider : IChatLlmProvider
         // Guest chat history often starts with the welcome assistant bubble — strip that.
         var history = NormalizeOpenAiHistory(request.History);
 
+        var langHint = request.LanguageHint ?? "en";
+        if (langHint is "ceb" or "bisaya" or "cebuano")
+            langHint = "Cebuano (Bisaya)";
+        else if (langHint is "fil" or "tl")
+            langHint = "Filipino (Tagalog)";
+
         var messages = new List<object>
         {
             new
             {
                 role = "system",
                 content =
-                    $"{request.SystemInstruction}\n\nHOTEL_CONTEXT:\n{request.HotelContext}\n\nLanguage hint: {request.LanguageHint ?? "en"}. Never invent bookings, MOR codes, room numbers, or payments."
+                    $"{request.SystemInstruction}\n\nHOTEL_CONTEXT:\n{request.HotelContext}\n\n"
+                    + $"Tone: warm hotel receptionist. Reply fully in {langHint}. "
+                    + "Answer every part of a complex guest message. Never invent bookings, MOR codes, room numbers, or payments."
             }
         };
 

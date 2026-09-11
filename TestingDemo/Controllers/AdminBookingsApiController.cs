@@ -18,17 +18,20 @@ public sealed class AdminBookingsApiController : ControllerBase
     private readonly IValidator<UpdateBookingRequest> _updateValidator;
     private readonly IValidator<CreateWalkInRequest> _walkInValidator;
     private readonly IHubContext<BookingNotificationsHub, IBookingNotificationsClient> _hub;
+    private readonly IGuestCatalogNotifier _guestCatalog;
 
     public AdminBookingsApiController(
         IBookingService bookingService,
         IValidator<UpdateBookingRequest> updateValidator,
         IValidator<CreateWalkInRequest> walkInValidator,
-        IHubContext<BookingNotificationsHub, IBookingNotificationsClient> hub)
+        IHubContext<BookingNotificationsHub, IBookingNotificationsClient> hub,
+        IGuestCatalogNotifier guestCatalog)
     {
         _bookingService = bookingService;
         _updateValidator = updateValidator;
         _walkInValidator = walkInValidator;
         _hub = hub;
+        _guestCatalog = guestCatalog;
     }
 
     [HttpPost("walk-in")]
@@ -61,6 +64,7 @@ public sealed class AdminBookingsApiController : ControllerBase
                 booking.CreatedAtUtc,
                 false,
                 "Walk-in confirmed with room assignment"));
+            await _guestCatalog.NotifyChangedAsync("availability", cancellationToken);
             return Ok(booking);
         }
         catch (BookingAvailabilityException ex)
@@ -210,6 +214,11 @@ public sealed class AdminBookingsApiController : ControllerBase
                 "Auto-Checkout Completed: Client duration done"));
         }
 
+        if (autoCancelled.Count > 0 || autoCheckouts.Count > 0)
+        {
+            await _guestCatalog.NotifyChangedAsync("availability", cancellationToken);
+        }
+
         return Ok(new
         {
             pendingCallsSent = pendingCalls.Count,
@@ -218,6 +227,28 @@ public sealed class AdminBookingsApiController : ControllerBase
             autoCancelled = autoCancelled.Count,
             autoCheckedOut = autoCheckouts.Count
         });
+    }
+
+    [HttpGet("room-type-availability")]
+    public async Task<ActionResult<IReadOnlyList<RoomAvailabilityDto>>> GetRoomTypeAvailability(
+        CancellationToken cancellationToken)
+    {
+        // Tonight's overnight window (Manila) — Pending + Confirmed holds reduce Remaining.
+        // Assigning door numbers does not change this inventory.
+        var today = PhilippinesTime.NowManila().Date;
+        var checkInAtUtc = PhilippinesTime.ToUtc(today.Add(StayTimeFees.DefaultCheckInTime));
+        var checkoutTimeUtc = PhilippinesTime.ToUtc(today.AddDays(1).Add(StayTimeFees.DefaultCheckOutTime));
+        try
+        {
+            return Ok(await _bookingService.GetAvailabilityAsync(
+                checkInAtUtc,
+                checkoutTimeUtc,
+                cancellationToken));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpGet("arrivals")]
@@ -322,6 +353,7 @@ public sealed class AdminBookingsApiController : ControllerBase
             }
 
             await _hub.Clients.All.BookingUpdated(ToNotification(booking, message));
+            await _guestCatalog.NotifyChangedAsync("availability", cancellationToken);
             return Ok(booking);
         }
         catch (KeyNotFoundException)
@@ -398,6 +430,7 @@ public sealed class AdminBookingsApiController : ControllerBase
         {
             var booking = await _bookingService.UpdateAsync(id, request, cancellationToken);
             await _hub.Clients.All.BookingUpdated(ToNotification(booking));
+            await _guestCatalog.NotifyChangedAsync("availability", cancellationToken);
             return Ok(booking);
         }
         catch (KeyNotFoundException)
@@ -493,6 +526,7 @@ public sealed class AdminBookingsApiController : ControllerBase
                 id,
                 cancellationToken);
             await _hub.Clients.All.BookingArchived(id);
+            await _guestCatalog.NotifyChangedAsync("availability", cancellationToken);
             return Ok(booking);
         }
         catch (KeyNotFoundException)
@@ -518,6 +552,7 @@ public sealed class AdminBookingsApiController : ControllerBase
                 id,
                 cancellationToken);
             await _hub.Clients.All.BookingArchived(id);
+            await _guestCatalog.NotifyChangedAsync("availability", cancellationToken);
             return Ok(booking);
         }
         catch (KeyNotFoundException)

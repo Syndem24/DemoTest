@@ -20,7 +20,7 @@ public sealed class ChatPublicContextBuilder : IChatPublicContextBuilder
     private readonly ChatbotOptions _options;
     private readonly IMemoryCache _cache;
 
-    private const string CacheKey = "chatbot.public-context.v2";
+    private const string CacheKey = "chatbot.public-context.v4";
 
     public ChatPublicContextBuilder(
         IRoomService rooms,
@@ -82,6 +82,10 @@ public sealed class ChatPublicContextBuilder : IChatPublicContextBuilder
         sb.AppendLine($"Check-in: {profile.CheckIn} (early option {profile.EarlyCheckIn}); Check-out: {profile.CheckOut}");
         sb.AppendLine($"Book online: {profile.BookPath}");
         sb.AppendLine($"Leave a stay review: {profile.ReviewsPath}");
+        sb.AppendLine(
+            "Payment methods (public — front desk only, no online payment): Cash at the counter; "
+            + "QR payment via GCash or PayMaya (InstaPay) at the front desk. "
+            + "Guests do not pay online in chat or on the website. Chat cannot check personal payment status.");
         sb.AppendLine(
             "How guests leave reviews: After checkout only. Sign in with Google on the home page "
             + "(“Sign in with Google to leave a review”) or open the reviews portal while signed in as a guest. "
@@ -152,9 +156,9 @@ public sealed class ChatPublicContextBuilder : IChatPublicContextBuilder
     {
         var p = _options.PublicProfile;
         var lead = string.IsNullOrWhiteSpace(preface)
-            ? "I cannot complete that right now. Please contact the front desk."
+            ? "I’m sorry I can’t finish that from chat right now — our front desk will take great care of you."
             : preface.Trim();
-        return $"{lead} Call {p.PhonePrimary} or {p.PhoneSecondary}. You can also book on the Accommodations page.";
+        return $"{lead} Please call {p.PhonePrimary} or {p.PhoneSecondary}, or book on the Accommodations page when you’re ready.";
     }
 
     private static string? Trim(string? value, int max)

@@ -1183,10 +1183,27 @@ body.rm-photo-zoom-open {
   flex-wrap: wrap;
 }
 
-.sc-generate-btn {
+.sc-btn.sc-generate-btn {
   flex: 0 0 auto;
   cursor: pointer;
   white-space: nowrap;
+  background: var(--teal);
+  color: var(--white);
+  border: 1.5px solid var(--teal);
+  box-shadow: 0 6px 16px rgba(26, 166, 166, 0.22);
+}
+
+.sc-btn.sc-generate-btn:hover:not(:disabled) {
+  background: #159494;
+  border-color: #159494;
+  color: var(--white);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(26, 166, 166, 0.32);
+}
+
+.sc-btn.sc-generate-btn:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
 }
 
 .sc-hint {

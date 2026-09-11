@@ -16,17 +16,20 @@ public sealed class BookingsApiController : ControllerBase
     private readonly IBookingService _bookingService;
     private readonly IValidator<CreateBookingRequest> _validator;
     private readonly IHubContext<BookingNotificationsHub, IBookingNotificationsClient> _hub;
+    private readonly IGuestCatalogNotifier _guestCatalog;
     private readonly ILogger<BookingsApiController> _logger;
 
     public BookingsApiController(
         IBookingService bookingService,
         IValidator<CreateBookingRequest> validator,
         IHubContext<BookingNotificationsHub, IBookingNotificationsClient> hub,
+        IGuestCatalogNotifier guestCatalog,
         ILogger<BookingsApiController> logger)
     {
         _bookingService = bookingService;
         _validator = validator;
         _hub = hub;
+        _guestCatalog = guestCatalog;
         _logger = logger;
     }
 
@@ -92,6 +95,7 @@ public sealed class BookingsApiController : ControllerBase
                 false);
 
             await _hub.Clients.All.BookingCreated(notification);
+            await _guestCatalog.NotifyChangedAsync("availability", cancellationToken);
 
             return StatusCode(
                 StatusCodes.Status201Created,

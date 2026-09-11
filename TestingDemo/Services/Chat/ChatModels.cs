@@ -37,7 +37,7 @@ public sealed class ChatReplyResult
 {
     public required string Reply { get; init; }
     public string Outcome { get; init; } = "unknown";
-    /// <summary>True only when Gemini produced the guest-visible reply after rules missed.</summary>
+    /// <summary>True when Gemini or Groq produced the guest-visible reply.</summary>
     public bool UsedAiFallback { get; init; }
 }
 
@@ -67,6 +67,6 @@ public sealed class ChatWelcomeResponse
 public sealed class ChatMessageResponse
 {
     public required string Reply { get; init; }
-    /// <summary>True when the reply came from Gemini after no FAQ rule matched.</summary>
+    /// <summary>True when the reply came from Gemini or Groq.</summary>
     public bool UsedAiFallback { get; init; }
 }

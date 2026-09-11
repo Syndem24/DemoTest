@@ -349,8 +349,8 @@ public static class PaymentFlushPdfBuilder
 
     private static string FormatMethod(PaymentMethod method) => method switch
     {
-        PaymentMethod.BankTransfer => "Bank/InstaPay",
-        PaymentMethod.EWallet or PaymentMethod.Maya => "E-wallet",
+        PaymentMethod.BankTransfer => "E-wallet (InstaPay QR)",
+        PaymentMethod.EWallet or PaymentMethod.Maya => "E-wallet (InstaPay QR)",
         PaymentMethod.Card => "Card",
         _ => method.ToString()
     };

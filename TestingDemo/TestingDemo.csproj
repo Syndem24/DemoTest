@@ -22,6 +22,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>mori-hotel-testingdemo-7c3e9a2b</UserSecretsId>
     <SpaRoot>ClientApp\</SpaRoot>
     <RoomAppJs>wwwroot\room-management\room-app.js</RoomAppJs>
     <!-- Prevent temporary verify folders from being included as project content/items. -->

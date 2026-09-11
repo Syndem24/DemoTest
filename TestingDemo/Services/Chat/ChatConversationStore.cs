@@ -9,6 +9,8 @@ public interface IChatConversationStore
 {
     IReadOnlyList<ChatTurn> Get(HttpContext http);
     void Save(HttpContext http, IReadOnlyList<ChatTurn> turns);
+    string? GetReplyLanguage(HttpContext http);
+    void SetReplyLanguage(HttpContext http, string? language);
 }
 
 /// <summary>
@@ -18,6 +20,7 @@ public interface IChatConversationStore
 public sealed class ChatConversationStore : IChatConversationStore
 {
     private const string SessionKey = "mori.chat.turns.v1";
+    private const string ReplyLangKey = "mori.chat.replyLang.v1";
     private readonly ChatbotOptions _options;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -52,5 +55,22 @@ public sealed class ChatConversationStore : IChatConversationStore
         var max = Math.Clamp(_options.HistoryTurns, 2, 16);
         var trimmed = turns.Count <= max ? turns : turns.Skip(turns.Count - max).ToList();
         http.Session.SetString(SessionKey, JsonSerializer.Serialize(trimmed, JsonOptions));
+    }
+
+    public string? GetReplyLanguage(HttpContext http)
+    {
+        var raw = http.Session.GetString(ReplyLangKey);
+        return string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
+    }
+
+    public void SetReplyLanguage(HttpContext http, string? language)
+    {
+        if (string.IsNullOrWhiteSpace(language) || language.Equals("en", StringComparison.OrdinalIgnoreCase))
+        {
+            http.Session.Remove(ReplyLangKey);
+            return;
+        }
+
+        http.Session.SetString(ReplyLangKey, language.Trim());
     }
 }

@@ -67,6 +67,7 @@ public sealed class SpecialOffersApiController : ControllerBase
     /// <summary>Deactivate an offer (and siblings with the same campaign window).</summary>
     [HttpPost("{id:int}/deactivate")]
     [Authorize(Roles = AppRoles.AdminManager)]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Deactivate(int id, CancellationToken cancellationToken)
     {
         var ok = await _offers.DeactivateAsync(id, cancellationToken);
@@ -77,6 +78,7 @@ public sealed class SpecialOffersApiController : ControllerBase
     /// <summary>Reactivate a deactivated offer with a new Manila start/end window.</summary>
     [HttpPost("{id:int}/reactivate")]
     [Authorize(Roles = AppRoles.AdminManager)]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Reactivate(
         int id,
         [FromBody] ReactivateSpecialOfferRequest request,
@@ -97,6 +99,7 @@ public sealed class SpecialOffersApiController : ControllerBase
     /// <summary>Hard-delete an offer and its sibling room-type rows. Bookings keep promo history (FK SetNull).</summary>
     [HttpDelete("{id:int}")]
     [Authorize(Roles = AppRoles.AdminManager)]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
     {
         var ok = await _offers.DeleteAsync(id, cancellationToken);

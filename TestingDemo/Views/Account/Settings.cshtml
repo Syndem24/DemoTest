@@ -1,6 +1,10 @@
 @model TestingDemo.ViewModels.AccountSettingsViewModel
 @{
     ViewData["Title"] = "Settings & Privacy";
+    if (Model.IsGuestAccount)
+    {
+        Layout = "_CustomerLayout";
+    }
     var showPasswordSuccess = TempData["PasswordSuccess"] is string;
     var profileBannerError = ViewData.ModelState
         .Where(entry => entry.Value?.Errors.Count > 0)
@@ -21,16 +25,23 @@
         && ViewData.ModelState.ErrorCount > 0;
 }
 
-<section class="admin-account-settings">
+<section class="admin-account-settings @(Model.IsGuestAccount ? "is-guest-account" : null)">
     <header class="admin-account-settings-hero">
         <div class="admin-settings-hero-brand">
             <img src="~/Images/Logo.png" asp-append-version="true" alt="" class="admin-settings-hero-logo" />
             <div>
-                <span class="admin-account-settings-eyebrow">Staff Account</span>
+                <span class="admin-account-settings-eyebrow">@(Model.IsGuestAccount ? "Guest Account" : "Staff Account")</span>
                 <h1>Settings & privacy</h1>
             </div>
         </div>
-        <p>Manage your profile details, password security, linked recovery accounts, and role permissions for <strong>Mori International Hotel™</strong>.</p>
+        @if (Model.IsGuestAccount)
+        {
+            <p>Manage your profile details, password security, and linked Google account for <strong>Mori International Hotel™</strong>.</p>
+        }
+        else
+        {
+            <p>Manage your profile details, password security, linked recovery accounts, and role permissions for <strong>Mori International Hotel™</strong>.</p>
+        }
     </header>
 
     <div class="admin-settings-layout">
@@ -87,12 +98,24 @@
 
                 <div class="admin-settings-nav-group">
                     <span class="admin-settings-nav-label">System & Access</span>
-                    <button type="button" class="admin-settings-nav-item" data-target="access">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-5.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8s0 0 0 0z" />
-                        </svg>
-                        <span>Role & Permissions</span>
-                    </button>
+                    @if (!Model.IsGuestAccount)
+                    {
+                        <button type="button" class="admin-settings-nav-item" data-target="access">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-5.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8s0 0 0 0z" />
+                            </svg>
+                            <span>Role & Permissions</span>
+                        </button>
+                    }
+                    else
+                    {
+                        <button type="button" class="admin-settings-nav-item" data-target="access">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-5.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8s0 0 0 0z" />
+                            </svg>
+                            <span>Account type</span>
+                        </button>
+                    }
                 </div>
             </nav>
         </aside>
@@ -133,7 +156,9 @@
                                 </svg>
                             </div>
                             <h3>Security & Password</h3>
-                            <p>Change your password regularly to keep your staff account secure.</p>
+                            <p>@(Model.IsGuestAccount
+                                ? "Change your password regularly to keep your guest account secure."
+                                : "Change your password regularly to keep your staff account secure.")</p>
                             <span class="admin-settings-hub-link">Update password &rarr;</span>
                         </article>
 
@@ -480,18 +505,26 @@
                 </article>
             </div>
 
-            <!-- SECTION 4: ROLE & PERMISSIONS -->
+            <!-- SECTION 4: ROLE & PERMISSIONS / ACCOUNT TYPE -->
             <div class="admin-settings-section" id="section-access" hidden>
                 <article class="admin-settings-card">
                     <header class="admin-settings-card-header">
-                        <h2>Role & Permissions</h2>
-                        <p>Read-only summary of your assigned staff role, account status, and privileges.</p>
+                        @if (Model.IsGuestAccount)
+                        {
+                            <h2>Account type</h2>
+                            <p>Read-only summary of your guest account details.</p>
+                        }
+                        else
+                        {
+                            <h2>Role & Permissions</h2>
+                            <p>Read-only summary of your assigned staff role, account status, and privileges.</p>
+                        }
                     </header>
 
                     <div class="admin-settings-info-grid">
                         <div class="admin-settings-info-tile">
-                            <span class="admin-settings-info-label">Assigned role</span>
-                            <strong class="admin-settings-info-value">@Model.RoleName</strong>
+                            <span class="admin-settings-info-label">@(Model.IsGuestAccount ? "Account type" : "Assigned role")</span>
+                            <strong class="admin-settings-info-value">@(Model.IsGuestAccount ? "Guest" : Model.RoleName)</strong>
                         </div>
                         <div class="admin-settings-info-tile">
                             <span class="admin-settings-info-label">Username</span>
@@ -503,7 +536,7 @@
                         </div>
                         <div class="admin-settings-info-tile">
                             <span class="admin-settings-info-label">Account status</span>
-                            <strong class="admin-settings-info-value text-success">Active Staff Account</strong>
+                            <strong class="admin-settings-info-value text-success">@(Model.IsGuestAccount ? "Active Guest Account" : "Active Staff Account")</strong>
                         </div>
                     </div>
                 </article>

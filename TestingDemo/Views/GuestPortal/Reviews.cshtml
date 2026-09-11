@@ -106,18 +106,6 @@
                     <p class="guest-review-rating-hint" data-i18n="reviews.tapStars">Tap the stars to rate each part of your stay.</p>
                     <div class="guest-review-rating-grid">
                         <div class="guest-star-field"
-                             data-star-field="overall"
-                             role="radiogroup"
-                             aria-labelledby="reviewOverallLabel"
-                             aria-required="true">
-                            <div class="guest-star-field-copy">
-                                <span id="reviewOverallLabel"><span data-i18n="reviews.overall">Overall stay</span> <em>*</em></span>
-                                <span class="guest-star-value" data-star-label aria-live="polite"></span>
-                            </div>
-                            <input type="hidden" data-review-overall value="" />
-                            <div class="guest-star-row" data-star-row></div>
-                        </div>
-                        <div class="guest-star-field"
                              data-star-field="staff"
                              role="radiogroup"
                              aria-labelledby="reviewStaffLabel"
@@ -151,6 +139,18 @@
                                 <span class="guest-star-value" data-star-label aria-live="polite"></span>
                             </div>
                             <input type="hidden" data-review-facilities value="" />
+                            <div class="guest-star-row" data-star-row></div>
+                        </div>
+                        <div class="guest-star-field"
+                             data-star-field="overall"
+                             role="radiogroup"
+                             aria-labelledby="reviewOverallLabel"
+                             aria-required="true">
+                            <div class="guest-star-field-copy">
+                                <span id="reviewOverallLabel"><span data-i18n="reviews.overall">Overall stay</span> <em>*</em></span>
+                                <span class="guest-star-value" data-star-label aria-live="polite"></span>
+                            </div>
+                            <input type="hidden" data-review-overall value="" />
                             <div class="guest-star-row" data-star-row></div>
                         </div>
                     </div>

@@ -41,6 +41,12 @@ try
 
     builder.Services.Configure<IdentityBootstrapOptions>(
         builder.Configuration.GetSection(IdentityBootstrapOptions.SectionName));
+    builder.Services.Configure<HostingOptions>(
+        builder.Configuration.GetSection(HostingOptions.SectionName));
+    builder.Services.AddHealthChecks()
+        .AddCheck<SqlConnectionHealthCheck>("sql", tags: ["ready"]);
+    // Single-instance guard must register before other hosted services.
+    builder.Services.AddHostedService<SingleInstanceGuardHostedService>();
 
     builder.Services.AddControllersWithViews()
         .AddJsonOptions(options =>
@@ -344,6 +350,11 @@ try
     app.UseStatusCodePagesWithReExecute("/Home/NotFoundPage");
     app.UseRateLimiter();
     app.MapStaticAssets();
+    app.MapHealthChecks("/health");
+    app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+    {
+        Predicate = check => check.Tags.Contains("ready")
+    });
     app.MapControllers();
     app.MapHub<BookingNotificationsHub>("/hubs/bookings");
     app.MapHub<GuestCatalogHub>("/hubs/guest-catalog");

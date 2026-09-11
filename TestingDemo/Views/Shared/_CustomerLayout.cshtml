@@ -5,9 +5,15 @@
         && string.Equals(action, "Index", StringComparison.OrdinalIgnoreCase);
     var isAccommodations = string.Equals(controller, "Booking", StringComparison.OrdinalIgnoreCase)
         && string.Equals(action, "Accommodations", StringComparison.OrdinalIgnoreCase);
-    var isStaffAuth = string.Equals(controller, "Account", StringComparison.OrdinalIgnoreCase)
+    var isAccountSettingsSurface = string.Equals(controller, "Account", StringComparison.OrdinalIgnoreCase)
+        && (string.Equals(action, "Settings", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(action, "UpdateProfile", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(action, "UpdateGoogleRecovery", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(action, "UpdatePassword", StringComparison.OrdinalIgnoreCase));
+    var isStaffAuth = (string.Equals(controller, "Account", StringComparison.OrdinalIgnoreCase)
         || string.Equals(controller, "Staff", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(controller, "GoogleVerification", StringComparison.OrdinalIgnoreCase);
+        || string.Equals(controller, "GoogleVerification", StringComparison.OrdinalIgnoreCase))
+        && !isAccountSettingsSurface;
     var immersive = ViewData["GuestImmersive"] as bool? == true || isAccommodations;
     var isFullBleed = ViewData["GuestFullBleed"] as bool? == true;
     var isAuthPage = ViewData["GuestAuthPage"] as bool? == true || isStaffAuth;
@@ -232,6 +238,15 @@
                             {
                                 <a role="menuitem"
                                    class="guest-nav-profile-item"
+                                   asp-controller="Account"
+                                   asp-action="Settings">
+                                    <svg class="guest-nav-profile-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                        <path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                                    </svg>
+                                    <span data-i18n="nav.accountSettings">Account settings</span>
+                                </a>
+                                <a role="menuitem"
+                                   class="guest-nav-profile-item"
                                    asp-controller="GuestPortal"
                                    asp-action="Reviews">
                                     <svg class="guest-nav-profile-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -303,6 +318,20 @@
     </footer>
 
     <div class="guest-toast" id="guestToast" hidden role="status" aria-live="polite"></div>
+    <div class="guest-availability-popup" id="guestAvailabilityPopup" hidden>
+        <div class="guest-availability-popup-backdrop" data-guest-availability-close tabindex="-1"></div>
+        <div class="guest-availability-popup-card" role="alertdialog" aria-modal="true"
+            aria-labelledby="guestAvailabilityTitle" aria-describedby="guestAvailabilityBody">
+            <p class="guest-availability-popup-kicker" data-i18n="booking.availabilityNoticeKicker">Availability update</p>
+            <h2 id="guestAvailabilityTitle">Room availability changed</h2>
+            <p id="guestAvailabilityBody" class="guest-availability-popup-body"></p>
+            <p id="guestAvailabilitySuggest" class="guest-availability-popup-suggest"></p>
+            <div class="guest-availability-popup-actions">
+                <button type="button" class="guest-btn guest-btn-primary" data-guest-availability-close
+                    data-i18n="booking.availabilityNoticeOk">Choose another room</button>
+            </div>
+        </div>
+    </div>
     @await RenderSectionAsync("GuestChrome", required: false)
 
     @if (!isAuthPage)
@@ -327,7 +356,7 @@
                 <p class="guest-cookies-kicker" data-i18n="cookies.kicker">Cookies</p>
                 <h2 id="guestCookiesTitle" data-i18n="cookies.title">Cookies on this site</h2>
                 <p id="guestCookiesCopy" data-i18n="cookies.copy">
-                    We use necessary cookies to run the site, keep you signed in, and remember a booking you started — including when you continue with Google. We do not set marketing or analytics cookies unless you choose Accept all.
+                    We use necessary cookies to run the site and keep you signed in. Choose Accept all only if we may also save a short booking draft. Necessary only does not save that draft.
                 </p>
                 <p class="guest-cookies-legal">
                     <a asp-controller="Booking" asp-action="PrivacyPolicy" data-i18n="cookies.privacy">Privacy policy</a>
@@ -345,10 +374,11 @@
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/lib/signalr/signalr.min.js"></script>
     <script src="~/js/guest-i18n.js" asp-append-version="true"></script>
+    <script src="~/js/guest-cookie-consent.js" asp-append-version="true"></script>
     <script src="~/js/photo-zoom.js" asp-append-version="true"></script>
     <script src="~/js/mori-input-filters.js" asp-append-version="true"></script>
+    <script src="~/js/stay-math.js" asp-append-version="true"></script>
     <script src="~/js/booking-ui.js" asp-append-version="true"></script>
-    <script src="~/js/guest-cookie-consent.js" asp-append-version="true"></script>
     @if (!isAuthPage)
     {
         <script src="~/js/hotel-chat.js" asp-append-version="true"></script>

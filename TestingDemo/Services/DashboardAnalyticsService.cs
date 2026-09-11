@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using TestingDemo.Data;
 using TestingDemo.Models;
+using TestingDemo.Options;
+using TestingDemo.Services.Chat;
 
 namespace TestingDemo.Services;
 
@@ -50,10 +53,20 @@ public interface IDashboardAnalyticsService
 public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
 {
     private readonly HotelBookingDbContext _db;
+    private readonly ChatProviderUsageTracker _chatUsage;
+    private readonly ChatbotOptions _chatbot;
+    private readonly ISecureConfigStore _vault;
 
-    public DashboardAnalyticsService(HotelBookingDbContext db)
+    public DashboardAnalyticsService(
+        HotelBookingDbContext db,
+        ChatProviderUsageTracker chatUsage,
+        IOptions<ChatbotOptions> chatbot,
+        ISecureConfigStore vault)
     {
         _db = db;
+        _chatUsage = chatUsage;
+        _chatbot = chatbot.Value;
+        _vault = vault;
     }
 
     public async Task<DashboardSnapshot> GetSnapshotAsync(
@@ -194,10 +207,17 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
             .GroupBy(o => new { o.Kind, o.Title, o.StartsAtUtc, o.EndsAtUtc })
             .CountAsync(cancellationToken);
 
+        var geminiConfigured = await _vault.HasValueAsync(SecureSettingKeys.GeminiApiKey, cancellationToken);
+        var groqConfigured = await _vault.HasValueAsync(SecureSettingKeys.GroqApiKey, cancellationToken);
+
         var signals = BuildSignals(
             isAdminManager,
-            occupancy,
-            roomsAvailable,
+            _chatUsage.GetApiConsumptionSnapshot(),
+            _chatUsage.GetForceFallbackInfo(ChatProviderKind.Gemini),
+            _chatUsage.GetForceFallbackInfo(ChatProviderKind.Groq),
+            geminiConfigured,
+            groqConfigured,
+            _chatbot,
             roomsCleaning,
             roomsUnavailable,
             pending,
@@ -300,8 +320,12 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
 
     private static IReadOnlyList<DashboardSignal> BuildSignals(
         bool isAdminManager,
-        decimal occupancy,
-        int roomsAvailable,
+        ChatApiConsumptionSnapshot chatApi,
+        ProviderFallbackInfo? geminiFallback,
+        ProviderFallbackInfo? groqFallback,
+        bool geminiConfigured,
+        bool groqConfigured,
+        ChatbotOptions chatbot,
         int roomsCleaning,
         int roomsUnavailable,
         int pending,
@@ -311,16 +335,16 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
         decimal pipeline,
         int activeOffers)
     {
-        var signals = new List<DashboardSignal>(5);
+        var signals = new List<DashboardSignal>(8);
 
-        if (occupancy >= 85m)
-            signals.Add(new DashboardSignal("Near full", "Protect rate and watch same-day walk-ins against remaining rooms.", "alert"));
-        else if (occupancy > 0 && occupancy < 40m)
-            signals.Add(new DashboardSignal("Soft occupancy", "Inventory is loose — push walk-in and live offers.", "watch"));
-        else if (occupancy >= 40m)
-            signals.Add(new DashboardSignal("Balanced house", "Occupancy is in a workable band for tonight.", "good"));
-        else
-            signals.Add(new DashboardSignal("Empty house", "No rooms marked occupied. Confirm room statuses in Rooms.", "watch"));
+        // Primary panel focus: Chatbot AI API integration + consumption.
+        signals.AddRange(BuildChatbotApiSignals(
+            chatApi,
+            geminiFallback,
+            groqFallback,
+            geminiConfigured,
+            groqConfigured,
+            chatbot));
 
         if (pending > 0 && arrivals > 0)
             signals.Add(new DashboardSignal("Call pending arrivals", $"{pending} pending stay(s) and {arrivals} arrival(s) today — confirm before check-in.", "alert"));
@@ -332,10 +356,7 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
         if (roomsUnavailable > 0)
             signals.Add(new DashboardSignal("Offline inventory", $"{roomsUnavailable} room(s) unavailable. That caps sellable rooms.", "watch"));
 
-        if (roomsAvailable > 0 && arrivals == 0 && occupancy < 50m)
-            signals.Add(new DashboardSignal("Walk-in window", $"{roomsAvailable} open room(s) and no arrivals on the board. Front desk can sell tonight.", "good"));
-
-        if (activeOffers == 0 && occupancy < 60m)
+        if (activeOffers == 0)
             signals.Add(new DashboardSignal("No live promo", "No active offer. A limited-time rate can lift soft dates.", "watch"));
 
         if (isAdminManager && revenueMonth > 0 && refundsMonth >= revenueMonth * 0.15m)
@@ -343,7 +364,113 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
         else if (isAdminManager && pipeline > revenueMonth * 2 && pipeline > 0)
             signals.Add(new DashboardSignal("Uncollected pipeline", "Open stay value is more than twice posted month cash. Chase remaining balances.", "watch"));
 
-        return signals.Take(5).ToList();
+        return signals.Take(6).ToList();
+    }
+
+    private static IReadOnlyList<DashboardSignal> BuildChatbotApiSignals(
+        ChatApiConsumptionSnapshot chatApi,
+        ProviderFallbackInfo? geminiFallback,
+        ProviderFallbackInfo? groqFallback,
+        bool geminiConfigured,
+        bool groqConfigured,
+        ChatbotOptions chatbot)
+    {
+        var list = new List<DashboardSignal>(4);
+        var softBudget = Math.Max(0, chatbot.SoftMonthlyApiCallBudget);
+        var monthPct = softBudget <= 0
+            ? 0m
+            : Math.Round(100m * chatApi.CallsMonth / softBudget, 0);
+
+        if (!chatbot.Enabled)
+        {
+            list.Add(new DashboardSignal(
+                "Chatbot AI off",
+                "Guest Mori Assistant is disabled. API integration is idle — turn Chatbot:Enabled on to resume.",
+                "watch"));
+            return list;
+        }
+
+        // Connection status — proves whether vault keys are actually stored.
+        if (geminiConfigured && groqConfigured)
+        {
+            list.Add(new DashboardSignal(
+                "Gemini + Groq connected",
+                "Both API keys are in the vault. Complex guest questions try Gemini first, then Groq.",
+                "good"));
+        }
+        else if (geminiConfigured)
+        {
+            list.Add(new DashboardSignal(
+                "Gemini connected · Groq missing",
+                "Gemini key is stored. Add a Groq key under Admin → Integrations so Groq can answer when Gemini misses.",
+                "watch"));
+        }
+        else if (groqConfigured)
+        {
+            list.Add(new DashboardSignal(
+                "Groq connected · Gemini missing",
+                "Groq key is stored. Complex questions will use Groq when Gemini is unavailable.",
+                "good"));
+        }
+        else
+        {
+            list.Add(new DashboardSignal(
+                "No LLM keys",
+                "Neither Gemini nor Groq is connected. Guest chat uses FAQ rules only — add keys under Admin → Integrations.",
+                "alert"));
+        }
+
+        if (geminiFallback is not null)
+        {
+            var untilPh = PhilippinesTime.ToManila(geminiFallback.UntilUtc).ToString("h:mm tt");
+            list.Add(new DashboardSignal(
+                "Gemini API paused",
+                $"Force-fallback after {geminiFallback.Reason}. Cooldown until {untilPh} (PH). Groq may still answer.",
+                "alert"));
+        }
+
+        if (groqFallback is not null)
+        {
+            var untilPh = PhilippinesTime.ToManila(groqFallback.UntilUtc).ToString("h:mm tt");
+            list.Add(new DashboardSignal(
+                "Groq API paused",
+                $"Force-fallback after {groqFallback.Reason}. Cooldown until {untilPh} (PH).",
+                "alert"));
+        }
+
+        if (!chatbot.UseGeminiFallback)
+        {
+            list.Add(new DashboardSignal(
+                "Rules-only chatbot",
+                "FAQ rules answer guests. LLM fallback is off — no Gemini/Groq consumption while UseGeminiFallback is false.",
+                "watch"));
+        }
+        else if (geminiConfigured || groqConfigured)
+        {
+            var level = chatApi.CallsToday == 0
+                ? "good"
+                : chatApi.CallsToday >= Math.Max(20, chatbot.MaxLlmPerIpPerDay)
+                    ? "watch"
+                    : "good";
+            var last = string.IsNullOrWhiteSpace(chatApi.LastProvider)
+                ? "none yet"
+                : chatApi.LastProvider;
+            list.Add(new DashboardSignal(
+                "API calls today",
+                $"{chatApi.GeminiCallsToday} Gemini · {chatApi.GroqCallsToday} Groq · {chatApi.UniqueGuestIpsToday} guest IP(s). Last: {last}. Soft cap {chatbot.MaxLlmPerIpPerDay}/IP/day.",
+                level));
+        }
+
+        if (softBudget > 0 && (geminiConfigured || groqConfigured || chatApi.CallsMonth > 0))
+        {
+            var monthLevel = monthPct >= 90m ? "alert" : monthPct >= 70m ? "watch" : "good";
+            list.Add(new DashboardSignal(
+                "API month budget",
+                $"{chatApi.GeminiCallsMonth} Gemini · {chatApi.GroqCallsMonth} Groq ({chatApi.CallsMonth}/{softBudget} soft total, {monthPct}%). Not a hard cut-off.",
+                monthLevel));
+        }
+
+        return list;
     }
 
     private sealed record LiveBookingRow(

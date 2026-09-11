@@ -30,7 +30,7 @@ public sealed class CreateBookingRequest
     /// <summary>One extra guest per room beyond 2 included occupants (₱200/night each).</summary>
     public int ExtraPersons { get; set; }
     public List<CreateBookingItemRequest> Items { get; set; } = new();
-    /// <summary>Flag for front desk to verify Senior/PWD ID on arrival.</summary>
+    /// <summary>Senior/PWD request; 20% stay charge after confirm / stay-fees save (verify ID).</summary>
     public ArrivalDiscountRequest ArrivalDiscountRequest { get; set; } = ArrivalDiscountRequest.None;
     /// <summary>Optional active Limited Time offer (online). Cash-only when the offer requires it.</summary>
     public int? SpecialOfferId { get; set; }
@@ -81,7 +81,7 @@ public sealed class UpdateBookingChargesRequest
     public bool RevertStayExtension { get; set; }
 
     /// <summary>
-    /// Senior/PWD claim flag for front desk (verify ID). Not auto-applied to totals.
+    /// Senior/PWD (verify ID). 20% of stay applied on confirm / stay-fees save when no special offer.
     /// Cannot combine with an active special-offer promo.
     /// </summary>
     public ArrivalDiscountRequest ArrivalDiscountRequest { get; set; } = ArrivalDiscountRequest.None;

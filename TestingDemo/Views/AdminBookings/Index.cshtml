@@ -30,6 +30,13 @@
                 History
             </button>
         </div>
+        <div class="admin-room-type-availability" data-room-type-availability aria-live="polite"
+            aria-label="Realtime room type availability">
+            <span class="admin-room-type-availability-label">Available tonight</span>
+            <div class="admin-room-type-availability-chips" data-room-type-availability-chips>
+                <span class="admin-room-type-availability-loading">Loading…</span>
+            </div>
+        </div>
         <div class="admin-daytime-flow-toolbar-shell" data-daytime-flow-toolbar hidden>
             <button type="button" class="admin-daytime-back-btn" data-daytime-flow-close
                 aria-label="Back to booking table">
@@ -234,7 +241,10 @@
         aria-labelledby="adminBookingDetailTitle">
         <header class="admin-booking-detail-header">
             <div class="admin-booking-detail-header-main">
-                <span class="admin-booking-reference" data-detail-reference></span>
+                <div class="admin-booking-detail-meta">
+                    <span class="admin-booking-detail-kicker">Reservation</span>
+                    <span class="admin-booking-reference" data-detail-reference></span>
+                </div>
                 <div class="admin-booking-detail-header-row">
                     <h2 id="adminBookingDetailTitle" data-detail-guest title="">Booking details</h2>
                     <div class="admin-booking-flow-path" data-detail-flow-path role="progressbar" aria-valuemin="1"
@@ -242,7 +252,9 @@
                 </div>
             </div>
             <button type="button" class="admin-booking-modal-close" data-booking-modal-close
-                aria-label="Close">&times;</button>
+                aria-label="Close booking details">
+                <span class="admin-booking-modal-close-icon" aria-hidden="true">&times;</span>
+            </button>
         </header>
         <div class="admin-booking-detail-body" data-booking-detail>
             <p>Loading details…</p>
@@ -277,6 +289,37 @@
                 <ul class="admin-fees-saved-list" data-fees-saved-list></ul>
                 <p class="admin-fees-saved-empty" data-fees-saved-empty hidden>No additional fees on this booking.</p>
                 <button type="button" class="admin-booking-confirm" data-fees-saved-ok>OK</button>
+            </div>
+        </div>
+        <div class="admin-fees-saved-popup" data-extend-calendar-popup hidden>
+            <div class="admin-fees-saved-popup-card admin-extend-calendar-card" role="dialog" aria-modal="true"
+                aria-labelledby="extendCalendarTitle">
+                <h3 id="extendCalendarTitle">Extend stay</h3>
+                <p class="admin-extend-calendar-lede" data-extend-calendar-lede>
+                    Pick a new checkout date. Extra nights fill in when you apply.
+                </p>
+                <p class="admin-extend-calendar-current" data-extend-calendar-current></p>
+                <div class="admin-extend-calendar-nav">
+                    <button type="button" class="admin-extend-calendar-nav-btn" data-extend-calendar-prev
+                        aria-label="Previous month">‹</button>
+                    <strong data-extend-calendar-month></strong>
+                    <button type="button" class="admin-extend-calendar-nav-btn" data-extend-calendar-next
+                        aria-label="Next month">›</button>
+                </div>
+                <div class="admin-extend-calendar-weekdays" aria-hidden="true">
+                    <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                </div>
+                <div class="admin-extend-calendar-grid" data-extend-calendar-grid role="grid"
+                    aria-label="Checkout dates"></div>
+                <ul class="admin-extend-calendar-key" aria-label="Date colors">
+                    <li><span class="is-booked" aria-hidden="true"></span> Booked stay</li>
+                    <li><span class="is-extend" aria-hidden="true"></span> Extended nights</li>
+                </ul>
+                <p class="admin-booking-fees-hint" data-extend-calendar-preview></p>
+                <div class="admin-extend-calendar-actions">
+                    <button type="button" class="admin-booking-rooms-adjust-btn" data-extend-calendar-cancel>Cancel</button>
+                    <button type="button" class="admin-booking-confirm" data-extend-calendar-apply disabled>Apply nights</button>
+                </div>
             </div>
         </div>
         <div class="admin-checkout-confirm-popup" data-checkout-confirm-popup hidden>
@@ -405,8 +448,7 @@
                     <span>Method</span>
                     <select data-payment-method>
                         <option value="Cash">Cash</option>
-                        <option value="EWallet">E-wallet</option>
-                        <option value="BankTransfer">Bank transfer (InstaPay QR)</option>
+                        <option value="EWallet">E-wallet (InstaPay QR)</option>
                     </select>
                 </label>
 
@@ -433,8 +475,7 @@
                 <div class="admin-payment-epay-panel" data-payment-epay-panel hidden>
                     <p class="admin-payment-panel-title">Digital payment proof</p>
                     <p class="admin-payment-prices-hint" data-payment-epay-hint>
-                        Guest pays via hotel InstaPay QR or e-wallet. Scan their receipt (or type the reference) and
-                        correct OCR if needed.
+                        Guest pays via hotel InstaPay QR (e-wallet). Attach a photo of their receipt.
                     </p>
                     <label>
                         <span>Amount paid (₱) <em>locked</em></span>
@@ -450,76 +491,13 @@
                         <input type="file" accept="image/*" data-payment-receipt-upload hidden />
                         <input type="file" accept="image/*" capture="environment" data-payment-receipt-capture hidden />
                     </div>
+                    <figure data-payment-receipt-preview-wrap hidden>
+                        <img class="admin-payment-receipt-preview" alt="Uploaded payment receipt"
+                            data-payment-receipt-preview data-photo-zoom data-photo-zoom-alt="Payment receipt"
+                            title="Click to zoom · Esc to exit" />
+                    </figure>
                     <p class="admin-payment-ocr-status" data-payment-ocr-status hidden role="status"></p>
-
-                    <div class="admin-payment-ocr-compare" data-payment-ocr-compare hidden>
-                        <p class="admin-payment-panel-title">Compare OCR result</p>
-                        <div class="admin-payment-ocr-grid">
-                            <figure class="admin-payment-ocr-photo">
-                                <div class="admin-payment-ocr-photo-frame">
-                                    <img alt="Uploaded payment receipt" data-payment-ocr-image data-photo-zoom
-                                        data-photo-zoom-alt="Payment receipt" title="Click to zoom · Esc to exit" />
-                                </div>
-                                <div class="admin-payment-ocr-photo-meta">
-                                    <p class="admin-payment-ocr-caption" data-payment-ocr-caption>Receipt photo · click
-                                        to zoom · Esc to exit</p>
-                                    <label class="admin-payment-ocr-filter-switch">
-                                        <input type="checkbox" data-payment-ocr-scanner-filter />
-                                        <span class="admin-payment-ocr-filter-track" aria-hidden="true"></span>
-                                        <span class="admin-payment-ocr-filter-text">Scanner filter</span>
-                                    </label>
-                                </div>
-                            </figure>
-                            <div class="admin-payment-ocr-fields">
-                                <label>
-                                    <span>Detected reference</span>
-                                    <input type="text" maxlength="120" data-payment-ocr-ref
-                                        placeholder="Ref No. / transaction id" />
-                                </label>
-                                <label>
-                                    <span>Detected amount (₱)</span>
-                                    <input type="text" inputmode="decimal" data-payment-ocr-amount placeholder="0.00"
-                                        autocomplete="off" data-mori-filter="decimal" name="paymentOcrAmount" />
-                                </label>
-                                <label>
-                                    <span>Transfer from / sender</span>
-                                    <input type="text" maxlength="160" data-payment-ocr-from
-                                        placeholder="Sender name or number" />
-                                </label>
-                                <label>
-                                    <span>Transfer to / recipient</span>
-                                    <input type="text" maxlength="160" data-payment-ocr-to
-                                        placeholder="Recipient name or number" />
-                                </label>
-                                <label>
-                                    <span>OCR text (for checking)</span>
-                                    <textarea rows="6" readonly data-payment-ocr-raw></textarea>
-                                </label>
-                                <p class="admin-payment-prices-hint">
-                                    Scan or upload the guest receipt (Azure OCR when available, otherwise local). Fix
-                                    fields, then Apply.
-                                </p>
-                                <div class="admin-payment-ocr-actions">
-                                    <button type="button" data-payment-ocr-discard>Discard scan</button>
-                                    <button type="button" class="admin-booking-confirm" data-payment-ocr-apply>Apply to
-                                        payment</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <label>
-                        <span>Payment reference <em>from OCR or manual</em></span>
-                        <input type="text" maxlength="120" data-payment-external-ref
-                            placeholder="Reference / transaction id" />
-                    </label>
-                    <label data-payment-bank-ref-wrap hidden>
-                        <span>InstaPay / bank reference</span>
-                        <input type="text" maxlength="120" data-payment-bank-ref
-                            placeholder="Clearing / transfer code if shown" />
-                    </label>
                     <input type="hidden" data-payment-receipt-path value="" />
-                    <input type="hidden" data-payment-ocr-channel value="" />
                 </div>
 
                 <label>
@@ -591,5 +569,6 @@
 <partial name="_AdminWalkInModals" />
 
 @section Scripts {
+    <script src="~/js/stay-math.js" asp-append-version="true"></script>
     <script src="~/js/walk-in.js" asp-append-version="true"></script>
 }

@@ -1743,6 +1743,20 @@
   box-shadow: 0 4px 12px rgba(13, 148, 136, 0.38);
 }
 
+.wiz-badge.is-sold {
+  background: color-mix(in srgb, var(--wiz-navy, #0b1f3a) 78%, #8f1f16);
+  box-shadow: 0 4px 12px rgba(11, 31, 58, 0.28);
+}
+
+.wiz-card.is-sold-out {
+  opacity: 0.92;
+}
+
+.wiz-card.is-sold-out [data-wiz-toggle] {
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
 .wiz-card-check {
   position: absolute;
   top: 0.85rem;

@@ -210,17 +210,18 @@
                 var inclusionsJson = System.Text.Json.JsonSerializer.Serialize(inclusions);
                 var canBook = type.AvailableCount > 0;
                         var viewHint = inclusions.FirstOrDefault(i => i.Contains("view", StringComparison.OrdinalIgnoreCase))
-                            ?? (canBook ? $"{type.AvailableCount} available" : "Sold out");
+                            ?? (canBook ? $"{type.AvailableCount} available" : "Fully booked");
                         var tagline = string.IsNullOrWhiteSpace(description)
                             ? $"{type.MaxOccupancy} guests · {type.BedCount} bed{(type.BedCount == 1 ? "" : "s")}"
                             : (description.Length > 110 ? description[..107] + "…" : description);
-                        <article class="wiz-card"
+                        <article class="wiz-card@(canBook ? "" : " is-sold-out")"
                                  data-wiz-card
                                  data-room-type-id="@type.RoomTypeId"
                          data-room-type="@type.Name"
                          data-price="@type.PricePerNight.ToString("0.00")"
                          data-occupancy="@type.MaxOccupancy"
                          data-beds="@type.BedCount"
+                         data-capacity="@type.RoomCount"
                          data-available="@type.AvailableCount"
                          data-images='@Html.Raw(imagesJson)'
                          data-inclusions='@Html.Raw(inclusionsJson)'
@@ -231,7 +232,7 @@
                                     <img src="@image" alt="" loading="lazy" />
                                 }
                                 <div class="wiz-card-media-fade" aria-hidden="true"></div>
-                                <span class="wiz-badge@(canBook ? "" : " is-sold")" data-i18n="@(canBook ? "wiz.available" : "wiz.soldOut")">@(canBook ? "Available" : "Sold out")</span>
+                                <span class="wiz-badge@(canBook ? "" : " is-sold")" data-i18n="@(canBook ? "wiz.available" : "wiz.fullyBooked")">@(canBook ? "Available" : "Fully booked")</span>
                                 <span class="wiz-offer-flag" data-wiz-offer-flag hidden></span>
                                 <span class="wiz-card-check" aria-hidden="true">
                                     <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5l3 3 6-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -250,7 +251,7 @@
                                 <dl class="wiz-stats">
                                     <div>
                                         <dt data-i18n="wiz.open">Open</dt>
-                                        <dd>@type.AvailableCount</dd>
+                                        <dd data-wiz-open-count>@type.AvailableCount</dd>
                                     </div>
                                     <div>
                                         <dt data-i18n="wiz.guests">Guests</dt>
@@ -279,16 +280,18 @@
                         </div>
                                 <div class="wiz-card-actions">
                                     <button type="button" class="wiz-btn wiz-btn-ghost" data-wiz-detail data-i18n="wiz.details">Details</button>
-                                    @if (canBook)
-                                    {
-                                        <button type="button" class="wiz-btn wiz-btn-primary" data-wiz-toggle>
+                                    <button type="button" class="wiz-btn wiz-btn-primary" data-wiz-toggle
+                                            @(canBook ? null : "disabled")
+                                            @(canBook ? null : "data-sold=1")>
+                                        @if (canBook)
+                                        {
                                             <span data-i18n="wiz.addToBooking">Add to Booking</span>
-                                        </button>
-                        }
-                        else
-                        {
-                                        <button type="button" class="wiz-btn wiz-btn-primary" disabled data-i18n="wiz.soldOut">Sold out</button>
-                                    }
+                                        }
+                                        else
+                                        {
+                                            <span data-i18n="wiz.fullyBooked">Fully booked</span>
+                                        }
+                                    </button>
                         </div>
                     </div>
                     </article>
@@ -592,7 +595,7 @@
                 <ul>
                     <li data-i18n="wiz.stayRule1">Check-in 14:00 · check-out 12:00 (Manila). Early check-in and late checkout may be offered for a fee.</li>
                     <li data-i18n="wiz.stayRule2">Each room includes two guests. A third guest is ₱200 per night, subject to room capacity.</li>
-                    <li data-i18n="wiz.stayRule3">Senior Citizen and PWD discounts are claimed at arrival with valid ID. They are not applied online.</li>
+                    <li data-i18n="wiz.stayRule3">Senior Citizen and PWD discounts (20%) apply when reception confirms the stay; bring valid ID. They are not combined with special offers.</li>
                 </ul>
             </section>
 

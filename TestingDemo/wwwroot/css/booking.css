@@ -1,4 +1,4 @@
-﻿/* Customer booking site â€” three colors: navy, white, teal
+/* Customer booking site â€” three colors: navy, white, teal
    Fluid / scalable layout across phone â†’ desktop */
 .guest-shell {
   --guest-pad: clamp(0.85rem, 3.5vw, 2.5rem);
@@ -7402,6 +7402,115 @@
   background: var(--teal);
 }
 
+.guest-availability-popup {
+  position: fixed;
+  inset: 0;
+  z-index: 2400;
+  display: grid;
+  place-items: center;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+}
+
+.guest-availability-popup[hidden] {
+  display: none !important;
+}
+
+.guest-availability-popup-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: rgb(8 18 36 / 0.55);
+  backdrop-filter: blur(5px);
+  cursor: pointer;
+}
+
+.guest-availability-popup-card {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 26rem);
+  display: grid;
+  gap: 0.7rem;
+  padding: 1.35rem 1.25rem 1.2rem;
+  border-radius: 16px;
+  background: var(--white);
+  border: 2px solid color-mix(in srgb, var(--teal) 55%, var(--navy));
+  box-shadow: 0 24px 64px rgb(8 18 36 / 0.35);
+  animation: guest-availability-pop 280ms cubic-bezier(.22, .8, .28, 1);
+}
+
+@keyframes guest-availability-pop {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.guest-availability-popup-kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+
+.guest-availability-popup-card h2 {
+  margin: 0;
+  font-size: clamp(1.15rem, 2.4vw, 1.35rem);
+  line-height: 1.25;
+  color: var(--navy);
+}
+
+.guest-availability-popup-body {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 650;
+  line-height: 1.45;
+  color: var(--navy);
+}
+
+.guest-availability-popup-suggest {
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--teal) 12%, var(--white));
+  border: 1px solid color-mix(in srgb, var(--teal) 35%, var(--navy-line, #d5dde8));
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--navy) 88%, var(--teal));
+}
+
+.guest-availability-popup-suggest[hidden] {
+  display: none !important;
+}
+
+.guest-availability-popup-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.35rem;
+}
+
+.guest-availability-popup-actions .guest-btn {
+  cursor: pointer;
+  min-width: 11rem;
+}
+
+body.guest-availability-popup-open {
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guest-availability-popup-card {
+    animation: none;
+  }
+}
+
 body.guest-modal-open {
   overflow: hidden;
 }
@@ -12457,6 +12566,59 @@ body.guest-review-modal-open {
   font-size: 0.95rem;
 }
 
+.guest-review-comment-wrap {
+  display: grid;
+  gap: 0.55rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.guest-review-comment-wrap .guest-review-comment {
+  flex: initial;
+}
+
+.guest-review-comment.is-translated {
+  -webkit-line-clamp: unset;
+  display: block;
+  overflow: visible;
+  color: color-mix(in srgb, var(--navy) 82%, white);
+}
+
+.guest-review-translate {
+  appearance: none;
+  justify-self: start;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--teal);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+  transition: color 180ms ease, opacity 180ms ease;
+}
+
+.guest-review-translate:hover,
+.guest-review-translate:focus-visible {
+  color: var(--navy);
+}
+
+.guest-review-translate:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--teal) 55%, white);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.guest-review-translate:disabled {
+  opacity: 0.65;
+  cursor: wait;
+  text-decoration: none;
+}
+
 .guest-review-comment.is-muted {
   color: color-mix(in srgb, var(--navy) 55%, white);
   font-size: 0.86rem;
@@ -12548,7 +12710,8 @@ body.guest-review-modal-open {
   z-index: 2400;
   display: grid;
   place-items: center;
-  padding: clamp(0.65rem, 2vw, 1.25rem);
+  padding: clamp(0.5rem, 2vw, 1.25rem);
+  overflow: hidden;
 }
 
 .guest-reviews-modal[hidden] {
@@ -12568,10 +12731,13 @@ body.guest-review-modal-open {
 .guest-reviews-modal-card {
   position: relative;
   z-index: 1;
-  width: min(70rem, 100%);
-  max-height: min(88vh, 58rem);
+  width: min(40rem, 100%);
+  height: min(92vh, 62rem);
+  max-height: min(92vh, 62rem);
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  max-width: 100%;
   border-radius: 1.5rem;
   background: #fff;
   border: 1px solid color-mix(in srgb, var(--navy) 10%, white);
@@ -12605,6 +12771,7 @@ body.guest-review-modal-open {
   justify-content: space-between;
   align-items: start;
   gap: 1rem;
+  flex-shrink: 0;
   padding: clamp(1rem, 2.4vw, 1.5rem) clamp(1rem, 2.8vw, 1.7rem) 1rem;
   border-bottom: 1px solid color-mix(in srgb, var(--navy) 8%, white);
 }
@@ -12637,6 +12804,7 @@ body.guest-review-modal-open {
   display: flex;
   align-items: baseline;
   gap: 0.55rem;
+  flex-shrink: 0;
   padding: 0.95rem clamp(1rem, 2.8vw, 1.7rem);
   border-bottom: 1px solid color-mix(in srgb, var(--navy) 8%, white);
   color: var(--navy);
@@ -12651,17 +12819,72 @@ body.guest-review-modal-open {
 }
 
 .guest-reviews-modal-body {
-  flex: 1;
-  overflow: auto;
-  padding: 1rem clamp(1rem, 2.8vw, 1.7rem) clamp(1.15rem, 3vw, 1.7rem);
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
-  gap: 1rem;
-  align-content: start;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.65rem clamp(0.85rem, 2.4vw, 1.35rem) 0.85rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
+  max-width: 100%;
 }
 
-.guest-review-card-modal {
-  height: fit-content;
+.guest-reviews-modal-body > .guest-reviews-empty {
+  margin: 0;
+}
+
+.guest-reviews-modal-body > .guest-review-card.guest-review-card-modal {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  margin: 0;
+  padding: clamp(0.85rem, 1.8vw, 1.15rem);
+  overflow: hidden;
+  border-radius: 1rem;
+}
+
+.guest-review-card-modal .guest-review-comment-wrap {
+  flex: 0 0 auto;
+  min-height: 0;
+  max-width: 100%;
+}
+
+.guest-review-card-modal .guest-review-comment,
+.guest-review-card-modal .guest-review-comment.is-translated {
+  flex: 0 0 auto;
+  display: block;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  -webkit-box-orient: initial;
+  max-height: none;
+  max-width: 100%;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.guest-review-card-modal .guest-review-tags,
+.guest-review-card-modal .guest-review-reply {
+  flex: 0 0 auto;
+  margin-top: 0.55rem;
+  max-width: 100%;
+}
+
+.guest-review-card-modal.is-focus-review {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--teal) 55%, white),
+    0 12px 28px rgba(11, 31, 58, 0.1);
 }
 
 body.guest-public-reviews-open {
@@ -12675,7 +12898,8 @@ body.guest-public-reviews-open .guest-nav {
 .guest-reviews-score:focus-visible,
 .guest-reviews-nav:focus-visible,
 .guest-reviews-dot:focus-visible,
-.guest-reviews-modal-close:focus-visible {
+.guest-reviews-modal-close:focus-visible,
+.guest-review-translate:focus-visible {
   outline: 3px solid var(--teal);
   outline-offset: 3px;
 }
@@ -12686,10 +12910,16 @@ body.guest-public-reviews-open .guest-nav {
     text-align: center;
   }
 
+  .guest-reviews-modal {
+    padding: 0;
+    place-items: stretch;
+  }
+
   .guest-reviews-modal-card {
     width: 100%;
-    max-height: 90vh;
-    border-radius: 1.2rem;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
   }
 
   .guest-reviews-modal-head {

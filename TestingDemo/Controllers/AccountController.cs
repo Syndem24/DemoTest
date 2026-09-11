@@ -476,8 +476,11 @@ public class AccountController : Controller
         return await RedirectAfterSignInAsync(user, returnUrl);
     }
 
+    private const string AccountSettingsRoles =
+        AppRoles.AdminManager + "," + AppRoles.Receptionist + "," + AppRoles.Guest;
+
     [HttpGet]
-    [Authorize(Roles = AppRoles.AdminManager + "," + AppRoles.Receptionist)]
+    [Authorize(Roles = AccountSettingsRoles)]
     public async Task<IActionResult> Settings(string? section = null, int activityPage = 1)
     {
         var user = await _userManager.GetUserAsync(User);
@@ -485,11 +488,11 @@ public class AccountController : Controller
             return Challenge();
 
         var activeSection = string.IsNullOrWhiteSpace(section) ? "overview" : section;
-        return View(await BuildSettingsModelAsync(user, activeSection: activeSection, activityPage: activityPage));
+        return AccountSettingsView(await BuildSettingsModelAsync(user, activeSection: activeSection, activityPage: activityPage));
     }
 
     [HttpPost]
-    [Authorize(Roles = AppRoles.AdminManager + "," + AppRoles.Receptionist)]
+    [Authorize(Roles = AccountSettingsRoles)]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateProfile([Bind(Prefix = "Profile")] UpdateProfileViewModel model)
     {
@@ -508,7 +511,7 @@ public class AccountController : Controller
         ModelState.Remove(nameof(UpdateProfileViewModel.Email));
 
         if (!ModelState.IsValid)
-            return View("Settings", await BuildSettingsModelAsync(user, profileModel: model, activeSection: "profile"));
+            return AccountSettingsView(await BuildSettingsModelAsync(user, profileModel: model, activeSection: "profile"));
 
         var userName = model.UserName.Trim();
         var phone = string.IsNullOrWhiteSpace(model.PhoneNumber) ? null : model.PhoneNumber.Trim();
@@ -532,7 +535,7 @@ public class AccountController : Controller
             if (!setUserName.Succeeded)
             {
                 AddIdentityErrors(setUserName, sectionModelPrefix: "Profile");
-                return View("Settings", await BuildSettingsModelAsync(user, profileModel: model, activeSection: "profile"));
+                return AccountSettingsView(await BuildSettingsModelAsync(user, profileModel: model, activeSection: "profile"));
             }
         }
 
@@ -545,7 +548,7 @@ public class AccountController : Controller
         if (!update.Succeeded)
         {
             AddIdentityErrors(update, sectionModelPrefix: "Profile");
-            return View("Settings", await BuildSettingsModelAsync(user, profileModel: model, activeSection: "profile"));
+            return AccountSettingsView(await BuildSettingsModelAsync(user, profileModel: model, activeSection: "profile"));
         }
 
         await _signInManager.RefreshSignInAsync(user);
@@ -557,7 +560,7 @@ public class AccountController : Controller
     }
 
     [HttpPost]
-    [Authorize(Roles = AppRoles.AdminManager + "," + AppRoles.Receptionist)]
+    [Authorize(Roles = AccountSettingsRoles)]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateGoogleRecovery([Bind(Prefix = "Profile")] UpdateGoogleRecoveryViewModel model)
     {
@@ -579,7 +582,7 @@ public class AccountController : Controller
         if (!ModelState.IsValid || postedEmail is null)
         {
             var showStepUp = HasFieldError("Profile.CurrentPassword") || HasFieldError("CurrentPassword");
-            return View("Settings", await BuildSettingsModelAsync(
+            return AccountSettingsView(await BuildSettingsModelAsync(
                 user,
                 profileModel: profileModel,
                 activeSection: "google",
@@ -604,7 +607,7 @@ public class AccountController : Controller
             AddProfileFieldError(
                 nameof(UpdateProfileViewModel.CurrentPassword),
                 "Enter your current password to continue.");
-            return View("Settings", await BuildSettingsModelAsync(
+            return AccountSettingsView(await BuildSettingsModelAsync(
                 user,
                 profileModel: profileModel,
                 activeSection: "google",
@@ -617,7 +620,7 @@ public class AccountController : Controller
             AddProfileFieldError(
                 nameof(UpdateProfileViewModel.CurrentPassword),
                 "Current password is incorrect for this account.");
-            return View("Settings", await BuildSettingsModelAsync(
+            return AccountSettingsView(await BuildSettingsModelAsync(
                 user,
                 profileModel: profileModel,
                 activeSection: "google",
@@ -633,7 +636,7 @@ public class AccountController : Controller
             AddProfileFieldError(
                 nameof(UpdateProfileViewModel.GoogleEmail),
                 "This email is already used by another staff account.");
-            return View("Settings", await BuildSettingsModelAsync(
+            return AccountSettingsView(await BuildSettingsModelAsync(
                 user,
                 profileModel: profileModel,
                 activeSection: "google"));
@@ -648,7 +651,7 @@ public class AccountController : Controller
                 AddProfileFieldError(
                     nameof(UpdateProfileViewModel.GoogleEmail),
                     "This email could not be saved. It may already be in use.");
-                return View("Settings", await BuildSettingsModelAsync(
+                return AccountSettingsView(await BuildSettingsModelAsync(
                     user,
                     profileModel: profileModel,
                     activeSection: "google"));
@@ -665,7 +668,7 @@ public class AccountController : Controller
         if (!update.Succeeded)
         {
             AddIdentityErrors(update, sectionModelPrefix: "Profile");
-            return View("Settings", await BuildSettingsModelAsync(user, profileModel: profileModel, activeSection: "google"));
+            return AccountSettingsView(await BuildSettingsModelAsync(user, profileModel: profileModel, activeSection: "google"));
         }
 
         await _signInManager.RefreshSignInAsync(user);
@@ -677,7 +680,7 @@ public class AccountController : Controller
     }
 
     [HttpPost]
-    [Authorize(Roles = AppRoles.AdminManager + "," + AppRoles.Receptionist)]
+    [Authorize(Roles = AccountSettingsRoles)]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdatePassword([Bind(Prefix = "Password")] ChangePasswordViewModel model)
     {
@@ -686,13 +689,13 @@ public class AccountController : Controller
             return Challenge();
 
         if (!ModelState.IsValid)
-            return View("Settings", await BuildSettingsModelAsync(user, passwordModel: model, activeSection: "password"));
+            return AccountSettingsView(await BuildSettingsModelAsync(user, passwordModel: model, activeSection: "password"));
 
         var change = await _userManager.ChangePasswordAsync(user, model.CurrentPassword ?? string.Empty, model.NewPassword);
         if (!change.Succeeded)
         {
             AddPasswordChangeErrors(change.Errors, sectionModelPrefix: "Password");
-            return View("Settings", await BuildSettingsModelAsync(user, passwordModel: model, activeSection: "password"));
+            return AccountSettingsView(await BuildSettingsModelAsync(user, passwordModel: model, activeSection: "password"));
         }
 
         user.MustChangePassword = false;
@@ -1306,6 +1309,9 @@ public class AccountController : Controller
 
         var roles = await _userManager.GetRolesAsync(user);
         var roleName = roles.FirstOrDefault() ?? "Staff";
+        var isGuestAccount = roles.Contains(AppRoles.Guest)
+            && !roles.Contains(AppRoles.AdminManager)
+            && !roles.Contains(AppRoles.Receptionist);
         var (activity, activityTotal) = await LoadAccountActivityAsync(user.Id, activityPage);
 
         return new AccountSettingsViewModel
@@ -1314,12 +1320,20 @@ public class AccountController : Controller
             Password = passwordModel,
             ActiveSection = activeSection,
             RoleName = roleName,
+            IsGuestAccount = isGuestAccount,
             ShowGoogleStepUp = showGoogleStepUp,
             ActivityLog = activity,
             ActivityPage = activityPage < 1 ? 1 : activityPage,
             ActivityPageSize = 15,
             ActivityTotal = activityTotal
         };
+    }
+
+    private ViewResult AccountSettingsView(AccountSettingsViewModel model)
+    {
+        if (model.IsGuestAccount)
+            ViewData["GuestAccountSettings"] = true;
+        return View("Settings", model);
     }
 
     private async Task RecordAccountActivityAsync(string userId, string action, string detail)

@@ -33,6 +33,9 @@ public sealed class ChatbotOptions
 
     public int ProviderCooldownMinutes { get; set; } = 30;
 
+    /// <summary>Soft monthly Gemini API call budget for dashboard signals (not a hard cut-off).</summary>
+    public int SoftMonthlyApiCallBudget { get; set; } = 2000;
+
     public ChatbotPublicProfile PublicProfile { get; set; } = new();
 }
 

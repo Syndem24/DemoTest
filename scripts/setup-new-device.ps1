@@ -4,7 +4,7 @@
   Prepares a new Windows machine to run the Hotel Booking demo.
 
 .PARAMETER ResetDatabase
-  Drops HotelBookingDb so the app can recreate it from the single baseline migration.
+  Drops MoriHotel so the app can recreate it from the single baseline migration.
 #>
 param(
     [switch]$ResetDatabase
@@ -39,17 +39,17 @@ sqllocaldb create mssqllocaldb 2>$null | Out-Null
 sqllocaldb start mssqllocaldb
 
 if ($ResetDatabase) {
-    Write-Host "==> Dropping HotelBookingDb (local data will be removed)..." -ForegroundColor Yellow
+    Write-Host "==> Dropping MoriHotel (local data will be removed)..." -ForegroundColor Yellow
     Add-Type -AssemblyName System.Data
     $master = "Server=(localdb)\mssqllocaldb;Trusted_Connection=True;TrustServerCertificate=True"
     $conn = New-Object System.Data.SqlClient.SqlConnection $master
     $conn.Open()
     $cmd = $conn.CreateCommand()
     $cmd.CommandText = @"
-IF DB_ID(N'HotelBookingDb') IS NOT NULL
+IF DB_ID(N'MoriHotel') IS NOT NULL
 BEGIN
-    ALTER DATABASE [HotelBookingDb] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-    DROP DATABASE [HotelBookingDb];
+    ALTER DATABASE [MoriHotel] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE [MoriHotel];
 END
 "@
     $cmd.ExecuteNonQuery() | Out-Null

@@ -21,7 +21,7 @@
   const BASE_GUESTS_PER_ROOM = 2;
   const MAX_GUESTS_PER_ROOM = 3;
   const MAX_EXTRA_PERSONS_PER_ROOM = 1;
-  const EXTRA_PERSON_FEE_PER_NIGHT = 200;
+  const EXTRA_PERSON_FEE_PER_NIGHT = window.MoriStayMath?.EXTRA_PERSON_FEE_PER_NIGHT ?? 200;
   const MAX_CHILD_AGE = 12;
   const MAX_GUEST_ROOMS = 8;
   const EARLY_CHECKIN_TIME = '11:30';
@@ -428,7 +428,7 @@
 
   initGuestHeroTour();
 
-  function showToast(message, ok = false) {
+  function showToast(message, ok = false, durationMs = 2800) {
     if (!toastEl) return;
     toastEl.textContent = message;
     toastEl.hidden = false;
@@ -436,7 +436,145 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
       toastEl.hidden = true;
-    }, 2800);
+    }, Math.max(1800, Number(durationMs) || 2800));
+  }
+
+  const availabilityPopup = document.getElementById('guestAvailabilityPopup');
+  const availabilityTitle = document.getElementById('guestAvailabilityTitle');
+  const availabilityBody = document.getElementById('guestAvailabilityBody');
+  const availabilitySuggest = document.getElementById('guestAvailabilitySuggest');
+
+  function buildAvailabilitySuggestion(items = lastAvailabilitySnapshot, message = '') {
+    const list = Array.isArray(items) ? items : [];
+    const alternatives = list
+      .filter((item) => Number(item.remaining ?? item.Remaining ?? 0) > 0)
+      .map((item) => item.roomTypeName || item.RoomTypeName)
+      .filter(Boolean);
+
+    // Prefer alternatives not named in the error message (the sold-out type).
+    const preferred = alternatives.filter((name) => {
+      if (!message) return true;
+      return !String(message).toLowerCase().includes(String(name).toLowerCase());
+    });
+    const picks = (preferred.length ? preferred : alternatives).slice(0, 3);
+
+    if (picks.length) {
+      return tx(
+        'booking.availabilitySuggestOtherTypes',
+        { rooms: picks.join(', ') },
+        `Please select another room type — for example ${picks.join(', ')} — or change your dates / reduce the number of rooms.`
+      );
+    }
+    return tx(
+      'booking.availabilitySuggestDatesOrTypes',
+      null,
+      'Please select another room type, reduce the quantity in your cart, or try different stay dates.'
+    );
+  }
+
+  function closeAvailabilityNotice() {
+    if (!availabilityPopup || availabilityPopup.hidden) return;
+    availabilityPopup.hidden = true;
+    document.body.classList.remove('guest-availability-popup-open');
+  }
+
+  function showAvailabilityNotice(message, options = {}) {
+    const text = String(message || '').trim();
+    if (!text) return;
+    const suggestion =
+      options.suggestion
+      || buildAvailabilitySuggestion(options.availability || lastAvailabilitySnapshot, text);
+
+    if (!availabilityPopup || !availabilityBody) {
+      showToast([text, suggestion].filter(Boolean).join(' '), false, 8000);
+      return;
+    }
+
+    if (availabilityTitle) {
+      availabilityTitle.textContent = options.title
+        || tx('booking.availabilityNoticeTitle', null, 'Unfortunately, that room type is no longer available');
+    }
+    availabilityBody.textContent = text;
+    if (availabilitySuggest) {
+      if (suggestion) {
+        availabilitySuggest.hidden = false;
+        availabilitySuggest.textContent = suggestion;
+      } else {
+        availabilitySuggest.hidden = true;
+        availabilitySuggest.textContent = '';
+      }
+    }
+    availabilityPopup.hidden = false;
+    document.body.classList.add('guest-availability-popup-open');
+    availabilityPopup.querySelector('[data-guest-availability-close].guest-btn')?.focus();
+    showToast(text, false, 5000);
+  }
+
+  availabilityPopup?.querySelectorAll('[data-guest-availability-close]').forEach((el) => {
+    el.addEventListener('click', closeAvailabilityNotice);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (availabilityPopup && !availabilityPopup.hidden) {
+      closeAvailabilityNotice();
+    }
+  });
+
+  window.MoriGuestUi = window.MoriGuestUi || {};
+  window.MoriGuestUi.showAvailabilityNotice = showAvailabilityNotice;
+  window.MoriGuestUi.closeAvailabilityNotice = closeAvailabilityNotice;
+
+  function isAvailabilityConflictMessage(message) {
+    const text = String(message || '');
+    return /only \d+ room\(s\) available|no longer available|not enough rooms|exceed availability|fully booked/i.test(
+      text
+    );
+  }
+
+  function buildCartAvailabilityExceededMessage(items = lastAvailabilitySnapshot) {
+    const byId = new Map(
+      (Array.isArray(items) ? items : []).map((item) => [
+        Number(item.roomTypeId ?? item.RoomTypeId),
+        item,
+      ])
+    );
+    const exceeded = [];
+    bookingCart.forEach((line) => {
+      const item = byId.get(Number(line.roomTypeId || 0));
+      const remaining = item ? Number(item.remaining ?? item.Remaining ?? 0) : 0;
+      const qty = Number(line.qty || 0);
+      if (qty > remaining) {
+        exceeded.push(
+          tx(
+            'booking.cartLineExceeded',
+            { room: line.roomType || 'Room', qty, remaining },
+            `${line.roomType || 'Room'} has only ${remaining} room(s) available for those dates (you selected ${qty}).`
+          )
+        );
+      }
+    });
+    if (!exceeded.length) return '';
+    return exceeded.join(' ');
+  }
+
+  function notifyCartAvailabilityExceeded(hasShortage) {
+    if (!hasShortage || !bookingCart.length) return;
+    const message = buildCartAvailabilityExceededMessage();
+    if (!message) return;
+    setMessage(bookMsg, message, false);
+    const offerMsgEl = document.getElementById('offerDatesAvailabilityMsg');
+    if (offerMsgEl) {
+      offerMsgEl.hidden = false;
+      offerMsgEl.textContent = message;
+    }
+    showAvailabilityNotice(message, {
+      availability: lastAvailabilitySnapshot,
+      title: tx(
+        'booking.cartAvailabilityNoticeTitle',
+        null,
+        'Unfortunately, a room in your cart is no longer available'
+      ),
+    });
   }
 
   function openModal(modal) {
@@ -609,12 +747,27 @@
       list.className = 'guest-inclusion-items';
       group.items.forEach((item) => {
         const li = document.createElement('li');
-        li.textContent = item;
+        const source = String(item || '').trim();
+        li.textContent =
+          window.MoriI18n?.translateInclusionItem?.(source) || source;
+        li.dataset.inclusionSource = source;
         list.appendChild(li);
       });
       section.appendChild(list);
       container.appendChild(section);
     });
+
+    if ((window.MoriI18n?.getLang?.() || 'en') === 'en') return;
+    void (async () => {
+      const nodes = container.querySelectorAll('li[data-inclusion-source]');
+      await Promise.all(
+        Array.from(nodes).map(async (li) => {
+          const source = li.dataset.inclusionSource || '';
+          const translated = await window.MoriI18n?.translateContent?.(source);
+          if (translated) li.textContent = translated;
+        })
+      );
+    })();
   }
 
   function showDetailsPhoto(index) {
@@ -687,7 +840,7 @@
     }
   }
 
-  function fillDetails(roomName) {
+  async function fillDetails(roomName) {
     const card = findRoomCard(roomName);
     if (!card || !detailsModal) return;
 
@@ -699,7 +852,11 @@
     const inclusionsEl = detailsModal.querySelector('#detailsInclusions');
     const bookBtn = detailsModal.querySelector('#detailsBookBtn');
     const statusPill = detailsModal.querySelector('#detailsStatusPill');
-    const fullDesc = card.querySelector('.guest-room-desc-full')?.textContent?.trim() || '';
+    const fullDesc =
+      (card.dataset.description || '').trim() ||
+      card.querySelector('.guest-room-desc-full')?.getAttribute('data-translate-source')?.trim() ||
+      card.querySelector('.guest-room-desc-full')?.textContent?.trim() ||
+      '';
 
     detailsModal.dataset.currentRoom = card.dataset.roomType || roomName;
 
@@ -708,7 +865,9 @@
     const formattedPrice = `₱${rawPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
     const isAvailable = Number(card.dataset.available || 0) > 0;
 
-    if (title) title.textContent = roomTypeStr;
+    if (title) {
+      title.textContent = window.MoriI18n?.translateRoomTypeName?.(roomTypeStr) || roomTypeStr;
+    }
     if (price) price.textContent = formattedPrice;
     if (occupancy) {
       occupancy.textContent = tx(
@@ -753,6 +912,19 @@
 
     detailsPhotos = parseJsonArray(card.dataset.images);
     showDetailsPhoto(0);
+
+    const [localizedName, localizedDesc] = await Promise.all([
+      window.MoriI18n?.translateContent?.(roomTypeStr) ?? roomTypeStr,
+      window.MoriI18n?.translateContent?.(fullDesc) ?? fullDesc,
+    ]);
+    if (detailsModal.dataset.currentRoom !== (card.dataset.roomType || roomName)) return;
+    if (title && localizedName) title.textContent = localizedName;
+    if (description) {
+      description.textContent =
+        localizedDesc ||
+        fullDesc ||
+        tx('details.noDescription', null, 'No description provided.');
+    }
   }
 
   // Stage photo zoom & touch swipe support
@@ -2389,12 +2561,12 @@
         ? tx(
             'booking.arrivalDiscountBlockedByOffer',
             null,
-            'Senior Citizen and PWD discounts are verified at arrival only, and cannot be combined with this special offer.'
+            'Senior Citizen and PWD discounts cannot be combined with this special offer. Choose the promo or the 20% discount — not both.'
           )
         : tx(
             'booking.arrivalDiscountHint',
             null,
-            'Senior Citizen and PWD discounts take effect only at arrival. Reception verifies your ID at the front desk — they are not applied online. They cannot be combined with an active special offer or walk-in promo.'
+            'Senior Citizen and PWD discounts (20% off the stay) are applied when reception confirms or saves stay fees. Bring valid ID for verification. They cannot be combined with an active special offer or walk-in promo.'
           );
     }
   }
@@ -2757,12 +2929,7 @@
   let lastAvailabilitySnapshot = [];
 
   function formatSoldOutDateLabel(isoDate) {
-    if (!isoDate) return '';
-    const parts = String(isoDate).split('-').map(Number);
-    if (parts.length < 3) return isoDate;
-    const d = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
-    if (Number.isNaN(d.getTime())) return isoDate;
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return window.MoriStayMath?.formatSoldOutDateLabel?.(isoDate) ?? (isoDate || '');
   }
 
   function soldOutDatesForItem(item) {
@@ -2964,8 +3131,8 @@
     return hasShortage;
   }
 
-  async function refreshLiveAvailability(checkIn, checkOut) {
-    if (validateDates(checkIn, checkOut)) return;
+  async function refreshLiveAvailability(checkIn, checkOut, options = {}) {
+    if (validateDates(checkIn, checkOut)) return false;
     try {
       const checkInAtUtc = toManilaDateTimeIso(checkIn, selectedCheckInTime());
       const checkoutTimeUtc = toManilaDateTimeIso(checkOut, selectedCheckOutTime());
@@ -2973,34 +3140,69 @@
       const response = await fetch(`/api/bookings/availability?${query}`, {
         headers: { Accept: 'application/json' },
       });
-      if (!response.ok) return;
+      if (!response.ok) return false;
       const hasShortage = applyLiveAvailability(await response.json());
       if (hasShortage) {
-        setMessage(
-          bookMsg,
-          tx(
+        if (options.fromRealtime || bookingCart.length) {
+          notifyCartAvailabilityExceeded(true);
+        } else {
+          const notice = tx(
             'booking.notEnoughRoomsDates',
             null,
             'Not enough rooms for these dates (other bookings or reservations may already hold them). Adjust room types or dates.'
-          ),
-          false
-        );
+          );
+          setMessage(bookMsg, notice, false);
+          showAvailabilityNotice(notice, { availability: lastAvailabilitySnapshot });
+        }
       } else if (hasSoldOutConflict() && bookWizardStep !== 'dates') {
-        setMessage(bookMsg, buildSoldOutMessages(lastAvailabilitySnapshot).join(' '), false);
+        const soldOutText = buildSoldOutMessages(lastAvailabilitySnapshot).join(' ');
+        setMessage(bookMsg, soldOutText, false);
+        if (soldOutText) {
+          showAvailabilityNotice(soldOutText, { availability: lastAvailabilitySnapshot });
+        }
       } else if (bookWizardStep === 'dates') {
         setMessage(bookMsg, '', false);
       }
+      return hasShortage;
     } catch {
       // The submit endpoint performs the authoritative availability check.
+      return false;
     }
   }
 
+  let liveAvailabilityRefreshTimer = 0;
+  function scheduleLiveAvailabilityRefresh(fromRealtime = false) {
+    clearTimeout(liveAvailabilityRefreshTimer);
+    liveAvailabilityRefreshTimer = setTimeout(() => {
+      const checkIn = modalCheckIn?.value || document.getElementById('checkIn')?.value || '';
+      const checkOut = modalCheckOut?.value || document.getElementById('checkOut')?.value || '';
+      if (!checkIn || !checkOut) return;
+      void refreshLiveAvailability(checkIn, checkOut, { fromRealtime });
+    }, 280);
+  }
+
+  function initGuestCatalogRealtime() {
+    if (!document.getElementById('rooms') || typeof signalR === 'undefined') return;
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl('/hubs/guest-catalog')
+      .withAutomaticReconnect()
+      .build();
+    connection.on('GuestCatalogChanged', (reason) => {
+      const key = String(reason || 'updated').toLowerCase();
+      if (key === 'availability') {
+        scheduleLiveAvailabilityRefresh(true);
+        return;
+      }
+      scheduleGuestCatalogRefresh();
+      if (key === 'rooms' || key === 'updated') {
+        scheduleLiveAvailabilityRefresh(true);
+      }
+    });
+    connection.start().catch(() => {});
+  }
+
   function nightCount(checkIn, checkOut) {
-    if (!checkIn || !checkOut) return 0;
-    const start = new Date(`${checkIn}T12:00:00`);
-    const end = new Date(`${checkOut}T12:00:00`);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
-    return Math.max(0, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+    return window.MoriStayMath?.nightCount?.(checkIn, checkOut) ?? 0;
   }
 
   function stayTotalAmount() {
@@ -3850,8 +4052,26 @@
     const visible = inclusions.slice(0, 3);
     const more = inclusions.length - visible.length;
     tagsEl.innerHTML =
-      visible.map((inc) => `<li>${escapeHtml(inc)}</li>`).join('') +
+      visible
+        .map((inc) => {
+          const source = String(inc || '').trim();
+          const label = window.MoriI18n?.translateInclusionItem?.(source) || source;
+          return `<li data-inclusion-source="${escapeHtml(source)}">${escapeHtml(label)}</li>`;
+        })
+        .join('') +
       (more > 0 ? `<li data-i18n-more="${more}">+${more} more</li>` : '');
+
+    if ((window.MoriI18n?.getLang?.() || 'en') === 'en') return;
+    void (async () => {
+      const nodes = tagsEl.querySelectorAll('li[data-inclusion-source]');
+      await Promise.all(
+        Array.from(nodes).map(async (li) => {
+          const source = li.getAttribute('data-inclusion-source') || '';
+          const translated = await window.MoriI18n?.translateContent?.(source);
+          if (translated) li.textContent = translated;
+        })
+      );
+    })();
   }
 
   function applyGuestRoomTypeToCard(card, type) {
@@ -3866,6 +4086,7 @@
     card.setAttribute('data-available', String(type.availableCount));
     card.setAttribute('data-images', JSON.stringify(type.images));
     card.setAttribute('data-inclusions', JSON.stringify(type.inclusions));
+    card.setAttribute('data-description', type.description || '');
 
     const title = card.querySelector(`#room-title-${type.roomTypeId}`) || card.querySelector('h2');
     if (title) title.textContent = type.name;
@@ -4108,16 +4329,6 @@
   function scheduleGuestCatalogRefresh() {
     clearTimeout(guestCatalogRefreshTimer);
     guestCatalogRefreshTimer = setTimeout(() => refreshGuestCatalog(), 300);
-  }
-
-  function initGuestCatalogRealtime() {
-    if (!document.getElementById('rooms') || typeof signalR === 'undefined') return;
-    const connection = new signalR.HubConnectionBuilder()
-      .withUrl('/hubs/guest-catalog')
-      .withAutomaticReconnect()
-      .build();
-    connection.on('GuestCatalogChanged', () => scheduleGuestCatalogRefresh());
-    connection.start().catch(() => {});
   }
 
   async function loadSpecialOffers(forceReload = false) {
@@ -4373,7 +4584,26 @@
 
   const BOOK_DRAFT_KEY = 'mori.guestBookDraft';
 
+  function canPersistBookDraft() {
+    if (typeof window.moriAllowsOptionalStorage === 'function') {
+      return window.moriAllowsOptionalStorage();
+    }
+    return window.moriCookieConsent === 'all';
+  }
+
+  function clearBookDraft() {
+    try {
+      sessionStorage.removeItem(BOOK_DRAFT_KEY);
+    } catch {
+      /* private mode */
+    }
+  }
+
   function persistBookDraft() {
+    if (!canPersistBookDraft()) {
+      clearBookDraft();
+      return;
+    }
     try {
       sessionStorage.setItem(
         BOOK_DRAFT_KEY,
@@ -4396,6 +4626,10 @@
   }
 
   function restoreBookDraft() {
+    if (!canPersistBookDraft()) {
+      clearBookDraft();
+      return;
+    }
     let raw = '';
     try {
       raw = sessionStorage.getItem(BOOK_DRAFT_KEY) || '';
@@ -5872,7 +6106,19 @@
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to submit booking.';
       setMessage(bookMsg, message, false);
-      showToast(message);
+      if (isAvailabilityConflictMessage(message)) {
+        showAvailabilityNotice(message, {
+          availability: lastAvailabilitySnapshot,
+          title: tx(
+            'booking.availabilityNoticeTitle',
+            null,
+            'Unfortunately, that room type is no longer available'
+          ),
+        });
+        setBookWizardStep('rooms');
+      } else {
+        showToast(message);
+      }
     } finally {
       if (submitButton) {
         submitButton.textContent = submitButton.dataset.originalText || 'Submit booking';
@@ -6077,6 +6323,10 @@
     }
   });
 
+  document.addEventListener('mori:cookieconsent', (event) => {
+    if (!event.detail?.allowsOptionalStorage) clearBookDraft();
+  });
+
   document.addEventListener('mori:langchange', () => {
     syncGuestFlowSummary();
     if (guestsModal && !guestsModal.hidden) {
@@ -6109,5 +6359,57 @@
       const doneBtn = successModal.querySelector('[data-close-modal].guest-btn-primary');
       if (doneBtn) doneBtn.textContent = tx('booking.done', null, 'Done');
     }
+    if (detailsModal && !detailsModal.hidden && detailsModal.dataset.currentRoom) {
+      void fillDetails(detailsModal.dataset.currentRoom);
+    }
+    void (async () => {
+      const cards = document.querySelectorAll('.guest-room[data-room-type]');
+      await Promise.all(
+        Array.from(cards).map(async (card) => {
+          const rawName = card.getAttribute('data-room-type') || '';
+          const rawDesc = (card.getAttribute('data-description') || '').trim();
+          if (!rawName) return;
+          const title = card.querySelector('h2');
+          if (title) {
+            title.textContent =
+              (await window.MoriI18n?.translateContent?.(rawName)) || rawName;
+          }
+          const descFull = card.querySelector('.guest-room-desc-full');
+          if (descFull && rawDesc) {
+            const translatedDesc =
+              (await window.MoriI18n?.translateContent?.(rawDesc)) || rawDesc;
+            descFull.textContent = translatedDesc;
+          }
+          const descEl = card.querySelector('.guest-room-feature-desc');
+          if (descEl && rawDesc) {
+            const translatedDesc =
+              (await window.MoriI18n?.translateContent?.(rawDesc)) || rawDesc;
+            descEl.removeAttribute('data-i18n');
+            descEl.textContent =
+              translatedDesc.length > 180
+                ? `${translatedDesc.slice(0, 180).trimEnd()}…`
+                : translatedDesc;
+          }
+          const inclusions = parseJsonArray(card.getAttribute('data-inclusions'));
+          if (inclusions.length) renderGuestRoomFeatureTags(card, inclusions);
+        })
+      );
+
+      const galleryRooms = document.querySelectorAll('.guest-gallery-room[data-room-type]');
+      await Promise.all(
+        Array.from(galleryRooms).map(async (card) => {
+          const rawName = card.getAttribute('data-room-type') || '';
+          if (!rawName) return;
+          const title = card.querySelector('strong');
+          const translated =
+            (await window.MoriI18n?.translateContent?.(rawName)) || rawName;
+          if (title) title.textContent = translated;
+          card.setAttribute(
+            'aria-label',
+            tx('wiz.viewRoomDetails', { room: translated }, `View ${translated} details`)
+          );
+        })
+      );
+    })();
   });
 })();

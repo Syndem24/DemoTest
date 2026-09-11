@@ -15,7 +15,7 @@ public sealed class ChatGuardrails : IChatGuardrails
 {
     private static readonly HashSet<string> AllowedLangs = new(StringComparer.OrdinalIgnoreCase)
     {
-        "en", "ja", "ko", "zh-Hans", "zh", "ru", "fil", "tl"
+        "en", "ja", "ko", "zh-Hans", "zh", "ru", "fil", "tl", "ceb", "bisaya"
     };
 
     private static readonly Regex BookingLookup = new(
@@ -39,7 +39,7 @@ public sealed class ChatGuardrails : IChatGuardrails
         reply = string.Empty;
         if (string.IsNullOrWhiteSpace(message))
         {
-            reply = "Please type a short question about the hotel.";
+            reply = "Whenever you’re ready, type a short question about the hotel — I’m happy to help.";
             return true;
         }
 
@@ -47,7 +47,8 @@ public sealed class ChatGuardrails : IChatGuardrails
         if (BookingLookup.IsMatch(normalized) || BookingLookupMultilingual.IsMatch(normalized))
         {
             reply =
-                "I cannot look up, change, or cancel personal bookings, payments, or card details in chat. Please call the front desk or use Booking history after you sign in.";
+                "I care about getting your stay details right, so I can’t look up, change, or cancel personal bookings or payments in chat. "
+                + "Please call our front desk, or sign in and open Booking history — we’ll take good care of you there.";
             return true;
         }
 
@@ -100,7 +101,18 @@ public sealed class ChatGuardrails : IChatGuardrails
             return "en";
         var code = lang.Trim();
         if (AllowedLangs.Contains(code))
-            return code.Equals("zh", StringComparison.OrdinalIgnoreCase) ? "zh-Hans" : code;
+        {
+            if (code.Equals("zh", StringComparison.OrdinalIgnoreCase))
+                return "zh-Hans";
+            if (code.Equals("tl", StringComparison.OrdinalIgnoreCase)
+                || code.Equals("fil", StringComparison.OrdinalIgnoreCase))
+                return "fil";
+            if (code.Equals("bisaya", StringComparison.OrdinalIgnoreCase)
+                || code.Equals("cebuano", StringComparison.OrdinalIgnoreCase)
+                || code.Equals("ceb", StringComparison.OrdinalIgnoreCase))
+                return "ceb";
+            return code;
+        }
         return "en";
     }
 }

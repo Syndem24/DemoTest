@@ -50,13 +50,13 @@ namespace TestingDemo.Data.Migrations
                 INSERT INTO [dbo].[SystemFlushLog] ([Kind], [FlushedAtUtc], [PerformedBy], [RecordCount], [FileName], [Summary])
                 SELECT N'Payments', [FlushedAtUtc], [PerformedBy], [RecordCount], [FileName], [Summary]
                 FROM [dbo].[PaymentFlushLog];
+
+                IF OBJECT_ID(N'[dbo].[BookingHistoryFlushLog]', N'U') IS NOT NULL
+                    DROP TABLE [dbo].[BookingHistoryFlushLog];
+
+                IF OBJECT_ID(N'[dbo].[PaymentFlushLog]', N'U') IS NOT NULL
+                    DROP TABLE [dbo].[PaymentFlushLog];
                 """);
-
-            migrationBuilder.DropTable(
-                name: "BookingHistoryFlushLog");
-
-            migrationBuilder.DropTable(
-                name: "PaymentFlushLog");
         }
 
         /// <inheritdoc />

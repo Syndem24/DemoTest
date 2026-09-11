@@ -12,81 +12,75 @@
 
     <article class="guest-legal-article">
         <section class="guest-legal-block" aria-labelledby="termsWho">
-            <h2 id="termsWho">1. Who these terms cover</h2>
+            <h2 id="termsWho" data-i18n="legal.terms.whoTitle">1. Who these terms cover</h2>
             <p>
-                Mori International Hotel (“we”, “the hotel”) operates this site for guests booking a stay at our property in Mandaue City, Cebu.
-                By creating a guest account, submitting a booking request, or using this site, you agree to these terms and to our
-                <a asp-controller="Booking" asp-action="PrivacyPolicy" asp-route-from="@fromAgreement">Privacy policy</a>.
+                <span data-i18n="legal.terms.whoBefore">Mori International Hotel (“we”, “the hotel”) operates this site for guests booking a stay at our property in Mandaue City, Cebu. By creating a guest account, submitting a booking request, or using this site, you agree to these terms and to our</span>
+                <a asp-controller="Booking" asp-action="PrivacyPolicy" asp-route-from="@fromAgreement" data-i18n="legal.privacyTitle">Privacy policy</a><span data-i18n="legal.period">.</span>
             </p>
         </section>
 
         <section class="guest-legal-block" aria-labelledby="termsAccounts">
-            <h2 id="termsAccounts">2. Guest accounts</h2>
-            <p>
-                Guest accounts are created with Google sign-in. The account is for guests only — it is not a staff login and does not grant access to hotel operations tools.
-                You must keep your Google account secure. You may log out at any time from the profile menu.
+            <h2 id="termsAccounts" data-i18n="legal.terms.accountsTitle">2. Guest accounts</h2>
+            <p data-i18n="legal.terms.accountsP1">
+                Guest accounts are created with Google sign-in. The account is for guests only — it is not a staff login and does not grant access to hotel operations tools. You must keep your Google account secure. You may log out at any time from the profile menu.
             </p>
-            <p>
-                You agree to give accurate stay details (name, contact information, dates, and guest counts) and not to misuse booking tools or other guests’ information.
-                Fraudulent or abusive activity may lead to account or booking restrictions.
+            <p data-i18n="legal.terms.accountsP2">
+                You agree to give accurate stay details (name, contact information, dates, and guest counts) and not to misuse booking tools or other guests’ information. Fraudulent or abusive activity may lead to account or booking restrictions.
             </p>
         </section>
 
         <section class="guest-legal-block" aria-labelledby="termsBookings">
-            <h2 id="termsBookings">3. Bookings and reservations</h2>
-            <p>
-                A request on this site is sent to the hotel for review. We may confirm, request more information, or decline a stay if rooms are unavailable or details cannot be verified.
-                Reception may call the number you provide before check-in.
+            <h2 id="termsBookings" data-i18n="legal.terms.bookingsTitle">3. Bookings and reservations</h2>
+            <p data-i18n="legal.terms.bookingsP1">
+                A request on this site is sent to the hotel for review. We may confirm, request more information, or decline a stay if rooms are unavailable or details cannot be verified. Reception may call the number you provide before check-in.
             </p>
-            <p>
+            <p data-i18n="legal.terms.bookingsP2">
                 Requests made well ahead of arrival may be treated as a reservation. Requests closer to arrival (within the site’s minimum lead time) are treated as a booking. Either way, the stay is not guaranteed until the hotel confirms it.
             </p>
         </section>
 
         <section class="guest-legal-block" aria-labelledby="termsStay">
-            <h2 id="termsStay">4. Terms of stay</h2>
-            <p>
+            <h2 id="termsStay" data-i18n="legal.terms.stayTitle">4. Terms of stay</h2>
+            <p data-i18n="legal.terms.stayP">
                 Our priority is a calm, comfortable stay. From arrival through checkout, guests are asked to respect house policies, other guests, and hotel staff.
             </p>
             <ul>
-                <li>Standard check-in is 14:00 (Manila time). Early check-in at 11:30 may be offered for a fee when available.</li>
-                <li>Standard check-out is 12:00. Late checkout may be offered by the hour, up to the hotel’s posted limit, for a fee.</li>
-                <li>Each room includes two guests. Extra persons may be charged per night, subject to room capacity.</li>
-                <li>Senior Citizen and PWD discounts are claimed at arrival with valid ID. They are not applied online and cannot be combined with an active special offer or walk-in promo.</li>
+                <li data-i18n="legal.terms.stayLi1">Standard check-in is 14:00 (Manila time). Early check-in at 11:30 may be offered for a fee when available.</li>
+                <li data-i18n="legal.terms.stayLi2">Standard check-out is 12:00. Late checkout may be offered by the hour, up to the hotel’s posted limit, for a fee.</li>
+                <li data-i18n="legal.terms.stayLi3">Each room includes two guests. Extra persons may be charged per night, subject to room capacity.</li>
+                <li data-i18n="legal.terms.stayLi4">Senior Citizen and PWD discounts (20% off the stay) apply when reception confirms or saves stay fees, with valid ID. They cannot be combined with an active special offer or walk-in promo.</li>
             </ul>
         </section>
 
         <section class="guest-legal-block" aria-labelledby="termsRates">
-            <h2 id="termsRates">5. Rates, offers, and payment</h2>
-            <p>
-                Nightly rates and special offers shown on this site apply only while they are active and only for the room types listed.
-                Some offers require cash on arrival. The booking summary before you submit is the amount we will record for the stay, plus any stay fees you select (early check-in, late checkout, extra person).
+            <h2 id="termsRates" data-i18n="legal.terms.ratesTitle">5. Rates, offers, and payment</h2>
+            <p data-i18n="legal.terms.ratesP">
+                Nightly rates and special offers shown on this site apply only while they are active and only for the room types listed. Some offers require cash on arrival. The booking summary before you submit is the amount we will record for the stay, plus any stay fees you select (early check-in, late checkout, extra person).
             </p>
         </section>
 
         <section class="guest-legal-block" aria-labelledby="termsCancel">
-            <h2 id="termsCancel">6. Cancellation</h2>
-            <p>
+            <h2 id="termsCancel" data-i18n="legal.terms.cancelTitle">6. Cancellation</h2>
+            <p data-i18n="legal.terms.cancelP">
                 Cancellation and prepayment rules can vary by booking and offer. If you need to change or cancel, contact the hotel using the details on our Contact section. We will confirm any charges or refunds in writing when we can.
             </p>
         </section>
 
         <section class="guest-legal-block" aria-labelledby="termsData">
-            <h2 id="termsData">7. Personal data</h2>
+            <h2 id="termsData" data-i18n="legal.terms.dataTitle">7. Personal data</h2>
             <p>
-                How we collect and use your information is explained in the
-                <a asp-controller="Booking" asp-action="PrivacyPolicy" asp-route-from="@fromAgreement">Privacy policy</a>.
-                Creating a guest account requires your consent to process personal data for that account, bookings, and stay-related contact.
+                <span data-i18n="legal.terms.dataBefore">How we collect and use your information is explained in the</span>
+                <a asp-controller="Booking" asp-action="PrivacyPolicy" asp-route-from="@fromAgreement" data-i18n="legal.privacyTitle">Privacy policy</a><span data-i18n="legal.terms.dataAfter">. Creating a guest account requires your consent to process personal data for that account, bookings, and stay-related contact.</span>
             </p>
         </section>
 
         <section class="guest-legal-block" aria-labelledby="termsContact">
-            <h2 id="termsContact">8. Contact</h2>
+            <h2 id="termsContact" data-i18n="legal.terms.contactTitle">8. Contact</h2>
             <p>
-                Mori International Hotel, AS Fortuna, Mandaue City, Cebu.
-                Email <a href="mailto:moriyamahotel@gmail.com">moriyamahotel@gmail.com</a>,
-                hotel phone <a href="tel:+63322388855">(032) 238 8855</a>,
-                or 24/7 staff <a href="tel:+639604417525">+63 960 441 7525</a>.
+                <span data-i18n="legal.terms.contactBefore">Mori International Hotel, AS Fortuna, Mandaue City, Cebu. Email</span>
+                <a href="mailto:moriyamahotel@gmail.com">moriyamahotel@gmail.com</a><span data-i18n="legal.terms.contactPhone">, hotel phone</span>
+                <a href="tel:+63322388855">(032) 238 8855</a><span data-i18n="legal.terms.contactStaff">, or 24/7 staff</span>
+                <a href="tel:+639604417525">+63 960 441 7525</a><span data-i18n="legal.period">.</span>
             </p>
         </section>
     </article>

@@ -2,11 +2,13 @@
   const COOKIE_NAME = 'mori_cookie_consent';
   const STORAGE_KEY = 'mori.cookieConsent';
   const MAX_AGE = 60 * 60 * 24 * 180;
+  const DRAFT_KEYS = ['mori.wizStayDraft', 'mori.guestBookDraft'];
   const banner = document.querySelector('[data-guest-cookies]');
   if (!banner) return;
 
   const inner = banner.querySelector('.guest-cookies-inner');
   let heightObserver = null;
+  let pendingShow = false;
 
   function readConsent() {
     const match = document.cookie.match(/(?:^|;\s*)mori_cookie_consent=(all|necessary)(?:;|$)/);
@@ -20,6 +22,20 @@
     return '';
   }
 
+  function clearOptionalDrafts() {
+    DRAFT_KEYS.forEach((key) => {
+      try {
+        sessionStorage.removeItem(key);
+      } catch {
+        /* private mode */
+      }
+    });
+  }
+
+  function allowsOptionalStorage(value = window.moriCookieConsent) {
+    return value === 'all';
+  }
+
   function writeConsent(value) {
     const secure = location.protocol === 'https:' ? '; Secure' : '';
     document.cookie = `${COOKIE_NAME}=${value}; Path=/; Max-Age=${MAX_AGE}; SameSite=Lax${secure}`;
@@ -29,6 +45,14 @@
       /* private mode */
     }
     window.moriCookieConsent = value;
+    if (!allowsOptionalStorage(value)) {
+      clearOptionalDrafts();
+    }
+    document.dispatchEvent(
+      new CustomEvent('mori:cookieconsent', {
+        detail: { consent: value, allowsOptionalStorage: allowsOptionalStorage(value) },
+      })
+    );
   }
 
   function syncPad(on) {
@@ -44,6 +68,7 @@
   }
 
   function hideBanner() {
+    pendingShow = false;
     banner.hidden = true;
     banner.setAttribute('aria-hidden', 'true');
     if (heightObserver) {
@@ -78,10 +103,14 @@
       hideBanner();
       return;
     }
-    if (!chromeReady() && attempt < 50) {
-      window.setTimeout(() => maybeShow(attempt + 1), 160);
+    if (!chromeReady()) {
+      pendingShow = true;
+      if (attempt < 80) {
+        window.setTimeout(() => maybeShow(attempt + 1), 200);
+      }
       return;
     }
+    pendingShow = false;
     showBanner();
   }
 
@@ -98,6 +127,17 @@
     el.addEventListener('click', () => showBanner());
   });
 
+  document.addEventListener('mori:guestchrome', () => {
+    if (pendingShow || !readConsent()) maybeShow(0);
+  });
+
   window.moriCookieConsent = readConsent() || '';
+  window.moriAllowsOptionalStorage = () => allowsOptionalStorage();
+  window.moriClearOptionalDrafts = clearOptionalDrafts;
+
+  if (!allowsOptionalStorage(window.moriCookieConsent)) {
+    clearOptionalDrafts();
+  }
+
   maybeShow();
 })();

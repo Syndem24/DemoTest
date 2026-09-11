@@ -1,5 +1,7 @@
 # Hotel Booking Demo
 
+Ops (single-instance, `/health`, backup/restore, secrets): see [docs/ops-deploy.md](docs/ops-deploy.md).
+
 ## Why Visual Studio dies after create (`ERR_CONNECTION_REFUSED` / `0xffffffff`)
 
 Visual Studio was opening the browser in a way that **ties the debugger to that browser window**. After you create a room (especially with photos / file picker), VS thinks the browser closed and **stops the app**. Cursor does not do this.
@@ -20,3 +22,6 @@ If it still stops, use **Ctrl+F5** or `.\run.ps1`.
 
 - Visual Studio / Cursor **F5**, or `.\run.ps1`
 - Site: **http://localhost:5288**
+- Health: **http://localhost:5288/health**
+
+LocalDB database name: `MoriHotel` (override with user secrets / env in production). Development enables first-run admin seed; password goes to `%LocalAppData%\MoriInternationalHotel\first-run-admin.txt` (not logs).

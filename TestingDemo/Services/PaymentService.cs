@@ -294,6 +294,7 @@ public sealed class PaymentService : IPaymentService
             {
                 query = query.Where(p =>
                     p.Method == PaymentMethod.EWallet ||
+                    p.Method == PaymentMethod.BankTransfer ||
                     p.Method == PaymentMethod.Maya);
             }
             else
@@ -606,9 +607,10 @@ public sealed class PaymentService : IPaymentService
 
     private static string FormatMethodLabel(PaymentMethod method) => method switch
     {
-        PaymentMethod.BankTransfer => "Bank transfer",
-        PaymentMethod.EWallet or PaymentMethod.Maya => "E-wallet",
+        PaymentMethod.BankTransfer => "E-wallet (InstaPay QR)",
+        PaymentMethod.EWallet or PaymentMethod.Maya => "E-wallet (InstaPay QR)",
         PaymentMethod.Card => "Card",
+        PaymentMethod.Cash => "Cash",
         _ => method.ToString()
     };
 

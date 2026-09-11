@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: TestingDemo
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore
+        run: dotnet restore TestingDemo.csproj
+
+      - name: Build
+        run: dotnet build TestingDemo.csproj -c Release --no-restore /p:SkipSpaBuild=true
+
+      - name: Verify health check is mapped
+        shell: pwsh
+        run: |
+          $program = Get-Content -Raw .\Program.cs
+          if ($program -notmatch 'MapHealthChecks\("/health"\)') {
+            throw "Program.cs must map /health"
+          }
+          if ($program -notmatch 'ValidateAntiForgeryToken') {
+            # SpecialOffers mutations live on the API controller
+          }
+          $offers = Get-Content -Raw .\Controllers\SpecialOffersApiController.cs
+          $mutations = ([regex]::Matches($offers, '\[ValidateAntiForgeryToken\]')).Count
+          if ($mutations -lt 3) {
+            throw "SpecialOffersApiController must ValidateAntiForgeryToken on deactivate/reactivate/delete"
+          }
+          $appsettings = Get-Content -Raw .\appsettings.json | ConvertFrom-Json
+          if ($appsettings.Identity.AllowBootstrapSeed -ne $false) {
+            throw "appsettings.json Identity:AllowBootstrapSeed must be false"
+          }
+          if ($appsettings.ConnectionStrings.DefaultConnection -match 'Kristian|AttachDbFilename') {
+            throw "Committed connection string must not use a personal AttachDbFilename path"
+          }
+          Write-Host "Pre-deploy config gates OK"

@@ -29,3 +29,7 @@ migrate-*.txt
 smoke-*.txt
 t-HotelBookingDb*.txt
 *.log
+
+## SQL backups (local)
+backups/
+*.bak

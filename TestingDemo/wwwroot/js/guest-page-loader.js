@@ -44,6 +44,7 @@
       loader.setAttribute('aria-busy', 'false');
       html.classList.remove('guest-is-loading');
       document.body?.classList.remove('guest-is-loading');
+      document.dispatchEvent(new CustomEvent('mori:guestchrome', { detail: { reason: 'page-loader-done' } }));
 
       const onEnd = (event) => {
         if (event.target !== loader) return;

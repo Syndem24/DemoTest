@@ -873,13 +873,8 @@
   }
 
   function nightCount() {
-    const inDate = checkInDate?.value || '';
-    const outDate = checkOutDate?.value || '';
-    if (!inDate || !outDate) return 0;
-    const start = new Date(`${inDate}T12:00:00`);
-    const end = new Date(`${outDate}T12:00:00`);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return 0;
-    return Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+    const n = window.MoriStayMath?.nightCount?.(checkInDate?.value || '', checkOutDate?.value || '') ?? 0;
+    return n < 1 ? 0 : Math.max(1, n);
   }
 
   function earlyFee(count) {
@@ -1029,12 +1024,7 @@
   }
 
   function formatSoldOutDateLabel(isoDate) {
-    if (!isoDate) return '';
-    const parts = String(isoDate).split('-').map(Number);
-    if (parts.length < 3) return isoDate;
-    const d = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
-    if (Number.isNaN(d.getTime())) return isoDate;
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return window.MoriStayMath?.formatSoldOutDateLabel?.(isoDate) ?? (isoDate || '');
   }
 
   function totalRemainingInventory() {

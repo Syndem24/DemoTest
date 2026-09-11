@@ -111,16 +111,11 @@
   }
 
   function parseYmd(value) {
-    const [y, m, d] = String(value || '').split('-').map(Number);
-    if (!y || !m || !d) return null;
-    return Date.UTC(y, m - 1, d);
+    return window.MoriStayMath?.parseYmdToUtc?.(value) ?? null;
   }
 
   function nightsBetween(a, b) {
-    const start = parseYmd(a);
-    const end = parseYmd(b);
-    if (start == null || end == null) return 0;
-    return Math.max(0, Math.round((end - start) / 86400000));
+    return window.MoriStayMath?.nightsBetween?.(a, b) ?? 0;
   }
 
   /** Check-in on or after the same calendar day next month (Manila). Soft warning only. */
@@ -1016,8 +1011,149 @@
     const occupancy = Number(card.getAttribute('data-occupancy') || 0);
     const id = Number(card.getAttribute('data-room-type-id'));
     const available = Number(card.getAttribute('data-available') || 0);
+    if (available < 1) return false;
     if (usedOfType(id) >= available) return false;
     return stayRooms.some((room) => !room.roomTypeId && guestsFitOccupancy(occupancy, room.guests));
+  }
+
+  function isCardFullyBooked(card) {
+    return Number(card?.getAttribute('data-available') || 0) < 1;
+  }
+
+  let lastStayAvailability = [];
+  let stayAvailabilityTimer = 0;
+
+  function pruneAssignmentsToAvailability() {
+    const byType = new Map();
+    stayRooms.forEach((slot, index) => {
+      if (!slot.roomTypeId) return;
+      const id = Number(slot.roomTypeId);
+      const list = byType.get(id) || [];
+      list.push(index);
+      byType.set(id, list);
+    });
+    byType.forEach((indexes, id) => {
+      const card = cards().find((el) => Number(el.getAttribute('data-room-type-id')) === id);
+      const available = Number(card?.getAttribute('data-available') || 0);
+      while (indexes.length > available) {
+        const dropAt = indexes.pop();
+        if (dropAt != null) stayRooms[dropAt].roomTypeId = null;
+      }
+    });
+  }
+
+  function applyStayAvailability(items) {
+    lastStayAvailability = Array.isArray(items) ? items : [];
+    const byId = new Map(
+      lastStayAvailability.map((item) => [Number(item.roomTypeId ?? item.RoomTypeId), item])
+    );
+
+    cards().forEach((card) => {
+      if (!card.hasAttribute('data-capacity')) {
+        card.setAttribute(
+          'data-capacity',
+          String(Number(card.getAttribute('data-available') || 0))
+        );
+      }
+      const id = Number(card.getAttribute('data-room-type-id'));
+      const capacity = Number(card.getAttribute('data-capacity') || 0);
+      const item = byId.get(id);
+      const remaining = item
+        ? Math.max(0, Number(item.remaining ?? item.Remaining ?? 0))
+        : lastStayAvailability.length
+          ? 0
+          : Math.max(0, Number(card.getAttribute('data-available') || capacity));
+      card.setAttribute('data-available', String(remaining));
+      const sold = remaining < 1;
+      card.classList.toggle('is-sold-out', sold);
+
+      const badge = card.querySelector('.wiz-badge');
+      if (badge) {
+        badge.classList.toggle('is-sold', sold);
+        badge.textContent = sold ? t('wiz.fullyBooked') : t('wiz.available');
+        badge.setAttribute('data-i18n', sold ? 'wiz.fullyBooked' : 'wiz.available');
+      }
+
+      const openCount = card.querySelector('[data-wiz-open-count]');
+      if (openCount) openCount.textContent = String(remaining);
+
+      const view = card.querySelector('.wiz-card-view');
+      if (view) {
+        const dot = view.querySelector('.wiz-card-view-dot');
+        const label = sold
+          ? t('wiz.fullyBooked')
+          : t('rooms.nAvailable', { n: remaining });
+        view.replaceChildren();
+        if (dot) view.append(dot);
+        else {
+          const mark = document.createElement('span');
+          mark.className = 'wiz-card-view-dot';
+          mark.setAttribute('aria-hidden', 'true');
+          view.append(mark);
+        }
+        view.append(document.createTextNode(` ${label}`));
+      }
+
+      const btn = card.querySelector('[data-wiz-toggle]');
+      if (btn) {
+        if (sold) {
+          btn.disabled = true;
+          btn.setAttribute('data-sold', '1');
+          btn.classList.remove('wiz-btn-remove');
+          btn.classList.add('wiz-btn-primary');
+          btn.innerHTML = `<span data-i18n="wiz.fullyBooked">${t('wiz.fullyBooked')}</span>`;
+        } else {
+          btn.removeAttribute('data-sold');
+        }
+      }
+    });
+
+    pruneAssignmentsToAvailability();
+    rebuildCartFromAssignments();
+  }
+
+  async function refreshStayAvailability() {
+    const checkIn = checkInEl?.value || '';
+    const checkOut = checkOutEl?.value || '';
+    if (!checkIn || !checkOut || nights() < 1) return;
+    try {
+      const query = new URLSearchParams({
+        checkInAtUtc: toManilaIso(checkIn, CHECKIN_TIME),
+        checkoutTimeUtc: toManilaIso(checkOut, CHECKOUT_TIME),
+      });
+      const response = await fetch(`/api/bookings/availability?${query}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) return;
+      applyStayAvailability(await response.json());
+      paintRooms();
+      paintCartChrome();
+      if (drawer && !drawer.hidden) paintDrawer();
+    } catch {
+      // Submit path remains authoritative.
+    }
+  }
+
+  function scheduleStayAvailabilityRefresh() {
+    window.clearTimeout(stayAvailabilityTimer);
+    stayAvailabilityTimer = window.setTimeout(() => {
+      void refreshStayAvailability();
+    }, 220);
+  }
+
+  function initStayAvailabilityRealtime() {
+    if (typeof signalR === 'undefined') return;
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl('/hubs/guest-catalog')
+      .withAutomaticReconnect()
+      .build();
+    connection.on('GuestCatalogChanged', (reason) => {
+      const key = String(reason || 'updated').toLowerCase();
+      if (key === 'availability' || key === 'rooms' || key === 'updated') {
+        scheduleStayAvailabilityRefresh();
+      }
+    });
+    connection.start().catch(() => {});
   }
 
   function rebuildCartFromAssignments() {
@@ -1265,7 +1401,16 @@
         mark.hidden = true;
       }
       const btn = card.querySelector('[data-wiz-toggle]');
-      if (!btn || btn.hasAttribute('data-sold')) return;
+      if (!btn) return;
+      if (isCardFullyBooked(card)) {
+        btn.disabled = true;
+        btn.setAttribute('data-sold', '1');
+        btn.classList.remove('wiz-btn-remove');
+        btn.classList.add('wiz-btn-primary');
+        btn.innerHTML = `<span data-i18n="wiz.fullyBooked">${t('wiz.fullyBooked')}</span>`;
+        return;
+      }
+      btn.removeAttribute('data-sold');
       const addable = canAssign(card);
       btn.disabled = !addable && qty < 1;
       btn.classList.toggle('wiz-btn-primary', addable || qty < 1);
@@ -1417,6 +1562,20 @@
     const id = Number(card.getAttribute('data-room-type-id'));
     const occupancy = Number(card.getAttribute('data-occupancy') || 0);
     showRoomsAlert('');
+    if (isCardFullyBooked(card) && usedOfType(id) < 1) {
+      showAvailabilityNotice(
+        t('booking.cartLineExceeded', {
+          room: card.getAttribute('data-room-type') || t('wiz.room'),
+          qty: 1,
+          remaining: 0,
+        }),
+        {
+          availability: lastStayAvailability,
+          title: t('booking.availabilityNoticeTitle'),
+        }
+      );
+      return;
+    }
     const hasOffer = Boolean(limitedOfferForType(id) || stayLongerOffersForType(id).length);
     if (!skipReveal && canAssign(card) && hasOffer) {
       openOffer(card);
@@ -1478,6 +1637,84 @@
       }, prefersReducedMotion() ? 0 : 220);
     }, options.holdMs ?? 2000);
   }
+
+  function isAvailabilityConflictMessage(message) {
+    return /only \d+ room\(s\) available|no longer available|not enough rooms|exceed availability|fully booked/i.test(
+      String(message || '')
+    );
+  }
+
+  function buildAvailabilitySuggestion(availability, message = '') {
+    const list = Array.isArray(availability) ? availability : [];
+    const alternatives = list
+      .filter((item) => Number(item.remaining ?? item.Remaining ?? 0) > 0)
+      .map((item) => item.roomTypeName || item.RoomTypeName)
+      .filter(Boolean);
+    const preferred = alternatives.filter((name) => {
+      if (!message) return true;
+      return !String(message).toLowerCase().includes(String(name).toLowerCase());
+    });
+    const picks = (preferred.length ? preferred : alternatives).slice(0, 3);
+    if (picks.length) {
+      return t('booking.availabilitySuggestOtherTypes', { rooms: picks.join(', ') });
+    }
+    return t('booking.availabilitySuggestDatesOrTypes');
+  }
+
+  function closeAvailabilityNotice() {
+    const popup = document.getElementById('guestAvailabilityPopup');
+    if (!popup || popup.hidden) return;
+    popup.hidden = true;
+    document.body.classList.remove('guest-availability-popup-open');
+  }
+
+  function showAvailabilityNotice(message, options = {}) {
+    const text = String(message || '').trim();
+    if (!text) return;
+
+    if (typeof window.MoriGuestUi?.showAvailabilityNotice === 'function') {
+      window.MoriGuestUi.showAvailabilityNotice(text, options);
+      return;
+    }
+
+    const popup = document.getElementById('guestAvailabilityPopup');
+    const titleEl = document.getElementById('guestAvailabilityTitle');
+    const bodyEl = document.getElementById('guestAvailabilityBody');
+    const suggestEl = document.getElementById('guestAvailabilitySuggest');
+    const suggestion =
+      options.suggestion
+      || buildAvailabilitySuggestion(options.availability, text);
+
+    if (!popup || !bodyEl) {
+      showToast([text, suggestion].filter(Boolean).join(' '), { alert: true, holdMs: 7000 });
+      return;
+    }
+
+    if (titleEl) {
+      titleEl.textContent =
+        options.title || t('booking.availabilityNoticeTitle');
+    }
+    bodyEl.textContent = text;
+    if (suggestEl) {
+      if (suggestion) {
+        suggestEl.hidden = false;
+        suggestEl.textContent = suggestion;
+      } else {
+        suggestEl.hidden = true;
+        suggestEl.textContent = '';
+      }
+    }
+    popup.hidden = false;
+    document.body.classList.add('guest-availability-popup-open');
+    popup.querySelector('[data-guest-availability-close].guest-btn')?.focus();
+    showToast(text, { alert: true, holdMs: 4200 });
+  }
+
+  document.getElementById('guestAvailabilityPopup')
+    ?.querySelectorAll('[data-guest-availability-close]')
+    .forEach((el) => {
+      el.addEventListener('click', closeAvailabilityNotice);
+    });
 
   function clearFlyers() {
     if (flyRaf) {
@@ -1814,9 +2051,13 @@
     const raw = String(name || '').trim();
     if (!raw) return '';
     const lower = raw.toLowerCase();
-    if (lower === 'wifi' || lower === 'wi-fi') return 'Wi-Fi';
-    if (lower === 'smart tv' || lower === 'tv set') return 'Smart TV';
-    return raw.charAt(0).toUpperCase() + raw.slice(1);
+    let normalized = raw;
+    if (lower === 'wifi' || lower === 'wi-fi') normalized = 'Wi-Fi';
+    else if (lower === 'smart tv' || lower === 'tv set') normalized = 'Smart TV';
+    else normalized = raw.charAt(0).toUpperCase() + raw.slice(1);
+    return window.MoriI18n?.translateInclusionItem?.(normalized)
+      || window.MoriI18n?.translateInclusionItem?.(raw)
+      || normalized;
   }
 
   function amenityIcon(name) {
@@ -1857,7 +2098,27 @@
     return groups;
   }
 
-  function renderAmenities(card) {
+  function amenitySourceLabel(name) {
+    const raw = String(name || '').trim();
+    if (!raw) return '';
+    const lower = raw.toLowerCase();
+    if (lower === 'wifi' || lower === 'wi-fi') return 'Wi-Fi';
+    if (lower === 'smart tv' || lower === 'tv set') return 'Smart TV';
+    return raw;
+  }
+
+  async function localizeAmenityLabel(name) {
+    const source = amenitySourceLabel(name);
+    const mapped = window.MoriI18n?.translateInclusionItem?.(source);
+    if (mapped && mapped !== source) return mapped;
+    if ((window.MoriI18n?.getLang?.() || 'en') === 'en') {
+      return displayAmenity(name);
+    }
+    const translated = await window.MoriI18n?.translateContent?.(source);
+    return translated || displayAmenity(name);
+  }
+
+  async function renderAmenities(card) {
     const host = detail?.querySelector('[data-wiz-detail-inclusions]');
     if (!host) return;
     const items = parseInclusions(card);
@@ -1866,10 +2127,21 @@
       host.innerHTML = `<p class="wiz-amenity-empty">${t('wiz.noAmenities')}</p>`;
       return;
     }
-    host.innerHTML = groups
+    const localized = await Promise.all(
+      groups.map(async (group) => ({
+        label: group.label,
+        items: await Promise.all(
+          group.items.map(async (item) => ({
+            item,
+            label: await localizeAmenityLabel(item),
+          }))
+        ),
+      }))
+    );
+    host.innerHTML = localized
       .map((group) => `<section class="wiz-amenity-group">
         <h3>${escapeHtml(group.label)}</h3>
-        <ul>${group.items.map((item) => `<li><span class="wiz-amenity-icon">${amenityIcon(item)}</span><span>${escapeHtml(displayAmenity(item))}</span></li>`).join('')}</ul>
+        <ul>${group.items.map((entry) => `<li><span class="wiz-amenity-icon">${amenityIcon(entry.item)}</span><span>${escapeHtml(entry.label)}</span></li>`).join('')}</ul>
       </section>`)
       .join('');
   }
@@ -2272,15 +2544,19 @@
     persistWizDraft();
   }
 
-  function openDetail(card) {
+  async function openDetail(card) {
     lastFocus = document.activeElement;
     detailCard = card;
     closeOffer({ keepLock: true });
+    const rawName = card.getAttribute('data-room-type') || '';
+    const rawDesc = card.getAttribute('data-description') || '';
     const title = detail?.querySelector('[data-wiz-detail-title]');
-    if (title) title.textContent = card.getAttribute('data-room-type') || '';
+    if (title) {
+      title.textContent = window.MoriI18n?.translateRoomTypeName?.(rawName) || rawName;
+    }
     const copy = detail?.querySelector('[data-wiz-detail-copy]');
-    if (copy) copy.innerHTML = formatDescription(card.getAttribute('data-description'));
-    renderAmenities(card);
+    if (copy) copy.innerHTML = formatDescription(rawDesc);
+    void renderAmenities(card);
     renderGallery(card, detail?.querySelector('[data-wiz-bento]'));
     const amenities = detail?.querySelector('[data-wiz-acc="amenities"]');
     const description = detail?.querySelector('[data-wiz-acc="description"]');
@@ -2291,7 +2567,7 @@
       const sold = Number(card.getAttribute('data-available') || 0) < 1;
       const addable = !sold && canAssign(card);
       bookBtn.disabled = !addable;
-      bookBtn.textContent = sold ? t('wiz.soldOut') : addable ? t('wiz.addToBooking') : t('wiz.alreadySelected');
+      bookBtn.textContent = sold ? t('wiz.fullyBooked') : addable ? t('wiz.addToBooking') : t('wiz.alreadySelected');
     }
     const toOffer = detail?.querySelector('[data-wiz-to-offer]');
     if (toOffer) {
@@ -2302,6 +2578,14 @@
     lockPage();
     if (detail) detail.hidden = false;
     document.querySelector('[data-wiz-detail-close]')?.focus();
+
+    const [name, desc] = await Promise.all([
+      window.MoriI18n?.translateContent?.(rawName) ?? rawName,
+      window.MoriI18n?.translateContent?.(rawDesc) ?? rawDesc,
+    ]);
+    if (detailCard !== card) return;
+    if (title) title.textContent = name || rawName;
+    if (copy) copy.innerHTML = formatDescription(desc || rawDesc);
   }
 
   function closeDetail(options) {
@@ -2313,12 +2597,13 @@
     }
   }
 
-  function openOffer(card) {
+  async function openOffer(card) {
     lastFocus = document.activeElement;
     detailCard = card;
     closeDetail({ keepLock: true });
+    const rawName = card.getAttribute('data-room-type') || t('wiz.guestRoom');
     const title = offerSheet?.querySelector('[data-wiz-offer-title]');
-    if (title) title.textContent = card.getAttribute('data-room-type') || t('wiz.guestRoom');
+    if (title) title.textContent = window.MoriI18n?.translateRoomTypeName?.(rawName) || rawName;
     renderGallery(card, offerSheet?.querySelector('[data-wiz-bento]'));
     const hasOffer = renderOfferReveal(card);
     if (!hasOffer) {
@@ -2328,6 +2613,8 @@
     lockPage();
     if (offerSheet) offerSheet.hidden = false;
     document.querySelector('[data-wiz-offer-close]')?.focus();
+    const translated = await (window.MoriI18n?.translateContent?.(rawName) ?? rawName);
+    if (detailCard === card && title) title.textContent = translated || rawName;
   }
 
   function closeOffer(options) {
@@ -2507,6 +2794,7 @@
       submitBtn.dataset.original = submitBtn.textContent || '';
       submitBtn.textContent = t('wiz.sending');
     }
+    let lastErrorPayload = {};
     try {
       const response = await fetch('/api/bookings', {
         method: 'POST',
@@ -2531,6 +2819,7 @@
         }),
       });
       const payload = await response.json().catch(() => ({}));
+      lastErrorPayload = payload;
       if (!response.ok) {
         const validationMessage = payload.errors ? Object.values(payload.errors).flat().join(' ') : '';
         throw new Error(
@@ -2549,9 +2838,20 @@
       paintCartChrome();
       setDrawerStep('confirm');
     } catch (err) {
-      if (reviewAlert) {
+      const message = err?.message || t('booking.toastSubmitFailed');
+      if (isAvailabilityConflictMessage(message)) {
+        if (reviewAlert) {
+          reviewAlert.hidden = true;
+          reviewAlert.textContent = '';
+        }
+        showAvailabilityNotice(message, {
+          availability: lastErrorPayload.availability,
+          title: t('booking.availabilityNoticeTitle'),
+        });
+        setDrawerStep('summary');
+      } else if (reviewAlert) {
         reviewAlert.hidden = false;
-        reviewAlert.textContent = err?.message || t('booking.toastSubmitFailed');
+        reviewAlert.textContent = message;
       }
     } finally {
       if (submitBtn) {
@@ -2586,6 +2886,7 @@
     paintNights();
     if (step === 2) paintRooms();
     if (drawer && !drawer.hidden) paintDrawer();
+    scheduleStayAvailabilityRefresh();
   }
 
   checkInEl?.addEventListener('change', () => {
@@ -2848,8 +3149,19 @@
     }
   }
 
+  function canPersistStayDraft() {
+    if (typeof window.moriAllowsOptionalStorage === 'function') {
+      return window.moriAllowsOptionalStorage();
+    }
+    return window.moriCookieConsent === 'all';
+  }
+
   function persistWizDraft() {
     if (restoringDraft) return;
+    if (!canPersistStayDraft()) {
+      clearWizDraft();
+      return;
+    }
     try {
       sessionStorage.setItem(
         WIZ_DRAFT_KEY,
@@ -2873,6 +3185,10 @@
   }
 
   function restoreWizDraft() {
+    if (!canPersistStayDraft()) {
+      clearWizDraft();
+      return false;
+    }
     let raw = '';
     try {
       raw = sessionStorage.getItem(WIZ_DRAFT_KEY) || '';
@@ -2935,30 +3251,64 @@
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') persistWizDraft();
   });
+  document.addEventListener('mori:cookieconsent', (event) => {
+    if (!event.detail?.allowsOptionalStorage) clearWizDraft();
+  });
 
-  function refreshI18nUi() {
+  async function localizeRoomCards() {
+    await Promise.all(
+      cards().map(async (card) => {
+        const rawName = card.getAttribute('data-room-type') || '';
+        const rawDesc = card.getAttribute('data-description') || '';
+        if (!rawName && !rawDesc) return;
+        const title = card.querySelector('.wiz-card-title-row h3, h3[data-wiz-open-detail], h3');
+        const tag = card.querySelector('.wiz-card-tag');
+        const [translatedName, translatedDesc] = await Promise.all([
+          rawName ? window.MoriI18n?.translateContent?.(rawName) ?? rawName : '',
+          rawDesc ? window.MoriI18n?.translateContent?.(rawDesc) ?? rawDesc : '',
+        ]);
+        if (title && rawName) title.textContent = translatedName || rawName;
+        if (tag && rawDesc) {
+          const desc = translatedDesc || rawDesc;
+          tag.textContent = desc.length > 110 ? `${desc.slice(0, 107).trimEnd()}…` : desc;
+        } else if (tag && !rawDesc) {
+          const occ = Number(card.getAttribute('data-occupancy') || 0);
+          const beds = Number(card.getAttribute('data-beds') || 0);
+          tag.textContent = `${t('wiz.upToGuests', { n: occ })} · ${beds === 1 ? t('wiz.bed', { n: beds }) : t('wiz.beds', { n: beds })}`;
+        }
+        const media = card.querySelector('.wiz-card-media[data-wiz-open-detail]');
+        if (media && rawName) {
+          media.setAttribute(
+            'aria-label',
+            t('wiz.viewRoomDetails', { room: translatedName || rawName })
+          );
+        }
+      })
+    );
+  }
+
+  async function refreshI18nUi() {
     paintStayRooms();
     paintNights();
     paintCartChrome();
     if (step === 2) paintRooms();
+    void localizeRoomCards();
     setBookingFor(bookingFor);
     if (drawer && !drawer.hidden) {
       setDrawerStep(drawerStep);
       paintDrawer();
     }
     if (detail && !detail.hidden && detailCard) {
-      const copy = detail.querySelector('[data-wiz-detail-copy]');
-      if (copy) copy.innerHTML = formatDescription(detailCard.getAttribute('data-description'));
-      renderAmenities(detailCard);
-      renderGallery(detailCard, detail.querySelector('[data-wiz-bento]'));
-      const bookBtn = detail.querySelector('[data-wiz-detail-book]');
-      if (bookBtn) {
-        const sold = Number(detailCard.getAttribute('data-available') || 0) < 1;
-        const addable = !sold && canAssign(detailCard);
-        bookBtn.textContent = sold ? t('wiz.soldOut') : addable ? t('wiz.addToBooking') : t('wiz.alreadySelected');
-      }
+      await openDetail(detailCard);
     }
     if (offerSheet && !offerSheet.hidden && detailCard) {
+      const offerTitle = offerSheet.querySelector('[data-wiz-offer-title]');
+      const rawName = detailCard.getAttribute('data-room-type') || t('wiz.guestRoom');
+      if (offerTitle) {
+        offerTitle.textContent = window.MoriI18n?.translateRoomTypeName?.(rawName) || rawName;
+        const translated = await (window.MoriI18n?.translateContent?.(rawName) ?? rawName);
+        if (offerTitle) offerTitle.textContent = translated || rawName;
+      }
       renderOfferReveal(detailCard);
     }
     if (dateSheet && !dateSheet.hidden) {
@@ -2975,7 +3325,7 @@
   }
 
   document.addEventListener('mori:langchange', () => {
-    refreshI18nUi();
+    void refreshI18nUi();
   });
 
   applyDateLimits();
@@ -2993,5 +3343,7 @@
   }
   loadOffers();
   syncConfirmReady();
+  initStayAvailabilityRealtime();
+  scheduleStayAvailabilityRefresh();
   if (!occupancyConfirmed) maybeOpenGuestsOnArrive();
 })();

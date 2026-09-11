@@ -42,6 +42,7 @@ public sealed class AutomaticCheckoutBackgroundService : BackgroundService
                 {
                     using var scope = _scopeFactory.CreateScope();
                     var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
+                    var guestCatalog = scope.ServiceProvider.GetRequiredService<IGuestCatalogNotifier>();
 
                 // 0. Pending call-guest warnings (check-in − 20m)
                 var pendingCalls = await bookingService.ProcessPendingCallWarningsAsync(stoppingToken);
@@ -106,6 +107,11 @@ public sealed class AutomaticCheckoutBackgroundService : BackgroundService
                         booking.GuestName);
 
                     await _hubContext.Clients.All.BookingUpdated(ToNotification(booking, "Auto-Checkout Completed: Client duration done"));
+                }
+
+                if (autoCancelled.Count > 0 || autoCheckedOutBookings.Count > 0)
+                {
+                    await guestCatalog.NotifyChangedAsync("availability", stoppingToken);
                 }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)

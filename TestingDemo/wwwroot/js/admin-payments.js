@@ -172,9 +172,16 @@
   }
 
   function formatPaymentMethod(value) {
-    if (value === 'BankTransfer') return 'Bank transfer (InstaPay)';
-    if (value === 'EWallet' || value === 'GCash' || value === 'Maya') return 'E-wallet';
+    if (
+      value === 'BankTransfer'
+      || value === 'EWallet'
+      || value === 'GCash'
+      || value === 'Maya'
+    ) {
+      return 'E-wallet (InstaPay QR)';
+    }
     if (value === 'Card') return 'Card (legacy)';
+    if (value === 'Cash') return 'Cash';
     return String(value || '');
   }
 
@@ -449,8 +456,7 @@
       fields.splice(
         8,
         0,
-        ['External ref', payment.externalReference || '—'],
-        ['Bank transfer ref', payment.bankTransferReference || '—'],
+        ['Payment reference', payment.externalReference || payment.bankTransferReference || '—'],
         ['Notes', payment.notes || '—']
       );
     }

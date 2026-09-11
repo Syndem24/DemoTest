@@ -83,7 +83,7 @@
                     </div>
                     <div class="admin-integration-card-copy">
                         <h2>AI Integration</h2>
-                        <p>Mori Assistant: FAQ rules first (rooms, rates, book, location…). Gemini only when UseGeminiFallback is on and no rule matched. Translate helps non-English rule matching.</p>
+                        <p>Mori Assistant: simple FAQs use rules; complex multi-part questions try Gemini then Groq (when keys are stored and UseGeminiFallback is on). Dashboard shows connection status and per-provider API use.</p>
                     </div>
                     @if (Model.GeminiConfigured || Model.GroqConfigured)
                     {

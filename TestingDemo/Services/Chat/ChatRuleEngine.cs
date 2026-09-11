@@ -16,6 +16,10 @@ public interface IChatRuleEngine
 
     string BuildUnknownTopicReply();
     string BuildUnclearInputReply();
+    /// <summary>Warm multi-part answer when Gemini/Groq both miss a complex guest message.</summary>
+    string BuildComplexAiMissReply();
+    bool TryLanguageSwitchReply(string original, string matchText, string replyLanguage, out string reply);
+    string? TryNativeCebuanoReply(string englishReply);
 }
 
 public sealed class ChatRuleEngine : IChatRuleEngine
@@ -157,10 +161,20 @@ public sealed class ChatRuleEngine : IChatRuleEngine
                 haystack,
                 "pay",
                 "payment",
+                "payment method",
+                "payment methods",
+                "how to pay",
                 "receipt",
                 "gcash",
+                "maya",
+                "paymaya",
+                "pay maya",
+                "e-wallet",
+                "ewallet",
+                "instapay",
+                "qr",
                 "bank transfer",
-                "how to pay",
+                "cash",
                 "支付",
                 "付款",
                 "支払い",
@@ -245,7 +259,7 @@ public sealed class ChatRuleEngine : IChatRuleEngine
             return await BuildReviewsReplyAsync(cancellationToken);
 
         if (MatchesAny(haystack, "thank", "thanks", "谢谢", "謝謝", "ありがとう", "감사"))
-            return "You’re welcome. Ask anytime about rooms, rates, offers, check-in, location, or booking.";
+            return "You’re so welcome — it’s our pleasure. Whenever you’re ready, I’m here for rooms, rates, booking help, or anything else about your stay.";
 
         return null;
     }
@@ -254,15 +268,136 @@ public sealed class ChatRuleEngine : IChatRuleEngine
     {
         var p = _options.PublicProfile;
         return
-            $"I’m not sure about that topic. I can help with rooms, rates, offers, check-in times, location, reviews, and how to book. "
-            + $"Or call the front desk at {p.PhonePrimary} / {p.PhoneSecondary}.";
+            $"I’d love to help with that, though I’m best with rooms, rates, offers, check-in times, our location, reviews, and how to book online. "
+            + $"If you need something more personal, our front desk is happy to assist at {p.PhonePrimary} or {p.PhoneSecondary}.";
+    }
+
+    public string BuildComplexAiMissReply()
+    {
+        var p = _options.PublicProfile;
+        return
+            $"Thank you for such a thoughtful note — I’d love to cover each part. "
+            + $"You’ll find Twin, Queen, and other room types on Accommodations ({p.BookPath}), with inclusions listed on each card. "
+            + $"Standard check-in is {p.CheckIn} (early option around {p.EarlyCheckIn} when available) and check-out is {p.CheckOut}. "
+            + "Guest Wi‑Fi is included; you’ll get the network details at check-in. "
+            + $"For parking or a weekend with a child, please call {p.PhonePrimary} or {p.PhoneSecondary} and we’ll plan it with you warmly — "
+            + "or pick your dates on Accommodations to book online.";
+    }
+
+    public bool TryLanguageSwitchReply(
+        string original,
+        string matchText,
+        string replyLanguage,
+        out string reply)
+    {
+        reply = string.Empty;
+        var hay = $"{original} {matchText}".ToLowerInvariant();
+        var asksBisaya =
+            hay.Contains("bisaya", StringComparison.Ordinal)
+            || hay.Contains("binisaya", StringComparison.Ordinal)
+            || hay.Contains("cebuano", StringComparison.Ordinal)
+            || hay.Contains("sugbuanon", StringComparison.Ordinal);
+        var asksSpeak =
+            hay.Contains("speak", StringComparison.Ordinal)
+            || hay.Contains("talk", StringComparison.Ordinal)
+            || hay.Contains("reply", StringComparison.Ordinal)
+            || hay.Contains("answer", StringComparison.Ordinal)
+            || hay.Contains("can you", StringComparison.Ordinal)
+            || hay.Contains("pwede", StringComparison.Ordinal)
+            || hay.Contains("in bisaya", StringComparison.Ordinal);
+
+        if (!asksBisaya || !asksSpeak)
+            return false;
+
+        reply =
+            "Oo, mahimo! Mutubag ko nimo sa Binisaya aron mas komportable ka. "
+            + "Pangutana lang bahin sa mga lawak, rates, check-in, lokasyon, o unsáon pag-book — ania ra ko aron mutabang.";
+        return true;
+    }
+
+    public string? TryNativeCebuanoReply(string englishReply)
+    {
+        if (string.IsNullOrWhiteSpace(englishReply))
+            return null;
+
+        var text = englishReply;
+        var p = _options.PublicProfile;
+
+        if (text.Contains("Open Accommodations", StringComparison.OrdinalIgnoreCase)
+            && (text.Contains("delighted to help you book", StringComparison.OrdinalIgnoreCase)
+                || text.Contains("choose your dates", StringComparison.OrdinalIgnoreCase)
+                || text.Contains("gentle steps", StringComparison.OrdinalIgnoreCase)))
+        {
+            return
+                $"Malipayon ko nga mutabang nimo mag-book. Ablihi ang Accommodations ({p.BookPath}), "
+                + "pilia ang imong check-in ug check-out, dayon ang klase sa lawak, ug sunda lang ang mga lakang sa screen. "
+                + $"Kung duol na ang imong pag-abot, mahimong dayon ang booking. Kinahanglan og tawag? {p.PhonePrimary} — ania mi para nimo.";
+        }
+
+        if (text.Contains("sharing your plans", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("finish the booking inside this chat", StringComparison.OrdinalIgnoreCase))
+        {
+            return
+                $"Salamat sa imong plano — mutudlo ko nimo, apan dili mahimo ang booking dinhi sa chat. "
+                + $"Palihog ablihi ang Accommodations ({p.BookPath}), isulod ang imong mga petsa, pilia ang lawak (Twin, Queen, ug uban pa), ug padayon. "
+                + $"Kung dili klaro, tawag sa {p.PhonePrimary} ug tabangan ka namo og malipayon.";
+        }
+
+        if (text.Contains("Standard check-in is", StringComparison.OrdinalIgnoreCase)
+            || (text.Contains("check-in is", StringComparison.OrdinalIgnoreCase)
+                && text.Contains("Check-out is", StringComparison.OrdinalIgnoreCase)))
+        {
+            return
+                $"Ang regular nga check-in kay {p.CheckIn}, ug early check-in mga {p.EarlyCheckIn} kung available. "
+                + $"Check-out kay {p.CheckOut}. Mahimong adunay gamay nga fee sa early check-in o late checkout — makita nimo kini samtang mag-book.";
+        }
+
+        if (text.Contains("guest Wi‑Fi", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("Guest Wi‑Fi", StringComparison.Ordinal)
+            || text.Contains("Wi‑Fi is part of", StringComparison.OrdinalIgnoreCase))
+        {
+            return
+                "Oo — adunay guest Wi‑Fi para sa komportable nimong pagpuyo. "
+                + "Ihatag namo ang network name ug password sa check-in o sa front desk. "
+                + "Dili ko magpakita og staff password dinhi, apan malipayon ming mutabang aron makakonekta ka.";
+        }
+
+        if (text.Contains("We don’t take payment online", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("We don't take payment online", StringComparison.OrdinalIgnoreCase)
+            || (text.Contains("GCash", StringComparison.OrdinalIgnoreCase)
+                && text.Contains("PayMaya", StringComparison.OrdinalIgnoreCase)
+                && text.Contains("front desk", StringComparison.OrdinalIgnoreCase)))
+        {
+            return
+                "Wala mi’y online nga bayad — tanan sa front desk ra. "
+                + "Pwede ka magbayad og cash, o QR sa counter gamit ang GCash o PayMaya (InstaPay). "
+                + "Mao ra na ang among paagi sa pagbayad. "
+                + $"Kung kinahanglan nimo og tabang sa pag-abot, tawag sa {p.PhonePrimary} o {p.PhoneSecondary} — atimanon ka namo.";
+        }
+
+        if (text.Contains("I care about getting your stay details right", StringComparison.OrdinalIgnoreCase))
+        {
+            return
+                "Gusto nako nga hustó ang imong detalye sa pagpuyo, busa dili ko makatan-aw, makausab, o makakansela "
+                + "sa personal nga booking o bayad dinhi sa chat. Palihog tawag sa front desk, o sign in ug ablihi ang Booking history — atimanon ka namo didto.";
+        }
+
+        if (text.Contains("I’d love to help with that, though I’m best with rooms", StringComparison.OrdinalIgnoreCase))
+        {
+            return
+                $"Gusto ko gyud mutabang — pinakamaayo ko sa mga lawak, rates, offers, oras sa check-in, lokasyon, reviews, ug unsáon pag-book online. "
+                + $"Kung personal na nga butang, tawag sa {p.PhonePrimary} o {p.PhoneSecondary} — malipayon ang among front desk.";
+        }
+
+        return null;
     }
 
     public string BuildUnclearInputReply() =>
-        "I didn’t catch a hotel question there. Ask about rooms, rates, offers, check-in, location, or how to book — or call the front desk.";
+        "I want to make sure I help you well — could you share a little more? For example rooms, rates, check-in, location, or how to book. I’m right here with you.";
 
     private static string BuildInviteReply() =>
-        "Of course — ask me about rooms, rates, offers, check-in, location, or how to book. I cannot look up personal reservations in chat.";
+        "Of course — I’m glad you reached out. Ask me anything about rooms, rates, offers, check-in, finding us, or booking online. "
+        + "For your own reservation details, sign in to Booking history or call our front desk — I’ll still guide you to the right place.";
 
     private async Task<string> BuildRoomsReplyAsync(CancellationToken cancellationToken)
     {
@@ -271,11 +406,12 @@ public sealed class ChatRuleEngine : IChatRuleEngine
         if (types.Count == 0)
         {
             return
-                $"No room types are listed as available online right now. Please call {p.PhonePrimary} or book on the Accommodations page.";
+                $"I’m sorry — we don’t have room types showing as available online at the moment. "
+                + $"Please call us at {p.PhonePrimary}, or check the Accommodations page again soon. We’ll take good care of you.";
         }
 
         var sb = new StringBuilder();
-        sb.Append("Available room types at ").Append(p.HotelName).AppendLine(":");
+        sb.Append("Here’s what we can offer you online at ").Append(p.HotelName).AppendLine(" right now:");
         foreach (var t in types)
         {
             sb.Append("- ")
@@ -286,10 +422,10 @@ public sealed class ChatRuleEngine : IChatRuleEngine
                 .Append(t.MaxOccupancy)
                 .Append(" guests (")
                 .Append(t.AvailableCount)
-                .AppendLine(" available).");
+                .AppendLine(" open).");
         }
 
-        sb.Append("Book on the Accommodations page. I do not share physical room numbers in chat.");
+        sb.Append("When you’re ready, book on the Accommodations page — I don’t share physical room numbers here, but our team will assign yours warmly on arrival.");
         return sb.ToString();
     }
 
@@ -299,7 +435,7 @@ public sealed class ChatRuleEngine : IChatRuleEngine
         if (types.Count == 0)
             return BuildUnknownTopicReply();
 
-        var sb = new StringBuilder("Current online rates (per night, available types):");
+        var sb = new StringBuilder("Here are tonight’s online rates for available room types:");
         sb.AppendLine();
         foreach (var t in types)
         {
@@ -310,7 +446,7 @@ public sealed class ChatRuleEngine : IChatRuleEngine
                 .AppendLine("/night");
         }
 
-        sb.Append("Extra fees (early check-in, late checkout, extra person) may apply at booking. See Accommodations to book.");
+        sb.Append("A few stay fees (early check-in, late checkout, or an extra person) may apply when you book — you’ll see them clearly on Accommodations.");
         return sb.ToString();
     }
 
@@ -318,9 +454,9 @@ public sealed class ChatRuleEngine : IChatRuleEngine
     {
         var offers = await _offers.GetActiveForGuestAsync(null, cancellationToken);
         if (offers.Count == 0)
-            return "There are no guest offers active online right now. Check Accommodations for current rates, or ask the front desk.";
+            return "We don’t have a special guest offer live online right now, but our regular rates on Accommodations are ready for you — or ask the front desk if you’re hoping for something particular.";
 
-        var sb = new StringBuilder("Guest offers available online:");
+        var sb = new StringBuilder("We’re glad to share these guest offers available online:");
         sb.AppendLine();
         foreach (var o in offers.Take(8))
         {
@@ -332,7 +468,7 @@ public sealed class ChatRuleEngine : IChatRuleEngine
             sb.AppendLine();
         }
 
-        sb.Append("Open Accommodations to apply an offer when you book.");
+        sb.Append("Open Accommodations to apply an offer while you book — we’re happy you’re considering a stay with us.");
         return sb.ToString();
     }
 
@@ -340,18 +476,17 @@ public sealed class ChatRuleEngine : IChatRuleEngine
     {
         var p = _options.PublicProfile;
         return
-            $"To book online, open the Accommodations page ({p.BookPath}), pick dates and a room type, then continue the booking flow. "
-            + "Near arrival you may get a booking instead of a longer-lead reservation. For help, call "
-            + $"{p.PhonePrimary}.";
+            $"I’d be delighted to help you book. Open Accommodations ({p.BookPath}), choose your dates and room, then follow the gentle steps on screen. "
+            + $"If your arrival is soon, the site may confirm a booking right away. Need a human touch? Call us at {p.PhonePrimary} — we’re here for you.";
     }
 
     private string BuildBookWithDatesReply()
     {
         var p = _options.PublicProfile;
         return
-            $"I can guide you, but I cannot complete a booking in chat. Open the Accommodations page ({p.BookPath}), "
-            + "enter your check-in and check-out dates, choose a room type (for example Twin or Queen), and continue. "
-            + $"Need help? Call {p.PhonePrimary}.";
+            $"Thank you for sharing your plans — I can guide you, though I can’t finish the booking inside this chat. "
+            + $"Please open Accommodations ({p.BookPath}), enter your check-in and check-out dates, pick a room (Twin, Queen, and more), and continue. "
+            + $"If anything feels unclear, call {p.PhonePrimary} and we’ll walk you through it warmly.";
     }
 
     private async Task<string> BuildInclusionsReplyAsync(CancellationToken cancellationToken)
@@ -360,22 +495,22 @@ public sealed class ChatRuleEngine : IChatRuleEngine
         if (types.Count == 0)
         {
             return
-                "I don’t have inclusion details online right now. Breakfast and other amenities depend on the room type — "
-                + "check Accommodations or ask the front desk.";
+                "I don’t have inclusion details online just now. Breakfast and amenities depend on the room type — "
+                + "please peek at Accommodations or ask our front desk; they’ll make sure you’re comfortable.";
         }
 
-        var sb = new StringBuilder("Room-type inclusions (from Room Management):");
+        var sb = new StringBuilder("Here’s what’s listed with each room type:");
         sb.AppendLine();
         foreach (var t in types)
         {
             sb.Append("- ").Append(t.Name).Append(": ");
             if (t.Inclusions.Count == 0)
-                sb.AppendLine("no inclusions listed online (ask the desk about breakfast).");
+                sb.AppendLine("no inclusions listed online yet (ask the desk about breakfast — we’re happy to clarify).");
             else
                 sb.AppendLine(string.Join(", ", t.Inclusions));
         }
 
-        sb.Append("If breakfast is not listed above, it is not included in the listed rate by default.");
+        sb.Append("If breakfast isn’t listed above, it usually isn’t in the base rate — but do ask us if you’d like to add something special.");
         return sb.ToString();
     }
 
@@ -383,33 +518,39 @@ public sealed class ChatRuleEngine : IChatRuleEngine
     {
         var p = _options.PublicProfile;
         return
-            "Online stays follow the payment steps shown in your booking flow (including receipt upload when required). "
-            + "I cannot look up a payment status in chat. For payment help, call "
-            + $"{p.PhonePrimary} or {p.PhoneSecondary}.";
+            "We don’t take payment online — everything is settled at our front desk. "
+            + "You can pay by cash, or by QR at the counter using GCash or PayMaya (InstaPay). "
+            + "Those are our only payment methods. "
+            + $"If you need help when you arrive, call us at {p.PhonePrimary} or {p.PhoneSecondary} — we’ll take care of you.";
     }
 
     private string BuildLocationReply()
     {
         var p = _options.PublicProfile;
-        return $"{p.HotelName} is at {p.Address}. Call {p.PhonePrimary} or {p.PhoneSecondary} for directions.";
+        return
+            $"We’re glad you’re finding your way to us. {p.HotelName} is at {p.Address}. "
+            + $"For directions or arrival tips, call {p.PhonePrimary} or {p.PhoneSecondary} — we’ll help you arrive at ease.";
     }
 
     private string BuildStayTimesReply()
     {
         var p = _options.PublicProfile;
         return
-            $"Standard check-in is {p.CheckIn} (early option {p.EarlyCheckIn} when offered). "
-            + $"Standard check-out is {p.CheckOut}. Early check-in and late checkout may add fees — see the booking form.";
+            $"Standard check-in is {p.CheckIn}, with an early option around {p.EarlyCheckIn} when available. "
+            + $"Check-out is {p.CheckOut}. Early check-in or late checkout may add a small fee — you’ll see the options when you book, and we’re happy to explain.";
     }
 
     private string BuildContactReply()
     {
         var p = _options.PublicProfile;
-        return $"Front desk: {p.PhonePrimary} or {p.PhoneSecondary}. Hotel: {p.HotelName}, {p.Address}.";
+        return
+            $"Our front desk would love to hear from you: {p.PhonePrimary} or {p.PhoneSecondary}. "
+            + $"We’re at {p.HotelName}, {p.Address} — come visit when you can.";
     }
 
     private string BuildWifiReply() =>
-        "Guest Wi‑Fi is available as a hotel amenity. The exact network name and password are provided at check-in or by the front desk — I do not share staff credentials in chat.";
+        "Yes — guest Wi‑Fi is part of a comfortable stay. You’ll get the network name and password at check-in or from our front desk. "
+        + "I don’t share staff passwords here, but our team will connect you gladly.";
 
     private async Task<string> BuildReviewsReplyAsync(CancellationToken cancellationToken)
     {
@@ -418,17 +559,17 @@ public sealed class ChatRuleEngine : IChatRuleEngine
             var page = await _reviews.GetPublicAsync(6, cancellationToken);
             var count = page.ReviewCount;
             if (count == 0 || page.Items.Count == 0)
-                return "Guest reviews appear on the hotel home page when published. I don’t invent ratings in chat.";
+                return "Guest stories appear on our home page when they’re published. I won’t invent ratings — you’re always welcome to read what’s shared there.";
 
             var avg = page.AverageOverall;
             return
-                $"We currently show {count} public guest review(s)"
-                + (avg > 0 ? $" (about {avg:0.0}/5 average)" : string.Empty)
-                + ". Scroll to Reviews on the home page to read them.";
+                $"We’re grateful for {count} public guest review(s)"
+                + (avg > 0 ? $" (about {avg:0.0}/5 on average)" : string.Empty)
+                + ". You’ll find them under Reviews on the home page — thank you for caring about other guests’ experiences.";
         }
         catch
         {
-            return "Guest reviews appear on the hotel home page when published.";
+            return "Guest reviews appear on our home page when published — you’re welcome to browse them anytime.";
         }
     }
 

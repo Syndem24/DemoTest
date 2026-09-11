@@ -104,3 +104,14 @@ public sealed class UpsertStayReviewReplyRequest
 {
     public string? Reply { get; set; }
 }
+
+public sealed class ReviewTranslateRequest
+{
+    public string? Text { get; set; }
+    public string? TargetLang { get; set; }
+}
+
+public sealed class ReviewTranslateResponse
+{
+    public required string Translated { get; init; }
+}

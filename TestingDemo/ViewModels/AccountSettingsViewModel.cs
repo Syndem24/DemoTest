@@ -8,6 +8,9 @@ public sealed class AccountSettingsViewModel
     public ChangePasswordViewModel Password { get; init; } = new();
     public string ActiveSection { get; init; } = "overview";
     public string RoleName { get; init; } = "Staff";
+
+    /// <summary>True when the signed-in user is a guest (not staff).</summary>
+    public bool IsGuestAccount { get; init; }
     public bool ShowGoogleStepUp { get; init; }
     public IReadOnlyList<AccountActivityItem> ActivityLog { get; init; } = [];
     public int ActivityPage { get; init; } = 1;

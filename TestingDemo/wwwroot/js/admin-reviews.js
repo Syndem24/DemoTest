@@ -53,6 +53,99 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
 
+  function needsTranslation(text) {
+    const value = String(text || '').trim();
+    if (value.length < 8) return false;
+    return /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7a3\u0400-\u04ff]/u.test(value);
+  }
+
+  function commentBlockHtml(comment) {
+    const raw = String(comment || '').trim();
+    if (!raw) {
+      return '<p class="admin-reviews-comment">No guest comment.</p>';
+    }
+    if (!needsTranslation(raw)) {
+      return `<p class="admin-reviews-comment">${esc(raw)}</p>`;
+    }
+    return `
+      <div class="admin-reviews-comment-wrap" data-admin-review-comment-wrap>
+        <p class="admin-reviews-comment" data-admin-review-original>${esc(raw)}</p>
+        <p class="admin-reviews-comment is-translated" data-admin-review-translated hidden></p>
+        <button type="button"
+                class="admin-reviews-translate"
+                data-admin-review-translate
+                aria-expanded="false">
+          See translation
+        </button>
+      </div>`;
+  }
+
+  async function fetchTranslation(text) {
+    const res = await fetch('/api/guest/reviews/translate', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({ text, targetLang: 'en' }),
+    });
+    if (!res.ok) throw new Error(`Translate failed (${res.status})`);
+    const body = await res.json();
+    const translated = String(body?.translated || '').trim();
+    if (!translated) throw new Error('Empty translation');
+    return translated;
+  }
+
+  async function onStaffTranslateClick(button) {
+    const wrap = button.closest('[data-admin-review-comment-wrap]');
+    if (!wrap) return;
+    const originalEl = wrap.querySelector('[data-admin-review-original]');
+    const translatedEl = wrap.querySelector('[data-admin-review-translated]');
+    if (!(originalEl instanceof HTMLElement) || !(translatedEl instanceof HTMLElement)) return;
+
+    if (button.getAttribute('data-showing') === '1') {
+      translatedEl.hidden = true;
+      originalEl.hidden = false;
+      button.setAttribute('data-showing', '0');
+      button.setAttribute('aria-expanded', 'false');
+      button.textContent = 'See translation';
+      return;
+    }
+
+    const cached = button.getAttribute('data-translated-text');
+    if (cached) {
+      translatedEl.textContent = cached;
+      translatedEl.hidden = false;
+      originalEl.hidden = true;
+      button.setAttribute('data-showing', '1');
+      button.setAttribute('aria-expanded', 'true');
+      button.textContent = 'Show original';
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = 'Translating…';
+    try {
+      const translated = await fetchTranslation(originalEl.textContent || '');
+      button.setAttribute('data-translated-text', translated);
+      translatedEl.textContent = translated;
+      translatedEl.hidden = false;
+      originalEl.hidden = true;
+      button.setAttribute('data-showing', '1');
+      button.setAttribute('aria-expanded', 'true');
+      button.textContent = 'Show original';
+    } catch {
+      button.textContent = 'Translation unavailable';
+      window.setTimeout(() => {
+        button.textContent = 'See translation';
+        button.disabled = false;
+      }, 1800);
+      return;
+    }
+    button.disabled = false;
+  }
+
   function showMessage(text, isError = false) {
     if (!messageEl) return;
     messageEl.hidden = !text;
@@ -143,7 +236,7 @@
           <strong>${esc(item.bookingReference)} · ${esc(item.guestDisplayName)}</strong>
           <span>${esc(phDate(item.createdAtUtc))}</span>
         </p>
-        <p class="admin-reviews-comment">${esc(item.comment || 'No guest comment.')}</p>
+        ${commentBlockHtml(item.comment)}
         ${tags}
         <p class="admin-reviews-reply-meta">
           ${item.hotelReply ? `Review response by ${esc(item.hotelReplyBy || 'Admin')} · ${esc(phDate(item.hotelReplyAtUtc))}` : 'No review response yet.'}
@@ -194,6 +287,12 @@
 
   function bindDetailActions() {
     if (!modalBody || !activeReviewId) return;
+
+    modalBody.querySelector('[data-admin-review-translate]')?.addEventListener('click', (event) => {
+      const btn = event.currentTarget;
+      if (!(btn instanceof HTMLElement)) return;
+      void onStaffTranslateClick(btn);
+    });
 
     modalBody.querySelector('[data-action-publish]')?.addEventListener('click', async (event) => {
       const btn = event.currentTarget;

@@ -1,7 +1,7 @@
 (() => {
   const STORAGE_KEY = 'moriGuestLang';
   /** Bump when locale JSON keys change so browsers fetch fresh files. */
-  const LOCALES_VERSION = '2026-09-10-far-checkin';
+  const LOCALES_VERSION = '2026-09-11-legal-full';
   const LOCALES = [
     { code: 'en', label: 'English', native: 'English' },
     { code: 'ja', label: '日本語', native: '日本語' },
@@ -9,11 +9,17 @@
     { code: 'ko', label: '한국어', native: '한국어' },
     { code: 'zh-Hans', label: '中文 (简体)', native: '中文 (简体)' },
   ];
+  const CONTENT_TRANSLATE_API = '/api/guest/reviews/translate';
+  const CONTENT_MAX_CHARS = 6000;
 
   /** @type {Record<string, any>} */
   const cache = {};
   /** @type {Record<string, string>} */
   const cacheVersion = {};
+  /** @type {Record<string, string>} */
+  const contentCache = {};
+  /** @type {Record<string, Promise<string>>} */
+  const contentInflight = {};
   let current = 'en';
   let dict = null;
   let applying = false;
@@ -37,6 +43,84 @@
   function t(key, params) {
     const value = getByPath(dict, key) ?? getByPath(cache.en, key) ?? key;
     return typeof value === 'string' ? format(value, params) : key;
+  }
+
+  function findMapValue(map, name) {
+    if (!map || typeof map !== 'object') return null;
+    const raw = String(name || '').trim();
+    if (!raw) return null;
+    if (typeof map[raw] === 'string') return map[raw];
+    const lower = raw.toLowerCase();
+    for (const [key, value] of Object.entries(map)) {
+      if (key.toLowerCase() === lower && typeof value === 'string') return value;
+    }
+    return null;
+  }
+
+  function translateInclusionItem(name) {
+    const raw = String(name || '').trim();
+    if (!raw) return '';
+    return (
+      findMapValue(dict?.inclusionItems, raw) ||
+      findMapValue(cache.en?.inclusionItems, raw) ||
+      raw
+    );
+  }
+
+  function translateRoomTypeName(name) {
+    const raw = String(name || '').trim();
+    if (!raw) return '';
+    return (
+      findMapValue(dict?.roomTypeNames, raw) ||
+      findMapValue(cache.en?.roomTypeNames, raw) ||
+      raw
+    );
+  }
+
+  function lookupStaticContent(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return '';
+    return (
+      findMapValue(dict?.roomTypeNames, raw) ||
+      findMapValue(dict?.inclusionItems, raw) ||
+      null
+    );
+  }
+
+  async function translateContent(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return '';
+    if (current === 'en') return raw;
+
+    const mapped = lookupStaticContent(raw);
+    if (mapped) return mapped;
+
+    const cacheKey = `${current}::${raw}`;
+    if (contentCache[cacheKey]) return contentCache[cacheKey];
+    if (contentInflight[cacheKey]) return contentInflight[cacheKey];
+
+    contentInflight[cacheKey] = (async () => {
+      try {
+        const payload = raw.length > CONTENT_MAX_CHARS ? raw.slice(0, CONTENT_MAX_CHARS) : raw;
+        const res = await fetch(CONTENT_TRANSLATE_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ text: payload, targetLang: current }),
+        });
+        if (!res.ok) return raw;
+        const data = await res.json();
+        const out = String(data?.translated || '').trim() || raw;
+        contentCache[cacheKey] = out;
+        return out;
+      } catch {
+        return raw;
+      } finally {
+        delete contentInflight[cacheKey];
+      }
+    })();
+
+    return contentInflight[cacheKey];
   }
 
   async function loadLocale(code) {
@@ -128,6 +212,37 @@
     el.textContent = `${t(key)} - ${t('nav.brand')}`;
   }
 
+  async function applyTranslateContentNodes() {
+    const nodes = [...document.querySelectorAll('[data-translate-content]')];
+    if (!nodes.length) return;
+
+    const limit = 3;
+    let cursor = 0;
+    async function worker() {
+      while (cursor < nodes.length) {
+        const el = nodes[cursor++];
+        if (!el.hasAttribute('data-translate-source')) {
+          el.setAttribute(
+            'data-translate-source',
+            (el.textContent || '').replace(/\s+/g, ' ').trim()
+          );
+        }
+        const source = el.getAttribute('data-translate-source') || '';
+        if (!source) continue;
+        if (current === 'en') {
+          el.textContent = source;
+          continue;
+        }
+        const translated = await translateContent(source);
+        if (translated) el.textContent = translated;
+      }
+    }
+
+    await Promise.all(
+      Array.from({ length: Math.min(limit, nodes.length) }, () => worker())
+    );
+  }
+
   function applyPage() {
     if (!dict || applying) return;
     applying = true;
@@ -142,6 +257,7 @@
       document.dispatchEvent(
         new CustomEvent('mori:langchange', { detail: { lang: current, t } })
       );
+      void applyTranslateContentNodes();
     } finally {
       applying = false;
     }
@@ -264,6 +380,7 @@
       popup.hidden = true;
       popup.classList.remove('is-leaving');
       document.body.classList.remove('guest-lang-popup-open');
+      document.dispatchEvent(new CustomEvent('mori:guestchrome', { detail: { reason: 'lang-popup-closed' } }));
     }, 280);
   }
 
@@ -319,6 +436,8 @@
         await setLanguage('en', { persist: true });
       }
       if (popup) popup.hidden = true;
+      document.body.classList.remove('guest-lang-popup-open');
+      document.dispatchEvent(new CustomEvent('mori:guestchrome', { detail: { reason: 'lang-ready' } }));
       return;
     }
 
@@ -331,10 +450,14 @@
     getLang: () => current,
     setLang: (code) => setLanguage(code),
     apply: () => applyPage(),
+    applyTranslateContent: () => applyTranslateContentNodes(),
     translateInclusionCategory: (name) => {
       const mapped = getByPath(dict, `inclusionCategories.${name}`);
       return typeof mapped === 'string' ? mapped : name;
     },
+    translateInclusionItem,
+    translateRoomTypeName,
+    translateContent,
   };
 
   if (document.readyState === 'loading') {
