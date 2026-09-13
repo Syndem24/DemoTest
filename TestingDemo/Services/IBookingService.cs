@@ -103,6 +103,8 @@ public interface IBookingService
     /// </summary>
     Task<FlushBookingHistoryResult> FlushHistoryAsync(
         string performedBy,
+        FlushDateRange dateRange = default,
+        bool clearAfterExport = true,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<BookingHistoryFlushLogDto>> GetHistoryFlushLogsAsync(

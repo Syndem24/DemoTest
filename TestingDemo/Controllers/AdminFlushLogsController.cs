@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using TestingDemo.DTOs;
 using TestingDemo.Models;
@@ -13,13 +14,16 @@ public sealed class AdminFlushLogsController : Controller
 {
     private readonly ISystemFlushService _flushService;
     private readonly ISystemAuditQuery _auditQuery;
+    private readonly UserManager<ApplicationUser> _userManager;
 
     public AdminFlushLogsController(
         ISystemFlushService flushService,
-        ISystemAuditQuery auditQuery)
+        ISystemAuditQuery auditQuery,
+        UserManager<ApplicationUser> userManager)
     {
         _flushService = flushService;
         _auditQuery = auditQuery;
+        _userManager = userManager;
     }
 
     [HttpGet]
@@ -49,15 +53,24 @@ public sealed class AdminFlushLogsController : Controller
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Flush(
-        [FromForm] string performedBy,
         [FromForm] List<SystemFlushKind>? kinds,
+        [FromForm] DateOnly? fromDate,
+        [FromForm] DateOnly? toDate,
+        [FromForm] bool clearAfterExport,
         CancellationToken cancellationToken)
     {
+        var wantsAjaxFile = IsAjaxFlushExportRequest();
+        string performedBy;
+
         try
         {
+            performedBy = await ResolveExporterNameAsync();
+            var dateRange = FlushDateRange.FromManilaDates(fromDate, toDate);
             var result = await _flushService.FlushSelectedAsync(
                 kinds ?? new List<SystemFlushKind>(),
                 performedBy,
+                dateRange,
+                clearAfterExport,
                 cancellationToken);
 
             var note = result.Skipped.Count > 0
@@ -66,11 +79,28 @@ public sealed class AdminFlushLogsController : Controller
             var flushed = string.Join(
                 ", ",
                 result.Logs.Select(log => $"{log.KindLabel} ({log.RecordCount})"));
+            var rangeNote = dateRange.HasFilter
+                ? dateRange.DescribeForSummary()
+                : string.Empty;
+            var modeNote = clearAfterExport
+                ? " Cleared matching records for the selected types. Use the Save dialog (or Downloads) for the PDF."
+                : " Export only — records were kept. Use the Save dialog (or Downloads) for the PDF.";
+            var message = result.Files.Count > 1
+                ? $"Exported {flushed}. Download the ZIP for every file.{rangeNote}{modeNote}{note}"
+                : $"Exported {flushed}.{rangeNote}{modeNote}{note}";
 
             if (result.Files.Count == 1)
             {
-                TempData["Message"] = $"Exported {flushed}.{note}";
+                if (!wantsAjaxFile)
+                {
+                    TempData["Message"] = message;
+                }
+
                 Response.Headers["X-Flush-Record-Count"] = result.Logs.Sum(l => l.RecordCount).ToString();
+                Response.Headers["X-Flush-Message"] = message;
+                Response.Headers.Append(
+                    "Access-Control-Expose-Headers",
+                    "Content-Disposition, X-Flush-Record-Count, X-Flush-Message");
                 return File(result.Files[0].Bytes, "application/pdf", result.Files[0].FileName);
             }
 
@@ -89,23 +119,80 @@ public sealed class AdminFlushLogsController : Controller
 
                 buffer.Position = 0;
                 var stamp = PhilippinesTime.ToManila(DateTime.UtcNow).ToString("yyyyMMdd-HHmm");
-                TempData["Message"] = $"Exported {flushed}. Download the ZIP for every file.{note}";
+                if (!wantsAjaxFile)
+                {
+                    TempData["Message"] = message;
+                }
+
                 Response.Headers["X-Flush-Record-Count"] = result.Logs.Sum(l => l.RecordCount).ToString();
+                Response.Headers["X-Flush-Message"] = message;
+                Response.Headers.Append(
+                    "Access-Control-Expose-Headers",
+                    "Content-Disposition, X-Flush-Record-Count, X-Flush-Message");
                 return File(buffer.ToArray(), "application/zip", $"Mori-Flush-Export-{stamp}.zip");
             }
 
-            TempData["Message"] = $"Exported {flushed}.{note}";
+            TempData["Message"] = message;
             return RedirectToAction(nameof(Index));
         }
         catch (ArgumentException ex)
         {
+            if (wantsAjaxFile)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+
             var model = await BuildModelAsync(null, null, null, 1, cancellationToken);
-            model.PerformedBy = performedBy ?? string.Empty;
             model.Kinds = kinds ?? new List<SystemFlushKind>();
+            model.FromDate = fromDate;
+            model.ToDate = toDate;
             model.Error = ex.Message;
             return View("Index", model);
         }
+        catch (Exception ex)
+        {
+            var errorMessage = !string.IsNullOrWhiteSpace(ex.Message)
+                ? ex.Message
+                : "Export failed. Please try again in a moment. If it keeps failing, contact support.";
+
+            if (wantsAjaxFile)
+            {
+                return BadRequest(new { message = errorMessage });
+            }
+
+            var model = await BuildModelAsync(null, null, null, 1, cancellationToken);
+            model.Kinds = kinds ?? new List<SystemFlushKind>();
+            model.FromDate = fromDate;
+            model.ToDate = toDate;
+            model.Error = errorMessage;
+            return View("Index", model);
+        }
     }
+
+    private async Task<string> ResolveExporterNameAsync()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        var name = user?.FullName?.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = user?.UserName?.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = User.Identity?.Name?.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(name) || name.Length < 2)
+        {
+            throw new ArgumentException("Could not identify the signed-in staff account for this export.");
+        }
+
+        return name.Length > 120 ? name[..120] : name;
+    }
+
+    private bool IsAjaxFlushExportRequest() =>
+        string.Equals(Request.Headers["X-Flush-Export"], "1", StringComparison.OrdinalIgnoreCase);
 
     private async Task<AdminFlushLogsViewModel> BuildModelAsync(
         string? search,

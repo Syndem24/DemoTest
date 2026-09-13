@@ -1,4 +1,51 @@
 @* Guest-side booking modal UI recycled for admin walk-in *@
+<div class="guest-modal" id="walkInSourceModal" data-walkin-source-modal hidden>
+    <div class="guest-modal-backdrop" data-walkin-source-close></div>
+    <div class="guest-modal-dialog guest-modal-dialog-walkin guest-modal-dialog-source" role="dialog" aria-modal="true" aria-labelledby="walkInSourceTitle">
+        <button type="button" class="guest-modal-close" data-walkin-source-close aria-label="Close">&times;</button>
+        <header class="guest-book-modal-head">
+            <p class="guest-eyebrow">Front desk</p>
+            <h2 id="walkInSourceTitle">Create booking</h2>
+            <p class="guest-modal-lede">
+                Select the booking source. Named OTAs (Agoda, Expedia, RedDoorz) use standard rates. <strong>Other OTA</strong> can optionally use a special offer when selected by staff.
+            </p>
+        </header>
+        <div class="guest-form is-source-form">
+            <section class="guest-book-section is-source">
+                <div class="guest-book-section-head">
+                    <span class="guest-book-section-num">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                    </span>
+                    <div>
+                        <h3>Booking channel</h3>
+                        <p>Select where this reservation originated.</p>
+                    </div>
+                </div>
+                <div class="guest-form-grid">
+                    <label>
+                        <span>Booking channel</span>
+                        <select id="walkInSourceSelect">
+                            <option value="WalkIn" selected>Walk-in (Eligible for promos)</option>
+                            <option value="Agoda">Agoda (Third-party)</option>
+                            <option value="Expedia">Expedia (Third-party)</option>
+                            <option value="RedDoorz">RedDoorz (Third-party)</option>
+                            <option value="OtherThirdParty">Other OTA (Promo opt-in)</option>
+                        </select>
+                    </label>
+                </div>
+            </section>
+
+            <div class="guest-modal-actions guest-book-modal-actions">
+                <button type="button" class="guest-btn guest-btn-ghost" data-walkin-source-close>Cancel</button>
+                <button type="button" class="guest-btn guest-btn-primary" id="walkInSourceNextBtn">
+                    Continue
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="guest-modal" id="walkInGuestsModal" data-walkin-guests-modal hidden>
     <div class="guest-modal-backdrop" data-walkin-close></div>
     <div class="guest-modal-dialog guest-modal-dialog-guests guest-modal-dialog-walkin" role="dialog" aria-modal="true" aria-labelledby="walkInGuestsTitle">
@@ -175,15 +222,17 @@
                             <div class="admin-walkin-fees" id="walkInFeeBreakdown"></div>
                         </div>
 
-                        <div class="guest-field admin-walkin-channel-field">
+                        <div class="guest-field admin-walkin-channel-field" hidden>
                             <label for="walkInChannel" class="form-label">Booking channel</label>
                             <select id="walkInChannel" class="form-select" required>
                                 <option value="" selected>Select channel…</option>
                                 <option value="WalkIn">Walk-in</option>
                                 <option value="Agoda">Agoda</option>
+                                <option value="Expedia">Expedia</option>
                                 <option value="RedDoorz">RedDoorz</option>
+                                <option value="OtherThirdParty">Other OTA</option>
                             </select>
-                            <div class="form-text">Required. Agoda and RedDoorz use standard rates (no walk-in promo).</div>
+                            <div class="form-text">Required. Agoda, Expedia, and RedDoorz use standard OTA rates. Other OTA can optionally apply a special offer.</div>
                         </div>
                     </div>
 

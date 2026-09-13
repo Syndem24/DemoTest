@@ -14,29 +14,50 @@ public sealed partial class BookingService
 {
     public async Task<FlushBookingHistoryResult> FlushHistoryAsync(
         string performedBy,
+        FlushDateRange dateRange = default,
+        bool clearAfterExport = true,
         CancellationToken cancellationToken = default)
     {
         performedBy = performedBy?.Trim() ?? string.Empty;
         if (performedBy.Length < 2 || performedBy.Length > 120)
         {
-            throw new ArgumentException("Enter the staff name who is exporting history (2â€“120 characters).");
+            throw new ArgumentException("Could not identify the staff account exporting history.");
         }
 
         await PurgeExpiredHistoryFlushLogsAsync(cancellationToken);
 
         return await ExecuteInSerializableTransactionAsync(async ct =>
         {
-        var archived = await _db.Bookings
+        var query = _db.Bookings
             .Include(booking => booking.Items)
                 .ThenInclude(item => item.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)
-            .Where(booking => booking.IsArchived)
+            .Where(booking => booking.IsArchived);
+
+        if (dateRange.FromUtcInclusive.HasValue)
+        {
+            var fromUtc = dateRange.FromUtcInclusive.Value;
+            query = query.Where(booking =>
+                (booking.ArchivedAtUtc ?? booking.UpdatedAtUtc) >= fromUtc);
+        }
+
+        if (dateRange.ToUtcExclusive.HasValue)
+        {
+            var toUtc = dateRange.ToUtcExclusive.Value;
+            query = query.Where(booking =>
+                (booking.ArchivedAtUtc ?? booking.UpdatedAtUtc) < toUtc);
+        }
+
+        var archived = await query
             .OrderByDescending(booking => booking.ArchivedAtUtc ?? booking.UpdatedAtUtc)
             .ToListAsync(ct);
 
         if (archived.Count == 0)
         {
-            throw new ArgumentException("History is empty â€” nothing to export.");
+            throw new ArgumentException(
+                dateRange.HasFilter
+                    ? "No archived bookings in that date range — nothing to export."
+                    : "No archived bookings to export.");
         }
 
         var flushedAtUtc = DateTime.UtcNow;
@@ -45,16 +66,24 @@ public sealed partial class BookingService
         var logoPath = Path.Combine(_environment.WebRootPath, "Images", "Logo.png");
         var pdfBytes = BookingHistoryPdfBuilder.Build(archived, performedBy, flushedAtUtc, logoPath);
 
-        var summary = BuildFlushSummary(archived);
+        var clearNote = clearAfterExport ? " then deleted." : " Data was kept (export only).";
+        var summary = BuildFlushSummary(archived) + dateRange.DescribeForSummary()
+            + (clearAfterExport ? " Cleared after export." : " Export only — records kept.");
+        var auditSummary =
+            $"{archived.Count} archived stay(s) exported to {fileName},{clearNote}{dateRange.DescribeForSummary()}";
+        var recordCount = archived.Count;
 
-        _db.Bookings.RemoveRange(archived);
+        if (clearAfterExport)
+        {
+            _db.Bookings.RemoveRange(archived);
+        }
 
         var log = new SystemFlushLog
         {
             Kind = SystemFlushKind.BookingHistory,
-            FlushedAtUtc = flushedAtUtc,
+            FlushedAtUtc = DateTime.UtcNow,
             PerformedBy = performedBy,
-            RecordCount = archived.Count,
+            RecordCount = recordCount,
             FileName = fileName,
             Summary = summary.Length > 2000 ? summary[..2000] : summary
         };
@@ -63,10 +92,10 @@ public sealed partial class BookingService
             SystemAuditIntent.FileModification,
             SystemAuditDomain.File,
             "Booking.FlushExport",
-            "Flush",
+            clearAfterExport ? "Flush" : "Export",
             fileName,
             fileName,
-            summary: $"{archived.Count} archived stay(s) exported to {fileName}, then deleted.");
+            summary: auditSummary);
 
         await _db.SaveChangesAsync(ct);
 

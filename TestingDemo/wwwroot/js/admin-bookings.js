@@ -302,7 +302,7 @@
     if (clearButton.disabled) return;
     clearButton.disabled = true;
     const previousLabel = clearButton.textContent;
-    clearButton.textContent = 'Clearingâ€¦';
+    clearButton.textContent = 'Clearing\u2026';
     try {
       await apiFetch('/api/admin/bookings/notifications/read-all', { method: 'POST' });
       setBadge(0);
@@ -437,7 +437,7 @@
     image.setAttribute('data-photo-zoom', '');
     image.setAttribute('data-photo-zoom-src', image.getAttribute('src') || '');
     image.setAttribute('data-photo-zoom-alt', image.getAttribute('alt') || 'E-wallet receipt');
-    image.setAttribute('title', 'Click to zoom Â· Esc to exit');
+    image.setAttribute('title', 'Click to zoom \u00B7 Esc to exit');
     if (typeof window.initPhotoZoom === 'function') {
       window.initPhotoZoom(image.parentElement || paymentAddModal || document);
     }
@@ -673,7 +673,7 @@
     });
   }
 
-  /** Compress for Azure F0 (max 4 MB) â€” scanned + small JPEG. */
+  /** Compress for Azure F0 (max 4 MB) \u2014 scanned + small JPEG. */
   async function prepareReceiptForAzureOcr(file) {
     return applyReceiptScannerFilter(file, {
       maxSide: 1600,
@@ -816,14 +816,14 @@
     if (!parsed.reference) missing.push('reference');
     if (parsed.amount == null) missing.push('amount');
     if (!parsed.transferFrom && !parsed.transferTo) missing.push('from/to');
-    const engineNote = engineLabel ? ` Â· ${engineLabel}` : '';
+    const engineNote = engineLabel ? ` \u00B7 ${engineLabel}` : '';
     if (missing.length) {
       setPaymentOcrStatus(
         `${layoutLabel}${engineNote}: could not fully read ${missing.join(', ')}. Fix from the photo, then Apply.`,
         true
       );
     } else {
-      setPaymentOcrStatus(`${layoutLabel} detected${engineNote} â€” compare fields, then Apply.`);
+      setPaymentOcrStatus(`${layoutLabel} detected${engineNote} \u2014 compare fields, then Apply.`);
     }
   }
 
@@ -857,8 +857,8 @@
     }
     if (caption) {
       caption.textContent = useScannerFilter
-        ? 'Scanned receipt Â· click to zoom Â· Esc to exit'
-        : 'Receipt photo Â· click to zoom Â· Esc to exit';
+        ? 'Scanned receipt \u00B7 click to zoom \u00B7 Esc to exit'
+        : 'Receipt photo \u00B7 click to zoom \u00B7 Esc to exit';
     }
     return workingFile;
   }
@@ -879,10 +879,10 @@
 
     let workingFile = file;
     if (paymentOcrScannerFilterEnabled) {
-      setPaymentOcrStatus('Applying scanner filterâ€¦');
+      setPaymentOcrStatus('Applying scanner filter\u2026');
     } else {
       setPaymentOcrStatus(
-        azureOcrConfigured === false ? 'Reading receipt with local OCRâ€¦' : 'Reading receiptâ€¦'
+        azureOcrConfigured === false ? 'Reading receipt with local OCR\u2026' : 'Reading receipt\u2026'
       );
     }
 
@@ -911,8 +911,8 @@
       if (azureOcrConfigured !== false) {
         setPaymentOcrStatus(
           paymentOcrScannerFilterEnabled
-            ? 'Reading scanned receipt with Azureâ€¦'
-            : 'Reading receipt with Azureâ€¦'
+            ? 'Reading scanned receipt with Azure\u2026'
+            : 'Reading receipt with Azure\u2026'
         );
         try {
           const azureResult = await requestAzureReceiptOcr(workingFile);
@@ -935,18 +935,18 @@
                 : engine === 'Unavailable'
                   ? 'Azure not configured'
                   : 'Azure unavailable');
-            setPaymentOcrStatus(`Using local OCR (${reason})â€¦`);
+            setPaymentOcrStatus(`Using local OCR (${reason})\u2026`);
           }
         } catch (azureError) {
           setPaymentOcrStatus(
-            `Using local OCR (${azureError instanceof Error ? azureError.message : 'Azure request failed'})â€¦`
+            `Using local OCR (${azureError instanceof Error ? azureError.message : 'Azure request failed'})\u2026`
           );
         }
       } else {
         setPaymentOcrStatus(
           paymentOcrScannerFilterEnabled
-            ? 'Reading scanned receipt with local OCRâ€¦'
-            : 'Reading receipt with local OCRâ€¦'
+            ? 'Reading scanned receipt with local OCR\u2026'
+            : 'Reading receipt with local OCR\u2026'
         );
       }
 
@@ -956,7 +956,7 @@
             'Azure OCR unavailable and local OCR library failed to load. Enter details manually.'
           );
         }
-        recognizedText = await runTesseractReceiptOcr(workingFile, 'Local OCRâ€¦ ');
+        recognizedText = await runTesseractReceiptOcr(workingFile, 'Local OCR\u2026 ');
         engineLabel = azureOcrConfigured === false
           ? 'local OCR (Azure not configured)'
           : 'local OCR';
@@ -1000,9 +1000,9 @@
     const scrollTop = body?.scrollTop ?? 0;
     const keepReading = hasPaymentOcrReading();
 
-    // Always update the preview immediately â€” do not block on OCR.
+    // Always update the preview immediately \u2014 do not block on OCR.
     setPaymentOcrStatus(
-      enabled ? 'Applying scanner filterâ€¦' : 'Showing original receiptâ€¦'
+      enabled ? 'Applying scanner filter\u2026' : 'Showing original receipt\u2026'
     );
     try {
       await previewPaymentReceiptFilter(paymentOcrOriginalFile, enabled);
@@ -1015,15 +1015,15 @@
       paymentOcrRerunAfterBusy = false;
       if (keepReading) {
         setPaymentOcrStatus(
-          'Showing original receipt â€” OCR fields kept. Turn filter on again to re-read.'
+          'Showing original receipt \u2014 OCR fields kept. Turn filter on again to re-read.'
         );
       } else {
-        setPaymentOcrStatus('Showing original receiptâ€¦');
+        setPaymentOcrStatus('Showing original receipt\u2026');
       }
     } else if (paymentOcrBusy) {
       paymentOcrRerunAfterBusy = true;
       setPaymentOcrStatus(
-        'Scanner filter on â€” OCR will re-read when the current pass finishes.'
+        'Scanner filter on \u2014 OCR will re-read when the current pass finishes.'
       );
     } else {
       await runPaymentReceiptOcr(paymentOcrOriginalFile);
@@ -1088,15 +1088,15 @@
     if (amountValue > 0) {
       partyBits.push(
         capped
-          ? `Receipt amount: ${money(amountValue)} Â· Will apply ${money(appliedAmount)} (excess not posted)`
+          ? `Receipt amount: ${money(amountValue)} \u00B7 Will apply ${money(appliedAmount)} (excess not posted)`
           : `Receipt amount: ${money(amountValue)}`
       );
     }
     if (partyBits.length && notes) {
-      const stamp = `Digital OCR Â· ${partyBits.join(' Â· ')}`;
+      const stamp = `Digital OCR \u00B7 ${partyBits.join(' \u00B7 ')}`;
       const existing = (notes.value || '').trim();
-      notes.value = existing.includes('Digital OCR Â·') || existing.includes('E-wallet OCR Â·')
-        ? existing.replace(/(?:Digital|E-wallet) OCR Â·[^\n]*/i, stamp)
+      notes.value = existing.includes('Digital OCR \u00B7') || existing.includes('E-wallet OCR \u00B7')
+        ? existing.replace(/(?:Digital|E-wallet) OCR \u00B7[^\n]*/i, stamp)
         : existing
           ? `${existing}\n${stamp}`
           : stamp;
@@ -1108,11 +1108,11 @@
     setPaymentAddBanner('');
     if (capped) {
       setPaymentOcrStatus(
-        `Applied ${channel} Â· ${reference}. Receipt ${money(amountValue)} exceeds balance â€” will post ${money(appliedAmount)} only.`
+        `Applied ${channel} \u00B7 ${reference}. Receipt ${money(amountValue)} exceeds balance \u2014 will post ${money(appliedAmount)} only.`
       );
     } else {
-      const amountNote = amountValue > 0 ? ` Â· ${money(amountValue)}` : '';
-      setPaymentOcrStatus(`Applied ${channel} Â· ${reference}${amountNote}. Save payment when ready.`);
+      const amountNote = amountValue > 0 ? ` \u00B7 ${money(amountValue)}` : '';
+      setPaymentOcrStatus(`Applied ${channel} \u00B7 ${reference}${amountNote}. Save payment when ready.`);
     }
   }
 
@@ -1327,7 +1327,7 @@
 
     const sample = grabPaymentCameraGuideSample();
     if (!sample) {
-      setPaymentCameraStatus('Waiting for camera previewâ€¦');
+      setPaymentCameraStatus('Waiting for camera preview\u2026');
       setPaymentCameraGuideState('scanning', 'Mobile receipt');
       schedulePaymentCameraAutoScan(280);
       return;
@@ -1338,7 +1338,7 @@
       paymentCameraGoodHits = 0;
       paymentCameraLastGoodRef = '';
       setPaymentCameraGuideState('scanning', 'Hold phone upright');
-      setPaymentCameraStatus('Center the upright mobile receipt in the portrait frameâ€¦');
+      setPaymentCameraStatus('Center the upright mobile receipt in the portrait frame\u2026');
       schedulePaymentCameraAutoScan(280);
       return;
     }
@@ -1347,16 +1347,16 @@
       try {
         await ensureTesseractLoaded();
       } catch {
-        setPaymentCameraGuideState('ready', 'Looking clear â€” tap Capture');
-        setPaymentCameraStatus('Image looks clear. OCR unavailable â€” tap Capture photo.');
+        setPaymentCameraGuideState('ready', 'Looking clear \u2014 tap Capture');
+        setPaymentCameraStatus('Image looks clear. OCR unavailable \u2014 tap Capture photo.');
         schedulePaymentCameraAutoScan(900);
         return;
       }
     }
 
     paymentCameraScanBusy = true;
-    setPaymentCameraGuideState('scanning', 'Readingâ€¦');
-    setPaymentCameraStatus('Clear image â€” checking receipt detailsâ€¦');
+    setPaymentCameraGuideState('scanning', 'Reading\u2026');
+    setPaymentCameraStatus('Clear image \u2014 checking receipt details\u2026');
     try {
       // Warm worker in parallel with downscale when possible.
       const [worker, blob] = await Promise.all([
@@ -1388,21 +1388,21 @@
         setPaymentCameraGuideState('ready', 'Details clear');
         // Capture sooner: one strong read, or two matching reads.
         if (paymentCameraGoodHits >= 2 || (paymentCameraGoodHits >= 1 && sharpness >= 16)) {
-          setPaymentCameraStatus('Details clear â€” capturingâ€¦');
+          setPaymentCameraStatus('Details clear \u2014 capturing\u2026');
           paymentCameraAutoCaptureLock = true;
           stopPaymentCameraAutoScan();
           await capturePaymentCameraPhoto({ auto: true });
           return;
         }
-        setPaymentCameraStatus('Details found â€” hold steadyâ€¦');
+        setPaymentCameraStatus('Details found \u2014 hold steady\u2026');
       } else {
         paymentCameraGoodHits = 0;
         paymentCameraLastGoodRef = '';
         setPaymentCameraGuideState('scanning', 'Need clearer details');
-        setPaymentCameraStatus('Receipt in frame â€” move closer until ref/amount are sharpâ€¦');
+        setPaymentCameraStatus('Receipt in frame \u2014 move closer until ref/amount are sharp\u2026');
       }
     } catch {
-      setPaymentCameraStatus('Still scanningâ€¦ keep the receipt inside the frame.');
+      setPaymentCameraStatus('Still scanning\u2026 keep the receipt inside the frame.');
     } finally {
       paymentCameraScanBusy = false;
       if (!paymentCameraAutoCaptureLock && paymentCameraModal && !paymentCameraModal.hidden) {
@@ -1452,7 +1452,7 @@
   async function openPaymentCamera() {
     if (!paymentAddModal || paymentAddModal.hidden) return;
     if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-      setPaymentOcrStatus('Camera needs HTTPS (or localhost). Opening device captureâ€¦', true);
+      setPaymentOcrStatus('Camera needs HTTPS (or localhost). Opening device capture\u2026', true);
       openNativeReceiptCapture();
       return;
     }
@@ -1465,18 +1465,18 @@
     paymentCameraFacingMode = 'environment';
     paymentCameraAutoCaptureLock = false;
     paymentCameraModal.hidden = false;
-    setPaymentCameraStatus('Starting cameraâ€¦');
+    setPaymentCameraStatus('Starting camera\u2026');
     setPaymentCameraGuideState('scanning', 'Mobile receipt');
     // Pre-warm OCR worker while the camera stream starts.
     ensurePaymentCameraScanWorker().catch(() => {});
     try {
       await startPaymentCameraStream();
-      setPaymentCameraStatus('Portrait scan on â€” hold the phone upright in the frame.');
+      setPaymentCameraStatus('Portrait scan on \u2014 hold the phone upright in the frame.');
       schedulePaymentCameraAutoScan(450);
     } catch (error) {
       closePaymentCameraModal();
       const message = error instanceof Error ? error.message : 'Unable to open camera.';
-      setPaymentOcrStatus(`${message} Opening device camera insteadâ€¦`, true);
+      setPaymentOcrStatus(`${message} Opening device camera instead\u2026`, true);
       openNativeReceiptCapture();
     }
   }
@@ -1485,13 +1485,13 @@
     paymentCameraFacingMode = paymentCameraFacingMode === 'environment' ? 'user' : 'environment';
     paymentCameraAutoCaptureLock = false;
     stopPaymentCameraAutoScan();
-    setPaymentCameraStatus('Switching cameraâ€¦');
+    setPaymentCameraStatus('Switching camera\u2026');
     try {
       await startPaymentCameraStream();
       setPaymentCameraStatus(
         paymentCameraFacingMode === 'environment'
-          ? 'Rear camera â€” auto-scan on.'
-          : 'Front camera â€” auto-scan on.'
+          ? 'Rear camera \u2014 auto-scan on.'
+          : 'Front camera \u2014 auto-scan on.'
       );
       schedulePaymentCameraAutoScan(400);
     } catch {
@@ -1524,7 +1524,7 @@
 
     stopPaymentCameraAutoScan();
     paymentCameraAutoCaptureLock = true;
-    setPaymentCameraStatus(options.auto ? 'Auto-capturing clear receiptâ€¦' : 'Capturingâ€¦');
+    setPaymentCameraStatus(options.auto ? 'Auto-capturing clear receipt\u2026' : 'Capturing\u2026');
 
     paymentCameraCanvas.width = width;
     paymentCameraCanvas.height = height;
@@ -1560,7 +1560,7 @@
     const pathInput = paymentAddModal.querySelector('[data-payment-receipt-path]');
     const preview = paymentAddModal.querySelector('[data-payment-receipt-preview]');
     const previewWrap = paymentAddModal.querySelector('[data-payment-receipt-preview-wrap]');
-    setPaymentOcrStatus('Uploading receiptâ€¦');
+    setPaymentOcrStatus('Uploading receipt\u2026');
     try {
       if (paymentOcrObjectUrl) URL.revokeObjectURL(paymentOcrObjectUrl);
       paymentOcrObjectUrl = URL.createObjectURL(file);
@@ -1623,7 +1623,7 @@
     const preview = paymentAddModal.querySelector('[data-payment-prices-preview]');
     if (preview) {
       const label = bal < -0.009 ? 'Overpaid' : bal <= 0.009 ? 'Fully paid' : 'Balance due';
-      preview.textContent = `${label} ${money(bal < -0.009 ? Math.abs(bal) : Math.max(0, bal))} Â· closed by default`;
+      preview.textContent = `${label} ${money(bal < -0.009 ? Math.abs(bal) : Math.max(0, bal))} \u00B7 closed by default`;
     }
   }
 
@@ -1654,7 +1654,7 @@
     const box = paymentAddModal.querySelector('[data-payment-change-box]');
     if (changeEl) changeEl.textContent = money(change);
     if (formula) {
-      formula.textContent = `${money(tendered)} âˆ’ ${money(due)} = ${money(change)} change`;
+      formula.textContent = `${money(tendered)} \u2212 ${money(due)} = ${money(change)} change`;
     }
     if (box) {
       box.classList.toggle('is-short', tendered > 0 && tendered < due);
@@ -1701,7 +1701,7 @@
     if (guest) guest.textContent = booking.guestName || 'Guest';
     if (paymentViewList) {
       paymentViewList.innerHTML =
-        '<tr><td colspan="6" class="admin-bookings-loading">Loadingâ€¦</td></tr>';
+        '<tr><td colspan="6" class="admin-bookings-loading">Loading\u2026</td></tr>';
     }
     if (paymentViewSummary) paymentViewSummary.replaceChildren();
 
@@ -1863,10 +1863,10 @@
     if (notes) {
       if (cashOnlyPromo) {
         notes.value = booking.specialOfferTitle
-          ? `Special offer (${booking.specialOfferTitle}) â€” cash on arrival only.`
-          : 'Special offer â€” cash on arrival only.';
+          ? `Special offer (${booking.specialOfferTitle}) \u2014 cash on arrival only.`
+          : 'Special offer \u2014 cash on arrival only.';
       } else if (hasIncidental) {
-        notes.value = 'Incidental (damage) on booking â€” collect in cash.';
+        notes.value = 'Incidental (damage) on booking \u2014 collect in cash.';
       } else {
         notes.value = '';
       }
@@ -1930,7 +1930,7 @@
         return;
       }
       const change = Math.round((tendered - amount) * 100) / 100;
-      const cashNote = `Cash tendered ${money(tendered)} Â· Change ${money(change)}`;
+      const cashNote = `Cash tendered ${money(tendered)} \u00B7 Change ${money(change)}`;
       notes = notes ? `${notes}\n${cashNote}` : cashNote;
     } else if (!cash) {
       const receiptPath = (paymentAddModal.querySelector('[data-payment-receipt-path]')?.value || '').trim();
@@ -1939,7 +1939,7 @@
         return;
       }
 
-      // E-wallet (InstaPay QR) â€” post only balance due; note excess on the receipt.
+      // E-wallet (InstaPay QR) \u2014 post only balance due; note excess on the receipt.
       const balanceDue = Math.max(0, Number(paymentPriceContext.balanceDue) || 0);
       if (eventType !== 'Refund' && amount > balanceDue + 0.009) {
         if (!(balanceDue > 0.009)) {
@@ -1953,8 +1953,8 @@
         const epayAmount = paymentAddModal.querySelector('[data-payment-epay-amount]');
         if (epayAmount) epayAmount.value = applied.toFixed(2);
         const capNote =
-          `Receipt/transfer ${money(receiptAmount)} Â· Applied ${money(applied)} (excess ${money(excess)} not posted)`;
-        if (!/Receipt\/transfer .* Â· Applied /i.test(notes)) {
+          `Receipt/transfer ${money(receiptAmount)} \u00B7 Applied ${money(applied)} (excess ${money(excess)} not posted)`;
+        if (!/Receipt\/transfer .* \u00B7 Applied /i.test(notes)) {
           notes = notes ? `${notes}\n${capNote}` : capNote;
         }
         const notesField = paymentAddModal.querySelector('[data-payment-notes]');
@@ -2016,10 +2016,10 @@
     if (!flushLogCount) return;
     const state = expanded ? 'Open' : 'Closed';
     if (!count) {
-      flushLogCount.textContent = `${state} Â· no export actions yet Â· kept 7 days`;
+      flushLogCount.textContent = `${state} \u00B7 no export actions yet \u00B7 kept 7 days`;
       return;
     }
-    flushLogCount.textContent = `${state} Â· ${count} export action${count === 1 ? '' : 's'} Â· kept 7 days`;
+    flushLogCount.textContent = `${state} \u00B7 ${count} export action${count === 1 ? '' : 's'} \u00B7 kept 7 days`;
   }
 
   function openFlushDetail(log) {
@@ -2031,9 +2031,9 @@
       .filter(Boolean);
     const fields = [
       ['When (PH)', formatDateTime(log.flushedAtUtc)],
-      ['Performed by', log.performedBy || 'â€”'],
+      ['Performed by', log.performedBy || '\u2014'],
       ['Records deleted', String(log.recordCount ?? 0)],
-      ['PDF softcopy', log.fileName || 'â€”'],
+      ['PDF softcopy', log.fileName || '\u2014'],
       ['Expires (PH)', formatDateTime(log.expiresAtUtc)],
     ];
     flushDetailBody.replaceChildren();
@@ -2075,7 +2075,7 @@
   async function refreshFlushLogs() {
     if (!flushLogList || !history) return;
     flushLogList.innerHTML =
-      '<tr><td colspan="6" class="admin-bookings-loading">Loading export logâ€¦</td></tr>';
+      '<tr><td colspan="6" class="admin-bookings-loading">Loading export log\u2026</td></tr>';
     try {
       const logs = await apiFetch('/api/admin/bookings/history/flush-logs');
       flushLogsCache = Array.isArray(logs) ? logs : [];
@@ -2096,9 +2096,9 @@
         const row = document.createElement('tr');
         const cells = [
           formatDateTime(log.flushedAtUtc),
-          log.performedBy || 'â€”',
+          log.performedBy || '\u2014',
           String(log.recordCount ?? 0),
-          log.fileName || 'â€”',
+          log.fileName || '\u2014',
           formatDateTime(log.expiresAtUtc),
         ];
         cells.forEach((text, index) => {
@@ -2169,10 +2169,10 @@
     if (flushConfirmButton) {
       flushConfirmButton.disabled = true;
       flushConfirmButton.dataset.exportLabel = flushConfirmButton.textContent || '';
-      flushConfirmButton.textContent = 'Exportingâ€¦';
+      flushConfirmButton.textContent = 'Exporting\u2026';
     }
     window.setAdminExportLoading?.(true, {
-      title: 'Exporting historyâ€¦',
+      title: 'Exporting history\u2026',
       detail: 'Building branded PDF softcopy and deleting archived history. Please wait.',
     });
     try {
@@ -2190,7 +2190,11 @@
         `History exported (${result.recordCount || 'all'} records). PDF saved as ${result.fileName}.`
       );
     } catch (error) {
-      showBookingMessage(error instanceof Error ? error.message : 'Unable to export history.', true);
+      showBookingMessage(
+        window.friendlyAdminExportError?.(error, 'Unable to export history.')
+          || (error instanceof Error ? error.message : 'Unable to export history.'),
+        true
+      );
     } finally {
       window.setAdminExportLoading?.(false);
       if (flushConfirmButton) {
@@ -2245,7 +2249,7 @@
   }
 
   function formatDate(value) {
-    if (!value) return 'â€”';
+    if (!value) return '\u2014';
     const date = parseUtc(value);
     return date
       ? date.toLocaleDateString(PH_LOCALE, {
@@ -2272,7 +2276,7 @@
   }
 
   function formatTime(value) {
-    if (!value) return 'â€”';
+    if (!value) return '\u2014';
     const date = parseUtc(value);
     return date
       ? date.toLocaleTimeString(PH_LOCALE, {
@@ -2280,11 +2284,11 @@
           hour: 'numeric',
           minute: '2-digit',
         })
-      : 'â€”';
+      : '\u2014';
   }
 
   function formatStayRange(checkIn, checkOut) {
-    return `${formatDateTime(checkIn) || formatDate(checkIn)} â†’ ${formatDateTime(checkOut) || formatDate(checkOut)}`;
+    return `${formatDateTime(checkIn) || formatDate(checkIn)} \u2192 ${formatDateTime(checkOut) || formatDate(checkOut)}`;
   }
 
   function daytimeCallStateKey(localDateIso, kind, bookingId) {
@@ -2311,10 +2315,7 @@
   }
 
   function money(value) {
-    return `â‚±${Number(value || 0).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
+    return `\u20B1${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
   function escapeHtml(value) {
@@ -2346,9 +2347,9 @@
     contentBtn.className = 'admin-notification-content';
 
     const title = document.createElement('strong');
-    title.textContent = `${item.reference} Â· ${item.guestName}`;
+    title.textContent = `${item.reference} \u00B7 ${item.guestName}`;
     const meta = document.createElement('span');
-    meta.textContent = `${displayEnum(item.kind)} Â· ${formatDateTime(item.checkInAtUtc || item.checkIn) || formatDate(item.checkInAtUtc || item.checkIn)}`;
+    meta.textContent = `${displayEnum(item.kind)} \u00B7 ${formatDateTime(item.checkInAtUtc || item.checkIn) || formatDate(item.checkInAtUtc || item.checkIn)}`;
     const time = document.createElement('small');
     time.textContent = formatDateTime(item.createdAtUtc);
     contentBtn.append(title, meta, time);
@@ -2501,11 +2502,11 @@
         const assigned = (line.assignedRooms || []).map((room) => room.roomNumber).filter(Boolean);
         return assigned.length
           ? assigned
-          : [`${line.quantity}Ã— ${line.roomTypeName}`];
+          : [`${line.quantity}\u00D7 ${line.roomTypeName}`];
       })
       .join(', ');
     const title = document.createElement('strong');
-    title.textContent = `${booking.reference} Â· ${booking.guestName}`;
+    title.textContent = `${booking.reference} \u00B7 ${booking.guestName}`;
     const meta = document.createElement('span');
     meta.textContent = rooms || 'Rooms pending assignment';
     const time = document.createElement('small');
@@ -2520,10 +2521,10 @@
     button.type = 'button';
     button.className = 'admin-arrival-card';
     const rooms = (booking.items || [])
-      .map((line) => `${line.quantity}Ã— ${line.roomTypeName}`)
+      .map((line) => `${line.quantity}\u00D7 ${line.roomTypeName}`)
       .join(', ');
     const title = document.createElement('strong');
-    title.textContent = `${booking.reference} Â· ${booking.guestName}`;
+    title.textContent = `${booking.reference} \u00B7 ${booking.guestName}`;
     const phone = document.createElement('span');
     phone.textContent = booking.guestPhone ? `Call ${booking.guestPhone}` : 'No phone on file';
     const meta = document.createElement('span');
@@ -2544,15 +2545,15 @@
         const assigned = (line.assignedRooms || []).map((room) => room.roomNumber).filter(Boolean);
         return assigned.length
           ? assigned
-          : [`${line.quantity}Ã— ${line.roomTypeName}`];
+          : [`${line.quantity}\u00D7 ${line.roomTypeName}`];
       })
       .join(', ');
     const title = document.createElement('strong');
-    title.textContent = `${booking.reference} Â· ${booking.guestName}`;
+    title.textContent = `${booking.reference} \u00B7 ${booking.guestName}`;
     const phone = document.createElement('span');
     phone.textContent = booking.guestPhone
-      ? `Call ${booking.guestPhone} â€” ask about late checkout`
-      : 'No phone on file â€” ask about late checkout';
+      ? `Call ${booking.guestPhone} \u2014 ask about late checkout`
+      : 'No phone on file \u2014 ask about late checkout';
     const meta = document.createElement('span');
     meta.textContent = rooms || 'Rooms pending assignment';
     const time = document.createElement('small');
@@ -2570,7 +2571,7 @@
         const assigned = (line.assignedRooms || []).map((room) => room.roomNumber).filter(Boolean);
         return assigned.length
           ? assigned
-          : [`${line.quantity}Ã— ${line.roomTypeName}`];
+          : [`${line.quantity}\u00D7 ${line.roomTypeName}`];
       })
       .join(', ');
     const calledDone = isDaytimeCallDone(localDateIso, kind, booking.id);
@@ -2580,7 +2581,7 @@
     const topRow = document.createElement('div');
     topRow.className = 'admin-daytime-top';
     const title = document.createElement('strong');
-    title.textContent = `${booking.reference} Â· ${booking.guestName}`;
+    title.textContent = `${booking.reference} \u00B7 ${booking.guestName}`;
     const timeBadge = document.createElement('span');
     timeBadge.className = 'admin-daytime-time-badge';
     timeBadge.textContent = kind === 'arrival'
@@ -2629,7 +2630,7 @@
 
   async function refreshArrivals() {
     if (!arrivalsList) return;
-    arrivalsList.innerHTML = '<p class="admin-bookings-loading">Loading arrivalsâ€¦</p>';
+    arrivalsList.innerHTML = '<p class="admin-bookings-loading">Loading arrivals\u2026</p>';
     try {
       const items = await apiFetch('/api/admin/bookings/arrivals?windowMinutes=20');
       arrivalsList.replaceChildren();
@@ -2648,7 +2649,7 @@
 
   async function refreshPendingCalls() {
     if (!pendingCallsList) return;
-    pendingCallsList.innerHTML = '<p class="admin-bookings-loading">Loading pending callsâ€¦</p>';
+    pendingCallsList.innerHTML = '<p class="admin-bookings-loading">Loading pending calls\u2026</p>';
     try {
       const items = await apiFetch('/api/admin/bookings/pending-calls?windowMinutes=20');
       pendingCallsList.replaceChildren();
@@ -2667,7 +2668,7 @@
 
   async function refreshCheckouts() {
     if (!checkoutsList) return;
-    checkoutsList.innerHTML = '<p class="admin-bookings-loading">Loading checkoutsâ€¦</p>';
+    checkoutsList.innerHTML = '<p class="admin-bookings-loading">Loading checkouts\u2026</p>';
     try {
       const items = await apiFetch('/api/admin/bookings/checkouts?windowMinutes=20');
       checkoutsList.replaceChildren();
@@ -2694,8 +2695,8 @@
 
   async function refreshDaytimeFlow() {
     if (!daytimeArrivalsList || !daytimeCheckoutsList) return;
-    daytimeArrivalsList.innerHTML = '<p class="admin-bookings-loading">Loading daytime arrivalsâ€¦</p>';
-    daytimeCheckoutsList.innerHTML = '<p class="admin-bookings-loading">Loading daytime checkoutsâ€¦</p>';
+    daytimeArrivalsList.innerHTML = '<p class="admin-bookings-loading">Loading daytime arrivals\u2026</p>';
+    daytimeCheckoutsList.innerHTML = '<p class="admin-bookings-loading">Loading daytime checkouts\u2026</p>';
     try {
       const payload = await apiFetch('/api/admin/bookings/daytime-flow?startHour=6&endHour=18');
       const arrivals = payload?.arrivals || [];
@@ -2706,10 +2707,10 @@
       daytimeFlowLocalDateIso = String(payload?.localDateIso || '');
 
       if (daytimeArrivalsTitle) {
-        daytimeArrivalsTitle.textContent = `Arrivals Â· ${dateLabel} (${startHour}:00-${endHour}:59)`;
+        daytimeArrivalsTitle.textContent = `Arrivals \u00B7 ${dateLabel} (${startHour}:00-${endHour}:59)`;
       }
       if (daytimeCheckoutsTitle) {
-        daytimeCheckoutsTitle.textContent = `Checkouts Â· ${dateLabel} (${startHour}:00-${endHour}:59)`;
+        daytimeCheckoutsTitle.textContent = `Checkouts \u00B7 ${dateLabel} (${startHour}:00-${endHour}:59)`;
       }
 
       daytimeArrivalsList.replaceChildren();
@@ -2865,7 +2866,7 @@
     return `${get('year')}-${get('month')}-${get('day')}`;
   }
 
-  /** Rooms may be assigned from the Manila arrival date onward â€” not earlier. */
+  /** Rooms may be assigned from the Manila arrival date onward \u2014 not earlier. */
   function canAssignRoomsToday(booking) {
     const arrival = manilaParts(booking.checkInAtUtc || booking.checkIn)?.date;
     if (!arrival) return false;
@@ -2877,7 +2878,7 @@
     return (
       `Assign rooms is locked until the check-in date (${arrival}, Philippines time). ` +
       `Payment can be recorded anytime after confirmation. ` +
-      `If the guest arrives earlier, use Adjust stay to move check-in â€” then assign rooms once that date is today and the stay is fully paid.`
+      `If the guest arrives earlier, use Adjust stay to move check-in \u2014 then assign rooms once that date is today and the stay is fully paid.`
     );
   }
 
@@ -2908,12 +2909,12 @@
           ? `${typeName} ${assigned[0]}`
           : `${typeName}: ${assigned.join(', ')}`;
       }
-      return `${qty}Ã— ${typeName}`;
+      return `${qty}\u00D7 ${typeName}`;
     });
 
-    let label = parts.join(' Â· ');
+    let label = parts.join(' \u00B7 ');
     if (bookingNeedsRooms(booking)) {
-      label += ' Â· not assigned';
+      label += ' \u00B7 not assigned';
     }
     return label;
   }
@@ -2947,7 +2948,7 @@
         if (booking.specialOfferId || booking.cashOnlyPromo) {
           const tag = document.createElement('span');
           tag.className = 'admin-booking-status is-special-offer';
-          tag.textContent = booking.cashOnlyPromo ? 'Special offer Â· Cash' : 'Special offer';
+          tag.textContent = booking.cashOnlyPromo ? 'Special offer \u00B7 Cash' : 'Special offer';
           tag.title = booking.specialOfferTitle
             ? `Special offer: ${booking.specialOfferTitle}`
             : 'Guest booked a special offer';
@@ -2984,7 +2985,7 @@
       flag.className = 'admin-booking-status is-needs-rooms';
       flag.textContent = canAssignRoomsToday(booking) ? 'Assign rooms' : 'Ready on arrival';
       flag.title = canAssignRoomsToday(booking)
-        ? 'Confirmed â€” finish payment if needed, then assign room numbers'
+        ? 'Confirmed \u2014 finish payment if needed, then assign room numbers'
         : arrivalAssignMessage(booking);
       statusCell.append(flag);
     }
@@ -3014,7 +3015,7 @@
     calendarDayModal?.removeAttribute('inert');
   }
 
-  /** Field row for guest details â€” plain label/value blocks (never dl/dt/dd). */
+  /** Field row for guest details \u2014 plain label/value blocks (never dl/dt/dd). */
   function detailField(label, value) {
     const wrapper = document.createElement('div');
     wrapper.className = 'admin-booking-detail-field';
@@ -3026,11 +3027,11 @@
     if (value != null && typeof value === 'object' && value.nodeType) {
       detail.append(value);
       if (!detail.textContent.trim() && detail.childElementCount === 0) {
-        detail.textContent = 'â€”';
+        detail.textContent = '\u2014';
       }
     } else {
       const text = String(value ?? '').trim();
-      detail.textContent = text || 'â€”';
+      detail.textContent = text || '\u2014';
     }
     wrapper.append(term, detail);
     return wrapper;
@@ -3101,7 +3102,7 @@
       current = 'confirm';
     } else if (status === 'Confirmed') {
       if (occupying && hasAssignedRooms) {
-        // Fees until receptionist continues â†’ Checkout (incidental / snacks), then Archive.
+        // Fees until receptionist continues -> Checkout (incidental / snacks), then Archive.
         current = extrasStage ? 'checkout' : 'fees';
       } else if (balanceDue > 0.009) current = 'pay';
       else if (!hasAssignedRooms) current = 'rooms';
@@ -3113,9 +3114,9 @@
     if (isArchived) {
       hint = 'Booking archived.';
     } else if (status === 'Pending') {
-      hint = 'Next: confirm â€” payment unlocks after confirmation.';
+      hint = 'Next: confirm \u2014 payment unlocks after confirmation.';
     } else if (current === 'pay') {
-      hint = `Next: record payment Â· due ${money(balanceDue)}.`;
+      hint = `Next: record payment \u00B7 due ${money(balanceDue)}.`;
     } else if (current === 'rooms') {
       hint = 'Next: assign room (fully paid).';
     } else if (current === 'fees') {
@@ -3230,7 +3231,7 @@
 
     const status = document.createElement('p');
     status.className = 'admin-booking-flow-path-status';
-    status.innerHTML = `<span class="admin-booking-flow-path-stepnum">Step ${stepNumber} of ${steps.length}</span> Â· ${escapeHtml(hint)}`;
+    status.innerHTML = `<span class="admin-booking-flow-path-stepnum">Step ${stepNumber} of ${steps.length}</span> \u00B7 ${escapeHtml(hint)}`;
 
     path.append(rail, status);
   }
@@ -3302,7 +3303,7 @@
     }
     const refEl = detailModal.querySelector('[data-detail-reference]');
     const guestEl = detailModal.querySelector('[data-detail-guest]');
-    if (refEl) refEl.textContent = hint?.reference || 'Loadingâ€¦';
+    if (refEl) refEl.textContent = hint?.reference || 'Loading\u2026';
     if (guestEl) {
       guestEl.textContent = hint?.guestName || 'Guest details';
       guestEl.title = hint?.guestName || '';
@@ -3386,14 +3387,14 @@
       flag.className = 'admin-booking-status is-needs-rooms';
       flag.textContent = canAssignRoomsToday(booking) ? 'Assign rooms' : 'Ready on arrival';
       flag.title = canAssignRoomsToday(booking)
-        ? 'Confirmed â€” finish payment if needed, then assign room numbers'
+        ? 'Confirmed \u2014 finish payment if needed, then assign room numbers'
         : arrivalAssignMessage(booking);
       statusGroup.append(flag);
     }
     if (booking.specialOfferId || booking.cashOnlyPromo) {
       const offerFlag = document.createElement('span');
       offerFlag.className = 'admin-booking-status is-special-offer';
-      offerFlag.textContent = booking.cashOnlyPromo ? 'Special offer Â· Cash only' : 'Special offer';
+      offerFlag.textContent = booking.cashOnlyPromo ? 'Special offer \u00B7 Cash only' : 'Special offer';
       offerFlag.title = booking.specialOfferTitle
         ? `Special offer: ${booking.specialOfferTitle}`
         : 'Guest booked a special offer';
@@ -3500,7 +3501,7 @@
     const extensionNights = extensionCharge ? Number(extensionCharge.quantity || 0) : 0;
     const parseIncidentalNoteFromLabel = (label) => {
       const text = String(label || '');
-      const marker = 'Â· cash Â· ';
+      const marker = '\u00B7 cash \u00B7 ';
       const idx = text.indexOf(marker);
       return idx >= 0 ? text.slice(idx + marker.length).trim() : '';
     };
@@ -3514,12 +3515,12 @@
       }));
     const parseSnackFromLabel = (label) => {
       const text = String(label || '');
-      const prefix = 'Snack & beverage Â· ';
+      const prefix = 'Snack & beverage \u00B7 ';
       if (!text.startsWith(prefix)) {
         return { product: '', takenDate: manilaTodayIso() };
       }
       const rest = text.slice(prefix.length);
-      const takenMatch = rest.match(/(?:^| Â· )([A-Z][a-z]{2} \d{1,2}, \d{4}) Â· \d+\s*Ã—/);
+      const takenMatch = rest.match(/(?:^| \u00B7 )([A-Z][a-z]{2} \d{1,2}, \d{4}) \u00B7 \d+\s*\u00D7/);
       let takenDate = manilaTodayIso();
       if (takenMatch) {
         const parsed = new Date(`${takenMatch[1]} 12:00:00`);
@@ -3534,11 +3535,11 @@
           takenDate = `${get('year')}-${get('month')}-${get('day')}`;
         }
       }
-      const productMatch = rest.match(/^(.*) Â· [A-Z][a-z]{2} \d{1,2}, \d{4} Â· \d+\s*Ã—/);
+      const productMatch = rest.match(/^(.*) \u00B7 [A-Z][a-z]{2} \d{1,2}, \d{4} \u00B7 \d+\s*\u00D7/);
       if (productMatch) {
         return { product: productMatch[1].trim(), takenDate };
       }
-      const legacyProduct = rest.match(/^(.*) Â· \d+\s*Ã—/);
+      const legacyProduct = rest.match(/^(.*) \u00B7 \d+\s*\u00D7/);
       return {
         product: legacyProduct ? legacyProduct[1].trim() : '',
         takenDate,
@@ -3567,8 +3568,8 @@
 
     const checkInRaw = booking.checkInAtUtc || booking.checkIn;
     const checkOutRaw = booking.checkoutTimeUtc || booking.checkOut;
-    const checkInLabel = formatDateTime(checkInRaw) || formatDate(checkInRaw) || 'â€”';
-    const checkOutLabel = formatDateTime(checkOutRaw) || formatDate(checkOutRaw) || 'â€”';
+    const checkInLabel = formatDateTime(checkInRaw) || formatDate(checkInRaw) || '\u2014';
+    const checkOutLabel = formatDateTime(checkOutRaw) || formatDate(checkOutRaw) || '\u2014';
     const hasAssignedRooms = (booking.items || []).some(
       (line) => (line.assignedRooms || []).length > 0
     );
@@ -3601,16 +3602,16 @@
     }
     const staySummary =
       stayBadges.length > 0
-        ? `${checkInLabel} â†’ ${checkOutLabel} (${stayBadges.join(' Â· ')})`
-        : `${checkInLabel} â†’ ${checkOutLabel}`;
-    const roomSummary = formatBookingRooms(booking) || 'â€”';
+        ? `${checkInLabel} \u2192 ${checkOutLabel} (${stayBadges.join(' \u00B7 ')})`
+        : `${checkInLabel} \u2192 ${checkOutLabel}`;
+    const roomSummary = formatBookingRooms(booking) || '\u2014';
 
     const fields = document.createElement('div');
     fields.className = 'admin-booking-detail-grid admin-booking-guest-details-grid';
     fields.append(
-      detailField('Guest', booking.guestName || 'â€”'),
-      detailField('Phone', booking.guestPhone || 'â€”'),
-      detailField('Email', booking.guestEmail || 'â€”'),
+      detailField('Guest', booking.guestName || '\u2014'),
+      detailField('Phone', booking.guestPhone || '\u2014'),
+      detailField('Email', booking.guestEmail || '\u2014'),
       detailField('Check-in', checkInLabel),
       detailField('Check-out', checkOutLabel),
       detailField('Stay', staySummary),
@@ -3627,7 +3628,7 @@
             const c = rooms.reduce((s, r) => s + Number(r.children ?? r.Children ?? 0), 0);
             const total = a + c;
             if (total > 0) {
-              return `${total} (${a} adult${a === 1 ? '' : 's'}, ${c} child${c === 1 ? '' : 'ren'} Â· ${rooms.length} room card${rooms.length === 1 ? '' : 's'})`;
+              return `${total} (${a} adult${a === 1 ? '' : 's'}, ${c} child${c === 1 ? '' : 'ren'} \u00B7 ${rooms.length} room card${rooms.length === 1 ? '' : 's'})`;
             }
           }
           if (adults + children > 0) {
@@ -3636,27 +3637,27 @@
           return 'Not recorded';
         })()
       ),
-      detailField('Request type', displayEnum(booking.kind) || 'â€”'),
-      detailField('Payment option', displayEnum(booking.paymentOption) || 'â€”'),
+      detailField('Request type', displayEnum(booking.kind) || '\u2014'),
+      detailField('Payment option', displayEnum(booking.paymentOption) || '\u2014'),
       detailField(
         'Special offer',
         booking.specialOfferId
-          ? `${booking.specialOfferTitle || 'Yes'}${booking.cashOnlyPromo ? ' Â· Cash only' : ''}`
-          : 'â€”'
+          ? `${booking.specialOfferTitle || 'Yes'}${booking.cashOnlyPromo ? ' \u00B7 Cash only' : ''}`
+          : '\u2014'
       ),
       detailField(
         'Senior / PWD',
         (() => {
-          if (postPaymentLock) return 'â€”';
+          if (postPaymentLock) return '\u2014';
           const v = displayEnum(booking.arrivalDiscountRequest);
-          if (v === 'SeniorCitizen') return 'Senior Citizen (âˆ’20% Â· verify ID)';
-          if (v === 'Pwd') return 'PWD (âˆ’20% Â· verify ID)';
+          if (v === 'SeniorCitizen') return 'Senior Citizen (\u221220% \u00B7 verify ID)';
+          if (v === 'Pwd') return 'PWD (\u221220% \u00B7 verify ID)';
           return 'None';
         })()
       ),
       detailField('Stay total', money(stayTotal)),
-      detailField('Reference', booking.reference || 'â€”'),
-      detailField('Submitted', formatDateTime(booking.createdAtUtc) || formatDate(booking.createdAtUtc) || 'â€”')
+      detailField('Reference', booking.reference || '\u2014'),
+      detailField('Submitted', formatDateTime(booking.createdAtUtc) || formatDate(booking.createdAtUtc) || '\u2014')
     );
 
     const extraPersonLocked = Boolean(booking.isArchived);
@@ -3666,13 +3667,13 @@
     const extrasStage = extrasStageEarly;
     const onFeesStage = onFeesStageEarly;
     const onPayStage = onPayStageEarly;
-    // Step 3 Â· Assign rooms: confirmed, rooms not assigned yet (paid or still collecting).
+    // Step 3 \u00B7 Assign rooms: confirmed, rooms not assigned yet (paid or still collecting).
     const onAssignRoomsStage =
       !booking.isArchived
       && status === 'Confirmed'
       && !hasAssignedRooms
       && !extrasStage;
-    // Incidental on Checkout; snack on Fees (step 4) and Checkout â€” not on Payment.
+    // Incidental on Checkout; snack on Fees (step 4) and Checkout \u2014 not on Payment.
     const showCheckoutExtras = extrasStage;
     const showSnackFees = !feesDisabled && !onPayStage;
     const roomCount = Math.max(
@@ -3690,9 +3691,9 @@
     const guestPreview = [booking.guestName, booking.guestPhone, booking.guestEmail]
       .map((part) => String(part || '').trim())
       .filter(Boolean)
-      .join(' Â· ');
+      .join(' \u00B7 ');
     guestToggle.innerHTML =
-      `<span class="admin-booking-guest-details-toggle-label"><span class="admin-booking-guest-details-toggle-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-4 0-7 2-7 4.5V20h14v-1.5C19 16 16 14 12 14z" fill="currentColor"/></svg></span><span class="admin-booking-guest-details-toggle-text"><strong>Guest details</strong><small class="admin-booking-guest-details-preview">${escapeHtml(guestPreview || 'No contact on file')}</small></span></span><span class="admin-booking-guest-details-chevron" aria-hidden="true">â–¾</span>`;
+      `<span class="admin-booking-guest-details-toggle-label"><span class="admin-booking-guest-details-toggle-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-4 0-7 2-7 4.5V20h14v-1.5C19 16 16 14 12 14z" fill="currentColor"/></svg></span><span class="admin-booking-guest-details-toggle-text"><strong>Guest details</strong><small class="admin-booking-guest-details-preview">${escapeHtml(guestPreview || 'No contact on file')}</small></span></span><span class="admin-booking-guest-details-chevron" aria-hidden="true">\u25BE</span>`;
     const guestBody = document.createElement('div');
     guestBody.className = 'admin-booking-guest-details-body';
     guestBody.append(fields);
@@ -3720,7 +3721,7 @@
     const feesHeadText = document.createElement('div');
     feesHeadText.className = 'admin-booking-fees-head-text';
     const feesTitle = document.createElement('h3');
-    feesTitle.textContent = extrasStage ? 'Checkout Â· incidental & snacks' : 'Stay fees';
+    feesTitle.textContent = extrasStage ? 'Checkout \u00B7 incidental & snacks' : 'Stay fees';
     const feesLede = document.createElement('p');
     feesLede.className = 'admin-booking-fees-lede';
     feesLede.textContent = extraPersonLocked
@@ -3858,7 +3859,7 @@
       const triggerChevron = document.createElement('span');
       triggerChevron.className = 'admin-fee-dd-trigger-chevron';
       triggerChevron.setAttribute('aria-hidden', 'true');
-      triggerChevron.textContent = 'â–¾';
+      triggerChevron.textContent = '\u25BE';
       trigger.append(triggerLabel, triggerMeta, triggerChevron);
 
       const panel = document.createElement('div');
@@ -3924,10 +3925,10 @@
     lateSelect.dataset.feeLate = '1';
     lateSelect.disabled = true;
     [
-      ['0', '12:00 PM â€” no fee'],
-      ['1', '+1 hour Â· â‚±100 / room'],
-      ['2', '+2 hours Â· â‚±200 / room'],
-      ['3', '+3 hours Â· â‚±300 / room'],
+      ['0', '12:00 PM \u2014 no fee'],
+      ['1', '+1 hour \u00B7 \u20B1100 / room'],
+      ['2', '+2 hours \u00B7 \u20B1200 / room'],
+      ['3', '+3 hours \u00B7 \u20B1300 / room'],
     ].forEach(([value, text]) => {
       const opt = document.createElement('option');
       opt.value = value;
@@ -3944,8 +3945,8 @@
     arrivalSelect.disabled = true;
     [
       ['None', 'None'],
-      ['SeniorCitizen', 'Senior Citizen (20% off stay Â· verify ID)'],
-      ['Pwd', 'PWD (20% off stay Â· verify ID)'],
+      ['SeniorCitizen', 'Senior Citizen (20% off stay \u00B7 verify ID)'],
+      ['Pwd', 'PWD (20% off stay \u00B7 verify ID)'],
     ].forEach(([value, text]) => {
       const opt = document.createElement('option');
       opt.value = value;
@@ -3999,7 +4000,7 @@
 
     const formatIncidentalLineText = (line) => {
       const note = (line.note || '').trim();
-      return note ? `${money(line.amount)} Â· ${note}` : money(line.amount);
+      return note ? `${money(line.amount)} \u00B7 ${note}` : money(line.amount);
     };
 
     const renderIncidentalLines = () => {
@@ -4135,7 +4136,7 @@
 
     const snackPreview = Object.assign(document.createElement('p'), {
       className: 'admin-booking-fees-hint',
-      textContent: 'Line total: â‚±0.00',
+      textContent: 'Line total: \u20B10.00',
     });
 
     const snackCartHint = Object.assign(document.createElement('p'), {
@@ -4161,11 +4162,11 @@
       const product = (line.product || '').trim();
       const taken = line.takenDate
         ? formatDate(`${line.takenDate}T12:00:00`) || line.takenDate
-        : 'â€”';
-      const qtyPart = `${line.qty} Ã— ${money(line.unitAmount)}`;
+        : '\u2014';
+      const qtyPart = `${line.qty} \u00D7 ${money(line.unitAmount)}`;
       return product
-        ? `${product} Â· ${taken} Â· ${qtyPart} = ${money(total)}`
-        : `${taken} Â· ${qtyPart} = ${money(total)}`;
+        ? `${product} \u00B7 ${taken} \u00B7 ${qtyPart} = ${money(total)}`
+        : `${taken} \u00B7 ${qtyPart} = ${money(total)}`;
     };
 
     const renderSnackLines = () => {
@@ -4300,7 +4301,7 @@
     };
 
     const formatIsoDay = (iso) => {
-      if (!iso) return 'â€”';
+      if (!iso) return '\u2014';
       const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
       if (!match) return iso;
       const dt = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12));
@@ -4347,9 +4348,9 @@
 
       if (currentEl) {
         const stayLabel = checkInDate
-          ? `Booked ${formatIsoDay(checkInDate)} â†’ ${formatIsoDay(currentOut)}`
+          ? `Booked ${formatIsoDay(checkInDate)} \u2192 ${formatIsoDay(currentOut)}`
           : `Current checkout ${formatIsoDay(currentOut)}`;
-        currentEl.textContent = `${stayLabel} Â· pick a later checkout (max +30 nights)`;
+        currentEl.textContent = `${stayLabel} \u00B7 pick a later checkout (max +30 nights)`;
       }
 
       const syncPreview = () => {
@@ -4357,7 +4358,7 @@
         if (previewEl) {
           previewEl.textContent =
             nightsAdd > 0
-              ? `+${nightsAdd} night${nightsAdd === 1 ? '' : 's'} Â· new checkout ${formatIsoDay(selectedIso)}`
+              ? `+${nightsAdd} night${nightsAdd === 1 ? '' : 's'} \u00B7 new checkout ${formatIsoDay(selectedIso)}`
               : 'Select a checkout date on the calendar.';
         }
         if (applyBtn) applyBtn.disabled = nightsAdd < 1 || nightsAdd > 30;
@@ -4533,9 +4534,9 @@
       title: 'Early check-in',
       hint: postPaymentLock
         ? 'Locked after payment'
-        : '11:30 AM Â· â‚±500 / room',
+        : '11:30 AM \u00B7 \u20B1500 / room',
       locked: postPaymentLock,
-      // Payment / Assign rooms only â€” hide on Fees and Checkout.
+      // Payment / Assign rooms only \u2014 hide on Fees and Checkout.
       showTrigger: !extrasStage && !onFeesStage,
       buildBody: () => {
         const row = document.createElement('label');
@@ -4566,8 +4567,8 @@
     registerFeeCategory({
       id: 'late',
       title: 'Late check-out',
-      hint: 'â‚±100 / hour / room Â· max 3 hours',
-      // Fees stage only â€” hide on Payment and Assign rooms.
+      hint: '\u20B1100 / hour / room \u00B7 max 3 hours',
+      // Fees stage only \u2014 hide on Payment and Assign rooms.
       showTrigger: onFeesStage,
       buildBody: () => {
         const row = document.createElement('label');
@@ -4586,7 +4587,7 @@
       getMeta: () => {
         const hours = Number(lateSelect.value || 0);
         return hours > 0
-          ? { active: true, text: `+${hours}h Â· ${money(100 * hours * roomCount)}` }
+          ? { active: true, text: `+${hours}h \u00B7 ${money(100 * hours * roomCount)}` }
           : { active: false, text: '' };
       },
     });
@@ -4596,7 +4597,7 @@
       title: 'Extra person',
       hint: postPaymentLock
         ? 'Locked after payment'
-        : 'â‚±200 / night Â· choose a room for each extra guest',
+        : '\u20B1200 / night \u00B7 choose a room for each extra guest',
       locked: !allowsExtraPerson || extraPersonLocked || postPaymentLock,
       lockWithStayFees: false,
       showTrigger: !extrasStage,
@@ -4620,11 +4621,11 @@
             .filter(Boolean)
             .join(' ');
           copy.innerHTML =
-            `<strong>Room ${slot.index + 1}${title ? ` Â· ${escapeHtml(title)}` : ''}</strong>` +
+            `<strong>Room ${slot.index + 1}${title ? ` \u00B7 ${escapeHtml(title)}` : ''}</strong>` +
             `<small>${
               slot.suggested
-                ? '3 guests recorded Â· â‚±200 / night'
-                : 'Add one extra guest Â· â‚±200 / night'
+                ? '3 guests recorded \u00B7 \u20B1200 / night'
+                : 'Add one extra guest \u00B7 \u20B1200 / night'
             }</small>`;
           row.append(input, copy);
           list.append(row);
@@ -4667,7 +4668,7 @@
       id: 'extend',
       title: 'Extend stay',
       hint: 'Adds nights and moves checkout date',
-      // Fees stage only â€” hide on Payment and Assign rooms.
+      // Fees stage only \u2014 hide on Payment and Assign rooms.
       showTrigger: onFeesStage,
       headAction: extendCalendarBtn,
       buildBody: () => [makeFeeField('Add nights', extendInput), extendPreview, extendClearRow],
@@ -4688,13 +4689,13 @@
     registerFeeCategory({
       id: 'incidental',
       title: 'Incidental',
-      hint: 'Multiple damages Â· collect in cash',
+      hint: 'Multiple damages \u00B7 collect in cash',
       showTrigger: Boolean(showCheckoutExtras),
       buildBody: () => {
         const draftRow = document.createElement('div');
         draftRow.className = 'admin-booking-fee-snack-row';
         draftRow.append(
-          makeFeeField('Amount (â‚±)', incidentalAmountInput),
+          makeFeeField('Amount (\u20B1)', incidentalAmountInput),
           makeFeeField('Note', incidentalNoteInput, true)
         );
         const draftBlock = document.createElement('div');
@@ -4719,14 +4720,14 @@
         const count = incidentalLines.length + (draftAmount > 0 ? 1 : 0);
         if (total <= 0) return { active: false, text: '' };
         if (count === 1) return { active: true, text: money(total) };
-        return { active: true, text: `${count} damages Â· ${money(total)}` };
+        return { active: true, text: `${count} damages \u00B7 ${money(total)}` };
       },
     });
 
     registerFeeCategory({
       id: 'snack',
       title: 'Snack & beverage',
-      hint: 'Products with date taken Â· qty Ã— unit price',
+      hint: 'Products with date taken \u00B7 qty \u00D7 unit price',
       showTrigger: Boolean(showSnackFees),
       buildBody: () => {
         const snackRow = document.createElement('div');
@@ -4734,7 +4735,7 @@
         snackRow.append(
           makeFeeField('Taken date', snackTakenInput),
           makeFeeField('Qty', snackQtyInput),
-          makeFeeField('Unit price (â‚±)', snackUnitInput)
+          makeFeeField('Unit price (\u20B1)', snackUnitInput)
         );
         const draftBlock = document.createElement('div');
         draftBlock.className = 'admin-booking-fee-snack-draft';
@@ -4773,16 +4774,16 @@
           const product = (snackLines[0].product || '').trim();
           return {
             active: true,
-            text: product ? `${product} Â· ${money(total)}` : money(total),
+            text: product ? `${product} \u00B7 ${money(total)}` : money(total),
           };
         }
         if (count === 1 && draftActive && !snackLines.length) {
           return {
             active: true,
-            text: draft.product ? `${draft.product} Â· ${money(total)}` : money(total),
+            text: draft.product ? `${draft.product} \u00B7 ${money(total)}` : money(total),
           };
         }
-        return { active: true, text: `${count} items Â· ${money(total)}` };
+        return { active: true, text: `${count} items \u00B7 ${money(total)}` };
       },
     });
 
@@ -4793,9 +4794,9 @@
         ? 'Removed after payment'
         : onSpecialOffer
           ? 'Unavailable while special offer is active'
-          : '20% off stay when saved Â· verify ID Â· not with special offer',
+          : '20% off stay when saved \u00B7 verify ID \u00B7 not with special offer',
       locked: onSpecialOffer || postPaymentLock,
-      // Payment / Assign rooms only â€” hide on Fees and Checkout.
+      // Payment / Assign rooms only \u2014 hide on Fees and Checkout.
       showTrigger: !extrasStage && !postPaymentLock && !onFeesStage,
       buildBody: () => {
         const hint = Object.assign(document.createElement('p'), {
@@ -4828,8 +4829,8 @@
       getMeta: () => {
         if (postPaymentLock) return { active: false, text: '' };
         const value = arrivalSelect.value || 'None';
-        if (value === 'SeniorCitizen') return { active: true, text: 'Senior Â· âˆ’20%' };
-        if (value === 'Pwd') return { active: true, text: 'PWD Â· âˆ’20%' };
+        if (value === 'SeniorCitizen') return { active: true, text: 'Senior \u00B7 \u221220%' };
+        if (value === 'Pwd') return { active: true, text: 'PWD \u00B7 \u221220%' };
         return { active: false, text: '' };
       },
     });
@@ -4888,7 +4889,7 @@
         ctrl.btn.title =
           mode === 'undo'
             ? 'Cancel the clear and keep the saved extension'
-            : 'Clear this fee â€” then click Save stay fees';
+            : 'Clear this fee \u2014 then click Save stay fees';
       });
     };
 
@@ -4909,10 +4910,10 @@
         refreshAllFeeMeta();
         feesMsg.hidden = false;
         feesMsg.textContent = feesDisabled
-          ? 'Cleared â€” click Save extra person rooms to apply.'
+          ? 'Cleared \u2014 click Save extra person rooms to apply.'
           : ctrl.id === 'extend' && pendingRevertExtend
-            ? 'Extension marked for removal â€” click Save stay fees to roll checkout back.'
-            : 'Cleared â€” click Save stay fees to apply.';
+            ? 'Extension marked for removal \u2014 click Save stay fees to roll checkout back.'
+            : 'Cleared \u2014 click Save stay fees to apply.';
       });
     });
 
@@ -4953,8 +4954,8 @@
             Object.assign(document.createElement('small'), {
               className: 'admin-booking-fees-manage-stage',
               textContent: extrasStage
-                ? 'From Stay fees Â· Edit opens here'
-                : 'From Checkout Â· Edit opens here',
+                ? 'From Stay fees \u00B7 Edit opens here'
+                : 'From Checkout \u00B7 Edit opens here',
             })
           );
         }
@@ -4988,10 +4989,10 @@
             refreshAllFeeMeta();
             feesMsg.hidden = false;
             feesMsg.textContent = feesDisabled
-              ? 'Cleared â€” click Save extra person rooms to apply.'
+              ? 'Cleared \u2014 click Save extra person rooms to apply.'
               : cat.id === 'extend' && pendingRevertExtend
-                ? 'Extension marked for removal â€” click Save stay fees to roll checkout back.'
-                : 'Cleared â€” click Save stay fees to apply.';
+                ? 'Extension marked for removal \u2014 click Save stay fees to roll checkout back.'
+                : 'Cleared \u2014 click Save stay fees to apply.';
           });
           actions.append(deleteBtn);
         } else {
@@ -5117,7 +5118,7 @@
         lines.push({
           label:
             payload.extraPersons > 1
-              ? `Extra person Â· ${payload.extraPersons}`
+              ? `Extra person \u00B7 ${payload.extraPersons}`
               : 'Extra person',
           amount: charge
             ? Number(charge.amount || 0)
@@ -5145,12 +5146,12 @@
           if (amount <= 0) return;
           const note = (line.note || '').trim();
           lines.push({
-            label: note ? `Incidental (cash) Â· ${note}` : 'Incidental (cash)',
+            label: note ? `Incidental (cash) \u00B7 ${note}` : 'Incidental (cash)',
             amount,
           });
         });
       } else if (payload.incidentalAmount > 0) {
-        const note = payload.incidentalNote ? ` Â· ${payload.incidentalNote}` : '';
+        const note = payload.incidentalNote ? ` \u00B7 ${payload.incidentalNote}` : '';
         lines.push({
           label: `Incidental (cash)${note}`,
           amount: payload.incidentalAmount,
@@ -5167,11 +5168,11 @@
           const taken = line.takenDate
             ? formatDate(`${line.takenDate}T12:00:00`) || line.takenDate
             : '';
-          const takenPart = taken ? ` Â· ${taken}` : '';
+          const takenPart = taken ? ` \u00B7 ${taken}` : '';
           lines.push({
             label: product
-              ? `Snack & beverage Â· ${product}${takenPart} Â· ${qty} Ã— ${money(unit)}`
-              : `Snack & beverage${takenPart} Â· ${qty} Ã— ${money(unit)}`,
+              ? `Snack & beverage \u00B7 ${product}${takenPart} \u00B7 ${qty} \u00D7 ${money(unit)}`
+              : `Snack & beverage${takenPart} \u00B7 ${qty} \u00D7 ${money(unit)}`,
             amount: total,
           });
         });
@@ -5180,10 +5181,10 @@
           Math.max(0, payload.snackBeverageQty) * Math.max(0, payload.snackBeverageUnitAmount);
         if (snackTotal > 0) {
           const product = payload.snackBeverageProduct
-            ? `${payload.snackBeverageProduct} Â· `
+            ? `${payload.snackBeverageProduct} \u00B7 `
             : '';
           lines.push({
-            label: `Snack & beverage Â· ${product}${payload.snackBeverageQty} Ã— ${money(payload.snackBeverageUnitAmount)}`,
+            label: `Snack & beverage \u00B7 ${product}${payload.snackBeverageQty} \u00D7 ${money(payload.snackBeverageUnitAmount)}`,
             amount: snackTotal,
           });
         }
@@ -5196,7 +5197,7 @@
           : extensionNights + Math.max(0, payload.extendStayNights);
       if (extendQty > 0 || payload.extendStayNights > 0) {
         lines.push({
-          label: `Extend stay Â· +${Math.max(extendQty, payload.extendStayNights)} night${
+          label: `Extend stay \u00B7 +${Math.max(extendQty, payload.extendStayNights)} night${
             Math.max(extendQty, payload.extendStayNights) === 1 ? '' : 's'
           }`,
           amount: extendCharge ? Number(extendCharge.amount || 0) : null,
@@ -5204,7 +5205,7 @@
         });
       } else if (payload.revertStayExtension && extensionNights > 0) {
         lines.push({
-          label: `Extend stay removed Â· âˆ’${extensionNights} night${extensionNights === 1 ? '' : 's'}`,
+          label: `Extend stay removed \u00B7 \u2212${extensionNights} night${extensionNights === 1 ? '' : 's'}`,
           amount: null,
           note: 'Checkout rolled back',
         });
@@ -5238,7 +5239,7 @@
             );
           }
           const value = document.createElement('strong');
-          value.textContent = line.amount == null ? 'â€”' : money(line.amount);
+          value.textContent = line.amount == null ? '\u2014' : money(line.amount);
           item.append(label, value);
           list.append(item);
         });
@@ -5295,11 +5296,11 @@
       const showCompare =
         (booking.specialOfferId || booking.cashOnlyPromo) && regular > rate;
       const rateHtml = showCompare
-        ? `<small>(<s>${money(regular)}</s> â†’ ${money(rate)}/night Ã— ${nights} night${nights === 1 ? '' : 's'})</small>`
-        : `<small>(${money(rate)}/night Ã— ${nights} night${nights === 1 ? '' : 's'})</small>`;
+        ? `<small>(<s>${money(regular)}</s> \u2192 ${money(rate)}/night \u00D7 ${nights} night${nights === 1 ? '' : 's'})</small>`
+        : `<small>(${money(rate)}/night \u00D7 ${nights} night${nights === 1 ? '' : 's'})</small>`;
       itemLinesHtml += `
         <div class="admin-breakdown-row">
-          <span>${qty}Ã— ${escapeHtml(line.roomTypeName || 'Room')} ${rateHtml}</span>
+          <span>${qty}\u00D7 ${escapeHtml(line.roomTypeName || 'Room')} ${rateHtml}</span>
           <strong>${money(lineTotal)}</strong>
         </div>
       `;
@@ -5307,7 +5308,7 @@
     if (extensionCharge) {
       itemLinesHtml += `
         <div class="admin-breakdown-row is-sub is-extension">
-          <span>${escapeHtml(extensionCharge.label || `Extra night(s) Â· +${extensionNights}`)} <small>(included in room stay)</small></span>
+          <span>${escapeHtml(extensionCharge.label || `Extra night(s) \u00B7 +${extensionNights}`)} <small>(included in room stay)</small></span>
           <strong>${money(extensionCharge.amount)}</strong>
         </div>
       `;
@@ -5344,7 +5345,7 @@
       payments.forEach((payment) => {
         paymentLinesHtml += `
           <div class="admin-breakdown-row is-sub">
-            <span>${escapeHtml(formatDateTime(payment.paidAtUtc))} Â· ${escapeHtml(formatPaymentMethod(payment.method))} <small>${escapeHtml(payment.receiptNumber || '')}</small></span>
+            <span>${escapeHtml(formatDateTime(payment.paidAtUtc))} \u00B7 ${escapeHtml(formatPaymentMethod(payment.method))} <small>${escapeHtml(payment.receiptNumber || '')}</small></span>
             <strong>${money(payment.amount)}</strong>
           </div>
         `;
@@ -5372,7 +5373,7 @@
     const toggleIcon = document.createElement('span');
     toggleIcon.className = 'admin-breakdown-icon';
     toggleIcon.setAttribute('aria-hidden', 'true');
-    toggleIcon.textContent = 'â–¾';
+    toggleIcon.textContent = '\u25BE';
     toggleMeta.append(toggleTotal, toggleIcon);
     breakdownToggle.append(toggleLabel, toggleMeta);
 
@@ -5385,7 +5386,7 @@
         ${itemLinesHtml || `<div class="admin-breakdown-row"><span>Stay</span><strong>${money(roomStayTotal)}</strong></div>`}
       </div>
       <div class="admin-breakdown-row is-sub">
-        <span>Room subtotal${roomCount ? ` Â· ${roomCount} room${roomCount === 1 ? '' : 's'}` : ''}</span>
+        <span>Room subtotal${roomCount ? ` \u00B7 ${roomCount} room${roomCount === 1 ? '' : 's'}` : ''}</span>
         <strong>${money(roomStayTotal)}</strong>
       </div>
       <div class="admin-breakdown-divider"></div>
@@ -5437,7 +5438,7 @@
 
     const heading = document.createElement('h3');
     heading.textContent =
-      onRoomsStep ? 'Step 3 Â· Assign rooms' : 'Rooms';
+      onRoomsStep ? 'Step 3 \u00B7 Assign rooms' : 'Rooms';
     const lines = document.createElement('ul');
     lines.className = 'admin-booking-lines';
     (booking.items || []).forEach((line) => {
@@ -5447,8 +5448,8 @@
         .map((room) => room.roomNumber)
         .filter(Boolean);
       name.textContent = assigned.length
-        ? `${line.quantity}Ã— ${line.roomTypeName} â†’ ${assigned.join(', ')}`
-        : `${line.quantity}Ã— ${line.roomTypeName}${status === 'Confirmed' ? ' Â· rooms not assigned yet' : ''}`;
+        ? `${line.quantity}\u00D7 ${line.roomTypeName} \u2192 ${assigned.join(', ')}`
+        : `${line.quantity}\u00D7 ${line.roomTypeName}${status === 'Confirmed' ? ' \u00B7 rooms not assigned yet' : ''}`;
       const rate = document.createElement('strong');
       const promo = Number(line.pricePerNight || 0);
       const regular = Number(
@@ -5457,7 +5458,7 @@
           ?? 0
       );
       if ((booking.specialOfferId || booking.cashOnlyPromo) && regular > promo) {
-        rate.innerHTML = `<s class="admin-rate-was">${money(regular)}</s> â†’ ${money(promo)} / night`;
+        rate.innerHTML = `<s class="admin-rate-was">${money(regular)}</s> \u2192 ${money(promo)} / night`;
       } else {
         rate.textContent = `${money(promo)} / night`;
       }
@@ -5476,7 +5477,7 @@
       } else if (!canAssignRoomsToday(booking)) {
         stepLede.textContent =
           `Check-in is ${formatDate(booking.checkInAtUtc || booking.checkIn)} (not today yet), so room numbers cannot be assigned. ` +
-          `Use Adjust stay if the guest called to arrive earlier â€” Assign rooms unlocks on the new check-in date when fully paid.`;
+          `Use Adjust stay if the guest called to arrive earlier \u2014 Assign rooms unlocks on the new check-in date when fully paid.`;
       } else {
         stepLede.textContent =
           'Pick room numbers for this stay. If the assign screen closes or the system restarts, reopen Assign rooms here.';
@@ -5552,7 +5553,7 @@
         })
       );
     } else if (!booking.isArchived && status === 'Confirmed' && hasAssignedRooms) {
-      // Guest schedule error after rooms assigned â€” contact + dates only.
+      // Guest schedule error after rooms assigned \u2014 contact + dates only.
       detailActions.append(
         actionIconButton({
           label: 'Correct guest / stay',
@@ -5562,7 +5563,7 @@
       );
     }
 
-    // Cancel only on Confirm / Payment steps â€” not Rooms, Fees, Extras, or Checkout.
+    // Cancel only on Confirm / Payment steps \u2014 not Rooms, Fees, Extras, or Checkout.
     if (
       !booking.isArchived &&
       (receptionFlow.current === 'confirm' || receptionFlow.current === 'pay')
@@ -5577,7 +5578,7 @@
       );
     }
 
-    // Payments only after confirmation â€” hidden while Pending.
+    // Payments only after confirmation \u2014 hidden while Pending.
     if (canRecordPayment(booking)) {
       const canTakePayment = balanceDue > 0.009;
       if (canTakePayment && !hasAssignedRooms) {
@@ -5593,7 +5594,7 @@
       } else {
         detailActions.append(
           actionIconButton({
-            label: 'Payments â€” view record',
+            label: 'Payments \u2014 view record',
             icon: ACTION_ICONS.payments,
             onClick: () => openPaymentViewModal(booking),
           })
@@ -5705,7 +5706,7 @@
     else fillPaymentSummaryFields(booking, null);
     const fullyPaid = isBookingFullyPaid(booking, paymentSummary);
 
-    // Pending confirm: confirm the booking only â€” rooms come after full payment.
+    // Pending confirm: confirm the booking only \u2014 rooms come after full payment.
     if (!assignOnly) {
       const intro = document.createElement('p');
       intro.className = 'admin-booking-assign-intro';
@@ -5719,7 +5720,7 @@
         const tip = document.createElement('p');
         tip.className = 'admin-booking-assign-tip';
         tip.textContent =
-          `Balance due ${money(paymentPriceContext.balanceDue)}. After you confirm, record payment â€” rooms unlock when fully paid.`;
+          `Balance due ${money(paymentPriceContext.balanceDue)}. After you confirm, record payment \u2014 rooms unlock when fully paid.`;
         detailBody.append(tip);
       }
 
@@ -5819,7 +5820,7 @@
           section.dataset.roomTypeId = String(group.roomTypeId);
 
           const title = document.createElement('h3');
-          title.textContent = `${group.roomTypeName} Â· pick ${group.quantityNeeded}`;
+          title.textContent = `${group.roomTypeName} \u00B7 pick ${group.quantityNeeded}`;
           section.append(title);
 
           if (!group.rooms?.length) {
@@ -5839,7 +5840,7 @@
               select.dataset.roomTypeId = String(group.roomTypeId);
               const placeholder = document.createElement('option');
               placeholder.value = '';
-              placeholder.textContent = 'Select roomâ€¦';
+              placeholder.textContent = 'Select room\u2026';
               select.append(placeholder);
               group.rooms.forEach((room) => {
                 const option = document.createElement('option');
@@ -6172,20 +6173,20 @@
   }
 
   function checkInTimeOptions() {
-    const list = [{ value: '11:30', label: '11:30 â€” early check-in' }];
+    const list = [{ value: '11:30', label: '11:30 \u2014 early check-in' }];
     for (let mins = 14 * 60; mins <= 23 * 60 + 30; mins += 30) {
       const value = minutesToClock(mins);
-      list.push({ value, label: `${value} â€” free of charge` });
+      list.push({ value, label: `${value} \u2014 free of charge` });
     }
     return list;
   }
 
   function checkOutTimeOptions() {
     return [
-      { value: '12:00', label: '12:00 â€” free of charge' },
-      { value: '13:00', label: '13:00 â€” late checkout (+1h)' },
-      { value: '14:00', label: '14:00 â€” late checkout (+2h)' },
-      { value: '15:00', label: '15:00 â€” late checkout (+3h max)' },
+      { value: '12:00', label: '12:00 \u2014 free of charge' },
+      { value: '13:00', label: '13:00 \u2014 late checkout (+1h)' },
+      { value: '14:00', label: '14:00 \u2014 late checkout (+2h)' },
+      { value: '15:00', label: '15:00 \u2014 late checkout (+3h max)' },
     ];
   }
 
@@ -6212,10 +6213,10 @@
       .map((line) => {
         const qty = Number(line.quantity || 0);
         if (qty <= 0) return '';
-        return `${qty}Ã— ${line.roomTypeName || 'Room'}`;
+        return `${qty}\u00D7 ${line.roomTypeName || 'Room'}`;
       })
       .filter(Boolean);
-    return lines.length ? lines.join(' Â· ') : 'No rooms on this booking yet';
+    return lines.length ? lines.join(' \u00B7 ') : 'No rooms on this booking yet';
   }
 
   function bookingRoomQuantity(booking) {
@@ -6274,7 +6275,7 @@
       `<small class="admin-booking-edit-category-preview">${escapeHtml(preview || '')}</small>` +
       `</span>` +
       `<span class="admin-booking-edit-category-attention" hidden></span>` +
-      `<span class="admin-booking-edit-category-chevron" aria-hidden="true">â–¾</span>`;
+      `<span class="admin-booking-edit-category-chevron" aria-hidden="true">\u25BE</span>`;
 
     const body = document.createElement('div');
     body.className = 'admin-booking-edit-category-body';
@@ -6348,7 +6349,7 @@
     controls.className = 'admin-booking-edit-headcount-controls';
     const dec = document.createElement('button');
     dec.type = 'button';
-    dec.textContent = 'âˆ’';
+    dec.textContent = '\u2212';
     const count = document.createElement('span');
     count.className = 'admin-booking-edit-headcount-value';
     count.setAttribute('aria-live', 'polite');
@@ -6405,7 +6406,7 @@
     intro.textContent = hardEdit
       ? 'Update guest contact and dates first. Head count uses per-room adults/children (like guest booking). Assigned room numbers stay locked.' +
         pastDateNote
-      : 'Edit contact & dates, then guest head count per room (Adults / Children). Add another room to open a new head-count card â€” then assign its room type under Edit rooms.' +
+      : 'Edit contact & dates, then guest head count per room (Adults / Children). Add another room to open a new head-count card \u2014 then assign its room type under Edit rooms.' +
         pastDateNote;
 
     const roomQtyInitial = bookingRoomQuantity(booking);
@@ -6416,7 +6417,7 @@
     const contactPreview = [booking.guestName, booking.guestPhone, booking.guestEmail]
       .map((part) => String(part || '').trim())
       .filter(Boolean)
-      .join(' Â· ');
+      .join(' \u00B7 ');
     const contactCategory = makeEditCategoryPanel({
       id: 'contact',
       title: 'Guest contact & dates',
@@ -6468,7 +6469,7 @@
     const headLede = document.createElement('p');
     headLede.className = 'admin-booking-edit-section-lede';
     headLede.textContent =
-      'Same as guest booking: each room has its own adults / children. Max 3 guests per room (2 included). Each room may add one extra guest for â‚±200 / night. Use Add another room here â€” a type row appears under Edit rooms for you to assign.';
+      'Same as guest booking: each room has its own adults / children. Max 3 guests per room (2 included). Each room may add one extra guest for \u20B1200 / night. Use Add another room here \u2014 a type row appears under Edit rooms for you to assign.';
     const addRoomFromHeadBtn = document.createElement('button');
     addRoomFromHeadBtn.type = 'button';
     addRoomFromHeadBtn.className = 'admin-booking-edit-add-room-from-head';
@@ -6503,7 +6504,7 @@
     availList.className = 'admin-booking-edit-availability-list';
     const availStatus = document.createElement('p');
     availStatus.className = 'admin-booking-edit-availability-status';
-    availStatus.textContent = 'Checking availabilityâ€¦';
+    availStatus.textContent = 'Checking availability\u2026';
     availPanel.append(availTitle, availList, availStatus);
 
     const roomFields = document.createElement('div');
@@ -6517,8 +6518,8 @@
         const row = document.createElement('div');
         row.className = 'admin-booking-edit-assigned-row';
         row.innerHTML =
-          `<span>${escapeHtml(String(line.quantity || 0))}Ã— ${escapeHtml(line.roomTypeName || 'Room')}` +
-          `${assigned.length ? ` â†’ ${escapeHtml(assigned.join(', '))}` : ''}</span>` +
+          `<span>${escapeHtml(String(line.quantity || 0))}\u00D7 ${escapeHtml(line.roomTypeName || 'Room')}` +
+          `${assigned.length ? ` \u2192 ${escapeHtml(assigned.join(', '))}` : ''}</span>` +
           `<strong>${money(line.pricePerNight)} / night</strong>`;
         const hidden = document.createElement('input');
         hidden.type = 'hidden';
@@ -6533,7 +6534,7 @@
     hint.className = 'admin-booking-edit-hint';
     hint.textContent = hardEdit
       ? 'Room numbers stay assigned. If another guest holds the same room on the new dates, save will be blocked.'
-      : 'Choose a room type for each stay room. Add or remove rooms under Guest head count â€” a type row appears here automatically.';
+      : 'Choose a room type for each stay room. Add or remove rooms under Guest head count \u2014 a type row appears here automatically.';
 
     const roomsCategory = makeEditCategoryPanel({
       id: 'rooms',
@@ -6641,20 +6642,20 @@
             .filter((line) => line.quantity > 0)
             .reduce((sum, line) => sum + line.quantity, 0);
       const typeGap = Math.max(0, rooms - Math.max(typeLinesQty, 0));
-      let statusText = `${total} guest${total === 1 ? '' : 's'} Â· ${rooms} room${rooms === 1 ? '' : 's'}`;
+      let statusText = `${total} guest${total === 1 ? '' : 's'} \u00B7 ${rooms} room${rooms === 1 ? '' : 's'}`;
       if (extras > 0) {
         statusText += extras > 1
-          ? ` Â· includes ${extras} extra persons Â· â‚±200 / night each`
-          : ' Â· includes â‚±200 / night extra person';
+          ? ` \u00B7 includes ${extras} extra persons \u00B7 \u20B1200 / night each`
+          : ' \u00B7 includes \u20B1200 / night extra person';
       }
-      else statusText += ` Â· within included capacity (${included})`;
+      else statusText += ` \u00B7 within included capacity (${included})`;
       if (typeGap > 0) {
-        statusText += ` Â· assign type for ${typeGap} new room${typeGap === 1 ? '' : 's'} under Edit rooms`;
+        statusText += ` \u00B7 assign type for ${typeGap} new room${typeGap === 1 ? '' : 's'} under Edit rooms`;
       }
       headStatus.textContent = statusText;
       headStatus.classList.toggle('is-at-capacity', typeGap > 0);
       headCategory.setPreview(
-        `${total} guest${total === 1 ? '' : 's'} Â· ${rooms} room${rooms === 1 ? '' : 's'}`
+        `${total} guest${total === 1 ? '' : 's'} \u00B7 ${rooms} room${rooms === 1 ? '' : 's'}`
       );
     }
 
@@ -6708,7 +6709,7 @@
         if (roomHasExtraGuest(room)) {
           const note = document.createElement('p');
           note.className = 'admin-booking-edit-guest-room-extra';
-          note.textContent = 'Extra person Â· â‚±200 / night';
+          note.textContent = 'Extra person \u00B7 \u20B1200 / night';
           card.append(note);
         }
         headRoomsList.append(card);
@@ -6752,11 +6753,11 @@
       const rows = readEditRoomLines(form).filter((line) => line.quantity > 0);
       const typed = aggregateEditRoomLines(
         rows.filter((line) => !line.needsType && line.roomTypeId)
-      ).map((line) => `${line.quantity}Ã— ${line.roomTypeName || 'Room'}`);
+      ).map((line) => `${line.quantity}\u00D7 ${line.roomTypeName || 'Room'}`);
       const pending = rows.filter((line) => line.needsType || !line.roomTypeId).length;
-      if (pending > 0) typed.push(`${pending}Ã— Select type`);
+      if (pending > 0) typed.push(`${pending}\u00D7 Select type`);
       roomsCategory.setPreview(
-        typed.length ? typed.join(' Â· ') : 'No rooms selected â€” add a room type'
+        typed.length ? typed.join(' \u00B7 ') : 'No rooms selected \u2014 add a room type'
       );
     }
 
@@ -6782,7 +6783,7 @@
       roomsCategory.setAttention(
         pending === 1
           ? 'Select room type for new room'
-          : `Select room types Â· ${pending} new rooms`
+          : `Select room types \u00B7 ${pending} new rooms`
       );
     }
 
@@ -6812,7 +6813,7 @@
           const blocked = lastAvailByType.size > 0 && !selected && left < 1;
           opt.disabled = blocked;
           const baseName = opt.dataset.roomTypeName || opt.textContent;
-          opt.textContent = blocked ? `${baseName} Â· none left` : baseName;
+          opt.textContent = blocked ? `${baseName} \u00B7 none left` : baseName;
         });
       });
     }
@@ -6962,7 +6963,7 @@
         return;
       }
 
-      availStatus.textContent = 'Checking availabilityâ€¦';
+      availStatus.textContent = 'Checking availability\u2026';
       try {
         const checkInAtUtc = toManilaDateTimeIso(checkIn, checkInTime);
         const checkoutTimeUtc = toManilaDateTimeIso(checkOut, checkOutTime);
@@ -7003,7 +7004,7 @@
           li.className = ok ? 'is-ok' : 'is-short';
           let label = `${line.roomTypeName}: ${remaining} available`;
           if (line.quantity > 1) label += ` (need ${line.quantity})`;
-          if (soldOutDates.length) label += ` Â· fully booked ${soldOutDates.join(', ')}`;
+          if (soldOutDates.length) label += ` \u00B7 fully booked ${soldOutDates.join(', ')}`;
           li.textContent = label;
           availList.append(li);
         });
@@ -7018,7 +7019,7 @@
         availOk = !insufficient;
         saveButton.disabled = insufficient;
         availStatus.textContent = insufficient
-          ? 'Not enough rooms for these dates â€” change the dates or wait for availability.'
+          ? 'Not enough rooms for these dates \u2014 change the dates or wait for availability.'
           : 'Enough rooms for this stay on the selected dates.';
 
         if (insufficient) {
@@ -7188,7 +7189,7 @@
       receptionExtrasStageBookingId = null;
       hideExtrasStageIntro();
     } else {
-      // Same guest reopened while on Checkout â€” keep step 5, hide leftover intro overlay.
+      // Same guest reopened while on Checkout \u2014 keep step 5, hide leftover intro overlay.
       hideExtrasStageIntro();
     }
 
@@ -7359,7 +7360,7 @@
     if (summaryEl) {
       summaryEl.hidden = !unpaid;
       if (unpaid) {
-        if (refEl) refEl.textContent = booking.reference || 'â€”';
+        if (refEl) refEl.textContent = booking.reference || '\u2014';
         if (totalEl) totalEl.textContent = money(stayTotal);
         if (paidEl) paidEl.textContent = money(amountPaid);
         if (balanceEl) balanceEl.textContent = money(balanceDue);
@@ -7752,7 +7753,7 @@
     wrap.classList.toggle('is-open', occ.available > 0);
     wrap.classList.toggle('is-full', occ.available === 0 && occ.capacity > 0);
     wrap.title = occ.capacity > 0
-      ? `${occ.reserved} reserved Â· ${occ.occupied} occupied Â· ${occ.available} available of ${occ.capacity}`
+      ? `${occ.reserved} reserved \u00B7 ${occ.occupied} occupied \u00B7 ${occ.available} available of ${occ.capacity}`
       : 'No sellable rooms';
 
     const bar = document.createElement('span');
@@ -7769,7 +7770,7 @@
     label.className = 'admin-cal-occ-label';
     label.textContent = occ.capacity > 0
       ? `${occ.available} avail`
-      : 'â€”';
+      : '\u2014';
 
     wrap.append(bar, label);
     return wrap;
@@ -7890,7 +7891,7 @@
       item.roomSummary,
     ].filter(Boolean);
     if (extensionNights > 0) bits.push(`+${extensionNights} extended`);
-    meta.textContent = bits.join(' Â· ');
+    meta.textContent = bits.join(' \u00B7 ');
 
     const stay = document.createElement('span');
     stay.className = 'admin-cal-guest-stay';
@@ -7981,7 +7982,7 @@
         name.textContent = row.name;
         const count = document.createElement('strong');
         count.textContent =
-          `${row.reserved} reserved Â· ${row.occupied} occupied Â· ${row.available} available`;
+          `${row.reserved} reserved \u00B7 ${row.occupied} occupied \u00B7 ${row.available} available`;
         li.append(name, count);
         calendarDayTypes.append(li);
       });
@@ -8471,7 +8472,7 @@
   if (earlyBookingId > 0 && !selectedFromUrlHandled) {
     selectedFromUrlHandled = true;
     pendingScrollBookingId = earlyBookingId;
-    // Open skeleton modal immediately â€” do not wait for the bookings table.
+    // Open skeleton modal immediately \u2014 do not wait for the bookings table.
     void openBookingDetails(earlyBookingId, earlyHint, { markRead: true });
     const url = new URL(window.location.href);
     url.searchParams.delete('booking');

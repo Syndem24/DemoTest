@@ -15,5 +15,7 @@ public interface ISystemFlushService
     Task<FlushSystemLogsResult> FlushSelectedAsync(
         IReadOnlyList<SystemFlushKind> kinds,
         string performedBy,
+        FlushDateRange dateRange = default,
+        bool clearAfterExport = true,
         CancellationToken cancellationToken = default);
 }

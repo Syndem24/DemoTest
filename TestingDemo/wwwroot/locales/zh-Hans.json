@@ -97,7 +97,14 @@
     "contactCta": "没空打电话？建议使用在线预订以获得可用最优价格，并让客房在您抵达时准备就绪。",
     "bookNow": "立即预订",
     "locationTitle": "位置与路线",
-    "locationBody": "距SM Jmall约700米，驾车约4分钟可达Oakridge Business Park，适合商务与旅游出行。"
+    "locationBody": "距SM Jmall约700米，驾车约4分钟可达Oakridge Business Park，适合商务与旅游出行。",
+    "stickyBrandSub": "国际酒店",
+    "stickyDatesIdle": "入住 – 退房",
+    "stickyDone": "完成",
+    "stickyAdult": "成人",
+    "stickyAdults": "成人",
+    "stickyChild": "儿童",
+    "stickyChildren": "儿童"
   },
   "rooms": {
     "pageTitle": "住宿客房",
@@ -536,11 +543,6 @@
     "back": "← 返回",
     "continueReview": "继续 — 核对住宿",
     "priceBreakdown": "价格明细",
-    "arrivalDiscount": "长者与残障折扣",
-    "arrivalDiscountAria": "抵达折扣申请",
-    "noArrivalDiscount": "不申请抵达折扣",
-    "seniorArrival": "长者（抵达时 20%）",
-    "pwdArrival": "残障（抵达时 20%）",
     "cancellation": "取消",
     "cancellationBody": "取消与预付规则因预订而异。如需更改或取消，请联系酒店。",
     "readTerms": "阅读完整住宿条款",

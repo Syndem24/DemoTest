@@ -57,19 +57,13 @@ public sealed class SystemFlushService : ISystemFlushService
     public async Task<SystemFlushPendingCountsDto> GetPendingCountsAsync(
         CancellationToken cancellationToken = default)
     {
-        var history = await _db.Bookings.AsNoTracking()
-            .CountAsync(booking => booking.IsArchived, cancellationToken);
-
-        var payments = await _db.PaymentRecords.AsNoTracking()
-            .CountAsync(
-                p => p.Booking.IsArchived
-                    || p.Booking.Status == BookingStatus.CheckedOut
-                    || p.Booking.Status == BookingStatus.Cancelled
-                    || p.Booking.Status == BookingStatus.Rejected,
-                cancellationToken);
-
-        var staffAudit = await _db.SystemAuditLogs.AsNoTracking()
-            .CountAsync(row => row.Domain == SystemAuditDomain.Account, cancellationToken);
+        // Pending counts match respective pages:
+        // Booking History: matches the Archive page (archived bookings)
+        var history = await _db.Bookings.AsNoTracking().CountAsync(b => b.IsArchived, cancellationToken);
+        // Payments: matches the Payments page (payment records)
+        var payments = await _db.PaymentRecords.AsNoTracking().CountAsync(cancellationToken);
+        // Staff Audit / Audit Log: matches the System audit log table above
+        var staffAudit = await _db.SystemAuditLogs.AsNoTracking().CountAsync(cancellationToken);
 
         return new SystemFlushPendingCountsDto(history, payments, staffAudit);
     }
@@ -77,12 +71,14 @@ public sealed class SystemFlushService : ISystemFlushService
     public async Task<FlushSystemLogsResult> FlushSelectedAsync(
         IReadOnlyList<SystemFlushKind> kinds,
         string performedBy,
+        FlushDateRange dateRange = default,
+        bool clearAfterExport = true,
         CancellationToken cancellationToken = default)
     {
         performedBy = performedBy?.Trim() ?? string.Empty;
         if (performedBy.Length < 2 || performedBy.Length > 120)
         {
-            throw new ArgumentException("Enter the staff name who is flushing (2–120 characters).");
+            throw new ArgumentException("Could not identify the staff account for this export.");
         }
 
         var selected = kinds
@@ -91,7 +87,7 @@ public sealed class SystemFlushService : ISystemFlushService
             .ToList();
         if (selected.Count == 0)
         {
-            throw new ArgumentException("Select at least one log type to flush.");
+            throw new ArgumentException("Select at least one log type to export.");
         }
 
         var files = new List<(byte[] Bytes, string FileName)>();
@@ -106,21 +102,33 @@ public sealed class SystemFlushService : ISystemFlushService
                 {
                     case SystemFlushKind.BookingHistory:
                     {
-                        var result = await _bookingService.FlushHistoryAsync(performedBy, cancellationToken);
+                        var result = await _bookingService.FlushHistoryAsync(
+                            performedBy,
+                            dateRange,
+                            clearAfterExport,
+                            cancellationToken);
                         files.Add((result.PdfBytes, result.FileName));
                         logs.Add(MapFromHistory(result.Log));
                         break;
                     }
                     case SystemFlushKind.Payments:
                     {
-                        var result = await _paymentService.FlushPaymentsAsync(performedBy, cancellationToken);
+                        var result = await _paymentService.FlushPaymentsAsync(
+                            performedBy,
+                            dateRange,
+                            clearAfterExport,
+                            cancellationToken);
                         files.Add((result.PdfBytes, result.FileName));
                         logs.Add(MapFromPayment(result.Log));
                         break;
                     }
                     case SystemFlushKind.StaffAudit:
                     {
-                        var result = await FlushStaffAuditAsync(performedBy, cancellationToken);
+                        var result = await FlushStaffAuditAsync(
+                            performedBy,
+                            dateRange,
+                            clearAfterExport,
+                            cancellationToken);
                         files.Add((result.PdfBytes, result.FileName));
                         logs.Add(result.Log);
                         break;
@@ -140,7 +148,7 @@ public sealed class SystemFlushService : ISystemFlushService
             throw new ArgumentException(
                 skipped.Count > 0
                     ? string.Join(" ", skipped)
-                    : "Nothing was flushed.");
+                    : "Nothing was exported.");
         }
 
         return new FlushSystemLogsResult(files, logs, skipped);
@@ -159,47 +167,75 @@ public sealed class SystemFlushService : ISystemFlushService
 
     private async Task<(byte[] PdfBytes, string FileName, SystemFlushLogDto Log)> FlushStaffAuditAsync(
         string performedBy,
+        FlushDateRange dateRange,
+        bool clearAfterExport,
         CancellationToken cancellationToken)
     {
-        await using var transaction = await _db.Database.BeginTransactionAsync(
-            IsolationLevel.Serializable,
-            cancellationToken);
-
-        var rows = await _auditQuery.GetStaffAccountAuditExportRowsAsync(cancellationToken);
-        if (rows.Count == 0)
+        // EnableRetryOnFailure requires transactions to run inside CreateExecutionStrategy().
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            throw new ArgumentException("Staff audit is empty — nothing to flush.");
-        }
+            await using var transaction = await _db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable,
+                cancellationToken);
 
-        var flushedAtUtc = DateTime.UtcNow;
-        var stamp = PhilippinesTime.ToManila(flushedAtUtc).ToString("yyyyMMdd-HHmm");
-        var fileName = $"Mori-StaffAudit-Export-{stamp}.pdf";
-        var logoPath = Path.Combine(_environment.WebRootPath, "Images", "Logo.png");
-        var pdfBytes = StaffAuditPdfBuilder.Build(rows, performedBy, flushedAtUtc, logoPath);
-        var summary =
-            $"{rows.Count} staff account audit row{(rows.Count == 1 ? "" : "s")} exported. Account history was kept.";
+            var rows = await _auditQuery.GetAuditExportRowsAsync(domain: null, dateRange, cancellationToken);
+            if (rows.Count == 0)
+            {
+                throw new ArgumentException(
+                    dateRange.HasFilter
+                        ? "No audit log rows in that date range — nothing to export."
+                        : "Audit log is empty — nothing to export.");
+            }
 
-        var log = new SystemFlushLog
-        {
-            Kind = SystemFlushKind.StaffAudit,
-            FlushedAtUtc = flushedAtUtc,
-            PerformedBy = performedBy,
-            RecordCount = rows.Count,
-            FileName = fileName,
-            Summary = summary
-        };
-        _db.SystemFlushLogs.Add(log);
-        _audit.Record(
-            SystemAuditIntent.FileModification,
-            SystemAuditDomain.File,
-            "StaffAudit.Export",
-            "Flush",
-            fileName,
-            fileName,
-            summary: summary);
-        await _db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return (pdfBytes, fileName, Map(log));
+            var flushedAtUtc = DateTime.UtcNow;
+            var stamp = PhilippinesTime.ToManila(flushedAtUtc).ToString("yyyyMMdd-HHmm");
+            var fileName = $"Mori-AuditLog-Export-{stamp}.pdf";
+            var logoPath = Path.Combine(_environment.WebRootPath, "Images", "Logo.png");
+            var pdfBytes = StaffAuditPdfBuilder.Build(
+                rows,
+                performedBy,
+                flushedAtUtc,
+                logoPath,
+                title: "System audit log",
+                subtitle: "System & staff audit events · official record export",
+                footerLabel: "system audit export");
+            var clearNote = clearAfterExport
+                ? " then deleted."
+                : " Data was kept (export only).";
+            var summary =
+                $"{rows.Count} audit log row{(rows.Count == 1 ? "" : "s")} exported to {fileName},{clearNote}{dateRange.DescribeForSummary()}";
+
+            if (clearAfterExport)
+            {
+                await _auditQuery.DeleteDomainInRangeAsync(
+                    domain: null,
+                    dateRange,
+                    cancellationToken);
+            }
+
+            var log = new SystemFlushLog
+            {
+                Kind = SystemFlushKind.StaffAudit,
+                FlushedAtUtc = flushedAtUtc,
+                PerformedBy = performedBy,
+                RecordCount = rows.Count,
+                FileName = fileName,
+                Summary = summary.Length > 2000 ? summary[..2000] : summary
+            };
+            _db.SystemFlushLogs.Add(log);
+            _audit.Record(
+                SystemAuditIntent.FileModification,
+                SystemAuditDomain.File,
+                "SystemAudit.Export",
+                clearAfterExport ? "Flush" : "Export",
+                fileName,
+                fileName,
+                summary: summary);
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return (pdfBytes, fileName, Map(log));
+        });
     }
 
     private async Task PurgeExpiredAsync(CancellationToken cancellationToken)
@@ -257,7 +293,7 @@ public sealed class SystemFlushService : ISystemFlushService
     {
         SystemFlushKind.BookingHistory => "Booking history",
         SystemFlushKind.Payments => "Payments",
-        SystemFlushKind.StaffAudit => "Staff audit",
+        SystemFlushKind.StaffAudit => "System audit log",
         _ => kind.ToString()
     };
 }

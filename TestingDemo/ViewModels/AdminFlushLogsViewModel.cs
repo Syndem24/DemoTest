@@ -7,6 +7,8 @@ public sealed class AdminFlushLogsViewModel
 {
     public string PerformedBy { get; set; } = string.Empty;
     public List<SystemFlushKind> Kinds { get; set; } = new();
+    public DateOnly? FromDate { get; set; }
+    public DateOnly? ToDate { get; set; }
     public SystemFlushKind? FilterKind { get; set; }
     public int HistoryPending { get; set; }
     public int PaymentsPending { get; set; }

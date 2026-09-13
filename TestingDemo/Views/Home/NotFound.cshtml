@@ -1,21 +1,22 @@
+@model TestingDemo.ViewModels.StatusErrorPageModel
 @{
     Layout = "_CustomerLayout";
-    ViewData["Title"] = "404 - Nothing's Here";
+    ViewData["Title"] = Model.Title;
     ViewData["GuestDarkPage"] = true;
 }
 
-<div class="error-404-wrapper">
+<div class="error-404-wrapper" data-error-status="@Model.StatusCode">
     <div class="error-404-bg-glow glow-1"></div>
     <div class="error-404-bg-glow glow-2"></div>
-    
+
     <div class="error-404-content">
         <div class="error-404-badge">
             <span class="badge-dot"></span>
-            <span>HTTP Status 404</span>
+            <span>@Model.BadgeLabel</span>
         </div>
 
         <div class="error-404-code-wrapper">
-            <h1 class="error-404-code">404</h1>
+            <h1 class="error-404-code">@Model.StatusCode</h1>
             <div class="error-404-icon-overlay">
                 <svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="floating-key-icon">
                     <path d="M21 2l-2 2m-2 2l-2 2m2-2l2 2m-4-4l2-2" />
@@ -25,10 +26,10 @@
             </div>
         </div>
 
-        <h2 class="error-404-headline">Nothing's here</h2>
+        <h2 class="error-404-headline">@Model.Headline</h2>
 
         <p class="error-404-description">
-            The page or room you are searching for doesn't exist, has been relocated, or is temporarily unavailable.
+            @Model.Description
         </p>
 
         <div class="error-404-actions">
@@ -40,15 +41,29 @@
                 Return to Home
             </a>
 
-            <a asp-controller="Booking" asp-action="Accommodations" class="error-btn error-btn-secondary">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16"/>
-                    <path d="M12 7v.01"/>
-                    <path d="M12 11v.01"/>
-                    <path d="M12 15v.01"/>
-                </svg>
-                Explore Rooms
-            </a>
+            @if (Model.StatusCode is 401 or 403)
+            {
+                <a asp-controller="Account" asp-action="Login" class="error-btn error-btn-secondary">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                        <polyline points="10 17 15 12 10 7"/>
+                        <line x1="15" y1="12" x2="3" y2="12"/>
+                    </svg>
+                    Sign in
+                </a>
+            }
+            else
+            {
+                <a asp-controller="Booking" asp-action="Accommodations" class="error-btn error-btn-secondary">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16"/>
+                        <path d="M12 7v.01"/>
+                        <path d="M12 11v.01"/>
+                        <path d="M12 15v.01"/>
+                    </svg>
+                    Explore Rooms
+                </a>
+            }
         </div>
 
         <div class="error-404-quick-links">
@@ -56,7 +71,7 @@
             <div class="quick-links-grid">
                 <a asp-controller="Booking" asp-action="Index" asp-fragment="about">About Hotel</a>
                 <a asp-controller="Booking" asp-action="Accommodations">Book a Stay</a>
-                <a asp-controller="Booking" asp-action="Index" asp-fragment="contact">Contact & Location</a>
+                <a asp-controller="Booking" asp-action="Index" asp-fragment="contact">Contact &amp; Location</a>
                 <a asp-controller="Staff" asp-action="Index">Staff Portal</a>
             </div>
         </div>

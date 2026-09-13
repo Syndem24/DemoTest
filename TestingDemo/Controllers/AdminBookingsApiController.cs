@@ -582,7 +582,7 @@ public sealed class AdminBookingsApiController : ControllerBase
         {
             var result = await _bookingService.FlushHistoryAsync(
                 request.PerformedBy,
-                cancellationToken);
+                cancellationToken: cancellationToken);
             Response.Headers["X-Flush-Record-Count"] = result.Log.RecordCount.ToString();
             Response.Headers["X-Flush-Performed-By"] = result.Log.PerformedBy;
             Response.Headers.Append("Access-Control-Expose-Headers", "Content-Disposition, X-Flush-Record-Count, X-Flush-Performed-By");
@@ -591,6 +591,13 @@ public sealed class AdminBookingsApiController : ControllerBase
         catch (ArgumentException ex)
         {
             return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception)
+        {
+            return BadRequest(new
+            {
+                message = "Export failed. Please try again in a moment. If it keeps failing, contact support."
+            });
         }
     }
 

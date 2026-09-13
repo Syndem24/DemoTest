@@ -1950,29 +1950,6 @@
     return rows;
   }
 
-  function arrivalDiscountValue() {
-    const checked = document.querySelector('input[name="wizArrivalDiscount"]:checked');
-    return checked?.value || 'None';
-  }
-
-  function syncArrivalDiscount() {
-    const blocked = cartHasRateOffer();
-    const hint = document.querySelector('[data-wiz-arrival-hint]');
-    document.querySelectorAll('input[name="wizArrivalDiscount"]').forEach((input) => {
-      if (input.value === 'None') {
-        input.disabled = false;
-        if (blocked) input.checked = true;
-        return;
-      }
-      input.disabled = blocked;
-    });
-    if (hint) {
-      hint.textContent = blocked
-        ? t('booking.arrivalDiscountBlockedByOffer')
-        : t('booking.arrivalDiscountHint');
-    }
-  }
-
   function paintReview() {
     const n = nights();
     const lead = document.querySelector('[data-wiz-lead-hint]');
@@ -1995,7 +1972,6 @@
         ? t('wiz.cashOfferNote', { title: offer.title || t('wiz.thisOffer') })
         : '';
     }
-    syncArrivalDiscount();
   }
 
   function openDrawer() {
@@ -2788,7 +2764,7 @@
     }
     const guest = guestPayload();
     const offer = selectedRateOffer();
-    const arrivalDiscountRequest = cartHasRateOffer() ? 'None' : arrivalDiscountValue();
+    const arrivalDiscountRequest = 'None';
     if (submitBtn) {
       submitBtn.disabled = true;
       submitBtn.dataset.original = submitBtn.textContent || '';

@@ -260,15 +260,20 @@ public sealed partial class BookingService
         if (channel == BookingChannel.Online)
             channel = BookingChannel.WalkIn;
 
+        // Named OTAs (Agoda, Expedia, RedDoorz) are always excluded from walk-in promos —
+        // their rates are managed by the OTA platform itself.
+        // OtherThirdParty is excluded by default but staff may opt in by selecting a SpecialOfferId.
         var isThirdParty = channel is BookingChannel.Agoda
             or BookingChannel.Expedia
             or BookingChannel.RedDoorz
-            or BookingChannel.OtherThirdParty;
+            || (channel is BookingChannel.OtherThirdParty && request.SpecialOfferId is null);
 
         var nights = StayNights(checkInAtUtc, checkoutTimeUtc);
         var offersByType = new Dictionary<int, SpecialOffer>();
         if (!isThirdParty
-            && channel is BookingChannel.WalkIn or BookingChannel.FrontDeskExtension)
+            && channel is BookingChannel.WalkIn
+                or BookingChannel.FrontDeskExtension
+                or BookingChannel.OtherThirdParty)
         {
             foreach (var roomTypeId in assignments.Select(a => a.RoomTypeId).Distinct())
             {

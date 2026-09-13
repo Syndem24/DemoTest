@@ -335,7 +335,7 @@ try
     }
     else
     {
-        app.UseExceptionHandler("/Home/Error");
+        app.UseExceptionHandler("/Home/NotFoundPage?statusCode=500");
         app.UseHsts();
         app.UseHttpsRedirection();
     }
@@ -347,7 +347,7 @@ try
     app.UseAuthentication();
     app.UseAuthorization();
     app.UseMiddleware<MustChangePasswordMiddleware>();
-    app.UseStatusCodePagesWithReExecute("/Home/NotFoundPage");
+    app.UseStatusCodePagesWithReExecute("/Home/NotFoundPage", "?statusCode={0}");
     app.UseRateLimiter();
     app.MapStaticAssets();
     app.MapHealthChecks("/health");

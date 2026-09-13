@@ -1,5 +1,5 @@
-/* Customer booking site â€” three colors: navy, white, teal
-   Fluid / scalable layout across phone â†’ desktop */
+/* Customer booking site — three colors: navy, white, teal
+   Fluid / scalable layout across phone -> desktop */
 .guest-shell {
   --guest-pad: clamp(0.85rem, 3.5vw, 2.5rem);
   --guest-max: 70rem;
@@ -31,21 +31,75 @@
   box-sizing: border-box;
 }
 
+/* Guest Navigation System — Option 2: Pure Frosted Pearl White (applied globally) */
 .guest-nav {
+  /* Pearl-white frosted glass — base state (sticky pages: Terms, Policy, Settings, etc.) */
+  --nav-bg: rgba(255, 255, 255, 0.82);
+  --nav-bg-scrolled: rgba(255, 255, 255, 0.97);
+  --nav-border: rgba(11, 31, 58, 0.09);
+  --nav-border-scrolled: rgba(11, 31, 58, 0.13);
+  --nav-text: var(--navy);
+  --nav-text-muted: rgba(11, 31, 58, 0.72);
+  --nav-accent: #0D9488;
+  --nav-accent-glow: rgba(13, 148, 136, 0.18);
+  --nav-cta-bg: linear-gradient(135deg, #0D9488 0%, #0F766E 100%);
+  --nav-cta-text: #FFFFFF;
+  --nav-shadow: 0 2px 20px rgba(11, 31, 58, 0.07), inset 0 -1px 0 rgba(11, 31, 58, 0.06);
+  --nav-shadow-scrolled: 0 4px 28px rgba(11, 31, 58, 0.11), inset 0 -1px 0 rgba(11, 31, 58, 0.09);
+
   position: sticky;
   top: 0;
   z-index: 40;
   padding: 0 max(var(--guest-pad), env(safe-area-inset-right)) 0 max(var(--guest-pad), env(safe-area-inset-left));
   padding-top: max(0, env(safe-area-inset-top));
-  background: rgba(255, 255, 255, 0.96);
-  border-bottom: 1px solid var(--navy-line);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: var(--nav-bg);
+  border-bottom: 1px solid var(--nav-border);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: var(--nav-shadow);
+  color: var(--nav-text);
   transition:
-    background 0.3s ease,
-    border-color 0.3s ease,
-    backdrop-filter 0.3s ease,
-    color 0.3s ease;
+    background 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+    backdrop-filter 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.guest-nav.is-scrolled {
+  background: var(--nav-bg-scrolled);
+  border-bottom-color: var(--nav-border-scrolled);
+  box-shadow: var(--nav-shadow-scrolled);
+}
+
+.guest-nav .guest-brand-name {
+  color: var(--navy);
+  text-shadow: none;
+}
+
+.guest-nav .guest-brand-logo {
+  filter: none;
+}
+
+.guest-nav .guest-nav-links a {
+  color: var(--nav-text-muted);
+}
+
+.guest-nav .guest-nav-links a:hover,
+.guest-nav .guest-nav-links a.is-active {
+  color: var(--nav-accent);
+  background: rgba(13, 148, 136, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(13, 148, 136, 0.2);
+  text-shadow: none;
+}
+
+.guest-nav .guest-nav-toggle {
+  border-color: rgba(11, 31, 58, 0.18);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--navy);
+}
+
+.guest-nav .guest-nav-toggle span {
+  background: var(--navy);
 }
 
 /* Immersive landing: fixed nav overlays the full-bleed hero */
@@ -64,55 +118,64 @@
   background: var(--white);
 }
 
-/* Transparent until scroll / menu open â€” navy text for daytime hero contrast */
+/*
+  Option 2 – Immersive hero UNSCROLLED:
+  Subtle frosted pearl veil so the hero image shows through while the nav
+  text remains legible. Mirrors the landing page treatment exactly.
+*/
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) {
-  background: transparent;
-  border-bottom-color: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  background: rgba(255, 255, 255, 0.18);
+  border-bottom-color: rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(22px) saturate(170%);
+  -webkit-backdrop-filter: blur(22px) saturate(170%);
+  box-shadow: 0 4px 24px rgba(11, 31, 58, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
+/* Brand stays white on dark hero image (unscrolled) */
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-brand,
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-brand:hover,
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-brand-name {
   color: var(--white);
-  text-shadow: 0 1px 8px rgba(11, 31, 58, 0.6);
+  text-shadow: 0 1px 8px rgba(11, 31, 58, 0.5);
 }
 
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-brand-logo {
-  filter: drop-shadow(0 1px 6px rgba(11, 31, 58, 0.6));
+  filter: drop-shadow(0 1px 6px rgba(11, 31, 58, 0.5));
 }
 
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-nav-links {
-  border-top-color: rgba(255, 255, 255, 0.15);
+  border-top-color: rgba(255, 255, 255, 0.2);
 }
 
+/* Nav links white on dark hero (unscrolled) */
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-nav-links a,
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-nav-links a.guest-nav-staff {
-  color: var(--white);
+  color: rgba(255, 255, 255, 0.92);
   font-weight: 500;
-  text-shadow: 0 1px 8px rgba(11, 31, 58, 0.6);
+  text-shadow: 0 1px 6px rgba(11, 31, 58, 0.45);
 }
 
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-nav-account-link {
-  color: var(--white);
+  color: rgba(255, 255, 255, 0.92);
   font-weight: 500;
-  text-shadow: 0 1px 8px rgba(11, 31, 58, 0.6);
+  text-shadow: 0 1px 6px rgba(11, 31, 58, 0.45);
 }
 
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-nav-links a:hover,
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-nav-links a.is-active {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--white);
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
 }
 
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-nav-account-link:hover,
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-nav-account-link.is-active {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--white);
 }
 
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-nav-toggle {
-  border-color: rgba(255, 255, 255, 0.35);
-  background: rgba(11, 31, 58, 0.25);
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.18);
   color: var(--white);
 }
 
@@ -120,36 +183,43 @@
   background: var(--white);
 }
 
+/* CTA button stays teal-filled on hero */
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-nav-cta {
-  background: var(--white);
+  background: rgba(255, 255, 255, 0.95);
   color: var(--navy);
-  box-shadow: 0 6px 16px rgba(11, 31, 58, 0.22);
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 4px 16px rgba(11, 31, 58, 0.18);
 }
 
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-nav-cta:hover {
   background: var(--teal);
   border-color: var(--teal);
-  box-shadow: 0 6px 16px rgba(26, 166, 166, 0.28);
+  box-shadow: 0 6px 18px rgba(13, 148, 136, 0.32);
   color: var(--white);
 }
 
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-lang-control-btn {
-  border-color: rgba(255, 255, 255, 0.35);
-  background: rgba(11, 31, 58, 0.25);
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.18);
   color: var(--white);
 }
 
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-lang-control-btn:hover,
 .guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .guest-lang-control-btn:focus-visible {
-  border-color: var(--white);
-  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.28);
 }
 
+/*
+  Option 2 – Immersive mobile OPEN (menu expanded, hero still visible):
+  Pearl-white panel so the open drawer reads cleanly.
+*/
 .guest-shell--immersive .guest-nav.is-open:not(.is-scrolled) {
-  background: rgba(11, 31, 58, 0.94);
-  border-bottom-color: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.97);
+  border-bottom-color: rgba(11, 31, 58, 0.1);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: 0 8px 32px rgba(11, 31, 58, 0.12);
 }
 
 .guest-shell--immersive .guest-nav.is-open:not(.is-scrolled) .guest-brand,
@@ -157,11 +227,11 @@
 .guest-shell--immersive .guest-nav.is-open:not(.is-scrolled) .guest-brand-name,
 .guest-shell--immersive .guest-nav.is-open:not(.is-scrolled) .guest-nav-links a,
 .guest-shell--immersive .guest-nav.is-open:not(.is-scrolled) .guest-nav-links a.guest-nav-staff {
-  color: var(--white);
+  color: var(--navy);
 }
 
 .guest-shell--immersive .guest-nav.is-open:not(.is-scrolled) .guest-brand-logo {
-  filter: brightness(0) invert(1);
+  filter: none;
 }
 
 .guest-shell--immersive .guest-nav.is-open:not(.is-scrolled) .guest-nav-links {
@@ -280,13 +350,15 @@
 .guest-nav-links a {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  color: rgba(11, 31, 58, 0.78);
+  gap: 0.45rem;
+  color: var(--nav-text-muted, rgba(11, 31, 58, 0.75));
   text-decoration: none;
-  font-weight: 500;
-  font-size: 0.95rem;
-  padding: 0.7rem 0.15rem;
-  transition: color 0.18s ease;
+  font-weight: 600;
+  font-size: 0.88rem;
+  letter-spacing: 0.04em;
+  padding: 0.55rem 0.95rem;
+  border-radius: 9999px;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .guest-nav-item-icon {
@@ -294,12 +366,14 @@
   height: 1.05rem;
   flex-shrink: 0;
   opacity: 0.75;
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .guest-nav-links a:hover,
 .guest-nav-links a.is-active {
-  color: var(--teal);
+  color: var(--nav-accent, #0D9488);
+  background: rgba(13, 148, 136, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(13, 148, 136, 0.16);
 }
 
 .guest-nav-links a:hover .guest-nav-item-icon,
@@ -313,21 +387,23 @@
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
-  border: 0;
-  border-radius: 999px;
-  padding: 0.55rem 1.15rem;
-  background: var(--teal);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 9999px;
+  padding: 0.58rem 1.35rem;
+  background: var(--nav-cta-bg, linear-gradient(135deg, #0D9488 0%, #0F766E 100%));
   color: var(--white);
   font: inherit;
   font-weight: 600;
-  font-size: 0.88rem;
+  font-size: 0.84rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
   text-decoration: none;
   order: 4;
-  box-shadow: 0 4px 14px rgba(26, 166, 166, 0.28);
-  transition: background 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+  box-shadow: 0 4px 16px rgba(13, 148, 136, 0.28);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .guest-nav-cta-icon {
@@ -4262,7 +4338,7 @@
   display: none;
 }
 
-/* Landing reviews â†’ contact: Accommodations palms, gutters only (no hallway illusion) */
+/* Landing reviews -> contact: Accommodations palms, gutters only (no hallway illusion) */
 .guest-landing-grove {
   position: relative;
   left: 50%;
@@ -4935,13 +5011,15 @@
   background: var(--white);
 }
 
+/* Auth pages use a relative (not sticky) nav — same Option 2 pearl white */
 .guest-shell--auth .guest-nav {
   position: relative;
   z-index: 20;
-  background: rgba(255, 255, 255, 0.96);
-  border-bottom: 1px solid var(--navy-line);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.97);
+  border-bottom: 1px solid rgba(11, 31, 58, 0.09);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: 0 2px 20px rgba(11, 31, 58, 0.07);
 }
 
 .guest-shell--auth-login {
@@ -7604,11 +7682,12 @@ body.guest-modal-open.guest-shell--clay.guest-shell--rooms .guest-main {
   }
 
   .guest-nav-links a {
-    padding: 0.2rem 0;
-    font-size: 0.72rem;
+    padding: 0.45rem 0.95rem;
+    font-size: 0.78rem;
     font-weight: 600;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
+    border-radius: 9999px;
   }
 
   .guest-nav-links .guest-nav-item-icon,
@@ -7646,7 +7725,7 @@ body.guest-modal-open.guest-shell--clay.guest-shell--rooms .guest-main {
   }
 }
 
-/* Guest count â†’ offer â†’ booking flow */
+/* Guest count -> offer -> booking flow */
 .guest-flow-bar {
   display: flex;
   flex-wrap: wrap;

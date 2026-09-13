@@ -420,86 +420,119 @@ public sealed class PaymentService : IPaymentService
 
     public async Task<FlushPaymentsResult> FlushPaymentsAsync(
         string performedBy,
+        FlushDateRange dateRange = default,
+        bool clearAfterExport = true,
         CancellationToken cancellationToken = default)
     {
         performedBy = performedBy?.Trim() ?? string.Empty;
         if (performedBy.Length < 2 || performedBy.Length > 120)
         {
-            throw new ArgumentException("Enter the staff name who is exporting payments (2–120 characters).");
+            throw new ArgumentException("Could not identify the staff account exporting payments.");
         }
 
         await PurgeExpiredFlushLogsAsync(cancellationToken);
 
-        await using var transaction = await _db.Database.BeginTransactionAsync(
-            IsolationLevel.Serializable,
-            cancellationToken);
-
-        // Only completed / archived stays — keep payment rows for active bookings.
-        // Cap batch size so PDF build cannot OOM on large archives; re-run flush for the rest.
-        var payments = await _db.PaymentRecords
-            .Include(p => p.Booking)
-            .Where(p =>
-                p.Booking.IsArchived
-                || p.Booking.Status == BookingStatus.CheckedOut
-                || p.Booking.Status == BookingStatus.Cancelled
-                || p.Booking.Status == BookingStatus.Rejected)
-            .OrderBy(p => p.PaidAtUtc)
-            .ThenBy(p => p.Id)
-            .Take(MaxFlushPaymentsPerRun)
-            .ToListAsync(cancellationToken);
-
-        if (payments.Count == 0)
+        // EnableRetryOnFailure requires transactions to run inside CreateExecutionStrategy().
+        var strategy = _db.Database.CreateExecutionStrategy();
+        var flushed = await strategy.ExecuteAsync(async () =>
         {
-            throw new ArgumentException(
-                "No completed-stay payments to export. Active bookings keep their payment records.");
-        }
+            await using var transaction = await _db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable,
+                cancellationToken);
 
-        var flushedAtUtc = DateTime.UtcNow;
-        var stamp = PhilippinesTime.ToManila(flushedAtUtc).ToString("yyyyMMdd-HHmm");
-        var fileName = $"Mori-Payment-Export-{stamp}.pdf";
-        var logoPath = Path.Combine(_environment.WebRootPath, "Images", "Logo.png");
-        var pdfBytes = PaymentFlushPdfBuilder.Build(payments, performedBy, flushedAtUtc, logoPath);
-        var summary = BuildFlushSummary(payments);
-        if (payments.Count >= MaxFlushPaymentsPerRun)
-        {
-            summary += $" Export capped at {MaxFlushPaymentsPerRun} rows; run flush again if more remain.";
-        }
-        var receiptPaths = payments
-            .Select(p => p.ReceiptImagePath)
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            // Only completed / archived stays — keep payment rows for active bookings.
+            // Cap batch size so PDF build cannot OOM on large archives; re-run flush for the rest.
+            var query = _db.PaymentRecords
+                .Include(p => p.Booking)
+                .AsQueryable();
 
-        _db.PaymentRecords.RemoveRange(payments);
+            if (dateRange.FromUtcInclusive.HasValue)
+            {
+                var fromUtc = dateRange.FromUtcInclusive.Value;
+                query = query.Where(p => p.PaidAtUtc >= fromUtc);
+            }
 
-        var log = new SystemFlushLog
-        {
-            Kind = SystemFlushKind.Payments,
-            FlushedAtUtc = flushedAtUtc,
-            PerformedBy = performedBy,
-            RecordCount = payments.Count,
-            FileName = fileName,
-            Summary = summary.Length > 2000 ? summary[..2000] : summary
-        };
-        _db.SystemFlushLogs.Add(log);
-        _audit.Record(
-            SystemAuditIntent.FileModification,
-            SystemAuditDomain.File,
-            "Payment.FlushExport",
-            "Flush",
-            log.FileName,
-            log.FileName,
-            summary: $"{payments.Count} completed-stay payment row(s) exported to {fileName}, then deleted.");
+            if (dateRange.ToUtcExclusive.HasValue)
+            {
+                var toUtc = dateRange.ToUtcExclusive.Value;
+                query = query.Where(p => p.PaidAtUtc < toUtc);
+            }
 
-        await _db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+            var payments = await query
+                .OrderBy(p => p.PaidAtUtc)
+                .ThenBy(p => p.Id)
+                .Take(MaxFlushPaymentsPerRun)
+                .ToListAsync(cancellationToken);
 
-        TryDeleteReceiptFiles(receiptPaths);
+            if (payments.Count == 0)
+            {
+                throw new ArgumentException(
+                    dateRange.HasFilter
+                        ? "No payment records in that date range — nothing to export."
+                        : "No payment records to export.");
+            }
+
+            var flushedAtUtc = DateTime.UtcNow;
+            var stamp = PhilippinesTime.ToManila(flushedAtUtc).ToString("yyyyMMdd-HHmm");
+            var fileName = $"Mori-Payment-Export-{stamp}.pdf";
+            var logoPath = Path.Combine(_environment.WebRootPath, "Images", "Logo.png");
+            var pdfBytes = PaymentFlushPdfBuilder.Build(payments, performedBy, flushedAtUtc, logoPath);
+            var summary = BuildFlushSummary(payments) + dateRange.DescribeForSummary()
+                + (clearAfterExport ? " Cleared after export." : " Export only — records kept.");
+            if (payments.Count >= MaxFlushPaymentsPerRun)
+            {
+                summary += $" Export capped at {MaxFlushPaymentsPerRun} rows; run flush again if more remain.";
+            }
+
+            var receiptPaths = clearAfterExport
+                ? payments
+                    .Select(p => p.ReceiptImagePath)
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : new List<string?>();
+
+            if (clearAfterExport)
+            {
+                _db.PaymentRecords.RemoveRange(payments);
+            }
+
+            var recordCount = payments.Count;
+            var clearNote = clearAfterExport ? " then deleted." : " Data was kept (export only).";
+            var auditSummary =
+                $"{payments.Count} payment row(s) exported to {fileName},{clearNote}{dateRange.DescribeForSummary()}";
+
+            var log = new SystemFlushLog
+            {
+                Kind = SystemFlushKind.Payments,
+                FlushedAtUtc = DateTime.UtcNow,
+                PerformedBy = performedBy,
+                RecordCount = recordCount,
+                FileName = fileName,
+                Summary = summary.Length > 2000 ? summary[..2000] : summary
+            };
+            _db.SystemFlushLogs.Add(log);
+            _audit.Record(
+                SystemAuditIntent.FileModification,
+                SystemAuditDomain.File,
+                "Payment.FlushExport",
+                clearAfterExport ? "Flush" : "Export",
+                log.FileName,
+                log.FileName,
+                summary: auditSummary);
+
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return (pdfBytes, fileName, log, receiptPaths);
+        });
+
+        TryDeleteReceiptFiles(flushed.receiptPaths);
 
         return new FlushPaymentsResult(
-            pdfBytes,
-            fileName,
-            MapFlushLog(log));
+            flushed.pdfBytes,
+            flushed.fileName,
+            MapFlushLog(flushed.log));
     }
 
     public async Task<IReadOnlyList<PaymentFlushLogDto>> GetPaymentFlushLogsAsync(

@@ -2537,7 +2537,6 @@
     const hint = document.getElementById('guestSpecialOfferPayHint');
     const tag = document.getElementById('guestSpecialOfferTag');
     const offerHidden = document.getElementById('specialOfferId');
-    const arrivalHint = document.getElementById('arrivalDiscountHint');
 
     if (offerHidden) {
       offerHidden.value = selectedSpecialOffer?.id ? String(selectedSpecialOffer.id) : '';
@@ -2555,20 +2554,6 @@
     }
 
     selectedPayMethod = 'Cash';
-
-    if (arrivalHint) {
-      arrivalHint.textContent = cashOnly
-        ? tx(
-            'booking.arrivalDiscountBlockedByOffer',
-            null,
-            'Senior Citizen and PWD discounts cannot be combined with this special offer. Choose the promo or the 20% discount — not both.'
-          )
-        : tx(
-            'booking.arrivalDiscountHint',
-            null,
-            'Senior Citizen and PWD discounts (20% off the stay) are applied when reception confirms or saves stay fees. Bring valid ID for verification. They cannot be combined with an active special offer or walk-in promo.'
-          );
-    }
   }
 
   function selectGuestPayMethod(method) {

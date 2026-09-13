@@ -3689,6 +3689,7 @@ a:hover {
 }
 
 /* Guest booking modals reused for walk-in Ã¢â‚¬â€ sit above admin shell */
+#walkInSourceModal,
 #walkInGuestsModal,
 #walkInBookModal,
 #walkInSuccessModal {
@@ -3702,10 +3703,41 @@ a:hover {
   font-family: var(--guest-font);
 }
 
+#walkInSourceModal .guest-modal-dialog,
 #walkInGuestsModal .guest-modal-dialog,
 #walkInBookModal .guest-modal-dialog,
 #walkInSuccessModal .guest-modal-dialog {
   font-family: var(--guest-font);
+}
+
+#walkInSourceModal .guest-modal-dialog-walkin {
+  width: min(96vw, 32rem);
+  max-width: 32rem;
+  padding: clamp(1rem, 2vw, 1.5rem);
+}
+
+#walkInSourceModal .guest-book-modal-head {
+  margin: calc(-1 * clamp(1rem, 2vw, 1.5rem)) calc(-1 * clamp(1rem, 2vw, 1.5rem)) 1.15rem;
+  padding: 1.1rem clamp(1rem, 2vw, 1.5rem) 1rem;
+  padding-right: calc(clamp(1rem, 2vw, 1.5rem) + 2.25rem);
+}
+
+#walkInSourceModal .guest-book-modal-head .guest-modal-lede {
+  max-width: none;
+  font-size: 0.94rem;
+  line-height: 1.5;
+}
+
+#walkInSourceModal .guest-book-section {
+  padding: 1.1rem 1.15rem;
+  gap: 0.85rem;
+}
+
+#walkInSourceModal .guest-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
 }
 
 #walkInBookModal .admin-walkin-assign-list {
@@ -11677,6 +11709,46 @@ body.hotel-photo-zoom-open {
   margin-bottom: 16px;
 }
 
+.admin-flush-dates {
+  margin-bottom: 16px;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(11, 31, 58, 0.1);
+  border-radius: 14px;
+  background: rgba(11, 31, 58, 0.03);
+}
+
+.admin-flush-dates-legend {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(11, 31, 58, 0.62);
+}
+
+.admin-flush-dates-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  color: rgba(11, 31, 58, 0.68);
+}
+
+.admin-flush-dates-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+.admin-flush-dates-grid .admin-flush-name {
+  margin-bottom: 0;
+}
+
+@media (max-width: 560px) {
+  .admin-flush-dates-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .admin-flush-name label,
 .admin-flush-filter label {
   font-size: 0.78rem;
@@ -11795,14 +11867,14 @@ body.hotel-photo-zoom-open {
 
 .admin-flush-table th,
 .admin-flush-table td {
-  padding: 14px 16px;
+  padding: 16px 18px;
   text-align: left;
   vertical-align: top;
   border-bottom: 1px solid rgba(11, 31, 58, 0.08);
 }
 
 .admin-flush-table th {
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -12088,7 +12160,7 @@ body.hotel-photo-zoom-open {
 .admin-audit-table {
   table-layout: fixed;
   min-width: 64rem;
-  font-size: 0.78rem;
+  font-size: 0.9rem;
 }
 
 .admin-audit-col-when { width: 10.25rem; }
@@ -12100,7 +12172,7 @@ body.hotel-photo-zoom-open {
 
 .admin-audit-table th,
 .admin-audit-table td {
-  padding: 0.4rem 0.55rem;
+  padding: 0.75rem 0.65rem;
   vertical-align: middle;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -12118,13 +12190,14 @@ body.hotel-photo-zoom-open {
   margin: 0 0 0 0.3rem;
   color: rgba(11, 31, 58, 0.72);
   font-weight: 500;
+  font-size: 0.82rem;
 }
 
 .admin-audit-table .admin-flush-badge {
   max-width: 100%;
-  min-height: 1.4rem;
-  padding: 0 0.45rem;
-  font-size: 0.62rem;
+  min-height: 1.6rem;
+  padding: 0 0.5rem;
+  font-size: 0.72rem;
   letter-spacing: 0.03em;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -12187,7 +12260,7 @@ body.hotel-photo-zoom-open {
   border: 1px solid var(--navy-line);
   border-radius: 16px;
   background: var(--white);
-  padding: 0.25rem clamp(0.85rem, 2vw, 1rem) 1rem;
+  padding: 0.35rem clamp(1rem, 2vw, 1.15rem) 1.15rem;
 }
 
 .admin-audit-retention > summary {
@@ -12198,9 +12271,9 @@ body.hotel-photo-zoom-open {
   cursor: pointer;
   font-weight: 700;
   color: var(--navy);
-  padding: 0.9rem 0.15rem;
+  padding: 1rem 0.15rem;
   list-style: none;
-  font-size: clamp(0.95rem, 2.4vw, 1.05rem);
+  font-size: clamp(1rem, 2.4vw, 1.1rem);
   transition: color 200ms ease;
 }
 
@@ -12573,8 +12646,60 @@ body.hotel-photo-zoom-open {
   gap: 12px;
 }
 
-.admin-flush-confirm-actions .admin-flush-submit {
-  width: auto;
+.admin-flush-confirm-actions--choice {
+  grid-template-columns: 1fr;
+}
+
+.admin-flush-confirm-actions .admin-flush-submit,
+.admin-flush-confirm-actions .admin-flush-btn-safe,
+.admin-flush-confirm-actions .admin-flush-btn-danger {
+  width: 100%;
+  min-height: 2.75rem;
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.admin-flush-btn-safe {
+  border: 0;
+  background: var(--teal);
+  color: var(--white);
+  box-shadow: 0 8px 18px rgba(26, 166, 166, 0.28);
+}
+
+.admin-flush-btn-safe:hover {
+  background: #179999;
+  transform: translateY(-1px);
+}
+
+.admin-flush-btn-safe:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.admin-flush-btn-danger {
+  border: 1.5px solid rgba(122, 31, 31, 0.45);
+  background: #7a1f1f;
+  color: var(--white);
+  box-shadow: 0 8px 18px rgba(122, 31, 31, 0.24);
+}
+
+.admin-flush-btn-danger:hover {
+  background: #641818;
+  transform: translateY(-1px);
+}
+
+.admin-flush-btn-danger:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+@media (min-width: 520px) {
+  .admin-flush-confirm-actions--choice {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
 }
 
 @media (min-width: 1100px) {
@@ -12625,8 +12750,8 @@ body.hotel-photo-zoom-open {
   }
 
   .admin-flush-table tr {
-    margin-bottom: 0.55rem;
-    padding: 0.5rem 0.7rem;
+    margin-bottom: 0.65rem;
+    padding: 0.7rem 0.9rem;
     border: 1px solid var(--navy-line);
     border-radius: 12px;
     background: var(--white);
@@ -12634,7 +12759,7 @@ body.hotel-photo-zoom-open {
 
   .admin-flush-table th,
   .admin-flush-table td {
-    padding: 0.4rem 0;
+    padding: 0.6rem 0;
   }
 
   .admin-flush-table td {
@@ -12645,6 +12770,7 @@ body.hotel-photo-zoom-open {
     border: 0;
     border-bottom: 1px solid rgba(11, 31, 58, 0.06);
     text-align: right;
+    font-size: 0.9rem;
   }
 
   .admin-flush-table td:last-child {
@@ -12669,15 +12795,24 @@ body.hotel-photo-zoom-open {
     white-space: normal;
     overflow: visible;
     text-overflow: unset;
+    font-size: 0.95rem;
+  }
+
+  .admin-audit-table th,
+  .admin-audit-table td {
+    padding: 0.85rem 0.75rem;
   }
 
   .admin-audit-table .admin-flush-badge {
     max-width: min(100%, 14rem);
+    font-size: 0.8rem;
+    min-height: 1.8rem;
   }
 
   .admin-audit-table td small {
     display: block;
     margin: 0.15rem 0 0;
+    font-size: 0.85rem;
   }
 
   .admin-flush-grid {

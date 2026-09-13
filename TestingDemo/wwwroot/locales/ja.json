@@ -97,7 +97,14 @@
     "contactCta": "お急ぎですか？通話の時間が取れない場合は、オンライン予約がおすすめです。到着時に客室の準備を整えやすく、お得な料金でご予約いただけます。",
     "bookNow": "今すぐ予約",
     "locationTitle": "アクセス",
-    "locationBody": "SM Jmallまで約700m、Oakridge Business Parkまで車で約4分。ショッピングや食事、ビジネス利用にも便利な立地です。"
+    "locationBody": "SM Jmallまで約700m、Oakridge Business Parkまで車で約4分。ショッピングや食事、ビジネス利用にも便利な立地です。",
+    "stickyBrandSub": "インターナショナルホテル",
+    "stickyDatesIdle": "チェックイン – チェックアウト",
+    "stickyDone": "完了",
+    "stickyAdult": "大人",
+    "stickyAdults": "大人",
+    "stickyChild": "お子様",
+    "stickyChildren": "お子様"
   },
   "rooms": {
     "pageTitle": "客室・宿泊施設",
@@ -536,11 +543,6 @@
     "back": "← 戻る",
     "continueReview": "続ける — 滞在を確認",
     "priceBreakdown": "料金内訳",
-    "arrivalDiscount": "シニア・PWD",
-    "arrivalDiscountAria": "到着時割引の希望",
-    "noArrivalDiscount": "到着時割引なし",
-    "seniorArrival": "シニア（到着時20%）",
-    "pwdArrival": "PWD（到着時20%）",
     "cancellation": "キャンセル",
     "cancellationBody": "キャンセルおよび前払いの条件は予約により異なります。変更や取消はホテルへご連絡ください。",
     "readTerms": "滞在規約の全文を読む",

@@ -3,6 +3,9 @@
   const guestsModal = document.getElementById('walkInGuestsModal');
   const bookModal = document.getElementById('walkInBookModal');
   const successModal = document.getElementById('walkInSuccessModal');
+  const sourceModal = document.getElementById('walkInSourceModal');
+  const sourceNextBtn = document.getElementById('walkInSourceNextBtn');
+  const sourceSelect = document.getElementById('walkInSourceSelect');
   if (!guestsModal || !bookModal) return;
 
   const guestsList = document.getElementById('walkInGuestsRoomList');
@@ -101,7 +104,9 @@
 
   function isThirdPartyChannel() {
     const channel = String(document.getElementById('walkInChannel')?.value || '');
-    return channel === 'Agoda' || channel === 'RedDoorz';
+    // Named OTAs: always excluded from promos.
+    // OtherThirdParty: treated as offer-eligible on the UI side (server excludes it when no offer is selected).
+    return channel === 'Agoda' || channel === 'Expedia' || channel === 'RedDoorz';
   }
 
   function syncWalkInTypeSelectionLength() {
@@ -516,7 +521,7 @@
     if (hint) {
       if (thirdParty) {
         hint.textContent =
-          'Senior / PWD 20% discount applies to Walk-in channel only. Agoda and RedDoorz use standard OTA rates.';
+          'Senior / PWD 20% discount applies to Walk-in and Other OTA channels only. Agoda, Expedia, and RedDoorz use standard OTA rates.';
       } else if (onPromo) {
         hint.textContent = 'Senior / PWD cannot combine with an active walk-in promo rate.';
       } else {
@@ -1402,7 +1407,7 @@
     if (step === 'payment') {
       const channel = String(document.getElementById('walkInChannel')?.value || '');
       if (!channel) {
-        showFormMessage('Select a booking channel (Walk-in, Agoda, or RedDoorz).', true);
+        showFormMessage('Select a booking channel (Walk-in, Agoda, Expedia, RedDoorz, or Other OTA).', true);
         return false;
       }
       if (totalRemainingInventory() < roomsNeeded()) {
@@ -1582,7 +1587,7 @@
     resetDates();
     walkInTypeSelections = [];
     const channelEl = document.getElementById('walkInChannel');
-    if (channelEl) channelEl.value = '';
+    if (channelEl) channelEl.value = sourceSelect?.value || 'WalkIn';
     if (partySummary) partySummary.textContent = partySummaryText();
     setWizardStep('guest');
     if (paymentTendered) paymentTendered.value = '';
@@ -1592,7 +1597,27 @@
     refreshTotals();
   }
 
-  openBtn?.addEventListener('click', () => openWalkInFlow());
+  openBtn?.addEventListener('click', () => {
+    if (sourceModal) {
+      if (sourceSelect) sourceSelect.value = 'WalkIn';
+      openModal(sourceModal);
+    } else {
+      openWalkInFlow();
+    }
+  });
+
+  sourceNextBtn?.addEventListener('click', () => {
+    const channelSelect = document.getElementById('walkInChannel');
+    if (channelSelect && sourceSelect) {
+      channelSelect.value = sourceSelect.value;
+    }
+    closeModal(sourceModal);
+    openWalkInFlow();
+  });
+
+  document.querySelectorAll('[data-walkin-source-close]').forEach(btn => {
+    btn.addEventListener('click', () => closeModal(sourceModal));
+  });
 
   roomTypePicker?.addEventListener('click', (event) => {
     const btn = event.target.closest('[data-walkin-pick-type]');

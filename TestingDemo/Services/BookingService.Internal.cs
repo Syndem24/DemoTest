@@ -131,7 +131,6 @@ public sealed partial class BookingService
     {
         return await _db.Rooms
             .AsNoTracking()
-            .Where(room => room.Status != RoomStatus.Unavailable)
             .GroupBy(room => new { room.RoomTypeId, room.RoomType.Name, room.RoomType.PricePerNight })
             .Select(group => new RoomTypeCapacity(
                 group.Key.RoomTypeId,
@@ -141,6 +140,19 @@ public sealed partial class BookingService
             .ToListAsync(cancellationToken);
     }
 
+    private async Task<Dictionary<int, int>> GetMaintenanceCountByTypeAsync(
+        CancellationToken cancellationToken)
+    {
+        var counts = await _db.Rooms
+            .AsNoTracking()
+            .Where(room => room.Status == RoomStatus.Cleaning || room.Status == RoomStatus.Unavailable)
+            .GroupBy(room => room.RoomTypeId)
+            .Select(group => new { RoomTypeId = group.Key, Count = group.Count() })
+            .ToListAsync(cancellationToken);
+
+        return counts.ToDictionary(item => item.RoomTypeId, item => item.Count);
+    }
+
     private async Task<Dictionary<int, int>> GetHeldQuantityByTypeAsync(
         DateTime checkInAtUtc,
         DateTime checkoutTimeUtc,
@@ -148,13 +160,14 @@ public sealed partial class BookingService
         CancellationToken cancellationToken)
     {
         var capacities = await GetPhysicalCapacityByTypeAsync(cancellationToken);
+        var maintenanceByType = await GetMaintenanceCountByTypeAsync(cancellationToken);
         var nights = EnumerateStayNights(checkInAtUtc, checkoutTimeUtc);
         var overlapping = await LoadOverlappingBookingLinesAsync(
             checkInAtUtc,
             checkoutTimeUtc,
             excludeBookingId,
             cancellationToken);
-        var (maxHeld, _) = ComputeNightlyInventory(capacities, overlapping, nights);
+        var (maxHeld, _) = ComputeNightlyInventory(capacities, maintenanceByType, overlapping, nights);
         return maxHeld;
     }
 
@@ -266,6 +279,7 @@ public sealed partial class BookingService
     private static (Dictionary<int, int> MaxHeldByType, Dictionary<int, List<string>> SoldOutDatesByType)
         ComputeNightlyInventory(
             IReadOnlyList<RoomTypeCapacity> capacities,
+            IReadOnlyDictionary<int, int> maintenanceByType,
             IReadOnlyList<OverlappingBookingLine> overlapping,
             IReadOnlyList<StayNightSlice> nights)
     {
@@ -289,11 +303,12 @@ public sealed partial class BookingService
             foreach (var capacity in capacities)
             {
                 var held = heldThisNight.GetValueOrDefault(capacity.RoomTypeId);
+                var maintenance = maintenanceByType.GetValueOrDefault(capacity.RoomTypeId);
                 maxHeldByType[capacity.RoomTypeId] = Math.Max(
                     maxHeldByType.GetValueOrDefault(capacity.RoomTypeId),
                     held);
 
-                if (capacity.Capacity - held <= 0)
+                if (capacity.Capacity - maintenance - held <= 0)
                 {
                     soldOutDatesByType[capacity.RoomTypeId].Add(
                         night.ManilaDate.ToString("yyyy-MM-dd"));
@@ -887,8 +902,13 @@ public sealed partial class BookingService
         DateTime checkoutTimeUtc,
         CancellationToken cancellationToken)
     {
-        var capacities = await GetPhysicalCapacityByTypeAsync(cancellationToken);
-        var capacityByType = capacities.ToDictionary(item => item.RoomTypeId);
+        var availability = await BuildAvailabilityAsync(
+            checkInAtUtc,
+            checkoutTimeUtc,
+            excludeBookingId: booking.Id,
+            allowPastCheckIn: true,
+            cancellationToken);
+        var capacityByType = availability.ToDictionary(item => item.RoomTypeId);
 
         foreach (var line in booking.Items.Where(item => item.RoomTypeId.HasValue))
         {
@@ -899,18 +919,10 @@ public sealed partial class BookingService
                     "One of the room types on this booking is no longer available.");
             }
 
-            var heldByOthers = await GetHeldQuantityForTypeAsync(
-                typeId,
-                checkInAtUtc,
-                checkoutTimeUtc,
-                excludeBookingId: booking.Id,
-                cancellationToken);
-
-            if (heldByOthers + line.Quantity > roomType.Capacity)
+            if (line.Quantity > roomType.Remaining)
             {
-                var remaining = Math.Max(0, roomType.Capacity - heldByOthers);
                 throw new BookingAvailabilityException(
-                    $"{roomType.RoomTypeName} has only {remaining} room(s) available for the extended dates.");
+                    $"{roomType.RoomTypeName} has only {roomType.Remaining} room(s) available for the extended dates.");
             }
         }
     }

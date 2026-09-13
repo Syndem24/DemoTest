@@ -246,19 +246,40 @@ public class HomeController : Controller
         return RedirectToAction(nameof(Privacy));
     }
 
+    [AllowAnonymous]
     [Route("Home/NotFoundPage")]
     [Route("NotFound")]
     [Route("404")]
-    public IActionResult NotFoundPage()
+    public IActionResult NotFoundPage(int? statusCode = null)
     {
-        Response.StatusCode = 404;
-        return View("NotFound");
+        var reExecute = HttpContext.Features.Get<Microsoft.AspNetCore.Diagnostics.IStatusCodeReExecuteFeature>();
+        var code = statusCode
+            ?? reExecute?.OriginalStatusCode
+            ?? Response.StatusCode;
+
+        if (code is < 400 or >= 600)
+        {
+            code = 404;
+        }
+
+        // Recycle the same NotFound page for known statuses; map other 4xx/5xx nearby.
+        code = code switch
+        {
+            400 or 401 or 403 or 404 or 500 or 503 => code,
+            >= 500 => 500,
+            _ => 404
+        };
+
+        Response.StatusCode = code;
+        return View("NotFound", StatusErrorPageModel.ForStatus(code));
     }
 
+    [AllowAnonymous]
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public IActionResult Error()
     {
-        return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+        Response.StatusCode = 500;
+        return View("NotFound", StatusErrorPageModel.ForStatus(500));
     }
 
     private async Task<IntegrationSettingsViewModel> BuildIntegrationModelAsync(CancellationToken cancellationToken)

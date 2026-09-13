@@ -799,7 +799,11 @@
         `Payments exported (${result.recordCount || 'all'} records). PDF saved as ${result.fileName}.`
       );
     } catch (error) {
-      showPaymentsMessage(error instanceof Error ? error.message : 'Unable to export payments.', true);
+      showPaymentsMessage(
+        window.friendlyAdminExportError?.(error, 'Unable to export payments.')
+          || (error instanceof Error ? error.message : 'Unable to export payments.'),
+        true
+      );
     } finally {
       window.setAdminExportLoading?.(false);
       if (flushConfirmButton) {

@@ -45,8 +45,12 @@ public sealed class CreateWalkInRequestValidator : AbstractValidator<CreateWalkI
             .WithMessage("At most one extra guest per room is allowed (₱200 / night).");
 
         RuleFor(x => x.Channel)
-            .Must(c => c is BookingChannel.WalkIn or BookingChannel.Agoda or BookingChannel.RedDoorz)
-            .WithMessage("Select a booking channel: Walk-in, Agoda, or RedDoorz.");
+            .Must(c => c is BookingChannel.WalkIn
+                    or BookingChannel.Agoda
+                    or BookingChannel.Expedia
+                    or BookingChannel.RedDoorz
+                    or BookingChannel.OtherThirdParty)
+            .WithMessage("Select a valid booking channel.");
 
         RuleForEach(x => x.Assignments).ChildRules(assignment =>
         {

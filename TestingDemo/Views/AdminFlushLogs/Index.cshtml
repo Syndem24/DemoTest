@@ -15,7 +15,7 @@
             <h1 id="auditPageTitle">System audit log</h1>
             <p class="admin-flush-lede">
                 Track administrative actions, configuration changes, and file modifications.
-                Rows are append-only and are not deleted by data retention.
+                Use Data retention export below to save a PDF and optionally clear Bookings, Payments, or Accounts events in a date range.
             </p>
         </div>
         <ul class="admin-flush-kpis" aria-label="Audit coverage">
@@ -31,8 +31,8 @@
             </li>
             <li>
                 <span>Retention</span>
-                <strong>Keep</strong>
-                <em>not auto-deleted</em>
+                <strong>Export</strong>
+                <em>clear optional</em>
             </li>
         </ul>
     </section>
@@ -201,7 +201,7 @@
                 @Html.AntiForgeryToken()
                 <header class="admin-flush-card-head">
                     <h2>Export operational records</h2>
-                    <p>Booking history and completed-stay payments are deleted after PDF export. Staff account history is exported and kept.</p>
+                    <p>Choose what to export from the audit table above. You will pick where to save the PDF on this computer. Export and clear removes that area’s events from the table.</p>
                 </header>
 
                 <fieldset class="admin-flush-kinds">
@@ -211,7 +211,7 @@
                         <span class="admin-flush-kind-box" aria-hidden="true"></span>
                         <span class="admin-flush-kind-copy">
                             <strong>Booking history</strong>
-                            <small>@Model.HistoryPending archived stay@(Model.HistoryPending == 1 ? "" : "s")@(historyReady ? "" : " — nothing waiting")</small>
+                            <small>@Model.HistoryPending archived booking@(Model.HistoryPending == 1 ? "" : "s")@(historyReady ? "" : " — nothing waiting")</small>
                         </span>
                     </label>
                     <label class="admin-flush-kind">
@@ -219,25 +219,51 @@
                         <span class="admin-flush-kind-box" aria-hidden="true"></span>
                         <span class="admin-flush-kind-copy">
                             <strong>Payments</strong>
-                            <small>@Model.PaymentsPending completed-stay payment@(Model.PaymentsPending == 1 ? "" : "s")@(paymentsReady ? "" : " — nothing waiting")</small>
+                            <small>@Model.PaymentsPending payment record@(Model.PaymentsPending == 1 ? "" : "s")@(paymentsReady ? "" : " — nothing waiting")</small>
                         </span>
                     </label>
                     <label class="admin-flush-kind">
                         <input type="checkbox" name="kinds" value="@SystemFlushKind.StaffAudit" @(Model.Kinds.Contains(SystemFlushKind.StaffAudit) ? "checked" : null) />
                         <span class="admin-flush-kind-box" aria-hidden="true"></span>
                         <span class="admin-flush-kind-copy">
-                            <strong>Staff audit PDF</strong>
-                            <small>@Model.StaffAuditPending account row@(Model.StaffAuditPending == 1 ? "" : "s") — export only@(staffReady ? "" : "")</small>
+                            <strong>System audit log</strong>
+                            <small>@Model.StaffAuditPending audit log event@(Model.StaffAuditPending == 1 ? "" : "s")@(staffReady ? "" : " — nothing waiting")</small>
                         </span>
                     </label>
                 </fieldset>
 
-                <div class="admin-flush-name">
-                    <label for="performedBy">Staff name</label>
-                    <input id="performedBy" name="performedBy" maxlength="120" required minlength="2" value="@Model.PerformedBy" placeholder="e.g. Ana Reyes" autocomplete="name" />
+                <div class="admin-flush-dates" role="group" aria-labelledby="flushDateLegend">
+                    <p id="flushDateLegend" class="admin-flush-dates-legend">Date range (Philippines) — required</p>
+                    <p class="admin-flush-dates-hint">
+                        Both dates are required. History uses archive date, payments use paid date, audit log uses event date.
+                    </p>
+                    <div class="admin-flush-dates-grid">
+                        <div class="admin-flush-name">
+                            <label for="fromDate">From</label>
+                            <input id="fromDate"
+                                   name="fromDate"
+                                   type="date"
+                                   required
+                                   value="@(Model.FromDate?.ToString("yyyy-MM-dd"))"
+                                   autocomplete="off" />
+                        </div>
+                        <div class="admin-flush-name">
+                            <label for="toDate">To</label>
+                            <input id="toDate"
+                                   name="toDate"
+                                   type="date"
+                                   required
+                                   value="@(Model.ToDate?.ToString("yyyy-MM-dd"))"
+                                   autocomplete="off" />
+                        </div>
+                    </div>
                 </div>
 
-                <p class="admin-flush-warn">Booking history and payments cannot be restored after export. The system audit log above is not deleted.</p>
+                <input type="hidden" name="clearAfterExport" id="clearAfterExport" value="false" />
+
+                <p class="admin-flush-warn">
+                    After you confirm, pick <strong>Just export</strong> (teal — keeps records) or <strong>Export and clear</strong> (red — deletes exported records in the date range). A Save dialog asks where to store the PDF. Files-area export markers stay for integrity.
+                </p>
                 <button type="submit" class="admin-flush-submit">Export selected</button>
             </form>
 
@@ -277,11 +303,11 @@
                             }
                             @if (Model.FilterKind == SystemFlushKind.StaffAudit)
                             {
-                                <option value="@SystemFlushKind.StaffAudit" selected>Staff audit</option>
+                                <option value="@SystemFlushKind.StaffAudit" selected>System audit log</option>
                             }
                             else
                             {
-                                <option value="@SystemFlushKind.StaffAudit">Staff audit</option>
+                                <option value="@SystemFlushKind.StaffAudit">System audit log</option>
                             }
                         </select>
                     </form>
@@ -314,7 +340,7 @@
                                 var expires = PhilippinesTime.ToManila(log.ExpiresAtUtc);
                                 var kindClass = log.KindLabel == "Payments"
                                     ? "is-payments"
-                                    : log.KindLabel == "Staff audit"
+                                    : (log.KindLabel == "Staff audit" || log.KindLabel == "System audit log")
                                         ? "is-staff"
                                         : "is-history";
                                 <tr>
@@ -341,11 +367,30 @@
 <div class="admin-flush-confirm" id="adminFlushConfirm" hidden>
     <button type="button" class="admin-flush-confirm-backdrop" data-flush-confirm-cancel aria-label="Cancel export"></button>
     <section class="admin-flush-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="flushConfirmTitle">
-        <h2 id="flushConfirmTitle">Export selected records?</h2>
-        <p id="flushConfirmBody">Export the selected types. Booking history and payments are deleted after the PDF is created.</p>
-        <div class="admin-flush-confirm-actions">
+        <h2 id="flushConfirmTitle">How do you want to export?</h2>
+        <p id="flushConfirmBody">Choose carefully. Clearing cannot be undone for the selected export types in that date range.</p>
+        <div class="admin-flush-confirm-actions admin-flush-confirm-actions--choice">
             <button type="button" class="admin-flush-ghost" data-flush-confirm-cancel>Cancel</button>
-            <button type="button" class="admin-flush-submit" id="adminFlushConfirmOk">Export now</button>
+            <button type="button" class="admin-flush-btn-safe" id="adminFlushExportOnly" data-flush-mode="export">
+                Just export
+            </button>
+            <button type="button" class="admin-flush-btn-danger" id="adminFlushExportClear" data-flush-mode="clear">
+                Export and clear
+            </button>
+        </div>
+    </section>
+</div>
+
+<div class="admin-flush-confirm" id="adminFlushSave" hidden>
+    <button type="button" class="admin-flush-confirm-backdrop" data-flush-save-skip aria-label="Skip choosing folder"></button>
+    <section class="admin-flush-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="flushSaveTitle">
+        <h2 id="flushSaveTitle">Save export file</h2>
+        <p id="flushSaveBody">Choose where on this computer to store the PDF.</p>
+        <div class="admin-flush-confirm-actions admin-flush-confirm-actions--choice">
+            <button type="button" class="admin-flush-ghost" data-flush-save-skip>Downloads folder</button>
+            <button type="button" class="admin-flush-btn-safe" id="adminFlushSavePick">
+                Choose folder…
+            </button>
         </div>
     </section>
 </div>
@@ -358,14 +403,227 @@
             const form = document.getElementById('adminFlushForm');
             const overlay = document.getElementById('adminFlushConfirm');
             const confirmBody = document.getElementById('flushConfirmBody');
-            const nameInput = document.getElementById('performedBy');
-            const stored = localStorage.getItem('moriSystemFlushBy');
-            if (nameInput && stored && !nameInput.value) nameInput.value = stored;
+            const clearInput = document.getElementById('clearAfterExport');
+            const submitBtn = form?.querySelector('.admin-flush-submit');
+
+            const pendingMessage = sessionStorage.getItem('moriFlushExportMessage');
+            if (pendingMessage) {
+                sessionStorage.removeItem('moriFlushExportMessage');
+                const existing = document.querySelector('.admin-flush-banner.is-ok');
+                if (existing) {
+                    existing.textContent = pendingMessage;
+                } else {
+                    const page = document.querySelector('.admin-flush-page');
+                    const banner = document.createElement('p');
+                    banner.className = 'admin-flush-banner is-ok';
+                    banner.setAttribute('role', 'status');
+                    banner.textContent = pendingMessage;
+                    page?.querySelector('.admin-flush-hero')?.after(banner);
+                }
+            }
+
             let confirmed = false;
 
             const closeConfirm = () => {
                 confirmed = false;
                 if (overlay) overlay.hidden = true;
+            };
+
+            const resetSubmitButton = () => {
+                if (!submitBtn) return;
+                submitBtn.disabled = false;
+                submitBtn.textContent = submitBtn.dataset.exportLabel || 'Export selected';
+                delete submitBtn.dataset.exportLabel;
+            };
+
+            const downloadBlob = (blob, fileName) => new Promise((resolve) => {
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = fileName || 'Mori-Flush-Export.pdf';
+                link.rel = 'noopener';
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                window.setTimeout(() => {
+                    URL.revokeObjectURL(url);
+                    resolve();
+                }, 1200);
+            });
+
+            const writeWithSavePicker = async (blob, fileName) => {
+                if (typeof window.showSaveFilePicker !== 'function') {
+                    throw new Error('SAVE_PICKER_UNSUPPORTED');
+                }
+
+                const isZip = /\.zip$/i.test(fileName) || (blob.type || '').includes('zip');
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: fileName,
+                    types: [
+                        isZip
+                            ? {
+                                description: 'ZIP archive',
+                                accept: { 'application/zip': ['.zip'] },
+                            }
+                            : {
+                                description: 'PDF document',
+                                accept: { 'application/pdf': ['.pdf'] },
+                            },
+                    ],
+                });
+                const writable = await handle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                return handle.name || fileName;
+            };
+
+            const promptSaveLocation = (blob, fileName) => new Promise((resolve) => {
+                const saveOverlay = document.getElementById('adminFlushSave');
+                const saveBody = document.getElementById('flushSaveBody');
+                const pickBtn = document.getElementById('adminFlushSavePick');
+                if (saveBody) {
+                    saveBody.textContent =
+                        `Export ready (${fileName}). Choose a folder on this computer, or use Downloads.`;
+                }
+
+                const finish = async (usePicker) => {
+                    saveOverlay?.querySelectorAll('[data-flush-save-skip], #adminFlushSavePick')
+                        .forEach((el) => el.replaceWith(el.cloneNode(true)));
+                    if (saveOverlay) saveOverlay.hidden = true;
+                    try {
+                        if (usePicker) {
+                            const savedAs = await writeWithSavePicker(blob, fileName);
+                            resolve(savedAs);
+                            return;
+                        }
+                    } catch (err) {
+                        if (!(err && err.name === 'AbortError')) {
+                            // Fall through to Downloads when picker is blocked or unsupported.
+                        }
+                    }
+                    await downloadBlob(blob, fileName);
+                    resolve(fileName);
+                };
+
+                if (!saveOverlay || !pickBtn) {
+                    void finish(false);
+                    return;
+                }
+
+                saveOverlay.hidden = false;
+                pickBtn.focus();
+                pickBtn.addEventListener('click', () => void finish(true), { once: true });
+                saveOverlay.querySelectorAll('[data-flush-save-skip]').forEach((btn) => {
+                    btn.addEventListener('click', () => void finish(false), { once: true });
+                });
+            });
+
+            const redirectAfterExport = (cleared) => {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('page');
+                if (!cleared) {
+                    window.location.assign(url.toString());
+                    return;
+                }
+
+                const kinds = [...(form?.querySelectorAll('input[name="kinds"]:checked') || [])]
+                    .map((input) => input.value);
+                if (kinds.includes('Payments')) {
+                    url.searchParams.set('domain', 'Payment');
+                } else if (kinds.includes('BookingHistory')) {
+                    url.searchParams.set('domain', 'Booking');
+                } else if (kinds.includes('StaffAudit')) {
+                    url.searchParams.set('domain', 'Account');
+                }
+                window.location.assign(url.toString());
+            };
+
+            const showExportError = (message) => {
+                let banner = document.querySelector('.admin-flush-banner.is-error');
+                if (!banner) {
+                    banner = document.createElement('p');
+                    banner.className = 'admin-flush-banner is-error';
+                    banner.setAttribute('role', 'alert');
+                    document.querySelector('.admin-flush-page')
+                        ?.querySelector('.admin-flush-hero')
+                        ?.after(banner);
+                }
+                banner.hidden = false;
+                banner.textContent = message;
+                banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            };
+
+            const beginExport = async () => {
+                if (overlay) overlay.hidden = true;
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.dataset.exportLabel = submitBtn.textContent || '';
+                    submitBtn.textContent = 'Exporting…';
+                }
+
+                window.setAdminExportLoading?.(true, {
+                    title: 'Exporting data…',
+                    detail: 'Building PDF softcopy and updating retention records. Please wait.',
+                });
+
+                try {
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        body: new FormData(form),
+                        credentials: 'same-origin',
+                        headers: {
+                            'X-Flush-Export': '1',
+                            Accept: 'application/pdf, application/zip, application/json',
+                        },
+                    });
+
+                    if (!response.ok) {
+                        const payload = await response.json().catch(() => ({}));
+                        throw new Error(
+                            window.friendlyAdminExportError?.(payload.message, 'Unable to export.')
+                            || payload.message
+                            || 'Unable to export.'
+                        );
+                    }
+
+                    const blob = await response.blob();
+                    if (!blob || blob.size === 0) {
+                        throw new Error('Export returned an empty file. Please try again.');
+                    }
+
+                    const disposition = response.headers.get('Content-Disposition') || '';
+                    const match = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(disposition);
+                    const fileName = match
+                        ? decodeURIComponent(match[1].replace(/"/g, '').trim())
+                        : (blob.type.includes('zip') ? 'Mori-Flush-Export.zip' : 'Mori-Flush-Export.pdf');
+                    const message = response.headers.get('X-Flush-Message')
+                        || `Export complete. Saved as ${fileName}.`;
+
+                    const cleared = clearInput?.value === 'true';
+                    window.setAdminExportLoading?.(false);
+
+                    // Trigger direct browser download
+                    await downloadBlob(blob, fileName);
+
+                    sessionStorage.setItem(
+                        'moriFlushExportMessage',
+                        `${message} Downloaded ${fileName}.`
+                    );
+
+                    // Give browser adequate time to initiate and save file before page refresh
+                    window.setTimeout(() => {
+                        redirectAfterExport(cleared);
+                    }, 1200);
+                } catch (error) {
+                    confirmed = false;
+                    showExportError(
+                        window.friendlyAdminExportError?.(error, 'Unable to export.')
+                        || (error instanceof Error ? error.message : 'Unable to export.')
+                    );
+                    resetSubmitButton();
+                } finally {
+                    window.setAdminExportLoading?.(false);
+                }
             };
 
             form?.addEventListener('submit', (event) => {
@@ -375,31 +633,69 @@
                     form.querySelector('input[name="kinds"]')?.focus();
                     return;
                 }
+
+                const fromDate = form.querySelector('#fromDate')?.value || '';
+                const toDate = form.querySelector('#toDate')?.value || '';
+                if (!fromDate || !toDate) {
+                    event.preventDefault();
+                    showExportError('Choose both From and To dates before exporting.');
+                    (form.querySelector('#fromDate') || form.querySelector('#toDate'))?.focus();
+                    return;
+                }
+                if (fromDate > toDate) {
+                    event.preventDefault();
+                    showExportError('From date must be on or before To date.');
+                    form.querySelector('#fromDate')?.focus();
+                    return;
+                }
+
                 if (!confirmed) {
                     event.preventDefault();
                     const labels = checked
                         .map((input) => input.closest('label')?.querySelector('strong')?.textContent?.trim())
                         .filter(Boolean);
                     if (confirmBody) {
-                        confirmBody.textContent = `Export ${labels.join(', ')}. Booking history and payments are deleted after export. Staff audit PDF keeps account history.`;
+                        confirmBody.textContent =
+                            `Export ${labels.join(', ')} for ${fromDate} to ${toDate} (PH). Just export keeps data. Export and clear deletes the exported rows for those types.`;
                     }
                     if (overlay) overlay.hidden = false;
-                    document.getElementById('adminFlushConfirmOk')?.focus();
+                    document.getElementById('adminFlushExportOnly')?.focus();
+                    return;
                 }
+
+                // When confirmed, allow native form submit to proceed directly to download the file
+                confirmed = false;
+                if (overlay) overlay.hidden = true;
             });
 
-            document.getElementById('adminFlushConfirmOk')?.addEventListener('click', () => {
+            const chooseMode = (clear) => {
+                if (clearInput) clearInput.value = clear ? 'true' : 'false';
                 confirmed = true;
-                if (nameInput?.value) localStorage.setItem('moriSystemFlushBy', nameInput.value.trim());
-                form?.requestSubmit();
-            });
+                if (overlay) overlay.hidden = true;
+                form?.submit();
+                // If cleared, schedule a page refresh so table and counters update after the download starts
+                if (clear) {
+                    window.setTimeout(() => {
+                        window.location.reload();
+                    }, 2500);
+                }
+            };
+
+            document.getElementById('adminFlushExportOnly')?.addEventListener('click', () => chooseMode(false));
+            document.getElementById('adminFlushExportClear')?.addEventListener('click', () => chooseMode(true));
 
             overlay?.querySelectorAll('[data-flush-confirm-cancel]').forEach((btn) => {
-                btn.addEventListener('click', closeConfirm);
+                btn.addEventListener('click', () => {
+                    if (document.body.classList.contains('is-exporting')) return;
+                    closeConfirm();
+                });
             });
 
             document.addEventListener('keydown', (event) => {
-                if (event.key === 'Escape' && overlay && !overlay.hidden) closeConfirm();
+                if (event.key === 'Escape' && overlay && !overlay.hidden) {
+                    if (document.body.classList.contains('is-exporting')) return;
+                    closeConfirm();
+                }
             });
         })();
     </script>

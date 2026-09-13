@@ -22,8 +22,8 @@ public enum SystemAuditDomain
 }
 
 /// <summary>
-/// Table <c>SystemAuditLog</c> — append-only integrity trail (who / what / when / target / why).
-/// Never flushed or auto-deleted.
+/// Table <c>SystemAuditLog</c> — integrity trail (who / what / when / target / why).
+/// Account-domain rows can be purged via staff-audit export-and-clear; other domains stay.
 /// </summary>
 public class SystemAuditLog
 {

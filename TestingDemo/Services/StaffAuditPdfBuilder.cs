@@ -5,7 +5,7 @@ using TestingDemo.Models;
 
 namespace TestingDemo.Services;
 
-/// <summary>Branded PDF of staff account audit rows from <see cref="SystemAuditLog"/>.</summary>
+/// <summary>Branded PDF of <see cref="SystemAuditLog"/> rows for retention export.</summary>
 public static class StaffAuditPdfBuilder
 {
     private static readonly Color Navy = Color.FromHex("#0B1F33");
@@ -17,7 +17,10 @@ public static class StaffAuditPdfBuilder
         IReadOnlyList<SystemAuditLog> rows,
         string performedBy,
         DateTime flushedAtUtc,
-        string? logoPath)
+        string? logoPath,
+        string title = "Staff audit log",
+        string subtitle = "Account create / edit / disable actions · exported from system audit",
+        string footerLabel = "staff audit export")
     {
         var flushedLocal = PhilippinesTime.ToManila(flushedAtUtc);
         var ordered = rows.OrderByDescending(row => row.AtUtc).ThenByDescending(row => row.Id).ToList();
@@ -31,11 +34,12 @@ public static class StaffAuditPdfBuilder
                 page.MarginVertical(22);
                 page.DefaultTextStyle(text => text.FontSize(8).FontColor(Navy));
 
-                page.Header().Element(header => ComposeHeader(header, logoPath, flushedLocal, performedBy, ordered.Count));
+                page.Header().Element(header =>
+                    ComposeHeader(header, logoPath, flushedLocal, performedBy, ordered.Count, title, subtitle));
                 page.Content().Element(content => ComposeTable(content, ordered));
                 page.Footer().AlignRight().Text(text =>
                 {
-                    text.Span("Mori International Hotel · staff audit export  ·  ").FontSize(7).FontColor(Teal);
+                    text.Span($"Mori International Hotel · {footerLabel}  ·  ").FontSize(7).FontColor(Teal);
                     text.CurrentPageNumber().FontSize(7);
                     text.Span(" / ").FontSize(7);
                     text.TotalPages().FontSize(7);
@@ -49,7 +53,9 @@ public static class StaffAuditPdfBuilder
         string? logoPath,
         DateTime flushedLocal,
         string performedBy,
-        int count)
+        int count,
+        string title,
+        string subtitle)
     {
         container.PaddingBottom(8).Column(column =>
         {
@@ -68,9 +74,9 @@ public static class StaffAuditPdfBuilder
                 });
                 row.RelativeItem().PaddingLeft(8).AlignMiddle().Column(brand =>
                 {
-                    brand.Item().Text("MORI INTERNATIONAL HOTEL — Staff audit log")
+                    brand.Item().Text($"MORI INTERNATIONAL HOTEL — {title}")
                         .FontSize(11).Bold().FontColor(Navy);
-                    brand.Item().Text("Account create / edit / disable actions · exported from system audit")
+                    brand.Item().Text(subtitle)
                         .FontSize(7).FontColor(Teal);
                 });
             });

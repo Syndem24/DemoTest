@@ -261,7 +261,7 @@ public sealed class AdminPaymentsApiController : ControllerBase
         {
             var result = await _paymentService.FlushPaymentsAsync(
                 request.PerformedBy,
-                cancellationToken);
+                cancellationToken: cancellationToken);
             Response.Headers["X-Flush-Record-Count"] = result.Log.RecordCount.ToString();
             Response.Headers["X-Flush-Performed-By"] = result.Log.PerformedBy;
             Response.Headers.Append(
@@ -272,6 +272,13 @@ public sealed class AdminPaymentsApiController : ControllerBase
         catch (ArgumentException ex)
         {
             return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception)
+        {
+            return BadRequest(new
+            {
+                message = "Export failed. Please try again in a moment. If it keeps failing, contact support."
+            });
         }
     }
 }

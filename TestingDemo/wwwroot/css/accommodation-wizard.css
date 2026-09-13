@@ -47,21 +47,28 @@
   display: none;
 }
 
+/* Accommodation hero unscrolled: wiz-cart-nav button uses pearl-white fill (matching pearl nav) */
 .guest-shell--wiz.guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .wiz-cart-nav {
-  background: #fff;
+  background: rgba(255, 255, 255, 0.95);
   color: var(--wiz-navy);
-  border-color: rgba(255, 255, 255, 0.55);
+  border-color: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 4px 16px rgba(11, 31, 58, 0.16);
 }
 
 .guest-shell--wiz.guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .wiz-cart-nav:hover,
 .guest-shell--wiz.guest-shell--immersive .guest-nav:not(.is-scrolled):not(.is-open) .wiz-cart-nav:focus-visible {
-  background: var(--wiz-teal-tint);
-  color: var(--wiz-teal);
+  background: var(--wiz-teal-emerald);
+  color: #fff;
+  border-color: var(--wiz-teal-emerald);
 }
 
+/* Option 2: Wizard nav fully pearl white on scrolled accommodation page */
 .guest-shell--wiz .guest-nav {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.97);
+  border-bottom: 1px solid rgba(11, 31, 58, 0.09);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: 0 2px 20px rgba(11, 31, 58, 0.07);
 }
 
 .guest-shell--wiz .guest-nav-inner {
@@ -2838,10 +2845,6 @@
 
 .wiz-policy-box a {
   color: var(--wiz-teal);
-}
-
-.wiz-arrival .wiz-hint-field {
-  margin: 0;
 }
 
 .wiz-check input:focus-visible,

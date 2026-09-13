@@ -36,6 +36,16 @@ public interface ISystemAuditRecorder
         string? actorUserId = null,
         string? actorDisplayName = null,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<SystemAuditLog>> GetAuditExportRowsAsync(
+        SystemAuditDomain? domain = null,
+        FlushDateRange dateRange = default,
+        CancellationToken cancellationToken = default);
+
+    Task<int> DeleteDomainInRangeAsync(
+        SystemAuditDomain? domain,
+        FlushDateRange dateRange,
+        CancellationToken cancellationToken = default);
 }
 
 public interface ISystemAuditQuery
@@ -65,6 +75,24 @@ public interface ISystemAuditQuery
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<SystemAuditLog>> GetStaffAccountAuditExportRowsAsync(
+        FlushDateRange dateRange = default,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<SystemAuditLog>> GetAuditExportRowsAsync(
+        SystemAuditDomain? domain = null,
+        FlushDateRange dateRange = default,
+        CancellationToken cancellationToken = default);
+
+    Task<int> GetTotalCountAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<int> CountByDomainAsync(
+        SystemAuditDomain domain,
+        CancellationToken cancellationToken = default);
+
+    Task<int> DeleteDomainInRangeAsync(
+        SystemAuditDomain? domain,
+        FlushDateRange dateRange,
         CancellationToken cancellationToken = default);
 }
 
@@ -343,13 +371,73 @@ public sealed class SystemAuditRecorder : ISystemAuditRecorder, ISystemAuditQuer
     }
 
     public async Task<IReadOnlyList<SystemAuditLog>> GetStaffAccountAuditExportRowsAsync(
+        FlushDateRange dateRange = default,
+        CancellationToken cancellationToken = default) =>
+        await GetAuditExportRowsAsync(SystemAuditDomain.Account, dateRange, cancellationToken);
+
+    public async Task<IReadOnlyList<SystemAuditLog>> GetAuditExportRowsAsync(
+        SystemAuditDomain? domain = null,
+        FlushDateRange dateRange = default,
         CancellationToken cancellationToken = default)
     {
-        return await _db.SystemAuditLogs.AsNoTracking()
-            .Where(row => row.Domain == SystemAuditDomain.Account)
+        var query = _db.SystemAuditLogs.AsNoTracking().AsQueryable();
+        if (domain.HasValue)
+        {
+            query = query.Where(row => row.Domain == domain.Value);
+        }
+
+        if (dateRange.FromUtcInclusive.HasValue)
+        {
+            var fromUtc = dateRange.FromUtcInclusive.Value;
+            query = query.Where(row => row.AtUtc >= fromUtc);
+        }
+
+        if (dateRange.ToUtcExclusive.HasValue)
+        {
+            var toUtc = dateRange.ToUtcExclusive.Value;
+            query = query.Where(row => row.AtUtc < toUtc);
+        }
+
+        return await query
             .OrderByDescending(row => row.AtUtc)
             .ThenByDescending(row => row.Id)
             .ToListAsync(cancellationToken);
+    }
+
+    public Task<int> GetTotalCountAsync(
+        CancellationToken cancellationToken = default) =>
+        _db.SystemAuditLogs.AsNoTracking().CountAsync(cancellationToken);
+
+    public Task<int> CountByDomainAsync(
+        SystemAuditDomain domain,
+        CancellationToken cancellationToken = default) =>
+        _db.SystemAuditLogs.AsNoTracking()
+            .CountAsync(row => row.Domain == domain, cancellationToken);
+
+    public async Task<int> DeleteDomainInRangeAsync(
+        SystemAuditDomain? domain,
+        FlushDateRange dateRange,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _db.SystemAuditLogs.AsQueryable();
+        if (domain.HasValue)
+        {
+            query = query.Where(row => row.Domain == domain.Value);
+        }
+
+        if (dateRange.FromUtcInclusive.HasValue)
+        {
+            var fromUtc = dateRange.FromUtcInclusive.Value;
+            query = query.Where(row => row.AtUtc >= fromUtc);
+        }
+
+        if (dateRange.ToUtcExclusive.HasValue)
+        {
+            var toUtc = dateRange.ToUtcExclusive.Value;
+            query = query.Where(row => row.AtUtc < toUtc);
+        }
+
+        return await query.ExecuteDeleteAsync(cancellationToken);
     }
 
     private string ResolveDisplayName(string userId, string? fallback)

@@ -271,10 +271,11 @@ public sealed partial class BookingService
             .ToList();
 
         var capacities = await GetPhysicalCapacityByTypeAsync(cancellationToken);
+        var maintenanceByType = await GetMaintenanceCountByTypeAsync(cancellationToken);
 
         return new ReservationCalendarDto(
             events,
-            BuildDailyOccupancy(stays, start, end, capacities));
+            BuildDailyOccupancy(stays, start, end, capacities, maintenanceByType));
     }
 
     /// <summary>
@@ -288,7 +289,8 @@ public sealed partial class BookingService
         IReadOnlyList<Booking> stays,
         DateTime rangeStart,
         DateTime rangeEnd,
-        IReadOnlyList<RoomTypeCapacity> capacities)
+        IReadOnlyList<RoomTypeCapacity> capacities,
+        IReadOnlyDictionary<int, int> maintenanceByType)
     {
         var startUtc = PhilippinesTime.ToUtc(rangeStart);
         var endUtc = PhilippinesTime.ToUtc(rangeEnd);
@@ -347,11 +349,12 @@ public sealed partial class BookingService
                 {
                     reservedByType.TryGetValue(item.RoomTypeId, out var reserved);
                     occupiedByType.TryGetValue(item.RoomTypeId, out var occupied);
+                    var maintenance = maintenanceByType.GetValueOrDefault(item.RoomTypeId);
                     return new DayRoomTypeOccupancyDto(
                         item.RoomTypeName,
                         reserved,
                         occupied,
-                        Math.Max(0, item.Capacity - occupied),
+                        Math.Max(0, item.Capacity - maintenance - occupied),
                         item.Capacity);
                 })
                 .OrderBy(item => item.RoomTypeName, StringComparer.OrdinalIgnoreCase)
@@ -359,11 +362,12 @@ public sealed partial class BookingService
 
             var occupiedTotal = occupiedByType.Values.Sum();
             var reservedTotal = reservedByType.Values.Sum();
+            var maintenanceTotal = maintenanceByType.Values.Sum();
             days.Add(new DayRoomOccupancyDto(
                 cursor.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 reservedTotal,
                 occupiedTotal,
-                Math.Max(0, capacityTotal - occupiedTotal),
+                Math.Max(0, capacityTotal - maintenanceTotal - occupiedTotal),
                 capacityTotal,
                 types));
             cursor = cursor.AddDays(1);

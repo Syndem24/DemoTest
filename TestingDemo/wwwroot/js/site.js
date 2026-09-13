@@ -2,7 +2,7 @@
 // for details on configuring this project to bundle and minify static web assets.
 
 /**
- * Full-screen feedback while PDF data export runs (history / payments).
+ * Full-screen feedback while PDF data export runs (history / payments / system flush).
  * Prevents the UI from looking frozen during long softcopy generation.
  */
 window.setAdminExportLoading = function setAdminExportLoading(visible, options = {}) {
@@ -24,6 +24,24 @@ window.setAdminExportLoading = function setAdminExportLoading(visible, options =
   if (visible) {
     overlay.querySelector('.admin-export-loading-card')?.focus?.();
   }
+};
+
+/** Map raw server/exception text to a staff-facing export error. */
+window.friendlyAdminExportError = function friendlyAdminExportError(error, fallback) {
+  const raw = error instanceof Error
+    ? error.message
+    : (typeof error === 'string' ? error : '');
+  const text = (raw || '').trim();
+  if (/execution strategy|SqlServerRetrying|InvalidOperationException|user-initiated transactions/i.test(text)) {
+    return 'Export could not finish because of a temporary database issue. Please try again.';
+  }
+  if (/Request failed \(5\d\d\)/.test(text)) {
+    return 'Export failed on the server. Please try again in a moment.';
+  }
+  if (/<!DOCTYPE|<html/i.test(text)) {
+    return fallback || 'Export failed. Please try again in a moment.';
+  }
+  return text || fallback || 'Unable to export. Please try again.';
 };
 
 document.addEventListener('DOMContentLoaded', () => {

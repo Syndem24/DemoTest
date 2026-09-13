@@ -55,6 +55,8 @@ public interface IPaymentService
 
     Task<FlushPaymentsResult> FlushPaymentsAsync(
         string performedBy,
+        FlushDateRange dateRange = default,
+        bool clearAfterExport = true,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<PaymentFlushLogDto>> GetPaymentFlushLogsAsync(

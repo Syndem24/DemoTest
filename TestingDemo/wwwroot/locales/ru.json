@@ -97,7 +97,14 @@
     "contactCta": "Нет времени звонить? Рекомендуем онлайн-бронирование по лучшим доступным ценам — номер будет готов к вашему приезду.",
     "bookNow": "Забронировать",
     "locationTitle": "Расположение и маршрут",
-    "locationBody": "Около 700 м до SM Jmall и примерно 4 минуты езды до Oakridge Business Park — удобно для деловых поездок и туризма."
+    "locationBody": "Около 700 м до SM Jmall и примерно 4 минуты езды до Oakridge Business Park — удобно для деловых поездок и туризма.",
+    "stickyBrandSub": "International Hotel",
+    "stickyDatesIdle": "Заезд – Выезд",
+    "stickyDone": "Готово",
+    "stickyAdult": "взрослый",
+    "stickyAdults": "взрослых",
+    "stickyChild": "ребёнок",
+    "stickyChildren": "детей"
   },
   "rooms": {
     "pageTitle": "Размещение",
@@ -536,11 +543,6 @@
     "back": "← Назад",
     "continueReview": "Далее — проверить проживание",
     "priceBreakdown": "Разбивка цены",
-    "arrivalDiscount": "Льготы Senior / PWD",
-    "arrivalDiscountAria": "Скидка по прибытии",
-    "noArrivalDiscount": "Без скидки по прибытии",
-    "seniorArrival": "Senior Citizen (20% по прибытии)",
-    "pwdArrival": "PWD (20% по прибытии)",
     "cancellation": "Отмена",
     "cancellationBody": "Правила отмены и предоплаты зависят от брони. Чтобы изменить или отменить, свяжитесь с отелем.",
     "readTerms": "Читать полные условия проживания",

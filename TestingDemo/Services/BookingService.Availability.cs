@@ -58,6 +58,7 @@ public sealed partial class BookingService
         ValidateDates(checkInAtUtc, checkoutTimeUtc, allowPastCheckIn);
 
         var capacities = await GetPhysicalCapacityByTypeAsync(cancellationToken);
+        var maintenanceByType = await GetMaintenanceCountByTypeAsync(cancellationToken);
         var nights = EnumerateStayNights(checkInAtUtc, checkoutTimeUtc);
         var overlapping = await LoadOverlappingBookingLinesAsync(
             checkInAtUtc,
@@ -66,6 +67,7 @@ public sealed partial class BookingService
             cancellationToken);
         var (maxHeld, soldOutByType) = ComputeNightlyInventory(
             capacities,
+            maintenanceByType,
             overlapping,
             nights);
 
@@ -73,12 +75,13 @@ public sealed partial class BookingService
             .Select(item =>
             {
                 var used = maxHeld.GetValueOrDefault(item.RoomTypeId);
+                var maintenance = maintenanceByType.GetValueOrDefault(item.RoomTypeId);
                 var soldOut = soldOutByType.GetValueOrDefault(item.RoomTypeId) ?? [];
                 return new RoomAvailabilityDto(
                     item.RoomTypeId,
                     item.RoomTypeName,
                     item.Capacity,
-                    Math.Max(0, item.Capacity - used),
+                    Math.Max(0, item.Capacity - maintenance - used),
                     item.PricePerNight,
                     soldOut);
             })
