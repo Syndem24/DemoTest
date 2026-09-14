@@ -83,8 +83,8 @@ public sealed class AdminFlushLogsController : Controller
                 ? dateRange.DescribeForSummary()
                 : string.Empty;
             var modeNote = clearAfterExport
-                ? " Cleared matching records for the selected types. Use the Save dialog (or Downloads) for the PDF."
-                : " Export only — records were kept. Use the Save dialog (or Downloads) for the PDF.";
+                ? " Cleared matching records for the selected types after export."
+                : " Export only — records were kept.";
             var message = result.Files.Count > 1
                 ? $"Exported {flushed}. Download the ZIP for every file.{rangeNote}{modeNote}{note}"
                 : $"Exported {flushed}.{rangeNote}{modeNote}{note}";
@@ -97,7 +97,7 @@ public sealed class AdminFlushLogsController : Controller
                 }
 
                 Response.Headers["X-Flush-Record-Count"] = result.Logs.Sum(l => l.RecordCount).ToString();
-                Response.Headers["X-Flush-Message"] = message;
+                Response.Headers["X-Flush-Message"] = HttpHeaderText.Ascii(message);
                 Response.Headers.Append(
                     "Access-Control-Expose-Headers",
                     "Content-Disposition, X-Flush-Record-Count, X-Flush-Message");
@@ -125,7 +125,7 @@ public sealed class AdminFlushLogsController : Controller
                 }
 
                 Response.Headers["X-Flush-Record-Count"] = result.Logs.Sum(l => l.RecordCount).ToString();
-                Response.Headers["X-Flush-Message"] = message;
+                Response.Headers["X-Flush-Message"] = HttpHeaderText.Ascii(message);
                 Response.Headers.Append(
                     "Access-Control-Expose-Headers",
                     "Content-Disposition, X-Flush-Record-Count, X-Flush-Message");

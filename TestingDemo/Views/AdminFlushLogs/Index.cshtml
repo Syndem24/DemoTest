@@ -259,10 +259,12 @@
                     </div>
                 </div>
 
-                <input type="hidden" name="clearAfterExport" id="clearAfterExport" value="false" />
+                <input type="hidden" id="clearAfterExport" name="clearAfterExport" value="false" />
 
                 <p class="admin-flush-warn">
-                    After you confirm, pick <strong>Just export</strong> (teal — keeps records) or <strong>Export and clear</strong> (red — deletes exported records in the date range). A Save dialog asks where to store the PDF. Files-area export markers stay for integrity.
+                    Export markers stay in the Files audit area for integrity. A confirmation step lets you choose
+                    <strong>Just export</strong> (keeps records) or <strong>Export and clear</strong> (deletes exported rows).
+                    Download and verify your files before clearing.
                 </p>
                 <button type="submit" class="admin-flush-submit">Export selected</button>
             </form>
@@ -381,19 +383,6 @@
     </section>
 </div>
 
-<div class="admin-flush-confirm" id="adminFlushSave" hidden>
-    <button type="button" class="admin-flush-confirm-backdrop" data-flush-save-skip aria-label="Skip choosing folder"></button>
-    <section class="admin-flush-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="flushSaveTitle">
-        <h2 id="flushSaveTitle">Save export file</h2>
-        <p id="flushSaveBody">Choose where on this computer to store the PDF.</p>
-        <div class="admin-flush-confirm-actions admin-flush-confirm-actions--choice">
-            <button type="button" class="admin-flush-ghost" data-flush-save-skip>Downloads folder</button>
-            <button type="button" class="admin-flush-btn-safe" id="adminFlushSavePick">
-                Choose folder…
-            </button>
-        </div>
-    </section>
-</div>
 
 @section Scripts {
     <script src="~/js/admin-audit-search.js" asp-append-version="true"></script>
@@ -405,7 +394,9 @@
             const confirmBody = document.getElementById('flushConfirmBody');
             const clearInput = document.getElementById('clearAfterExport');
             const submitBtn = form?.querySelector('.admin-flush-submit');
+            let confirmed = false;
 
+            // Restore success banner after redirect (set in sessionStorage before page reload)
             const pendingMessage = sessionStorage.getItem('moriFlushExportMessage');
             if (pendingMessage) {
                 sessionStorage.removeItem('moriFlushExportMessage');
@@ -421,13 +412,6 @@
                     page?.querySelector('.admin-flush-hero')?.after(banner);
                 }
             }
-
-            let confirmed = false;
-
-            const closeConfirm = () => {
-                confirmed = false;
-                if (overlay) overlay.hidden = true;
-            };
 
             const resetSubmitButton = () => {
                 if (!submitBtn) return;
@@ -451,73 +435,6 @@
                 }, 1200);
             });
 
-            const writeWithSavePicker = async (blob, fileName) => {
-                if (typeof window.showSaveFilePicker !== 'function') {
-                    throw new Error('SAVE_PICKER_UNSUPPORTED');
-                }
-
-                const isZip = /\.zip$/i.test(fileName) || (blob.type || '').includes('zip');
-                const handle = await window.showSaveFilePicker({
-                    suggestedName: fileName,
-                    types: [
-                        isZip
-                            ? {
-                                description: 'ZIP archive',
-                                accept: { 'application/zip': ['.zip'] },
-                            }
-                            : {
-                                description: 'PDF document',
-                                accept: { 'application/pdf': ['.pdf'] },
-                            },
-                    ],
-                });
-                const writable = await handle.createWritable();
-                await writable.write(blob);
-                await writable.close();
-                return handle.name || fileName;
-            };
-
-            const promptSaveLocation = (blob, fileName) => new Promise((resolve) => {
-                const saveOverlay = document.getElementById('adminFlushSave');
-                const saveBody = document.getElementById('flushSaveBody');
-                const pickBtn = document.getElementById('adminFlushSavePick');
-                if (saveBody) {
-                    saveBody.textContent =
-                        `Export ready (${fileName}). Choose a folder on this computer, or use Downloads.`;
-                }
-
-                const finish = async (usePicker) => {
-                    saveOverlay?.querySelectorAll('[data-flush-save-skip], #adminFlushSavePick')
-                        .forEach((el) => el.replaceWith(el.cloneNode(true)));
-                    if (saveOverlay) saveOverlay.hidden = true;
-                    try {
-                        if (usePicker) {
-                            const savedAs = await writeWithSavePicker(blob, fileName);
-                            resolve(savedAs);
-                            return;
-                        }
-                    } catch (err) {
-                        if (!(err && err.name === 'AbortError')) {
-                            // Fall through to Downloads when picker is blocked or unsupported.
-                        }
-                    }
-                    await downloadBlob(blob, fileName);
-                    resolve(fileName);
-                };
-
-                if (!saveOverlay || !pickBtn) {
-                    void finish(false);
-                    return;
-                }
-
-                saveOverlay.hidden = false;
-                pickBtn.focus();
-                pickBtn.addEventListener('click', () => void finish(true), { once: true });
-                saveOverlay.querySelectorAll('[data-flush-save-skip]').forEach((btn) => {
-                    btn.addEventListener('click', () => void finish(false), { once: true });
-                });
-            });
-
             const redirectAfterExport = (cleared) => {
                 const url = new URL(window.location.href);
                 url.searchParams.delete('page');
@@ -525,7 +442,6 @@
                     window.location.assign(url.toString());
                     return;
                 }
-
                 const kinds = [...(form?.querySelectorAll('input[name="kinds"]:checked') || [])]
                     .map((input) => input.value);
                 if (kinds.includes('Payments')) {
@@ -553,16 +469,17 @@
                 banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             };
 
+            // Sends the form via fetch, streams the response as a blob download.
+            // Always called with event.preventDefault() already issued.
             const beginExport = async () => {
-                if (overlay) overlay.hidden = true;
                 if (submitBtn) {
                     submitBtn.disabled = true;
                     submitBtn.dataset.exportLabel = submitBtn.textContent || '';
-                    submitBtn.textContent = 'Exporting…';
+                    submitBtn.textContent = 'Exporting\u2026';
                 }
 
                 window.setAdminExportLoading?.(true, {
-                    title: 'Exporting data…',
+                    title: 'Exporting data\u2026',
                     detail: 'Building PDF softcopy and updating retention records. Please wait.',
                 });
 
@@ -592,7 +509,7 @@
                     }
 
                     const disposition = response.headers.get('Content-Disposition') || '';
-                    const match = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(disposition);
+                    const match = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(disposition);
                     const fileName = match
                         ? decodeURIComponent(match[1].replace(/"/g, '').trim())
                         : (blob.type.includes('zip') ? 'Mori-Flush-Export.zip' : 'Mori-Flush-Export.pdf');
@@ -602,7 +519,6 @@
                     const cleared = clearInput?.value === 'true';
                     window.setAdminExportLoading?.(false);
 
-                    // Trigger direct browser download
                     await downloadBlob(blob, fileName);
 
                     sessionStorage.setItem(
@@ -610,7 +526,6 @@
                         `${message} Downloaded ${fileName}.`
                     );
 
-                    // Give browser adequate time to initiate and save file before page refresh
                     window.setTimeout(() => {
                         redirectAfterExport(cleared);
                     }, 1200);
@@ -624,6 +539,11 @@
                 } finally {
                     window.setAdminExportLoading?.(false);
                 }
+            };
+
+            const closeConfirm = () => {
+                confirmed = false;
+                if (overlay) overlay.hidden = true;
             };
 
             form?.addEventListener('submit', (event) => {
@@ -650,52 +570,44 @@
                 }
 
                 if (!confirmed) {
+                    // Show the Just export / Export and clear modal
                     event.preventDefault();
                     const labels = checked
                         .map((input) => input.closest('label')?.querySelector('strong')?.textContent?.trim())
                         .filter(Boolean);
                     if (confirmBody) {
                         confirmBody.textContent =
-                            `Export ${labels.join(', ')} for ${fromDate} to ${toDate} (PH). Just export keeps data. Export and clear deletes the exported rows for those types.`;
+                            `Export ${labels.join(', ')} for ${fromDate} to ${toDate} (PH). ` +
+                            `Just export keeps data intact. Export and clear permanently deletes the exported rows for those types.`;
                     }
                     if (overlay) overlay.hidden = false;
                     document.getElementById('adminFlushExportOnly')?.focus();
                     return;
                 }
 
-                // When confirmed, allow native form submit to proceed directly to download the file
+                // confirmed === true: modal button already set clearInput.value; run the fetch download
                 confirmed = false;
-                if (overlay) overlay.hidden = true;
+                event.preventDefault();
+                beginExport();
             });
 
+            // Modal action buttons — set the export mode then re-trigger form submit (with confirmed=true)
             const chooseMode = (clear) => {
                 if (clearInput) clearInput.value = clear ? 'true' : 'false';
                 confirmed = true;
                 if (overlay) overlay.hidden = true;
-                form?.submit();
-                // If cleared, schedule a page refresh so table and counters update after the download starts
-                if (clear) {
-                    window.setTimeout(() => {
-                        window.location.reload();
-                    }, 2500);
-                }
+                form?.requestSubmit();
             };
 
             document.getElementById('adminFlushExportOnly')?.addEventListener('click', () => chooseMode(false));
             document.getElementById('adminFlushExportClear')?.addEventListener('click', () => chooseMode(true));
 
             overlay?.querySelectorAll('[data-flush-confirm-cancel]').forEach((btn) => {
-                btn.addEventListener('click', () => {
-                    if (document.body.classList.contains('is-exporting')) return;
-                    closeConfirm();
-                });
+                btn.addEventListener('click', closeConfirm);
             });
 
             document.addEventListener('keydown', (event) => {
-                if (event.key === 'Escape' && overlay && !overlay.hidden) {
-                    if (document.body.classList.contains('is-exporting')) return;
-                    closeConfirm();
-                }
+                if (event.key === 'Escape' && overlay && !overlay.hidden) closeConfirm();
             });
         })();
     </script>

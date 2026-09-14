@@ -421,7 +421,7 @@ public sealed class PaymentService : IPaymentService
     public async Task<FlushPaymentsResult> FlushPaymentsAsync(
         string performedBy,
         FlushDateRange dateRange = default,
-        bool clearAfterExport = true,
+        bool clearAfterExport = false,
         CancellationToken cancellationToken = default)
     {
         performedBy = performedBy?.Trim() ?? string.Empty;

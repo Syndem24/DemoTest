@@ -15,7 +15,7 @@ public sealed partial class BookingService
     public async Task<FlushBookingHistoryResult> FlushHistoryAsync(
         string performedBy,
         FlushDateRange dateRange = default,
-        bool clearAfterExport = true,
+        bool clearAfterExport = false,
         CancellationToken cancellationToken = default)
     {
         performedBy = performedBy?.Trim() ?? string.Empty;

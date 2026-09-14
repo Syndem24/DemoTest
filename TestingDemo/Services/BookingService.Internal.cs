@@ -457,7 +457,7 @@ public sealed partial class BookingService
 
     /// <summary>
     /// Hotel nights = Manila calendar checkout date âˆ’ check-in date (not elapsed hours).
-    /// Early 11:30 / late checkout must not inflate the night count.
+    /// Early check-in (5:00 AM – 11:00 AM) / late checkout must not inflate the night count.
     /// </summary>
     private static int StayNights(DateTime checkInAtUtc, DateTime checkoutTimeUtc)
     {
@@ -531,7 +531,7 @@ public sealed partial class BookingService
             checkInLocal.Minute,
             0);
         var checkInTime = earlyCheckIn
-            ? StayTimeFees.EarlyCheckInTime
+            ? StayTimeFees.EarlyCheckInEndTime
             : (preservedCheckInTime >= StayTimeFees.DefaultCheckInTime
                 ? preservedCheckInTime
                 : StayTimeFees.DefaultCheckInTime);
@@ -564,7 +564,7 @@ public sealed partial class BookingService
             booking.Charges.Add(new BookingCharge
             {
                 ChargeType = BookingChargeType.EarlyCheckIn,
-                Label = $"Early check-in (11:30 AM) Â· {rooms} room{(rooms == 1 ? "" : "s")}",
+                Label = $"Early check-in (5:00 AM – 11:00 AM) · {rooms} room{(rooms == 1 ? "" : "s")}",
                 Quantity = rooms,
                 Nights = 1,
                 UnitAmount = StayTimeFees.EarlyCheckInFeePerRoom,

@@ -2,11 +2,12 @@ namespace TestingDemo.Services;
 
 /// <summary>
 /// Early check-in / late check-out / extra-person fees (aligned with guest + admin UI).
-/// Early check-in is only offered at 11:30 AM Manila.
+/// Early check-in is offered from 5:00 AM to 11:00 AM Manila.
 /// </summary>
 public static class StayTimeFees
 {
-    public static readonly TimeSpan EarlyCheckInTime = new(11, 30, 0);
+    public static readonly TimeSpan EarlyCheckInStartTime = new(5, 0, 0);
+    public static readonly TimeSpan EarlyCheckInEndTime = new(11, 0, 0);
     public static readonly TimeSpan DefaultCheckInTime = new(14, 0, 0);
     public static readonly TimeSpan DefaultCheckOutTime = new(12, 0, 0);
 
@@ -34,7 +35,7 @@ public static class StayTimeFees
     public static bool IsEarlyCheckIn(DateTime checkInAtUtc)
     {
         var local = PhilippinesTime.ToManila(checkInAtUtc);
-        return local.TimeOfDay == EarlyCheckInTime;
+        return local.TimeOfDay >= EarlyCheckInStartTime && local.TimeOfDay <= EarlyCheckInEndTime;
     }
 
     public static decimal ComputeEarlyCheckInFee(DateTime checkInAtUtc, int roomCount)

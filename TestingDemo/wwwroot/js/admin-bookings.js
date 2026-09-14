@@ -3589,7 +3589,7 @@
       && !(occupyingGuestEarly && hasAssignedRooms);
     const postPaymentLock = balanceDue <= 0.009 && hasAssignedRooms;
     const stayBadges = [];
-    if (hasEarly) stayBadges.push('Early 11:30 AM');
+    if (hasEarly) stayBadges.push('Early 5:00 AM \u2013 11:00 AM');
     if (lateHours > 0) stayBadges.push(`Late +${lateHours}h`);
     if (extensionNights > 0) {
       stayBadges.push(`+${extensionNights} night${extensionNights === 1 ? '' : 's'}`);
@@ -4534,7 +4534,7 @@
       title: 'Early check-in',
       hint: postPaymentLock
         ? 'Locked after payment'
-        : '11:30 AM \u00B7 \u20B1500 / room',
+        : '5:00 AM \u2013 11:00 AM \u00B7 \u20B1500 / room',
       locked: postPaymentLock,
       // Payment / Assign rooms only \u2014 hide on Fees and Checkout.
       showTrigger: !extrasStage && !onFeesStage,
@@ -5100,7 +5100,7 @@
       if (payload.earlyCheckIn) {
         const charge = findCharge('EarlyCheckIn');
         lines.push({
-          label: 'Early check-in (11:30 AM)',
+          label: 'Early check-in (5:00 AM \u2013 11:00 AM)',
           amount: charge ? Number(charge.amount || 0) : 500 * roomCount,
         });
       }
@@ -6173,8 +6173,14 @@
   }
 
   function checkInTimeOptions() {
-    const list = [{ value: '11:30', label: '11:30 \u2014 early check-in' }];
+    const list = [];
+    for (let hour = 5; hour <= 11; hour += 1) {
+      const value = `${String(hour).padStart(2, '0')}:00`;
+      list.push({ value, label: `${value} \u2014 early check-in` });
+    }
     for (let mins = 14 * 60; mins <= 23 * 60 + 30; mins += 30) {
+      // Skip 14:30 (2:30 PM)
+      if (mins === 14 * 60 + 30) continue;
       const value = minutesToClock(mins);
       list.push({ value, label: `${value} \u2014 free of charge` });
     }
@@ -6193,7 +6199,7 @@
   function normalizeCheckInTime(value) {
     const mins = parseClockToMinutes(value);
     if (mins == null) return '14:00';
-    if (mins <= 11 * 60 + 30) return '11:30';
+    if (mins >= 5 * 60 && mins <= 11 * 60) return minutesToClock(mins);
     if (mins < 14 * 60) return '14:00';
     const rounded = Math.round(mins / 30) * 30;
     return minutesToClock(Math.max(14 * 60, Math.min(23 * 60 + 30, rounded)));

@@ -59,14 +59,15 @@
   const MAX_EXTRA_PERSONS_PER_ROOM = 1;
   const MAX_CHILD_AGE = 12;
   const MAX_GUEST_ROOMS = 8;
-  const EARLY_CHECKIN_TIME = '11:30';
+  const EARLY_CHECKIN_START_TIME = '05:00';
+  const EARLY_CHECKIN_END_TIME = '11:00';
   const DEFAULT_CHECKIN_TIME = '14:00';
   const DEFAULT_CHECKOUT_TIME = '12:00';
   const EARLY_FEE = 500;
   const LATE_FEE_PER_HOUR = 100;
   const MAX_LATE_HOURS = 3;
   const FREE_CHECKIN_TIMES = [
-    '14:00', '14:30', '15:00', '15:30', '16:00', '16:30',
+    '14:00', '15:00', '15:30', '16:00', '16:30',
     '17:00', '17:30', '18:00', '18:30', '19:00', '19:30',
     '20:00', '20:30', '21:00', '21:30', '22:00', '22:30',
     '23:00', '23:30',
@@ -884,7 +885,13 @@
 
   function earlyFee(count) {
     if (count < 1) return 0;
-    return checkInTime?.value === EARLY_CHECKIN_TIME ? EARLY_FEE * count : 0;
+    const time = checkInTime?.value;
+    if (!time) return 0;
+    const [h, m] = time.split(':').map(Number);
+    const minutes = h * 60 + (m || 0);
+    const startMinutes = 5 * 60; // 5:00 AM
+    const endMinutes = 11 * 60; // 11:00 AM
+    return (minutes >= startMinutes && minutes <= endMinutes) ? EARLY_FEE * count : 0;
   }
 
   function lateHours() {
@@ -892,9 +899,9 @@
     if (!time || time <= DEFAULT_CHECKOUT_TIME) return 0;
     const [h, m] = time.split(':').map(Number);
     const [bh, bm] = DEFAULT_CHECKOUT_TIME.split(':').map(Number);
-    const minutes = h * 60 + m - (bh * 60 + bm);
+    const minutes = (h * 60 + (m || 0)) - (bh * 60 + (bm || 0));
     if (minutes <= 0) return 0;
-    return Math.min(MAX_LATE_HOURS, Math.round(minutes / 60));
+    return Math.min(MAX_LATE_HOURS, Math.ceil(minutes / 60));
   }
 
   function lateFee(count) {
@@ -916,14 +923,14 @@
 
   function extraPersonFee() {
     const extras = extraPersonsFromGuests();
-    const count = extras > 0 ? extras : extraPersonInput?.checked ? 1 : 0;
+    const count = extras > 0 ? extras : (extraPersonInput?.checked ? 1 : 0);
     if (count < 1) return 0;
     return 200 * count * Math.max(1, nightCount());
   }
 
   function syncExtraPersonOption() {
     const fromGuests = extraPersonsFromGuests() > 0;
-    if (extraPersonWrap) extraPersonWrap.hidden = false;
+    if (extraPersonWrap) extraPersonWrap.hidden = !fromGuests;
     if (extraPersonInput) {
       if (fromGuests) extraPersonInput.checked = true;
       extraPersonInput.disabled = fromGuests;
@@ -934,10 +941,19 @@
     const count = Math.max(1, roomsNeeded());
     if (checkInTime) {
       const prev = checkInTime.value || DEFAULT_CHECKIN_TIME;
-      checkInTime.innerHTML = [
-        `<option value="${EARLY_CHECKIN_TIME}">${EARLY_CHECKIN_TIME} — ${money(EARLY_FEE * count)} early (${money(EARLY_FEE)} × ${count})</option>`,
-        ...FREE_CHECKIN_TIMES.map((t) => `<option value="${t}">${t} — free of charge</option>`),
-      ].join('');
+      const options = [
+        `<option value="${DEFAULT_CHECKIN_TIME}">14:00 (2:00 PM) — free of charge</option>`,
+      ];
+      for (let hour = 5; hour <= 11; hour += 1) {
+        const hh = String(hour).padStart(2, '0');
+        const time = `${hh}:00`;
+        const ampm = `${hour}:00 AM`;
+        const fee = EARLY_FEE * count;
+        options.push(
+          `<option value="${time}">${time} (${ampm}) — ${money(fee)} early check-in (${money(EARLY_FEE)} × ${count} room${count === 1 ? '' : 's'})</option>`
+        );
+      }
+      checkInTime.innerHTML = options.join('');
       checkInTime.value = [...checkInTime.options].some((o) => o.value === prev)
         ? prev
         : DEFAULT_CHECKIN_TIME;
@@ -945,17 +961,17 @@
     if (checkOutTime) {
       const prev = checkOutTime.value || DEFAULT_CHECKOUT_TIME;
       const options = [
-        `<option value="${DEFAULT_CHECKOUT_TIME}">${DEFAULT_CHECKOUT_TIME} — free of charge</option>`,
+        `<option value="${DEFAULT_CHECKOUT_TIME}">12:00 (12:00 PM) — free of charge</option>`,
       ];
       for (let hour = 1; hour <= MAX_LATE_HOURS; hour += 1) {
-        const [bh, bm] = DEFAULT_CHECKOUT_TIME.split(':').map(Number);
-        const total = bh * 60 + bm + hour * 60;
+        const total = 12 * 60 + hour * 60;
         const hh = String(Math.floor(total / 60)).padStart(2, '0');
-        const mm = String(total % 60).padStart(2, '0');
-        const time = `${hh}:${mm}`;
+        const time = `${hh}:00`;
+        const pmHour = Math.floor(total / 60) > 12 ? Math.floor(total / 60) - 12 : Math.floor(total / 60);
+        const ampm = `${pmHour}:00 PM`;
         const fee = LATE_FEE_PER_HOUR * hour * count;
         options.push(
-          `<option value="${time}">${time} — ${money(fee)} late (+${hour}h × ${count} room${count === 1 ? '' : 's'})</option>`
+          `<option value="${time}">${time} (${ampm}) — ${money(fee)} late check-out (+${hour}h × ${count} room${count === 1 ? '' : 's'})</option>`
         );
       }
       checkOutTime.innerHTML = options.join('');
@@ -977,8 +993,8 @@
       return;
     }
     const parts = [];
-    if (early) parts.push(`Early check-in ${money(early)}`);
-    if (late) parts.push(`Late check-out ${money(late)}`);
+    if (early) parts.push(`Early check-in ${money(early)} (5:00 AM – 11:00 AM)`);
+    if (late) parts.push(`Late check-out ${money(late)} (+${lateHours()}h extend, 1:00 PM – 3:00 PM)`);
     timeFeesHint.hidden = false;
     timeFeesHint.textContent = `${parts.join(' · ')} (${count} room${count === 1 ? '' : 's'})`;
   }
@@ -1264,7 +1280,7 @@
           `<div class="admin-walkin-discount-row"><span>${walkInArrivalDiscountLabel()}</span><strong>−${money(arrivalDiscount).replace(/^₱/, '')}</strong></div>`
         );
       }
-      if (early > 0) lines.push(`<div><span>Early check-in (11:30 AM)</span><strong>${money(early)}</strong></div>`);
+      if (early > 0) lines.push(`<div><span>Early check-in (${checkInTime?.value || '5:00 AM \u2013 11:00 AM'})</span><strong>${money(early)}</strong></div>`);
       if (late > 0) lines.push(`<div><span>Late check-out (+${lateHours()}h)</span><strong>${money(late)}</strong></div>`);
       if (extra > 0) {
         const extras = extraPersonsFromGuests() || (extraPersonInput?.checked ? 1 : 0);
@@ -1711,7 +1727,7 @@
   });
 
   [checkInDate, checkOutDate, checkInTime, checkOutTime].forEach((el) => {
-    el?.addEventListener('change', async () => {
+    const handler = async () => {
       if (el === checkInDate && checkOutDate && checkOutDate.value < checkInDate.value) {
         checkOutDate.value = checkInDate.value;
       }
@@ -1725,7 +1741,9 @@
         syncWalkInRoomsStepState();
       }
       refreshTotals();
-    });
+    };
+    el?.addEventListener('change', handler);
+    el?.addEventListener('input', handler);
   });
 
   extraPersonInput?.addEventListener('change', () => refreshTotals());

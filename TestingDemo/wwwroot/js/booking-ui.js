@@ -24,7 +24,8 @@
   const EXTRA_PERSON_FEE_PER_NIGHT = window.MoriStayMath?.EXTRA_PERSON_FEE_PER_NIGHT ?? 200;
   const MAX_CHILD_AGE = 12;
   const MAX_GUEST_ROOMS = 8;
-  const EARLY_CHECKIN_TIME = '11:30';
+  const EARLY_CHECKIN_START_TIME = '05:00';
+  const EARLY_CHECKIN_END_TIME = '11:00';
   const EARLY_CHECKIN_FEE_PER_ROOM = 500;
   const LATE_CHECKOUT_FEE_PER_ROOM_PER_HOUR = 100;
   const MAX_LATE_CHECKOUT_HOURS = 3;
@@ -1076,7 +1077,13 @@
 
   function earlyCheckInFee(rooms = cartRoomCount()) {
     if (rooms < 1) return 0;
-    return selectedCheckInTime() === EARLY_CHECKIN_TIME
+    const time = selectedCheckInTime();
+    if (!time) return 0;
+    const [h, m] = time.split(':').map(Number);
+    const minutes = h * 60 + m;
+    const startMinutes = 5 * 60; // 5:00 AM
+    const endMinutes = 11 * 60; // 11:00 AM
+    return (minutes >= startMinutes && minutes <= endMinutes)
       ? EARLY_CHECKIN_FEE_PER_ROOM * rooms
       : 0;
   }
@@ -1148,13 +1155,19 @@
     const prevOut = checkOutSelect?.value || DEFAULT_CHECKOUT_TIME;
 
     if (checkInSelect) {
+      const earlyTimes = [];
+      for (let hour = 5; hour <= 11; hour += 1) {
+        earlyTimes.push(`${String(hour).padStart(2, '0')}:00`);
+      }
       const freeTimes = [];
       for (let hour = 14; hour <= 23; hour += 1) {
         freeTimes.push(`${String(hour).padStart(2, '0')}:00`);
-        freeTimes.push(`${String(hour).padStart(2, '0')}:30`);
+        if (hour > 14) {
+          freeTimes.push(`${String(hour).padStart(2, '0')}:30`);
+        }
       }
       checkInSelect.innerHTML = [
-        `<option value="${EARLY_CHECKIN_TIME}">${tx('booking.earlyCheckInOption', { time: EARLY_CHECKIN_TIME, fee: earlyFee }, `${EARLY_CHECKIN_TIME} — early check-in ${formatMoney(earlyFee)}`)}</option>`,
+        ...earlyTimes.map((t) => `<option value="${t}">${tx('booking.earlyCheckInOption', { time: t, fee: earlyFee }, `${t} — early check-in ${formatMoney(earlyFee)}`)}</option>`),
         ...freeTimes.map((t) => `<option value="${t}">${tx('booking.timeFreeOption', { time: t }, `${t} — free of charge`)}</option>`),
       ].join('');
       checkInSelect.value = [...checkInSelect.options].some((o) => o.value === prevIn)
@@ -1198,7 +1211,7 @@
     const parts = [];
     if (early > 0) {
       parts.push(
-        `${tx('booking.feeEarlyCheckIn', null, 'Early check-in')} (${EARLY_CHECKIN_TIME}): ${formatMoney(early)}`
+        `${tx('booking.feeEarlyCheckIn', null, 'Early check-in')} (${selectedCheckInTime()}): ${formatMoney(early)}`
       );
     }
     if (late > 0) {
@@ -1292,7 +1305,7 @@
 
     const early = earlyCheckInFee(rooms);
     if (early > 0) {
-      lines.push({ label: `Early check-in (${EARLY_CHECKIN_TIME})`, amount: formatMoney(early) });
+      lines.push({ label: `Early check-in (${selectedCheckInTime()})`, amount: formatMoney(early) });
     }
     const late = lateCheckOutFee(rooms);
     const lateHours = lateCheckOutHours();

@@ -16,7 +16,7 @@ public readonly record struct FlushDateRange(DateTime? FromUtcInclusive, DateTim
 
         if (fromDate.Value > toDate.Value)
         {
-            throw new ArgumentException("Export “from” date must be on or before the “to” date.");
+            throw new ArgumentException("Export from date must be on or before the to date.");
         }
 
         var fromLocal = DateTime.SpecifyKind(
@@ -44,7 +44,7 @@ public readonly record struct FlushDateRange(DateTime? FromUtcInclusive, DateTim
         if (FromUtcInclusive.HasValue && ToUtcExclusive.HasValue)
         {
             var toInclusive = ToUtcExclusive.Value.AddTicks(-1);
-            return $" Date filter (PH): {Fmt(FromUtcInclusive.Value)} – {Fmt(toInclusive)}.";
+            return $" Date filter (PH): {Fmt(FromUtcInclusive.Value)} - {Fmt(toInclusive)}.";
         }
 
         if (FromUtcInclusive.HasValue)

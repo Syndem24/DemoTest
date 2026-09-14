@@ -60,10 +60,10 @@ public sealed class SystemFlushService : ISystemFlushService
         // Pending counts match respective pages:
         // Booking History: matches the Archive page (archived bookings)
         var history = await _db.Bookings.AsNoTracking().CountAsync(b => b.IsArchived, cancellationToken);
-        // Payments: matches the Payments page (payment records)
+        // Payments: same unfiltered total as the Payments page
         var payments = await _db.PaymentRecords.AsNoTracking().CountAsync(cancellationToken);
-        // Staff Audit / Audit Log: matches the System audit log table above
-        var staffAudit = await _db.SystemAuditLogs.AsNoTracking().CountAsync(cancellationToken);
+        // Staff audit: same total as the Events KPI with All areas (no search)
+        var staffAudit = await _auditQuery.GetTotalCountAsync(cancellationToken);
 
         return new SystemFlushPendingCountsDto(history, payments, staffAudit);
     }
@@ -72,7 +72,7 @@ public sealed class SystemFlushService : ISystemFlushService
         IReadOnlyList<SystemFlushKind> kinds,
         string performedBy,
         FlushDateRange dateRange = default,
-        bool clearAfterExport = true,
+        bool clearAfterExport = false,
         CancellationToken cancellationToken = default)
     {
         performedBy = performedBy?.Trim() ?? string.Empty;
