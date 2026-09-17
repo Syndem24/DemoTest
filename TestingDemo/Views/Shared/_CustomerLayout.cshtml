@@ -227,7 +227,9 @@
                                 <a role="menuitem"
                                    class="guest-nav-profile-item"
                                    asp-controller="Dashboard"
-                                   asp-action="Index">
+                                   asp-action="Index"
+                                   data-surface-exit
+                                   data-loader-text="Opening the staff panel…">
                                     <svg class="guest-nav-profile-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                                         <path fill="currentColor" d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
                                     </svg>
@@ -370,6 +372,7 @@
     </div>
 
     <script src="~/js/guest-page-loader.js" asp-append-version="true"></script>
+    <script src="~/js/page-transition.js" asp-append-version="true"></script>
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/lib/signalr/signalr.min.js"></script>

@@ -2,20 +2,22 @@
 @using TestingDemo.Models
 @using TestingDemo.Services
 @{
-    ViewData["Title"] = "System audit log";
+    ViewData["Title"] = "Data and trails";
     var historyReady = Model.HistoryPending > 0;
     var paymentsReady = Model.PaymentsPending > 0;
     var staffReady = Model.StaffAuditPending > 0;
+    var pendingTotal = Model.HistoryPending + Model.PaymentsPending + Model.StaffAuditPending;
+    var todayPh = PhilippinesTime.ToManila(DateTime.UtcNow).Date;
 }
 
 <div class="admin-flush-page admin-audit-page">
     <section class="admin-flush-hero" aria-labelledby="auditPageTitle">
         <div class="admin-flush-hero-copy">
             <p class="admin-flush-eyebrow">Integrity</p>
-            <h1 id="auditPageTitle">System audit log</h1>
+            <h1 id="auditPageTitle">Data and trails</h1>
             <p class="admin-flush-lede">
-                Track administrative actions, configuration changes, and file modifications.
-                Use Data retention export below to save a PDF and optionally clear Bookings, Payments, or Accounts events in a date range.
+                Every administrative action, configuration change, and file export is recorded here.
+                Open a section below to review the audit log or export records to PDF.
             </p>
         </div>
         <ul class="admin-flush-kpis" aria-label="Audit coverage">
@@ -30,9 +32,9 @@
                 <em>newest first</em>
             </li>
             <li>
-                <span>Retention</span>
-                <strong>Export</strong>
-                <em>clear optional</em>
+                <span>Exportable</span>
+                <strong>@pendingTotal</strong>
+                <em>@(pendingTotal == 1 ? "record waiting" : "records waiting")</em>
             </li>
         </ul>
     </section>
@@ -45,6 +47,18 @@
     {
         <p class="admin-flush-banner is-error" role="alert">@Model.Error</p>
     }
+
+    <details class="admin-audit-section" open>
+        <summary>
+            <span class="admin-audit-section-icon is-teal" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 3h9l5 5v13H6V3zm8 1.5V9h4.5L14 4.5zM8 12h8v2H8v-2zm0 4h8v2H8v-2z"/></svg>
+            </span>
+            <span class="admin-audit-section-title">
+                <strong>Audit log</strong>
+                <small>Who changed what, and why — newest first</small>
+            </span>
+            <span class="admin-audit-section-meta" data-audit-total-badge>@Model.AuditTotal @(Model.AuditTotal == 1 ? "event" : "events")</span>
+        </summary>
 
     <section class="admin-flush-card admin-audit-panel" aria-labelledby="auditFilterTitle" data-audit-live data-audit-api="@Url.Content("~/api/admin/audit/recent")">
         <header class="admin-flush-card-head">
@@ -191,59 +205,87 @@
             </nav>
         }
     </section>
+    </details>
 
-    <details class="admin-audit-retention">
+    <details class="admin-audit-section" id="retentionSection" open="@(!string.IsNullOrWhiteSpace(Model.Error) || Model.Kinds.Count > 0)">
         <summary>
-            <span>Data retention export</span>
+            <span class="admin-audit-section-icon is-navy" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+            </span>
+            <span class="admin-audit-section-title">
+                <strong>Data retention export</strong>
+                <small>Save records to PDF, then optionally clear them</small>
+            </span>
+            <span class="admin-audit-section-meta @(pendingTotal > 0 ? "is-on" : null)">@pendingTotal exportable</span>
         </summary>
-        <div class="admin-flush-grid">
-            <form asp-action="Flush" method="post" class="admin-flush-card admin-flush-form" id="adminFlushForm">
-                @Html.AntiForgeryToken()
-                <header class="admin-flush-card-head">
-                    <h2>Export operational records</h2>
-                    <p>Choose what to export from the audit table above. You will pick where to save the PDF on this computer. Export and clear removes that area’s events from the table.</p>
-                </header>
 
-                <fieldset class="admin-flush-kinds">
-                    <legend>Log type</legend>
-                    <label class="admin-flush-kind">
-                        <input type="checkbox" name="kinds" value="@SystemFlushKind.BookingHistory" @(Model.Kinds.Contains(SystemFlushKind.BookingHistory) ? "checked" : null) />
-                        <span class="admin-flush-kind-box" aria-hidden="true"></span>
-                        <span class="admin-flush-kind-copy">
-                            <strong>Booking history</strong>
-                            <small>@Model.HistoryPending archived booking@(Model.HistoryPending == 1 ? "" : "s")@(historyReady ? "" : " — nothing waiting")</small>
-                        </span>
-                    </label>
-                    <label class="admin-flush-kind">
-                        <input type="checkbox" name="kinds" value="@SystemFlushKind.Payments" @(Model.Kinds.Contains(SystemFlushKind.Payments) ? "checked" : null) />
-                        <span class="admin-flush-kind-box" aria-hidden="true"></span>
-                        <span class="admin-flush-kind-copy">
-                            <strong>Payments</strong>
-                            <small>@Model.PaymentsPending payment record@(Model.PaymentsPending == 1 ? "" : "s")@(paymentsReady ? "" : " — nothing waiting")</small>
-                        </span>
-                    </label>
-                    <label class="admin-flush-kind">
-                        <input type="checkbox" name="kinds" value="@SystemFlushKind.StaffAudit" @(Model.Kinds.Contains(SystemFlushKind.StaffAudit) ? "checked" : null) />
-                        <span class="admin-flush-kind-box" aria-hidden="true"></span>
-                        <span class="admin-flush-kind-copy">
-                            <strong>System audit log</strong>
-                            <small>@Model.StaffAuditPending audit log event@(Model.StaffAuditPending == 1 ? "" : "s")@(staffReady ? "" : " — nothing waiting")</small>
-                        </span>
-                    </label>
-                </fieldset>
+        <form asp-action="Flush" method="post" class="admin-flush-card admin-flush-form admin-retention-form" id="adminFlushForm">
+            @Html.AntiForgeryToken()
+            <input type="hidden" id="clearAfterExport" name="clearAfterExport" value="false" />
 
-                <div class="admin-flush-dates" role="group" aria-labelledby="flushDateLegend">
-                    <p id="flushDateLegend" class="admin-flush-dates-legend">Date range (Philippines) — required</p>
-                    <p class="admin-flush-dates-hint">
-                        Both dates are required. History uses archive date, payments use paid date, audit log uses event date.
-                    </p>
-                    <div class="admin-flush-dates-grid">
+            <ol class="admin-retention-steps">
+                <li class="admin-retention-step">
+                    <div class="admin-retention-step-head">
+                        <span class="admin-retention-step-num" aria-hidden="true">1</span>
+                        <div>
+                            <h2 id="retentionStep1">Choose what to export</h2>
+                            <p>Pick one or more record types. Counts show how many records are waiting.</p>
+                        </div>
+                    </div>
+                    <fieldset class="admin-flush-kinds admin-retention-kinds" aria-labelledby="retentionStep1">
+                        <legend class="visually-hidden">Record types</legend>
+                        <label class="admin-flush-kind @(historyReady ? null : "is-empty")">
+                            <input type="checkbox" name="kinds" value="@SystemFlushKind.BookingHistory" @(Model.Kinds.Contains(SystemFlushKind.BookingHistory) ? "checked" : null) />
+                            <span class="admin-flush-kind-box" aria-hidden="true"></span>
+                            <span class="admin-flush-kind-copy">
+                                <strong>Booking history</strong>
+                                <small>Archived bookings · filtered by archive date</small>
+                            </span>
+                            <span class="admin-retention-count">@Model.HistoryPending</span>
+                        </label>
+                        <label class="admin-flush-kind @(paymentsReady ? null : "is-empty")">
+                            <input type="checkbox" name="kinds" value="@SystemFlushKind.Payments" @(Model.Kinds.Contains(SystemFlushKind.Payments) ? "checked" : null) />
+                            <span class="admin-flush-kind-box" aria-hidden="true"></span>
+                            <span class="admin-flush-kind-copy">
+                                <strong>Payments</strong>
+                                <small>Payment records · filtered by paid date</small>
+                            </span>
+                            <span class="admin-retention-count">@Model.PaymentsPending</span>
+                        </label>
+                        <label class="admin-flush-kind @(staffReady ? null : "is-empty")">
+                            <input type="checkbox" name="kinds" value="@SystemFlushKind.StaffAudit" @(Model.Kinds.Contains(SystemFlushKind.StaffAudit) ? "checked" : null) />
+                            <span class="admin-flush-kind-box" aria-hidden="true"></span>
+                            <span class="admin-flush-kind-copy">
+                                <strong>Audit log</strong>
+                                <small>Staff and system events · filtered by event date</small>
+                            </span>
+                            <span class="admin-retention-count">@Model.StaffAuditPending</span>
+                        </label>
+                    </fieldset>
+                </li>
+
+                <li class="admin-retention-step">
+                    <div class="admin-retention-step-head">
+                        <span class="admin-retention-step-num" aria-hidden="true">2</span>
+                        <div>
+                            <h2 id="retentionStep2">Set the date range</h2>
+                            <p>Philippine time. Both dates are required — use a preset or pick your own.</p>
+                        </div>
+                    </div>
+                    <div class="admin-retention-presets" role="group" aria-label="Quick date ranges">
+                        <button type="button" class="admin-retention-preset" data-range-days="7">Last 7 days</button>
+                        <button type="button" class="admin-retention-preset" data-range-days="30">Last 30 days</button>
+                        <button type="button" class="admin-retention-preset" data-range-month="current">This month</button>
+                        <button type="button" class="admin-retention-preset" data-range-month="previous">Last month</button>
+                    </div>
+                    <div class="admin-flush-dates-grid admin-retention-dates" role="group" aria-labelledby="retentionStep2">
                         <div class="admin-flush-name">
                             <label for="fromDate">From</label>
                             <input id="fromDate"
                                    name="fromDate"
                                    type="date"
                                    required
+                                   max="@todayPh.ToString("yyyy-MM-dd")"
                                    value="@(Model.FromDate?.ToString("yyyy-MM-dd"))"
                                    autocomplete="off" />
                         </div>
@@ -253,116 +295,31 @@
                                    name="toDate"
                                    type="date"
                                    required
+                                   max="@todayPh.ToString("yyyy-MM-dd")"
                                    value="@(Model.ToDate?.ToString("yyyy-MM-dd"))"
                                    autocomplete="off" />
                         </div>
                     </div>
-                </div>
+                </li>
 
-                <input type="hidden" id="clearAfterExport" name="clearAfterExport" value="false" />
-
-                <p class="admin-flush-warn">
-                    Export markers stay in the Files audit area for integrity. A confirmation step lets you choose
-                    <strong>Just export</strong> (keeps records) or <strong>Export and clear</strong> (deletes exported rows).
-                    Download and verify your files before clearing.
-                </p>
-                <button type="submit" class="admin-flush-submit">Export selected</button>
-            </form>
-
-            <section class="admin-flush-card admin-flush-log-panel" aria-labelledby="flushHistoryTitle">
-                <div class="admin-flush-log-head">
-                    <div>
-                        <h2 id="flushHistoryTitle">Export actions</h2>
-                        <p>Who exported what. These operational rows expire after 7 days.</p>
+                <li class="admin-retention-step">
+                    <div class="admin-retention-step-head">
+                        <span class="admin-retention-step-num" aria-hidden="true">3</span>
+                        <div>
+                            <h2>Export</h2>
+                            <p>You'll be asked to <strong>Just export</strong> (keep records) or <strong>Export and clear</strong> (delete the exported rows). Download and check the PDF before clearing.</p>
+                        </div>
                     </div>
-                    <form method="get" asp-action="Index" class="admin-flush-filter">
-                        @if (!string.IsNullOrWhiteSpace(Model.Search))
-                        {
-                            <input type="hidden" name="q" value="@Model.Search" />
-                        }
-                        @if (Model.Domain.HasValue)
-                        {
-                            <input type="hidden" name="domain" value="@Model.Domain" />
-                        }
-                        <label for="kind">Show</label>
-                        <select id="kind" name="kind" onchange="this.form.submit()">
-                            <option value="">All types</option>
-                            @if (Model.FilterKind == SystemFlushKind.BookingHistory)
-                            {
-                                <option value="@SystemFlushKind.BookingHistory" selected>Booking history</option>
-                            }
-                            else
-                            {
-                                <option value="@SystemFlushKind.BookingHistory">Booking history</option>
-                            }
-                            @if (Model.FilterKind == SystemFlushKind.Payments)
-                            {
-                                <option value="@SystemFlushKind.Payments" selected>Payments</option>
-                            }
-                            else
-                            {
-                                <option value="@SystemFlushKind.Payments">Payments</option>
-                            }
-                            @if (Model.FilterKind == SystemFlushKind.StaffAudit)
-                            {
-                                <option value="@SystemFlushKind.StaffAudit" selected>System audit log</option>
-                            }
-                            else
-                            {
-                                <option value="@SystemFlushKind.StaffAudit">System audit log</option>
-                            }
-                        </select>
-                    </form>
-                </div>
-
-                @if (Model.Logs.Count == 0)
-                {
-                    <div class="admin-flush-empty">
-                        <strong>No export actions yet</strong>
-                        <span>They appear here after you export a log type.</span>
+                    <div class="admin-retention-actions">
+                        <button type="submit" class="admin-flush-submit">
+                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                            Export selected
+                        </button>
+                        <p class="admin-retention-note">An export marker is always kept in the <em>Files</em> audit area for integrity.</p>
                     </div>
-                }
-                else
-                {
-                    <div class="admin-flush-table-wrap">
-                        <table class="admin-flush-table">
-                            <thead>
-                                <tr>
-                                    <th>When</th>
-                                    <th>Type</th>
-                                    <th>By</th>
-                                    <th>Rows</th>
-                                    <th>File</th>
-                                    <th>Summary</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                            @foreach (var log in Model.Logs)
-                            {
-                                var expires = PhilippinesTime.ToManila(log.ExpiresAtUtc);
-                                var kindClass = log.KindLabel == "Payments"
-                                    ? "is-payments"
-                                    : (log.KindLabel == "Staff audit" || log.KindLabel == "System audit log")
-                                        ? "is-staff"
-                                        : "is-history";
-                                <tr>
-                                    <td data-label="When">
-                                        <time datetime="@log.FlushedAtUtc.ToString("o")">@PhilippinesTime.FormatStamp(log.FlushedAtUtc)</time>
-                                        <small>Expires @expires.ToString("dd MMM")</small>
-                                    </td>
-                                    <td data-label="Type"><span class="admin-flush-badge @kindClass">@log.KindLabel</span></td>
-                                    <td data-label="By">@log.PerformedBy</td>
-                                    <td data-label="Rows">@log.RecordCount</td>
-                                    <td data-label="File">@log.FileName</td>
-                                    <td data-label="Summary">@log.Summary</td>
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
-                    </div>
-                }
-            </section>
-        </div>
+                </li>
+            </ol>
+        </form>
     </details>
 </div>
 
@@ -395,6 +352,49 @@
             const clearInput = document.getElementById('clearAfterExport');
             const submitBtn = form?.querySelector('.admin-flush-submit');
             let confirmed = false;
+
+            // Quick date presets (Philippine calendar dates)
+            const fromInput = document.getElementById('fromDate');
+            const toInput = document.getElementById('toDate');
+            const phToday = () => {
+                const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' })
+                    .formatToParts(new Date());
+                const get = (t) => Number(parts.find((p) => p.type === t)?.value);
+                return new Date(Date.UTC(get('year'), get('month') - 1, get('day')));
+            };
+            const iso = (d) => d.toISOString().slice(0, 10);
+            const setRange = (from, to) => {
+                if (fromInput) fromInput.value = iso(from);
+                if (toInput) toInput.value = iso(to);
+                document.querySelector('.admin-flush-banner.is-error')?.setAttribute('hidden', '');
+            };
+            document.querySelectorAll('.admin-retention-preset').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const today = phToday();
+                    const days = Number(btn.dataset.rangeDays);
+                    if (days) {
+                        const from = new Date(today);
+                        from.setUTCDate(from.getUTCDate() - (days - 1));
+                        setRange(from, today);
+                    } else if (btn.dataset.rangeMonth === 'current') {
+                        setRange(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)), today);
+                    } else if (btn.dataset.rangeMonth === 'previous') {
+                        const first = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
+                        const last = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 0));
+                        setRange(first, last);
+                    }
+                    document.querySelectorAll('.admin-retention-preset').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+                });
+            });
+            [fromInput, toInput].forEach((input) => input?.addEventListener('input', () => {
+                document.querySelectorAll('.admin-retention-preset').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+            }));
+
+            // Open the export section when the form is invalid so the message is visible.
+            const openRetention = () => {
+                const section = document.getElementById('retentionSection');
+                if (section && !section.open) section.open = true;
+            };
 
             // Restore success banner after redirect (set in sessionStorage before page reload)
             const pendingMessage = sessionStorage.getItem('moriFlushExportMessage');
@@ -455,6 +455,7 @@
             };
 
             const showExportError = (message) => {
+                openRetention();
                 let banner = document.querySelector('.admin-flush-banner.is-error');
                 if (!banner) {
                     banner = document.createElement('p');

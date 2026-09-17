@@ -571,7 +571,7 @@
 
   function syncWalkInPaymentChange() {
     const total = computeGrandTotal();
-    if (paymentDue) paymentDue.value = money(total).replace('₱', '');
+    if (paymentDue) paymentDue.textContent = money(total);
     const method = String(paymentMethod?.value || 'Cash');
     if (!isCashPaymentMethod(method)) {
       if (paymentDigitalAmount && !paymentDigitalAmount.value.trim()) {
@@ -579,12 +579,27 @@
       }
       return;
     }
-    const tendered = parseMoneyInput(paymentTendered?.value);
-    const change = Math.max(0, tendered - total);
+    const raw = String(paymentTendered?.value || '').trim();
+    const tendered = parseMoneyInput(raw);
+    const short = total - tendered;
     if (paymentChange) {
       paymentChange.hidden = false;
-      paymentChange.textContent = `Change: ${money(change)}`;
+      paymentChange.classList.remove('is-short', 'is-exact', 'is-change', 'is-waiting');
+      if (!raw) {
+        paymentChange.classList.add('is-waiting');
+        paymentChange.textContent = `Waiting for cash — guest needs to pay ${money(total)}.`;
+      } else if (short > 0.009) {
+        paymentChange.classList.add('is-short');
+        paymentChange.textContent = `Short by ${money(short)} — collect ${money(total)} in total.`;
+      } else if (short > -0.009) {
+        paymentChange.classList.add('is-exact');
+        paymentChange.textContent = 'Exact amount — no change to give.';
+      } else {
+        paymentChange.classList.add('is-change');
+        paymentChange.textContent = `Change to give back: ${money(-short)}`;
+      }
     }
+    paymentTendered?.classList.toggle('is-invalid', Boolean(raw) && short > 0.009);
   }
 
   function estimatedStayTotal() {
@@ -748,13 +763,31 @@
     });
   }
 
+  function firstMissingChildAge() {
+    for (let roomIndex = 0; roomIndex < guestRooms.length; roomIndex += 1) {
+      const room = guestRooms[roomIndex];
+      const children = Number(room.children) || 0;
+      for (let childIndex = 0; childIndex < children; childIndex += 1) {
+        const age = room.childAges?.[childIndex];
+        if (age === null || age === undefined || Number.isNaN(Number(age))) {
+          return { room: roomIndex, child: childIndex };
+        }
+      }
+    }
+    return null;
+  }
+
   function syncGuestsContinueState() {
     const over = guestRoomsOverCapacity();
+    const missingAge = firstMissingChildAge();
     if (guestsSubmitBtn) {
       guestsSubmitBtn.disabled = over;
+      guestsSubmitBtn.classList.toggle('is-pending', !over && Boolean(missingAge));
       guestsSubmitBtn.title = over
         ? 'Guests exceed room capacity. Add another room or reduce guests to continue.'
-        : '';
+        : missingAge
+          ? 'Select each child’s age to continue.'
+          : '';
     }
     if (guestsCapacity) {
       if (over) {
@@ -786,7 +819,7 @@
         const ages =
           (Number(room.children) || 0) > 0
             ? `<div class="guest-guests-ages">
-                <span class="guest-guests-ages-label">${room.children} child${room.children === 1 ? '' : "ren"}'s age</span>
+                <span class="guest-guests-ages-label">${room.children} child${room.children === 1 ? '' : "ren"}'s age <em class="guest-guests-required">required</em></span>
                 <div class="guest-guests-ages-grid">
                   ${Array.from({ length: room.children }, (_, childIndex) => {
                     const age = room.childAges[childIndex];
@@ -1350,6 +1383,9 @@
     if (step === 'payment') {
       refreshTotals();
       syncWalkInPaymentPanels();
+      if (isCashPaymentMethod(paymentMethod?.value || 'Cash') && !String(paymentTendered?.value || '').trim()) {
+        window.setTimeout(() => paymentTendered?.focus({ preventScroll: true }), 60);
+      }
     }
     if (step === 'rooms') {
       renderRoomSlots();
@@ -1359,16 +1395,52 @@
     if (step === 'dates') refreshTotals();
   }
 
+  const GUEST_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
+  const GUEST_PHONE_RE = /^[+\d][\d\s\-().]*$/;
+
+  function markGuestField(input, message, focusField = true) {
+    if (!input) return;
+    input.setAttribute('aria-invalid', 'true');
+    input.classList.add('is-invalid');
+    if (focusField) input.focus({ preventScroll: true });
+    showFormMessage(message, true);
+    const clear = () => {
+      input.removeAttribute('aria-invalid');
+      input.classList.remove('is-invalid');
+      input.removeEventListener('input', clear);
+    };
+    input.addEventListener('input', clear);
+  }
+
+  function validateGuestFields() {
+    const nameEl = document.getElementById('walkInGuestName');
+    const emailEl = document.getElementById('walkInGuestEmail');
+    const phoneEl = document.getElementById('walkInGuestPhone');
+    const name = String(nameEl?.value || '').trim();
+    const email = String(emailEl?.value || '').trim();
+    const phone = String(phoneEl?.value || '').trim();
+
+    if (!name) return markGuestField(nameEl, 'Enter the lead guest’s full name.'), false;
+    if (name.length < 2) return markGuestField(nameEl, 'Full name must be at least 2 characters.'), false;
+    if (!email) return markGuestField(emailEl, 'Enter the guest’s email address.'), false;
+    if (!GUEST_EMAIL_RE.test(email)) {
+      const hint = email.includes('@') && !/\.[a-z]{2,}$/i.test(email)
+        ? `Email is missing its ending — e.g. ${email.split('@')[0]}@gmail.com`
+        : 'Enter a valid email like name@gmail.com.';
+      return markGuestField(emailEl, hint), false;
+    }
+    if (!phone) return markGuestField(phoneEl, 'Enter the guest’s phone number.'), false;
+    const digits = phone.replace(/\D/g, '');
+    if (!GUEST_PHONE_RE.test(phone) || digits.length < 7) {
+      return markGuestField(phoneEl, 'Phone must be digits only (spaces, dashes, or a leading + are fine), e.g. +63 917 123 4567.'), false;
+    }
+    if (digits.length > 15) return markGuestField(phoneEl, 'Phone number is too long.'), false;
+    return true;
+  }
+
   function validateStep(step) {
     if (step === 'guest') {
-      const name = String(document.getElementById('walkInGuestName')?.value || '').trim();
-      const email = String(document.getElementById('walkInGuestEmail')?.value || '').trim();
-      const phone = String(document.getElementById('walkInGuestPhone')?.value || '').trim();
-      if (!name || !email || !phone) {
-        showFormMessage('Enter lead guest name, email, and phone.', true);
-        return false;
-      }
-      return true;
+      return validateGuestFields();
     }
     if (step === 'dates') {
       if (nightCount() < 1) {
@@ -1443,9 +1515,16 @@
       }
       const method = String(paymentMethod?.value || 'Cash');
       if (isCashPaymentMethod(method)) {
-        const tendered = parseMoneyInput(paymentTendered?.value);
+        const raw = String(paymentTendered?.value || '').trim();
+        const tendered = parseMoneyInput(raw);
+        if (!raw) {
+          paymentTendered?.focus();
+          showFormMessage(`Type the cash the guest handed over (at least ${money(total)}).`, true);
+          return false;
+        }
         if (tendered < total - 0.009) {
-          showFormMessage(`Cash tender must cover ${money(total)} due.`, true);
+          paymentTendered?.focus();
+          showFormMessage(`Cash from guest is short by ${money(total - tendered)}. Collect ${money(total)} in total.`, true);
           return false;
         }
       } else {
@@ -1599,6 +1678,19 @@
       showGuestsHint('Add at least one adult and one room.');
       return;
     }
+    const missingAge = firstMissingChildAge();
+    if (missingAge) {
+      const select = guestsList?.querySelector(
+        `[data-walkin-age="${missingAge.room}"][data-walkin-age-index="${missingAge.child}"]`
+      );
+      select?.setAttribute('aria-invalid', 'true');
+      select?.classList.add('is-invalid');
+      select?.focus();
+      showGuestsHint(
+        `Select the age of child ${missingAge.child + 1} in Room ${missingAge.room + 1} before continuing.`
+      );
+      return;
+    }
     closeModal(guestsModal);
     resetDates();
     walkInTypeSelections = [];
@@ -1685,6 +1777,12 @@
     if (!room) return;
     if (!Array.isArray(room.childAges)) room.childAges = [];
     room.childAges[childIndex] = ageSelect.value === '' ? null : Number(ageSelect.value);
+    if (ageSelect.value !== '') {
+      ageSelect.removeAttribute('aria-invalid');
+      ageSelect.classList.remove('is-invalid');
+      showGuestsHint('');
+    }
+    syncGuestsContinueState();
   });
 
   document.querySelectorAll('[data-walkin-close]').forEach((el) => {
@@ -1762,7 +1860,27 @@
     refreshTotals();
   });
   paymentTendered?.addEventListener('input', () => syncWalkInPaymentChange());
+  document.getElementById('walkInPaymentExactBtn')?.addEventListener('click', () => {
+    if (!paymentTendered) return;
+    paymentTendered.value = computeGrandTotal().toFixed(2);
+    syncWalkInPaymentChange();
+    paymentTendered.focus();
+  });
   paymentDigitalAmount?.addEventListener('input', () => syncWalkInPaymentChange());
+
+  // Inline format feedback on the Guest step as soon as the field is left.
+  document.getElementById('walkInGuestEmail')?.addEventListener('blur', (event) => {
+    const value = String(event.target.value || '').trim();
+    if (value && !GUEST_EMAIL_RE.test(value)) {
+      markGuestField(event.target, 'Enter a valid email like name@gmail.com.', false);
+    }
+  });
+  document.getElementById('walkInGuestPhone')?.addEventListener('blur', (event) => {
+    const value = String(event.target.value || '').trim();
+    if (value && (!GUEST_PHONE_RE.test(value) || value.replace(/\D/g, '').length < 7)) {
+      markGuestField(event.target, 'Phone must be digits only, e.g. +63 917 123 4567.', false);
+    }
+  });
 
   bookForm?.addEventListener('submit', async (event) => {
     event.preventDefault();

@@ -5285,17 +5285,73 @@
   padding: clamp(1.75rem, 4.5vw, 3.25rem) var(--guest-pad) clamp(3rem, 6vw, 4.5rem);
   display: grid;
   gap: clamp(1.25rem, 3vw, 2rem);
-  justify-items: start;
+  justify-items: center;
+}
+
+/* Reading progress — thin gradient bar pinned to the bottom edge of the
+   sticky site nav on the legal pages (JS keeps it glued to the nav).
+   Decorative: hidden from assistive tech. */
+.guest-legal-progress {
+  position: fixed;
+  top: 4rem;
+  left: 0;
+  right: 0;
+  z-index: 45;
+  height: 4px;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--navy) 7%, transparent);
+}
+
+.guest-legal-progress-bar {
+  display: block;
+  position: relative;
+  height: 100%;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, var(--teal) 0%, #2dd4bf 100%);
+  box-shadow: 0 0 10px rgba(13, 148, 136, 0.45);
+  transition: transform 80ms linear;
+}
+
+/* Soft glow on the leading edge so the fill reads as a light, not a stripe */
+.guest-legal-progress-bar::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  transform: translate(50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(45, 212, 191, 0.9) 0%, rgba(45, 212, 191, 0) 70%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guest-legal-progress-bar {
+    transition: none;
+    box-shadow: none;
+  }
+
+  .guest-legal-progress-bar::after {
+    display: none;
+  }
 }
 
 .guest-legal-head {
   display: grid;
   gap: 0.7rem;
-  max-width: 40rem;
+  max-width: 44rem;
+  justify-items: center;
+  text-align: center;
 }
 
 .guest-legal-head .guest-eyebrow {
   margin: 0;
+}
+
+.guest-legal-head .guest-eyebrow.is-ruled::after {
+  margin-inline: auto;
 }
 
 .guest-legal-page .guest-legal-head h1 {
@@ -5316,6 +5372,7 @@
 .guest-legal-switch {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 0.65rem;
   margin-top: 0.2rem;
 }
@@ -5411,6 +5468,7 @@
 .guest-legal-foot {
   display: grid;
   gap: 0.5rem;
+  justify-items: center;
 }
 
 .guest-legal-back {
@@ -13023,244 +13081,6 @@ body.guest-public-reviews-open .guest-nav {
   }
 }
 
-
-/* Guest page loader â€” Sam Herbert puff.svg (MIT) + Mori navy/teal exit */
-.guest-page-loader {
-  position: fixed;
-  inset: 0;
-  z-index: 4000;
-  display: grid;
-  place-items: center;
-  padding: max(1.25rem, env(safe-area-inset-top)) 1.25rem max(1.25rem, env(safe-area-inset-bottom));
-  overflow: hidden;
-  background: #ffffff;
-  color: var(--navy);
-  pointer-events: all;
-}
-
-.guest-page-loader-inner {
-  display: grid;
-  justify-items: center;
-  gap: 0.7rem;
-  width: min(28rem, 100%);
-  text-align: center;
-  animation: guest-loader-enter 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.guest-page-loader-orbit {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: min(11.5rem, 58vw);
-  aspect-ratio: 1;
-}
-
-.guest-page-loader-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--navy) 10%, var(--white));
-  pointer-events: none;
-}
-
-.guest-page-loader-ring::after {
-  content: "";
-  position: absolute;
-  inset: -2px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  border-top-color: var(--teal);
-  border-right-color: color-mix(in srgb, var(--teal) 45%, var(--white));
-  animation: guest-loader-ring 1.05s cubic-bezier(0.45, 0, 0.2, 1) infinite;
-}
-
-.guest-page-loader-mark {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  place-items: center;
-  width: 68%;
-  background: transparent;
-}
-
-.guest-page-loader-logo {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-height: 4.4rem;
-  object-fit: contain;
-  transform-origin: center;
-  animation: guest-loader-logo 2.4s cubic-bezier(0.45, 0, 0.2, 1) infinite;
-}
-
-.guest-page-loader-brand {
-  margin: 0.15rem 0 0;
-  font-family: "Cormorant Garamond", "Times New Roman", serif;
-  font-size: clamp(1.2rem, 1rem + 1.4vw, 1.7rem);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--navy);
-}
-
-.guest-page-loader-status {
-  display: grid;
-  margin: 0;
-  min-height: 2.8rem;
-  font-family: "Outfit", "Segoe UI", sans-serif;
-  font-size: clamp(0.95rem, 0.88rem + 0.3vw, 1.05rem);
-  font-weight: 500;
-  line-height: 1.4;
-  color: color-mix(in srgb, var(--navy) 68%, var(--white));
-}
-
-.guest-page-loader-status span {
-  grid-area: 1 / 1;
-  max-width: 22rem;
-  margin-inline: auto;
-  opacity: 0;
-  visibility: hidden;
-  transform: translate3d(0, 8px, 0);
-  transition: opacity 280ms ease, transform 280ms ease, visibility 280ms ease;
-}
-
-.guest-page-loader-status span.is-active {
-  opacity: 1;
-  visibility: visible;
-  transform: none;
-}
-
-.guest-page-loader-bar {
-  width: min(16rem, 86%);
-  height: 4px;
-  margin-top: 0.15rem;
-  overflow: hidden;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--navy) 10%, var(--white));
-}
-
-.guest-page-loader-bar-fill {
-  display: block;
-  width: 14%;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--teal);
-  transform-origin: left center;
-  animation: guest-loader-bar 2.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-
-.guest-page-loader.is-leaving {
-  pointer-events: none;
-  animation: guest-loader-exit 720ms cubic-bezier(0.76, 0, 0.24, 1) forwards;
-}
-
-.guest-page-loader.is-leaving .guest-page-loader-inner {
-  animation: guest-loader-exit-inner 480ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-.guest-page-loader.is-leaving .guest-page-loader-logo,
-.guest-page-loader.is-leaving .guest-page-loader-ring::after {
-  animation: none;
-}
-
-.guest-page-loader.is-leaving .guest-page-loader-bar-fill {
-  animation: guest-loader-bar-done 280ms ease-out forwards;
-}
-
-@keyframes guest-loader-ring {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes guest-loader-bar {
-  to {
-    width: 86%;
-  }
-}
-
-@keyframes guest-loader-bar-done {
-  to {
-    width: 100%;
-  }
-}
-
-@keyframes guest-loader-logo {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-    opacity: 0.92;
-  }
-  50% {
-    transform: translate3d(0, -8px, 0) scale(1.06);
-    opacity: 1;
-  }
-}
-
-@keyframes guest-loader-enter {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 18px, 0) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes guest-loader-exit-inner {
-  to {
-    opacity: 0;
-    transform: translate3d(0, -22px, 0) scale(0.9);
-  }
-}
-
-@keyframes guest-loader-exit {
-  0% {
-    opacity: 1;
-    transform: none;
-  }
-  55% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translate3d(0, -12%, 0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .guest-page-loader-inner,
-  .guest-page-loader-logo,
-  .guest-page-loader-ring::after,
-  .guest-page-loader-bar-fill {
-    animation: none;
-  }
-
-  .guest-page-loader-logo {
-    opacity: 1;
-  }
-
-  .guest-page-loader-status span {
-    transition: none;
-  }
-
-  .guest-page-loader-bar-fill {
-    width: 70%;
-  }
-
-  .guest-page-loader.is-leaving .guest-page-loader-bar-fill {
-    width: 100%;
-  }
-
-  .guest-page-loader.is-leaving,
-  .guest-page-loader.is-leaving .guest-page-loader-inner {
-    animation: guest-loader-fade 180ms ease forwards;
-  }
-
-  @keyframes guest-loader-fade {
-    to { opacity: 0; }
-  }
-}
 
 /* Cookie consent â€” first-party, equal Accept / Reject, navy/teal only */
 html.guest-cookies-on {

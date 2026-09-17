@@ -82,7 +82,9 @@
         <a class="hotel-sidebar-brand"
            asp-controller="Booking"
            asp-action="Index"
-           title="Open guest site">
+           title="Open guest site"
+           data-surface-exit
+           data-loader-text="Opening the guest site…">
             <img src="~/Images/Logo.png" asp-append-version="true" alt="Mori International Hotel" class="hotel-sidebar-logo" />
         </a>
 
@@ -128,11 +130,12 @@
             <a class="hotel-sidebar-link @adminFlushLogsActive"
                asp-controller="AdminFlushLogs"
                asp-action="Index"
-               title="System audit log">
+               title="Data Management and Audit trails"
+               aria-label="Data Management and Audit trails">
                 <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                     <path d="M6 3h9l5 5v13H6V3zm8 1.5V9h4.5L14 4.5zM8 12h8v2H8v-2zm0 4h8v2H8v-2z"/>
                 </svg>
-                <span>Audit log</span>
+                <span>Data</span>
             </a>
             }
             <a class="hotel-sidebar-link @adminOffersActive"
@@ -257,7 +260,7 @@
                             <a asp-controller="Account" asp-action="Settings" class="admin-profile-link">
                                 Edit profile &amp; security
                             </a>
-                            <form asp-controller="Account" asp-action="Logout" method="post" class="admin-profile-logout" data-admin-logout-form>
+                            <form asp-controller="Account" asp-action="Logout" method="post" class="admin-profile-logout" data-admin-logout-form data-surface-exit data-loader-text="Signing out…">
                                 @Html.AntiForgeryToken()
                                 <button type="submit" class="admin-profile-link admin-profile-link-danger">Log out</button>
                             </form>
@@ -285,6 +288,7 @@
     <script src="~/lib/signalr/signalr.min.js"></script>
     <script src="~/js/admin-realtime.js" asp-append-version="true"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+    <script src="~/js/page-transition.js" asp-append-version="true"></script>
     <script src="~/js/mori-input-filters.js" asp-append-version="true"></script>
     @if (needsPhotoZoom)
     {

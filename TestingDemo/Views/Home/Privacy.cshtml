@@ -1,6 +1,11 @@
 @model TestingDemo.ViewModels.IntegrationSettingsViewModel
 @{
     ViewData["Title"] = "Integration";
+    var senderSet = !string.IsNullOrWhiteSpace(Model.SenderEmail);
+    var emailReady = senderSet && Model.SmtpPasswordConfigured;
+    var emailStatus = emailReady ? "Ready to send" : (senderSet || Model.SmtpPasswordConfigured ? "Incomplete" : "Not set");
+    var emailStatusClass = emailReady ? "is-on" : (senderSet || Model.SmtpPasswordConfigured ? "is-warn" : "is-off");
+    var googleReady = Model.GoogleClientSecretConfigured && !string.IsNullOrWhiteSpace(Model.GoogleClientId);
 }
 
 <section class="admin-account-settings admin-integration">
@@ -12,15 +17,16 @@
                 <h1>Integration</h1>
             </div>
         </div>
-        <p>Store Gmail SMTP, Gemini, Groq, and Google OAuth credentials encrypted in the hotel vault. Outbound mail uses the <strong>Mori International Hotel™</strong> brand and logo. Leave a secret blank to keep the current value.</p>
+        <p>Gmail SMTP, AI providers, and Google OAuth credentials are stored encrypted in the hotel vault. Leave a secret blank to keep its current value.</p>
     </header>
 
-    <form asp-controller="Home" asp-action="Privacy" method="post" class="admin-integration-form">
+    <form asp-controller="Home" asp-action="Privacy" method="post" class="admin-integration-form" id="integrationForm" novalidate>
         @Html.AntiForgeryToken()
-        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+        <div asp-validation-summary="ModelOnly" class="admin-settings-password-error admin-integration-summary" role="alert"></div>
 
         <div class="admin-integration-grid">
-            <article class="admin-settings-card admin-integration-card">
+            @* ───────────── Email delivery ───────────── *@
+            <article class="admin-settings-card admin-integration-card" aria-labelledby="emailCardTitle">
                 <header class="admin-integration-card-head">
                     <div class="admin-settings-hub-icon is-teal" aria-hidden="true">
                         <svg viewBox="0 0 24 24">
@@ -28,53 +34,90 @@
                         </svg>
                     </div>
                     <div class="admin-integration-card-copy">
-                        <h2>Email delivery</h2>
-                        <p>Gmail sender for staff onboarding and password reset OTP. Messages show the Mori International Hotel™ logo and trademark.</p>
+                        <h2 id="emailCardTitle">Email delivery</h2>
+                        <p>Gmail account that sends staff onboarding and password-reset codes. Messages carry the Mori International Hotel™ logo.</p>
                     </div>
-                    @if (Model.SmtpPasswordConfigured)
-                    {
-                        <span class="admin-integration-status is-on">Configured</span>
-                    }
-                    else
-                    {
-                        <span class="admin-integration-status is-off">Not set</span>
-                    }
+                    <span class="admin-integration-status @emailStatusClass">@emailStatus</span>
                 </header>
 
                 <div class="admin-settings-fields is-single admin-integration-fields">
                     <div class="admin-settings-field">
                         <label asp-for="SenderEmail" class="form-label"></label>
-                        <input asp-for="SenderEmail" class="form-control" type="email" autocomplete="off" placeholder="hotel@gmail.com" data-mori-filter="email" maxlength="254" />
-                        <span asp-validation-for="SenderEmail" class="text-danger"></span>
+                        <input asp-for="SenderEmail"
+                               class="form-control"
+                               type="email"
+                               inputmode="email"
+                               autocomplete="off"
+                               spellcheck="false"
+                               placeholder="hotel@gmail.com"
+                               data-mori-filter="email"
+                               maxlength="254"
+                               aria-describedby="sender-hint" />
+                        <span asp-validation-for="SenderEmail" class="admin-settings-inline-error"></span>
+                        <p id="sender-hint" class="admin-integration-secret-hint">Guests and staff will see this address as the sender.</p>
                     </div>
+
                     <div class="admin-settings-field">
-                        <label asp-for="SmtpPassword" class="form-label"></label>
-                        <div class="admin-settings-password-group @(Model.SmtpPasswordConfigured ? "is-configured-secret" : null)">
+                        <div class="admin-integration-label-row">
+                            <label asp-for="SmtpPassword" class="form-label"></label>
                             @if (Model.SmtpPasswordConfigured)
                             {
-                                <span class="admin-integration-secret-mask" aria-hidden="true">••••••••••••</span>
+                                <span class="admin-integration-stored">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
+                                    Stored
+                                </span>
                             }
+                        </div>
+                        <div class="admin-settings-password-group">
                             <input asp-for="SmtpPassword"
                                    id="SmtpPassword"
                                    class="form-control"
                                    type="password"
                                    autocomplete="new-password"
-                                   placeholder="@(Model.SmtpPasswordConfigured ? "Leave blank to keep" : "Gmail app password")"
-                                   aria-describedby="@(Model.SmtpPasswordConfigured ? "smtp-secret-hint" : null)" />
+                                   spellcheck="false"
+                                   placeholder="@(Model.SmtpPasswordConfigured ? "Enter a new app password to replace it" : "16-character Gmail app password")"
+                                   aria-describedby="smtp-hint" />
+                            <partial name="_PasswordToggle" model="@("SmtpPassword")" />
                         </div>
+                        <p id="smtp-hint" class="admin-integration-secret-hint">
+                            @(Model.SmtpPasswordConfigured
+                                ? "Leave blank to keep the stored app password."
+                                : "Not your Gmail login password — generate an app password in your Google Account.")
+                        </p>
                         @if (Model.SmtpPasswordConfigured)
                         {
-                            <p id="smtp-secret-hint" class="admin-integration-secret-hint">A Gmail app password is already stored. Leave blank to keep it.</p>
+                            <label class="admin-settings-check is-destructive">
+                                <input asp-for="ClearSmtpPassword" data-clear-configured-secret="SmtpPassword" />
+                                <span>Remove the stored app password (email delivery stops)</span>
+                            </label>
                         }
-                        <label class="admin-settings-check">
-                            <input asp-for="ClearSmtpPassword" data-clear-configured-secret="SmtpPassword" />
-                            <span>Remove stored Gmail app password</span>
-                        </label>
                     </div>
+
+                    <details class="admin-integration-help">
+                        <summary>How to get a Gmail app password</summary>
+                        <ol>
+                            <li>Turn on 2-Step Verification for the Gmail account.</li>
+                            <li>Open Google Account → Security → <strong>App passwords</strong>.</li>
+                            <li>Create one named “Mori Hotel” and paste the 16-character code above.</li>
+                        </ol>
+                    </details>
                 </div>
+
+                <footer class="admin-integration-card-foot">
+                    <button type="submit"
+                            class="btn btn-outline-secondary admin-integration-test"
+                            formaction="@Url.Action("TestSmtp", "Home")"
+                            formnovalidate
+                            data-requires-password>
+                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                        Send test email
+                    </button>
+                    <p class="admin-integration-secret-hint">Sends a sample message to your staff email using the <em>saved</em> settings. Requires your current password below.</p>
+                </footer>
             </article>
 
-            <article class="admin-settings-card admin-integration-card">
+            @* ───────────── AI providers ───────────── *@
+            <article class="admin-settings-card admin-integration-card" aria-labelledby="aiCardTitle">
                 <header class="admin-integration-card-head">
                     <div class="admin-settings-hub-icon is-navy" aria-hidden="true">
                         <svg viewBox="0 0 24 24">
@@ -82,15 +125,13 @@
                         </svg>
                     </div>
                     <div class="admin-integration-card-copy">
-                        <h2>AI Integration</h2>
-                        <p>Mori Assistant: simple FAQs use rules; complex multi-part questions try Gemini then Groq (when keys are stored and UseGeminiFallback is on). Dashboard shows connection status and per-provider API use.</p>
+                        <h2 id="aiCardTitle">AI assistant</h2>
+                        <p>Mori Assistant answers simple FAQs with rules. Complex questions go to Gemini first, then Groq as backup.</p>
                     </div>
                     @if (Model.GeminiConfigured || Model.GroqConfigured)
                     {
                         <span class="admin-integration-status is-on">
-                            @(Model.GeminiConfigured && Model.GroqConfigured
-                                ? "Both set"
-                                : Model.GeminiConfigured ? "Gemini set" : "Groq set")
+                            @(Model.GeminiConfigured && Model.GroqConfigured ? "Both set" : Model.GeminiConfigured ? "Gemini set" : "Groq set")
                         </span>
                     }
                     else
@@ -100,81 +141,80 @@
                 </header>
 
                 <div class="admin-settings-fields is-single admin-integration-fields">
-                    <div class="admin-settings-field">
-                        <label asp-for="GeminiApiKey" class="form-label"></label>
-                        <div class="admin-settings-password-group @(Model.GeminiConfigured ? "is-configured-secret" : null)">
+                    <fieldset class="admin-integration-provider">
+                        <legend>Gemini <span class="admin-integration-provider-tag">Primary</span></legend>
+                        <div class="admin-settings-field">
+                            <div class="admin-integration-label-row">
+                                <label asp-for="GeminiApiKey" class="form-label"></label>
+                                @if (Model.GeminiConfigured)
+                                {
+                                    <span class="admin-integration-stored">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
+                                        Stored
+                                    </span>
+                                }
+                            </div>
+                            <div class="admin-settings-password-group">
+                                <input asp-for="GeminiApiKey"
+                                       id="GeminiApiKey"
+                                       class="form-control"
+                                       type="password"
+                                       autocomplete="new-password"
+                                       spellcheck="false"
+                                       placeholder="@(Model.GeminiConfigured ? "Enter a new key to replace it" : "Paste key from Google AI Studio")"
+                                       aria-describedby="gemini-hint" />
+                                <partial name="_PasswordToggle" model="@("GeminiApiKey")" />
+                            </div>
+                            <p id="gemini-hint" class="admin-integration-secret-hint">Stored encrypted; never shown again after save.</p>
                             @if (Model.GeminiConfigured)
                             {
-                                <span class="admin-integration-secret-mask" aria-hidden="true">••••••••••••</span>
+                                <label class="admin-settings-check is-destructive">
+                                    <input asp-for="ClearGeminiKey" data-clear-configured-secret="GeminiApiKey" />
+                                    <span>Remove the stored Gemini key</span>
+                                </label>
                             }
-                            <input asp-for="GeminiApiKey"
-                                   id="GeminiApiKey"
-                                   class="form-control"
-                                   type="password"
-                                   autocomplete="new-password"
-                                   spellcheck="false"
-                                   placeholder="@(Model.GeminiConfigured ? "Leave blank to keep current key" : "Paste API key from Google AI Studio")"
-                                   aria-describedby="gemini-api-hint@(Model.GeminiConfigured ? " gemini-secret-hint" : null)" />
                         </div>
-                        <p id="gemini-api-hint" class="admin-integration-secret-hint">Primary AI. Stored encrypted; never shown again after save.</p>
-                        @if (Model.GeminiConfigured)
-                        {
-                            <p id="gemini-secret-hint" class="admin-integration-secret-hint">A Gemini API key is already stored. Leave blank to keep it.</p>
-                        }
-                        <label class="admin-settings-check">
-                            <input asp-for="ClearGeminiKey" data-clear-configured-secret="GeminiApiKey" />
-                            <span>Remove stored Gemini API key</span>
-                        </label>
-                    </div>
+                    </fieldset>
 
-                    <div class="admin-settings-field">
-                        <label asp-for="GeminiKeyName" class="form-label">Gemini key nickname</label>
-                        <input asp-for="GeminiKeyName"
-                               class="form-control"
-                               autocomplete="off"
-                               maxlength="80"
-                               placeholder="e.g. Mori production Gemini" />
-                    </div>
-
-                    <div class="admin-settings-field">
-                        <label asp-for="GroqApiKey" class="form-label"></label>
-                        <div class="admin-settings-password-group @(Model.GroqConfigured ? "is-configured-secret" : null)">
+                    <fieldset class="admin-integration-provider">
+                        <legend>Groq <span class="admin-integration-provider-tag">Backup</span></legend>
+                        <div class="admin-settings-field">
+                            <div class="admin-integration-label-row">
+                                <label asp-for="GroqApiKey" class="form-label"></label>
+                                @if (Model.GroqConfigured)
+                                {
+                                    <span class="admin-integration-stored">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
+                                        Stored
+                                    </span>
+                                }
+                            </div>
+                            <div class="admin-settings-password-group">
+                                <input asp-for="GroqApiKey"
+                                       id="GroqApiKey"
+                                       class="form-control"
+                                       type="password"
+                                       autocomplete="new-password"
+                                       spellcheck="false"
+                                       placeholder="@(Model.GroqConfigured ? "Enter a new key to replace it" : "Paste key from Groq Console")"
+                                       aria-describedby="groq-hint" />
+                                <partial name="_PasswordToggle" model="@("GroqApiKey")" />
+                            </div>
+                            <p id="groq-hint" class="admin-integration-secret-hint">Used when Gemini is missing or out of quota.</p>
                             @if (Model.GroqConfigured)
                             {
-                                <span class="admin-integration-secret-mask" aria-hidden="true">••••••••••••</span>
+                                <label class="admin-settings-check is-destructive">
+                                    <input asp-for="ClearGroqKey" data-clear-configured-secret="GroqApiKey" />
+                                    <span>Remove the stored Groq key</span>
+                                </label>
                             }
-                            <input asp-for="GroqApiKey"
-                                   id="GroqApiKey"
-                                   class="form-control"
-                                   type="password"
-                                   autocomplete="new-password"
-                                   spellcheck="false"
-                                   placeholder="@(Model.GroqConfigured ? "Leave blank to keep current key" : "Paste API key from Groq Console")"
-                                   aria-describedby="groq-api-hint@(Model.GroqConfigured ? " groq-secret-hint" : null)" />
                         </div>
-                        <p id="groq-api-hint" class="admin-integration-secret-hint">Backup AI when Gemini is missing or out of quota. Stored encrypted.</p>
-                        @if (Model.GroqConfigured)
-                        {
-                            <p id="groq-secret-hint" class="admin-integration-secret-hint">A Groq API key is already stored. Leave blank to keep it.</p>
-                        }
-                        <label class="admin-settings-check">
-                            <input asp-for="ClearGroqKey" data-clear-configured-secret="GroqApiKey" />
-                            <span>Remove stored Groq API key</span>
-                        </label>
-                    </div>
-
-                    <div class="admin-settings-field">
-                        <label asp-for="GroqKeyName" class="form-label">Groq key nickname</label>
-                        <input asp-for="GroqKeyName"
-                               class="form-control"
-                               autocomplete="off"
-                               maxlength="80"
-                               placeholder="e.g. Mori backup Groq" />
-                    </div>
+                    </fieldset>
                 </div>
             </article>
 
-            <article class="admin-settings-card admin-integration-card">
+            @* ───────────── Google sign-in ───────────── *@
+            <article class="admin-settings-card admin-integration-card" aria-labelledby="googleCardTitle">
                 <header class="admin-integration-card-head">
                     <div class="admin-settings-hub-icon is-teal" aria-hidden="true">
                         <svg viewBox="0 0 24 24">
@@ -182,91 +222,100 @@
                         </svg>
                     </div>
                     <div class="admin-integration-card-copy">
-                        <h2>Google sign-in</h2>
-                        <p>OAuth Client ID and Client Secret for guest/staff Google login.</p>
+                        <h2 id="googleCardTitle">Google sign-in</h2>
+                        <p>OAuth web client used for “Continue with Google” on the login page.</p>
                     </div>
-                    @if (Model.GoogleClientSecretConfigured && !string.IsNullOrWhiteSpace(Model.GoogleClientId))
-                    {
-                        <span class="admin-integration-status is-on">Configured</span>
-                    }
-                    else
-                    {
-                        <span class="admin-integration-status is-off">Not set</span>
-                    }
+                    <span class="admin-integration-status @(googleReady ? "is-on" : "is-off")">@(googleReady ? "Configured" : "Not set")</span>
                 </header>
 
                 <div class="admin-settings-fields is-single admin-integration-fields">
                     <div class="admin-settings-field">
-                        <label class="admin-settings-check">
-                            <input asp-for="GoogleLoginEnabled" />
+                        <label class="admin-settings-check admin-integration-switch">
+                            <input asp-for="GoogleLoginEnabled" aria-describedby="google-enabled-hint" />
                             <span>Show “Continue with Google” on the login page</span>
                         </label>
-                        <p class="admin-integration-secret-hint">When off, the Google button is hidden even if credentials are saved.</p>
+                        <p id="google-enabled-hint" class="admin-integration-secret-hint">Turn on only after both Client ID and Client Secret are saved.</p>
+                        <span asp-validation-for="GoogleLoginEnabled" class="admin-settings-inline-error"></span>
                     </div>
                     <div class="admin-settings-field">
                         <label asp-for="GoogleClientId" class="form-label"></label>
-                        <input asp-for="GoogleClientId" class="form-control" autocomplete="off" placeholder="….apps.googleusercontent.com" />
-                        <span asp-validation-for="GoogleClientId" class="text-danger"></span>
+                        <input asp-for="GoogleClientId" class="form-control" autocomplete="off" spellcheck="false" placeholder="….apps.googleusercontent.com" />
+                        <span asp-validation-for="GoogleClientId" class="admin-settings-inline-error"></span>
                     </div>
                     <div class="admin-settings-field">
-                        <label asp-for="GoogleClientSecret" class="form-label"></label>
-                        <div class="admin-settings-password-group @(Model.GoogleClientSecretConfigured ? "is-configured-secret" : null)">
+                        <div class="admin-integration-label-row">
+                            <label asp-for="GoogleClientSecret" class="form-label"></label>
                             @if (Model.GoogleClientSecretConfigured)
                             {
-                                <span class="admin-integration-secret-mask" aria-hidden="true">••••••••••••</span>
+                                <span class="admin-integration-stored">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
+                                    Stored
+                                </span>
                             }
+                        </div>
+                        <div class="admin-settings-password-group">
                             <input asp-for="GoogleClientSecret"
                                    id="GoogleClientSecret"
                                    class="form-control"
                                    type="password"
                                    autocomplete="new-password"
-                                   placeholder="@(Model.GoogleClientSecretConfigured ? "Leave blank to keep" : "Google Client Secret")"
-                                   aria-describedby="@(Model.GoogleClientSecretConfigured ? "google-secret-hint" : null)" />
+                                   spellcheck="false"
+                                   placeholder="@(Model.GoogleClientSecretConfigured ? "Enter a new secret to replace it" : "Google Client Secret")"
+                                   aria-describedby="google-secret-hint" />
+                            <partial name="_PasswordToggle" model="@("GoogleClientSecret")" />
                         </div>
+                        <p id="google-secret-hint" class="admin-integration-secret-hint">Google Cloud → Credentials → Web client.</p>
+                        <span asp-validation-for="GoogleClientSecret" class="admin-settings-inline-error"></span>
                         @if (Model.GoogleClientSecretConfigured)
                         {
-                            <p id="google-secret-hint" class="admin-integration-secret-hint">A Google Client Secret is already stored. Leave blank to keep it.</p>
+                            <label class="admin-settings-check is-destructive">
+                                <input asp-for="ClearGoogleClientSecret" data-clear-configured-secret="GoogleClientSecret" />
+                                <span>Remove the stored Client Secret (Google login stops)</span>
+                            </label>
                         }
-                        <label class="admin-settings-check">
-                            <input asp-for="ClearGoogleClientSecret" data-clear-configured-secret="GoogleClientSecret" />
-                            <span>Remove stored Google Client Secret</span>
-                        </label>
                     </div>
                 </div>
             </article>
         </div>
 
-        <article class="admin-settings-card admin-integration-confirm">
-            <header class="admin-integration-card-head">
-                <div class="admin-settings-hub-icon is-navy" aria-hidden="true">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
-                    </svg>
-                </div>
-                <div class="admin-integration-card-copy">
-                    <h2>Confirm it is you</h2>
-                    <p>Enter your current AdminManager password to save secrets or send a test email.</p>
-                </div>
-            </header>
-
-            <div class="admin-settings-fields is-single admin-integration-fields">
-                <div class="admin-settings-field">
-                    <label asp-for="CurrentPassword" class="form-label"></label>
-                    <div class="admin-settings-password-group">
-                        <input asp-for="CurrentPassword"
-                               id="CurrentPassword"
-                               class="form-control"
-                               type="password"
-                               autocomplete="current-password"
-                               placeholder="Current password" />
+        @* ───────────── Confirm + save ───────────── *@
+        <article class="admin-settings-card admin-integration-confirm" aria-labelledby="confirmCardTitle">
+            <div class="admin-integration-confirm-inner">
+                <div class="admin-integration-card-head">
+                    <div class="admin-settings-hub-icon is-navy" aria-hidden="true">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                        </svg>
                     </div>
-                    <span asp-validation-for="CurrentPassword" class="text-danger"></span>
+                    <div class="admin-integration-card-copy">
+                        <h2 id="confirmCardTitle">Confirm it’s you</h2>
+                        <p>Your AdminManager password is required to save secrets or send a test email.</p>
+                    </div>
                 </div>
-            </div>
 
-            <div class="admin-settings-actions admin-integration-actions">
-                <button type="submit" class="btn btn-primary">Save secrets</button>
-                <button type="submit" class="btn btn-outline-secondary" formaction="@Url.Action("TestSmtp", "Home")">Send test email</button>
+                <div class="admin-integration-confirm-controls">
+                    <div class="admin-settings-field admin-integration-confirm-field">
+                        <label asp-for="CurrentPassword" class="form-label"></label>
+                        <div class="admin-settings-password-group">
+                            <input asp-for="CurrentPassword"
+                                   id="CurrentPassword"
+                                   class="form-control"
+                                   type="password"
+                                   autocomplete="current-password"
+                                   placeholder="Current password"
+                                   required />
+                            <partial name="_PasswordToggle" model="@("CurrentPassword")" />
+                        </div>
+                        <span asp-validation-for="CurrentPassword" class="admin-settings-inline-error"></span>
+                    </div>
+
+                    <div class="admin-settings-actions admin-integration-actions">
+                        <button type="submit" class="btn btn-primary" data-requires-password>
+                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
+                            Save secrets
+                        </button>
+                    </div>
+                </div>
             </div>
         </article>
     </form>
@@ -275,28 +324,60 @@
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
     <script>
-        function syncConfiguredSecret(group) {
-            if (!group || !group.classList.contains('is-configured-secret')) return;
-            var input = group.querySelector('input.form-control');
-            var clearing = group.parentElement && group.parentElement.querySelector('[data-clear-configured-secret]:checked');
-            group.classList.toggle('is-editing', Boolean(clearing || (input && input.value)));
-        }
-
-        document.querySelectorAll('.admin-settings-password-group.is-configured-secret').forEach(function (group) {
-            var input = group.querySelector('input.form-control');
-            if (!input) return;
-            ['input', 'focus', 'blur'].forEach(function (eventName) {
-                input.addEventListener(eventName, function () { syncConfiguredSecret(group); });
+        (function () {
+            // Show / hide secret values (same pattern as Account Settings).
+            document.querySelectorAll('[data-password-toggle]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var input = document.getElementById(btn.getAttribute('data-password-toggle'));
+                    if (!input) return;
+                    var show = input.type === 'password';
+                    input.type = show ? 'text' : 'password';
+                    btn.setAttribute('aria-pressed', String(show));
+                    btn.setAttribute('aria-label', show ? 'Hide value' : 'Show value');
+                    btn.title = show ? 'Hide value' : 'Show value';
+                    var eyeShow = btn.querySelector('.icon-eye-show');
+                    var eyeHide = btn.querySelector('.icon-eye-hide');
+                    if (eyeShow) eyeShow.hidden = show;
+                    if (eyeHide) eyeHide.hidden = !show;
+                    input.focus({ preventScroll: true });
+                });
             });
-            syncConfiguredSecret(group);
-        });
 
-        document.querySelectorAll('[data-clear-configured-secret]').forEach(function (clearBox) {
-            clearBox.addEventListener('change', function () {
-                var input = document.getElementById(clearBox.getAttribute('data-clear-configured-secret'));
-                var group = input && input.closest('.admin-settings-password-group');
-                syncConfiguredSecret(group);
+            // "Remove stored secret" disables the replacement input so the two intents never conflict.
+            document.querySelectorAll('[data-clear-configured-secret]').forEach(function (box) {
+                var input = document.getElementById(box.getAttribute('data-clear-configured-secret'));
+                if (!input) return;
+                var group = input.closest('.admin-settings-password-group');
+                var sync = function () {
+                    input.disabled = box.checked;
+                    if (box.checked) input.value = '';
+                    if (group) group.classList.toggle('is-clearing', box.checked);
+                    var toggle = group && group.querySelector('[data-password-toggle]');
+                    if (toggle) toggle.disabled = box.checked;
+                };
+                box.addEventListener('change', sync);
+                sync();
             });
-        });
+
+            // Guide the admin to the password field instead of a silent server round-trip.
+            var form = document.getElementById('integrationForm');
+            var current = document.getElementById('CurrentPassword');
+            if (form && current) {
+                form.addEventListener('submit', function (event) {
+                    var submitter = event.submitter;
+                    if (!submitter || !submitter.hasAttribute('data-requires-password')) return;
+                    if (current.value.trim()) {
+                        submitter.setAttribute('aria-busy', 'true');
+                        submitter.disabled = true;
+                        return;
+                    }
+                    event.preventDefault();
+                    current.setCustomValidity('Enter your current password first.');
+                    current.reportValidity();
+                    current.focus();
+                });
+                current.addEventListener('input', function () { current.setCustomValidity(''); });
+            }
+        })();
     </script>
 }

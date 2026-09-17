@@ -10,14 +10,16 @@
             "args": [],
             "cwd": "${workspaceFolder}/TestingDemo",
             "stopAtEntry": false,
-            "console": "integratedTerminal",
-            "launchSettingsFilePath": "${workspaceFolder}/TestingDemo/Properties/launchSettings.json",
-            "launchSettingsProfile": "TestingDemo",
+            "console": "internalConsole",
+            "internalConsoleOptions": "openOnSessionStart",
             "env": {
                 "ASPNETCORE_ENVIRONMENT": "Development",
                 "ASPNETCORE_URLS": "http://localhost:5288",
-                "HOTEL_OPEN_BROWSER": "1"
+                "HOTEL_OPEN_BROWSER": "1",
+                "DOTNET_HOTRELOAD_ENABLED": "0"
             },
+            "justMyCode": true,
+            "requireExactSource": false,
             "sourceFileMap": {
                 "/Views": "${workspaceFolder}/TestingDemo/Views"
             }

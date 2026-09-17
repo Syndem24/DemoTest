@@ -230,37 +230,6 @@
                             </select>
                             <div class="form-text">Required. Agoda, Expedia, and RedDoorz use standard OTA rates. Other OTA can optionally apply a special offer.</div>
                         </div>
-                    </div>
-
-                    <div class="admin-walkin-payment-form">
-                        <div class="admin-walkin-payment-collect">
-                            <p class="admin-walkin-price-heading">Collect payment</p>
-                            <div class="admin-walkin-payment-grid">
-                                <label class="admin-walkin-span-full">
-                                    <span>Payment method</span>
-                                    <select id="walkInPaymentMethod" class="form-select">
-                                        <option value="Cash" selected>Cash</option>
-                                        <option value="EWallet">E-wallet (InstaPay QR)</option>
-                                    </select>
-                                </label>
-                                <label id="walkInPaymentCashDueWrap">
-                                    <span>Amount due (₱)</span>
-                                    <input type="text" id="walkInPaymentDue" class="form-control" readonly tabindex="-1" />
-                                </label>
-                                <label id="walkInPaymentCashTenderWrap">
-                                    <span>Cash from guest (₱)</span>
-                                    <input type="text" id="walkInPaymentTendered" class="form-control" inputmode="decimal" placeholder="0.00" autocomplete="off" />
-                                </label>
-                                <label id="walkInPaymentDigitalWrap" class="admin-walkin-span-full" hidden>
-                                    <span>Amount received (₱)</span>
-                                    <input type="text" id="walkInPaymentDigitalAmount" class="form-control" inputmode="decimal" placeholder="0.00" autocomplete="off" />
-                                </label>
-                            </div>
-                            <p class="admin-walkin-change" id="walkInPaymentChange" hidden>Change: ₱0.00</p>
-                            <p class="admin-walkin-hint" id="walkInPaymentDigitalHint" hidden>
-                                Receipt proof can be uploaded from booking details after check-in if needed.
-                            </p>
-                        </div>
 
                         <div class="guest-field admin-walkin-arrival-field">
                             <label for="walkInArrivalDiscount" class="form-label">Senior / PWD (flag for arrival)</label>
@@ -270,6 +239,41 @@
                                 <option value="Pwd">PWD — 20% off (verify ID on arrival)</option>
                             </select>
                             <div class="form-text" id="walkInArrivalDiscountHint">Walk-in channel: 20% off stay when selected (verify ID on arrival). Not combinable with promo rates.</div>
+                        </div>
+                    </div>
+
+                    <div class="admin-walkin-payment-form">
+                        <div class="admin-walkin-payment-collect">
+                            <p class="admin-walkin-price-heading">Collect payment</p>
+                            <div class="admin-walkin-payment-grid">
+                                <label>
+                                    <span>Payment method</span>
+                                    <select id="walkInPaymentMethod" class="form-select">
+                                        <option value="Cash" selected>Cash</option>
+                                        <option value="EWallet">E-wallet (InstaPay QR)</option>
+                                    </select>
+                                </label>
+                                <div id="walkInPaymentCashDueWrap" class="admin-walkin-due">
+                                    <span class="admin-walkin-due-label">Amount due</span>
+                                    <output id="walkInPaymentDue" class="admin-walkin-due-value" aria-live="polite">₱0.00</output>
+                                    <span class="admin-walkin-due-note">Fixed — from stay summary</span>
+                                </div>
+                                <label id="walkInPaymentCashTenderWrap" class="admin-walkin-span-full admin-walkin-tender">
+                                    <span>Cash from guest (₱) <em class="admin-walkin-required">Type the amount handed over</em></span>
+                                    <span class="admin-walkin-tender-row">
+                                        <input type="text" id="walkInPaymentTendered" class="form-control admin-walkin-tender-input" inputmode="decimal" placeholder="e.g. 3500" autocomplete="off" aria-describedby="walkInPaymentChange" />
+                                        <button type="button" class="admin-walkin-exact" id="walkInPaymentExactBtn">Exact amount</button>
+                                    </span>
+                                </label>
+                                <label id="walkInPaymentDigitalWrap" class="admin-walkin-span-full" hidden>
+                                    <span>Amount received (₱)</span>
+                                    <input type="text" id="walkInPaymentDigitalAmount" class="form-control" inputmode="decimal" placeholder="0.00" autocomplete="off" />
+                                </label>
+                            </div>
+                            <p class="admin-walkin-change" id="walkInPaymentChange" role="status" hidden>Change: ₱0.00</p>
+                            <p class="admin-walkin-hint" id="walkInPaymentDigitalHint" hidden>
+                                Receipt proof can be uploaded from booking details after check-in if needed.
+                            </p>
                         </div>
                     </div>
                 </div>

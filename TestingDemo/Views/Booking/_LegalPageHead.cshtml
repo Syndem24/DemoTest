@@ -7,6 +7,7 @@
     var titleKey = isPrivacy ? "legal.privacyTitle" : "legal.termsTitle";
     var ledeKey = isPrivacy ? "legal.privacyLede" : "legal.termsLede";
 }
+<div class="guest-legal-progress" aria-hidden="true"><span class="guest-legal-progress-bar"></span></div>
 <header class="guest-legal-head">
     <partial name="_LegalBack" />
     <p class="guest-eyebrow is-ruled" data-i18n="legal.brand">Mori International Hotel</p>
@@ -27,3 +28,4 @@
            data-i18n="legal.termsTitle">Terms and policies</a>
     </nav>
 </header>
+<script src="~/js/legal-progress.js" asp-append-version="true"></script>
