@@ -56,6 +56,17 @@
     <link rel="icon" type="image/png" href="~/Images/Logo.png" asp-append-version="true" />
     <link rel="apple-touch-icon" href="~/Images/Logo.png" asp-append-version="true" />
     <script type="importmap"></script>
+    <script>
+        // Surface-transition handoff: page-transition.js flags a guest → admin
+        // switch in sessionStorage; claim it here so the arrival loader below
+        // covers the first paint and exits with the shared animation.
+        try {
+            if (window.sessionStorage && sessionStorage.getItem('mori-surface-arrive') === '1') {
+                sessionStorage.removeItem('mori-surface-arrive');
+                document.documentElement.classList.add('mori-surface-arrival');
+            }
+        } catch (e) { /* storage unavailable */ }
+    </script>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/TestingDemo.styles.css" asp-append-version="true" />
@@ -75,6 +86,26 @@
     @await RenderSectionAsync("Styles", required: false)
 </head>
 <body class="hotel-shell">
+    <div id="adminPageLoader"
+         class="guest-page-loader admin-page-loader"
+         role="status"
+         aria-live="polite"
+         aria-busy="true"
+         hidden>
+        <div class="guest-page-loader-inner">
+            <div class="guest-page-loader-orbit" aria-hidden="true">
+                <span class="guest-page-loader-ring"></span>
+                <span class="guest-page-loader-mark">
+                    <img src="~/Images/Logo.png" asp-append-version="true" alt="" class="guest-page-loader-logo" />
+                </span>
+            </div>
+            <p class="guest-page-loader-brand">Mori International Hotel</p>
+            <p class="guest-page-loader-status"><span class="is-active">Preparing the staff panel…</span></p>
+            <div class="guest-page-loader-bar" aria-hidden="true">
+                <span class="guest-page-loader-bar-fill"></span>
+            </div>
+        </div>
+    </div>
     <partial name="_MoriFlash" />
     <div class="hotel-sidebar-backdrop" id="sidebarBackdrop" hidden></div>
 

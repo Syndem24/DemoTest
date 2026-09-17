@@ -54,6 +54,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title @if (!string.IsNullOrWhiteSpace(i18nTitle)) { <text>data-i18n-page-title="@i18nTitle"</text> }>@ViewData["Title"] - Mori International Hotel</title>
+    <script>
+        // Consume any surface-transition arrival flag left by page-transition.js
+        // (the guest loader already covers this page's first paint).
+        try {
+            if (window.sessionStorage && sessionStorage.getItem('mori-surface-arrive') === '1') {
+                sessionStorage.removeItem('mori-surface-arrive');
+                document.documentElement.classList.add('mori-surface-arrival');
+            }
+        } catch (e) { /* storage unavailable */ }
+    </script>
     <style>
         html.guest-is-loading,
         html.guest-is-loading body { overflow: hidden; }

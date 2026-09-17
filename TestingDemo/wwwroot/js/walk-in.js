@@ -46,6 +46,22 @@
   const paymentDigitalHint = document.getElementById('walkInPaymentDigitalHint');
   const roomTypePicker = document.getElementById('walkInRoomTypePicker');
   const typesLede = document.getElementById('walkInTypesLede');
+  const typeSelectionSummary = document.getElementById('walkInTypeSelectionSummary');
+  const typeSelectionProgress = document.getElementById('walkInTypeSelectionProgress');
+  const selectionDialog = document.getElementById('walkInSelectionDialog');
+  const selectionGroups = document.getElementById('walkInSelectionGroups');
+  const selectionTypes = document.getElementById('walkInSelectionTypes');
+  const selectionCount = document.getElementById('walkInSelectionCount');
+  const selectionBarFill = document.getElementById('walkInSelectionBarFill');
+  const quantityDialog = document.getElementById('walkInTypeQuantityDialog');
+  const quantityForm = document.getElementById('walkInTypeQuantityForm');
+  const quantityInput = document.getElementById('walkInTypeQuantity');
+  const quantityTitle = document.getElementById('walkInTypeQuantityTitle');
+  const quantityHint = document.getElementById('walkInTypeQuantityHint');
+  const quantityError = document.getElementById('walkInTypeQuantityError');
+  const quantityConfirm = document.getElementById('walkInTypeQuantityConfirm');
+  let quantityTypeId = 0;
+  let quantityMode = 'add';
   const stepTabs = Array.from(document.querySelectorAll('[data-walkin-step-tab]'));
 
   const token = document.querySelector(
@@ -136,18 +152,115 @@
     }
   }
 
-  function walkInSelectButtonLabel(roomIndex, roomCount, isSelected, soldOut) {
-    if (soldOut) return 'Fully booked';
-    if (!isSelected) return 'Select room';
-    return roomCount > 1 ? `Selected · Room ${roomIndex + 1}` : 'In your stay';
+  function walkInQuantityLimit(typeId) {
+    const selections = getWalkInTypeSelections();
+    const existing = selections.filter((id) => id === typeId).length;
+    const slots = [];
+    for (let index = 0; index < roomsNeeded(); index += 1) {
+      const room = guestRooms[index];
+      if (selections[index] || !room) continue;
+      const guests = (Number(room.adults) || 0) + (Number(room.children) || 0);
+      if (guests <= effectiveRoomTypeCapacity(typeId)) slots.push(index);
+    }
+    const available = Math.max(0, Math.floor(typeRemaining(typeId)));
+    return { existing, slots, maximum: Math.min(existing + slots.length, available) };
   }
 
-  function selectWalkInType(roomIndex, typeId) {
-    syncWalkInTypeSelectionLength();
-    walkInTypeSelections[roomIndex] = Number(typeId) || 0;
+  function commitWalkInTypeSelections(selections) {
+    if (selections.some((id, index) => id !== walkInTypeSelections[index])) {
+      roomSlots?.replaceChildren();
+    }
+    walkInTypeSelections = selections;
     renderWalkInTypePicker();
     refreshTotals();
     syncWalkInTypesStepState();
+  }
+
+  function setWalkInTypeQuantity(typeId, quantity) {
+    if (!roomTypes.some((type) => type.roomTypeId === typeId)) return false;
+    syncWalkInTypeSelectionLength();
+    const { existing, slots, maximum } = walkInQuantityLimit(typeId);
+    if (!Number.isInteger(quantity) || quantity < 0 || quantity > maximum) return false;
+    const selections = getWalkInTypeSelections();
+    let remove = Math.max(0, existing - quantity);
+    for (let index = selections.length - 1; index >= 0 && remove > 0; index -= 1) {
+      if (selections[index] !== typeId) continue;
+      selections[index] = 0;
+      remove -= 1;
+    }
+    slots.slice(0, Math.max(0, quantity - existing)).forEach((index) => {
+      selections[index] = typeId;
+    });
+    commitWalkInTypeSelections(selections);
+    return true;
+  }
+
+  function focusWalkInType(typeId) {
+    if (selectionDialog?.open) {
+      const inDialog =
+        selectionDialog.querySelector(`[data-walkin-edit-type="${typeId}"]`)
+        || selectionDialog.querySelector('[data-walkin-remove-slot], [data-walkin-edit-type], [data-walkin-selection-close]');
+      (inDialog || selectionDialog.querySelector('.admin-walkin-quantity-close'))?.focus({ preventScroll: true });
+      return;
+    }
+    const card = roomTypePicker?.querySelector(`[data-walkin-type-card="${typeId}"]`);
+    const target = card?.querySelector('button:not(:disabled)') || backBtn;
+    target?.focus({ preventScroll: true });
+  }
+
+  function closeWalkInQuantity() {
+    if (!quantityDialog?.open) return;
+    const typeId = quantityTypeId;
+    quantityDialog.close();
+    quantityTypeId = 0;
+    focusWalkInType(typeId);
+  }
+
+  function syncWalkInQuantityControls() {
+    if (!quantityInput || !quantityTypeId) return;
+    const { existing, maximum } = walkInQuantityLimit(quantityTypeId);
+    const min = quantityMode === 'add' ? 1 : 0;
+    const max = quantityMode === 'add' ? Math.max(0, maximum - existing) : maximum;
+    quantityInput.min = String(min);
+    quantityInput.max = String(max);
+    const value = Number(quantityInput.value);
+    const valid = quantityInput.value.trim() !== '' && Number.isInteger(value) && value >= min && value <= max;
+    quantityConfirm.disabled = !valid;
+    quantityDialog.querySelector('[data-walkin-quantity-minus]').disabled = value <= min;
+    quantityDialog.querySelector('[data-walkin-quantity-plus]').disabled = value >= max;
+    quantityHint.textContent = `${roomsNeeded()} rooms requested · ${getWalkInTypeSelections().filter(Boolean).length} selected. `
+      + (quantityMode === 'add'
+        ? `You can add up to ${max} more of this type for the unselected guest rooms.`
+        : `Set the total for this type (0–${max}). Use 0 to remove it from this draft.`);
+  }
+
+  function openWalkInQuantity(typeId, mode) {
+    const type = roomTypes.find((item) => item.roomTypeId === typeId);
+    if (!type || !quantityDialog || !quantityInput) return;
+    quantityTypeId = typeId;
+    quantityMode = mode;
+    const { existing, maximum } = walkInQuantityLimit(typeId);
+    quantityTitle.textContent = mode === 'add' ? `How many ${type.name} rooms?` : `Edit ${type.name} quantity`;
+    quantityInput.value = String(mode === 'add' ? 1 : Math.min(existing, maximum));
+    quantityConfirm.textContent = mode === 'add' ? 'Add rooms' : 'Save quantity';
+    quantityError.hidden = true;
+    quantityInput.removeAttribute('aria-invalid');
+    syncWalkInQuantityControls();
+    quantityDialog.showModal();
+    quantityInput.focus();
+    quantityInput.select();
+  }
+
+  function openWalkInSelection() {
+    if (!selectionDialog || selectionDialog.open) return;
+    selectionDialog.showModal();
+    selectionDialog.querySelector('[data-walkin-selection-close]')?.focus({ preventScroll: true });
+  }
+
+  function closeWalkInSelection(refocus = true) {
+    if (!selectionDialog?.open) return;
+    selectionDialog.close();
+    if (refocus) typeSelectionProgress?.focus({ preventScroll: true });
   }
 
   function walkInDiscountPercent(regular, promo) {
@@ -252,7 +365,7 @@
       });
   }
 
-  function renderWalkInTypeCard(item, roomIndex, roomCount, selectedId) {
+  function renderWalkInTypeCard(item) {
     const base = Number(item.pricePerNight || 0);
     const limited = walkInLimitedOfferForType(item.roomTypeId);
     const activeOffer = walkInOfferForType(item.roomTypeId);
@@ -262,7 +375,9 @@
       : base;
     const showCompare = Boolean(activeOffer && effective < regular);
     const soldOut = item.available < 1;
-    const isSelected = selectedId === item.roomTypeId;
+    const { existing: quantity, maximum } = walkInQuantityLimit(item.roomTypeId);
+    const isSelected = quantity > 0;
+    const canAdd = roomsNeeded() === 1 ? !soldOut && !isSelected : maximum > quantity;
     const image = item.images?.[0] || '';
     const safeName = escapeHtml(item.name);
     const safeImage = escapeHtml(image);
@@ -286,9 +401,9 @@
         ? `<span class="guest-offer-promo-flag">Special offer</span>`
         : '';
     const selectedBadge = isSelected
-      ? `<span class="guest-offer-selected-badge" data-walkin-selected-badge>In your stay</span>`
+      ? `<span class="guest-offer-selected-badge" data-walkin-selected-badge>${quantity} selected</span>`
       : '';
-    const selectLabel = walkInSelectButtonLabel(roomIndex, roomCount, isSelected, soldOut);
+    const selectLabel = soldOut ? 'Fully booked' : 'Select room';
 
     return `
       <article
@@ -335,18 +450,17 @@
               ${limited ? '<span class="guest-offer-price-note">Cash only</span>' : ''}
               <button
                 type="button"
-                class="guest-btn guest-btn-primary guest-offer-select admin-walkin-pick-type${isSelected ? ' is-selected-room' : ''}"
+                class="guest-btn guest-btn-primary guest-offer-select admin-walkin-pick-type"
                 data-walkin-pick-type="${item.roomTypeId}"
-                data-walkin-room-index="${roomIndex}"
-                aria-pressed="${isSelected ? 'true' : 'false'}"
-                ${soldOut ? 'disabled' : ''}>
-                ${
-                  isSelected
-                    ? `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>`
-                    : ''
-                }
+                ${roomsNeeded() > 1 ? 'aria-haspopup="dialog"' : ''}
+                ${canAdd ? '' : 'disabled'}>
                 <span>${selectLabel}</span>
               </button>
+              ${isSelected ? `
+                <div class="admin-walkin-selection-actions">
+                  <button type="button" data-walkin-edit-type="${item.roomTypeId}" aria-haspopup="dialog">Edit quantity (${quantity})</button>
+                  <button type="button" data-walkin-remove-type="${item.roomTypeId}" aria-label="Remove all ${safeName} selections">Remove</button>
+                </div>` : ''}
             </div>
           </div>
           ${stayLongerSection}
@@ -355,19 +469,51 @@
     `;
   }
 
-  function renderWalkInTypeSlot(roomIndex, items, roomCount) {
-    const selectedId = Number(walkInTypeSelections[roomIndex] || 0);
-    const head =
-      roomCount > 1
-        ? `<h4 class="admin-walkin-type-slot-head">Room ${roomIndex + 1}</h4>`
-        : '<h4 class="admin-walkin-type-slot-head">Select room type</h4>';
-    const cards = items.map((item) => renderWalkInTypeCard(item, roomIndex, roomCount, selectedId)).join('');
-    return `
-      <div class="admin-walkin-type-slot" data-walkin-type-slot="${roomIndex}">
-        ${head}
-        <div class="admin-walkin-type-cards">${cards}</div>
-      </div>
-    `;
+  function renderWalkInSelectionSummary() {
+    const selections = getWalkInTypeSelections();
+    const needed = roomsNeeded();
+    const selected = selections.filter(Boolean).length;
+    const selectedIcon =
+      '<svg class="admin-walkin-slot-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>';
+    const pendingIcon =
+      '<svg class="admin-walkin-slot-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/></svg>';
+    if (typeSelectionSummary) {
+      typeSelectionSummary.innerHTML = Array.from({ length: needed }, (_, index) => {
+        const type = roomTypes.find((item) => item.roomTypeId === selections[index]);
+        return `<li class="${type ? 'is-selected' : 'is-pending'}">
+          ${type ? selectedIcon : pendingIcon}
+          <span><strong>Room ${index + 1}</strong> · ${type ? escapeHtml(type.name) : 'Not selected'}</span>
+          ${type ? `<button type="button" data-walkin-remove-slot="${index}" aria-label="Remove selection for Room ${index + 1}">Remove</button>` : ''}
+        </li>`;
+      }).join('');
+    }
+    const groups = new Map();
+    selections.forEach((typeId) => {
+      if (typeId) groups.set(typeId, (groups.get(typeId) || 0) + 1);
+    });
+    if (selectionGroups) selectionGroups.hidden = groups.size === 0;
+    if (selectionTypes) {
+      selectionTypes.innerHTML = Array.from(groups, ([typeId, qty]) => {
+        const type = roomTypes.find((item) => item.roomTypeId === typeId);
+        const name = escapeHtml(type?.name || 'Room type');
+        return `<li class="is-selected">
+          ${selectedIcon}
+          <span><strong>${name}</strong> · ${qty} room${qty === 1 ? '' : 's'}</span>
+          <span class="admin-walkin-selection-actions">
+            <button type="button" data-walkin-edit-type="${typeId}" aria-haspopup="dialog">Edit quantity</button>
+            <button type="button" data-walkin-remove-type="${typeId}" aria-label="Remove all ${name} selections">Remove all</button>
+          </span>
+        </li>`;
+      }).join('');
+    }
+    if (selectionCount) selectionCount.textContent = `${selected} of ${needed} rooms selected`;
+    if (selectionBarFill) selectionBarFill.style.width = `${needed ? Math.round((selected / needed) * 100) : 0}%`;
+    if (typeSelectionProgress) {
+      const label = typeSelectionProgress.querySelector?.('[data-progress-text]') || typeSelectionProgress;
+      label.textContent = `${selected} of ${needed} selected · ${needed - selected} remaining`;
+      typeSelectionProgress.hidden = wizardStep !== 'types';
+      typeSelectionProgress.classList.toggle('is-complete', canProceedFromTypesStep());
+    }
   }
 
   function renderWalkInTypePicker() {
@@ -380,7 +526,7 @@
     if (typesLede) {
       typesLede.textContent =
         count > 1
-          ? `Choose room types for each of the ${count} rooms in the party. Prices shown are per night.`
+          ? `Select a room type, then choose how many of your ${count} rooms to add. The counter below tracks your draft — select it to review or undo picks.`
           : 'Choose a room type for this stay. Prices shown are per night.';
     }
 
@@ -391,9 +537,7 @@
       return;
     }
 
-    roomTypePicker.innerHTML = Array.from({ length: count }, (_, index) =>
-      renderWalkInTypeSlot(index, items, count)
-    ).join('');
+    roomTypePicker.innerHTML = `<div class="admin-walkin-type-cards">${items.map((item) => renderWalkInTypeCard(item)).join('')}</div>`;
 
     syncWalkInTypesStepState();
   }
@@ -431,6 +575,7 @@
   }
 
   function syncWalkInTypesStepState() {
+    renderWalkInSelectionSummary();
     updateWalkInAvailabilityNotice();
     if (nextBtn && wizardStep === 'types') {
       nextBtn.disabled = !canProceedFromTypesStep();
@@ -561,7 +706,7 @@
       });
     }
     const effectiveCash = isCashPaymentMethod(paymentMethod?.value || 'Cash');
-    if (paymentCashDueWrap) paymentCashDueWrap.hidden = !effectiveCash;
+    if (paymentCashDueWrap) paymentCashDueWrap.hidden = false;
     if (paymentCashTenderWrap) paymentCashTenderWrap.hidden = !effectiveCash;
     if (paymentChange) paymentChange.hidden = !effectiveCash;
     if (paymentDigitalWrap) paymentDigitalWrap.hidden = effectiveCash;
@@ -721,6 +866,8 @@
   }
 
   function closeAllWalkInModals() {
+    closeWalkInQuantity();
+    closeWalkInSelection(false);
     closeModal(guestsModal);
     closeModal(bookModal);
     closeModal(successModal);
@@ -1348,6 +1495,7 @@
   async function setWizardStep(step) {
     if (!STEPS.includes(step)) return;
     wizardStep = step;
+    renderWalkInSelectionSummary();
     bookForm?.setAttribute('data-walkin-step', step);
     document.querySelectorAll('[data-walkin-step-panel]').forEach((panel) => {
       const id = panel.getAttribute('data-walkin-step-panel');
@@ -1728,13 +1876,74 @@
   });
 
   roomTypePicker?.addEventListener('click', (event) => {
-    const btn = event.target.closest('[data-walkin-pick-type]');
+    const btn = event.target.closest('[data-walkin-pick-type], [data-walkin-edit-type], [data-walkin-remove-type]');
     if (!btn || btn.disabled) return;
     event.preventDefault();
-    const roomIndex = Number(btn.getAttribute('data-walkin-room-index'));
-    const typeId = Number(btn.getAttribute('data-walkin-pick-type'));
+    const typeId = Number(btn.dataset.walkinPickType || btn.dataset.walkinEditType || btn.dataset.walkinRemoveType);
     if (!typeId) return;
-    selectWalkInType(roomIndex, typeId);
+    if (btn.hasAttribute('data-walkin-remove-type')) {
+      setWalkInTypeQuantity(typeId, 0);
+      focusWalkInType(typeId);
+    } else if (btn.hasAttribute('data-walkin-edit-type')) {
+      openWalkInQuantity(typeId, 'edit');
+    } else if (roomsNeeded() > 1) {
+      openWalkInQuantity(typeId, 'add');
+    } else if (typeRemaining(typeId) > 0 && guestCount() <= effectiveRoomTypeCapacity(typeId)) {
+      commitWalkInTypeSelections([typeId]);
+      focusWalkInType(typeId);
+    }
+  });
+
+  typeSelectionSummary?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-walkin-remove-slot]');
+    if (!btn) return;
+    const index = Number(btn.dataset.walkinRemoveSlot);
+    const selections = getWalkInTypeSelections();
+    if (!Number.isInteger(index) || index < 0 || index >= selections.length) return;
+    const typeId = selections[index];
+    selections[index] = 0;
+    commitWalkInTypeSelections(selections);
+    focusWalkInType(typeId);
+  });
+
+  quantityDialog?.querySelectorAll('[data-walkin-quantity-close]').forEach((btn) => {
+    btn.addEventListener('click', closeWalkInQuantity);
+  });
+  quantityDialog?.addEventListener('cancel', (event) => {
+    event.preventDefault();
+    closeWalkInQuantity();
+  });
+  quantityDialog?.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') event.stopPropagation();
+  });
+  quantityDialog?.querySelectorAll('[data-walkin-quantity-minus], [data-walkin-quantity-plus]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const delta = btn.hasAttribute('data-walkin-quantity-plus') ? 1 : -1;
+      quantityInput.value = String(Math.max(Number(quantityInput.min), Math.min(Number(quantityInput.max), Number(quantityInput.value) + delta)));
+      syncWalkInQuantityControls();
+    });
+  });
+  quantityInput?.addEventListener('input', () => {
+    quantityError.hidden = true;
+    quantityInput.removeAttribute('aria-invalid');
+    syncWalkInQuantityControls();
+  });
+  quantityForm?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const value = Number(quantityInput.value);
+    const { existing } = walkInQuantityLimit(quantityTypeId);
+    const quantity = quantityMode === 'add' ? existing + value : value;
+    if (quantityInput.value.trim() === '' || !Number.isInteger(value)
+        || value < (quantityMode === 'add' ? 1 : 0)
+        || !setWalkInTypeQuantity(quantityTypeId, quantity)) {
+      syncWalkInQuantityControls();
+      quantityError.textContent = 'Choose a whole number within the available limit. Availability may have changed.';
+      quantityError.hidden = false;
+      quantityInput.setAttribute('aria-invalid', 'true');
+      quantityInput.focus();
+      return;
+    }
+    closeWalkInQuantity();
   });
 
   guestsAddRoomBtn?.addEventListener('click', () => {
@@ -1783,6 +1992,36 @@
       showGuestsHint('');
     }
     syncGuestsContinueState();
+  });
+
+  typeSelectionProgress?.addEventListener('click', openWalkInSelection);
+
+  selectionDialog?.addEventListener('click', (event) => {
+    if (event.target === selectionDialog) {
+      closeWalkInSelection();
+      return;
+    }
+    const btn = event.target.closest('[data-walkin-edit-type], [data-walkin-remove-type]');
+    if (!btn || btn.disabled) return;
+    event.preventDefault();
+    const typeId = Number(btn.dataset.walkinEditType || btn.dataset.walkinRemoveType);
+    if (!typeId) return;
+    if (btn.hasAttribute('data-walkin-remove-type')) {
+      setWalkInTypeQuantity(typeId, 0);
+      focusWalkInType(typeId);
+    } else {
+      openWalkInQuantity(typeId, 'edit');
+    }
+  });
+  selectionDialog?.querySelectorAll('[data-walkin-selection-close]').forEach((btn) => {
+    btn.addEventListener('click', () => closeWalkInSelection());
+  });
+  selectionDialog?.addEventListener('cancel', (event) => {
+    event.preventDefault();
+    closeWalkInSelection();
+  });
+  selectionDialog?.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') event.stopPropagation();
   });
 
   document.querySelectorAll('[data-walkin-close]').forEach((el) => {

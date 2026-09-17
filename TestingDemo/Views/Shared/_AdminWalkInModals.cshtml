@@ -73,49 +73,49 @@
         <button type="button" class="guest-modal-close" data-walkin-close aria-label="Close">&times;</button>
 
         <header class="guest-book-modal-head">
-            <p class="guest-eyebrow">Front desk</p>
-            <h2 id="walkInBookTitle">Walk-in check-in</h2>
-            <p class="guest-modal-lede">
-                Guest details and dates, then choose room types, collect payment, and assign room numbers.
-            </p>
-            <p class="guest-book-party" id="walkInBookPartySummary"></p>
-            <ol class="guest-book-steps" id="walkInBookStepList" aria-label="Walk-in steps">
-                <li class="is-guest is-current" data-walkin-step-tab="guest" aria-current="step">
-                    <span class="guest-book-step-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    </span>
-                    <span>Guest</span>
+            <div class="admin-walkin-heading">
+                <p class="guest-eyebrow">Front desk</p>
+                <h2 id="walkInBookTitle">Walk-in check-in</h2>
+            </div>
+            <ol class="admin-walkin-path-flow" id="walkInBookStepList" aria-label="Create booking steps">
+                <li>
+                    <button type="button" class="is-current" data-walkin-step-tab="guest" aria-current="step">
+                        <span class="admin-walkin-step-number" aria-hidden="true">1</span>
+                        <span>Guest</span>
+                    </button>
                 </li>
-                <li class="is-dates" data-walkin-step-tab="dates">
-                    <span class="guest-book-step-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                    </span>
-                    <span>Dates</span>
+                <li>
+                    <button type="button" data-walkin-step-tab="dates">
+                        <span class="admin-walkin-step-number" aria-hidden="true">2</span>
+                        <span>Dates</span>
+                    </button>
                 </li>
-                <li class="is-types" data-walkin-step-tab="types">
-                    <span class="guest-book-step-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-6h6v6"/></svg>
-                    </span>
-                    <span>Room type</span>
+                <li>
+                    <button type="button" data-walkin-step-tab="types">
+                        <span class="admin-walkin-step-number" aria-hidden="true">3</span>
+                        <span>Room type</span>
+                    </button>
                 </li>
-                <li class="is-payment" data-walkin-step-tab="payment">
-                    <span class="guest-book-step-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
-                    </span>
-                    <span>Payment</span>
+                <li>
+                    <button type="button" data-walkin-step-tab="payment">
+                        <span class="admin-walkin-step-number" aria-hidden="true">4</span>
+                        <span>Payment</span>
+                    </button>
                 </li>
-                <li class="is-rooms" data-walkin-step-tab="rooms">
-                    <span class="guest-book-step-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-6h6v6"/></svg>
-                    </span>
-                    <span>Assign rooms</span>
+                <li>
+                    <button type="button" data-walkin-step-tab="rooms">
+                        <span class="admin-walkin-step-number" aria-hidden="true">5</span>
+                        <span>Assign rooms</span>
+                    </button>
                 </li>
             </ol>
+            <p class="guest-book-party" id="walkInBookPartySummary"></p>
         </header>
 
         <form class="guest-form guest-book-modal-form is-wizard" id="walkInBookForm" novalidate data-walkin-step="guest">
             @Html.AntiForgeryToken()
 
+            <div class="admin-walkin-scroll-body">
             <section class="guest-book-section is-guest is-wizard-panel" data-walkin-step-panel="guest">
                 <div class="guest-book-section-head">
                     <span class="guest-book-section-num">1</span>
@@ -245,19 +245,19 @@
                     <div class="admin-walkin-payment-form">
                         <div class="admin-walkin-payment-collect">
                             <p class="admin-walkin-price-heading">Collect payment</p>
+                            <div id="walkInPaymentCashDueWrap" class="admin-walkin-due">
+                                <span id="walkInPaymentDueLabel" class="admin-walkin-due-label">Amount due</span>
+                                <output id="walkInPaymentDue" class="admin-walkin-due-value" aria-labelledby="walkInPaymentDueLabel" aria-live="polite">₱0.00</output>
+                                <span class="admin-walkin-due-note">Calculated from the stay summary</span>
+                            </div>
                             <div class="admin-walkin-payment-grid">
-                                <label>
+                                <label class="admin-walkin-span-full">
                                     <span>Payment method</span>
                                     <select id="walkInPaymentMethod" class="form-select">
                                         <option value="Cash" selected>Cash</option>
                                         <option value="EWallet">E-wallet (InstaPay QR)</option>
                                     </select>
                                 </label>
-                                <div id="walkInPaymentCashDueWrap" class="admin-walkin-due">
-                                    <span class="admin-walkin-due-label">Amount due</span>
-                                    <output id="walkInPaymentDue" class="admin-walkin-due-value" aria-live="polite">₱0.00</output>
-                                    <span class="admin-walkin-due-note">Fixed — from stay summary</span>
-                                </div>
                                 <label id="walkInPaymentCashTenderWrap" class="admin-walkin-span-full admin-walkin-tender">
                                     <span>Cash from guest (₱) <em class="admin-walkin-required">Type the amount handed over</em></span>
                                     <span class="admin-walkin-tender-row">
@@ -266,8 +266,8 @@
                                     </span>
                                 </label>
                                 <label id="walkInPaymentDigitalWrap" class="admin-walkin-span-full" hidden>
-                                    <span>Amount received (₱)</span>
-                                    <input type="text" id="walkInPaymentDigitalAmount" class="form-control" inputmode="decimal" placeholder="0.00" autocomplete="off" />
+                                    <span>E-wallet amount received (₱)</span>
+                                    <input type="text" id="walkInPaymentDigitalAmount" class="form-control admin-walkin-tender-input" inputmode="decimal" placeholder="0.00" autocomplete="off" aria-describedby="walkInPaymentDigitalHint" />
                                 </label>
                             </div>
                             <p class="admin-walkin-change" id="walkInPaymentChange" role="status" hidden>Change: ₱0.00</p>
@@ -296,6 +296,7 @@
             </section>
 
             <p class="guest-form-message" id="walkInFormMessage" hidden></p>
+            </div>
 
             <div class="guest-modal-actions guest-book-modal-actions guest-book-wizard-actions">
                 <button type="button" class="guest-btn guest-btn-ghost" id="walkInWizardBackBtn">Back</button>
@@ -305,10 +306,66 @@
                     Confirm walk-in
                 </button>
                 <button type="button" class="guest-btn guest-btn-ghost" data-walkin-close>Cancel</button>
+                <button type="button" id="walkInTypeSelectionProgress" class="admin-walkin-selection-progress" aria-haspopup="dialog" aria-controls="walkInSelectionDialog" aria-live="polite" hidden>
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                    <span data-progress-text>0 of 0 selected</span>
+                </button>
             </div>
         </form>
     </div>
 </div>
+
+<dialog id="walkInTypeQuantityDialog" class="admin-walkin-quantity-dialog" aria-labelledby="walkInTypeQuantityTitle" aria-describedby="walkInTypeQuantityHint">
+    <form id="walkInTypeQuantityForm" novalidate>
+        <header>
+            <h2 class="admin-walkin-quantity-heading">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg>
+                <span id="walkInTypeQuantityTitle">Choose room quantity</span>
+            </h2>
+            <button type="button" class="admin-walkin-quantity-close" data-walkin-quantity-close aria-label="Close quantity picker">&times;</button>
+        </header>
+        <p id="walkInTypeQuantityHint"></p>
+        <label for="walkInTypeQuantity">Number of rooms</label>
+        <div class="admin-walkin-quantity-control">
+            <button type="button" data-walkin-quantity-minus aria-label="Decrease room quantity">−</button>
+            <input id="walkInTypeQuantity" type="number" min="1" max="8" step="1" value="1" required inputmode="numeric" aria-describedby="walkInTypeQuantityHint walkInTypeQuantityError" />
+            <button type="button" data-walkin-quantity-plus aria-label="Increase room quantity">+</button>
+        </div>
+        <p id="walkInTypeQuantityError" class="guest-form-message is-error" role="alert" hidden></p>
+        <footer>
+            <button type="button" class="guest-btn guest-btn-ghost" data-walkin-quantity-close>Cancel</button>
+            <button type="submit" class="guest-btn guest-btn-primary" id="walkInTypeQuantityConfirm">Add rooms</button>
+        </footer>
+    </form>
+</dialog>
+
+<dialog id="walkInSelectionDialog" class="admin-walkin-quantity-dialog admin-walkin-selection-dialog" aria-labelledby="walkInSelectionTitle" aria-describedby="walkInSelectionHint">
+    <div class="admin-walkin-selection-body">
+        <header>
+            <h2 id="walkInSelectionTitle" class="admin-walkin-quantity-heading">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                <span>Selection progress</span>
+            </h2>
+            <button type="button" class="admin-walkin-quantity-close" data-walkin-selection-close aria-label="Close selection progress">&times;</button>
+        </header>
+        <p id="walkInSelectionHint">Draft only — nothing is booked until confirmation. Edit or remove a pick below.</p>
+        <div class="admin-walkin-selection-meter">
+            <p class="admin-walkin-selection-count" id="walkInSelectionCount">0 of 0 rooms selected</p>
+            <div class="admin-walkin-selection-bar" aria-hidden="true"><span id="walkInSelectionBarFill"></span></div>
+        </div>
+        <div class="admin-walkin-selection-groups" id="walkInSelectionGroups" hidden>
+            <h3>Selected room types</h3>
+            <ul id="walkInSelectionTypes" aria-label="Selected room types"></ul>
+        </div>
+        <div class="admin-walkin-selection-rooms">
+            <h3>Rooms in this draft</h3>
+            <ul id="walkInTypeSelectionSummary" aria-label="Selected and unselected rooms"></ul>
+        </div>
+        <footer>
+            <button type="button" class="guest-btn guest-btn-primary" data-walkin-selection-close>Done</button>
+        </footer>
+    </div>
+</dialog>
 
 <div class="guest-modal" id="walkInSuccessModal" data-walkin-success-modal hidden>
     <div class="guest-modal-backdrop" data-walkin-close></div>

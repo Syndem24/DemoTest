@@ -40,6 +40,9 @@
         overlay = buildOverlay(label);
         document.body.appendChild(overlay);
         document.documentElement.style.overflow = 'hidden';
+        // Flag the destination surface so it can cover its own first paint
+        // and play the shared exit animation (guest → admin handoff).
+        try { window.sessionStorage?.setItem('mori-surface-arrive', '1'); } catch (e) { /* storage unavailable */ }
     };
 
     document.addEventListener('click', (event) => {
@@ -64,4 +67,34 @@
             document.documentElement.style.overflow = '';
         }
     });
+
+    // Arrival handoff: _Layout pre-renders #adminPageLoader and its inline head
+    // script adds .mori-surface-arrival before first paint, so this surface is
+    // already covered — play the shared exit animation instead of a hard cut.
+    const arrival = document.getElementById('adminPageLoader');
+    if (arrival && document.documentElement.classList.contains('mori-surface-arrival')) {
+        const MIN_VISIBLE_MS = 500;
+        const EXIT_MS = 780;
+        const startedAt = performance.now();
+        arrival.removeAttribute('hidden');
+        document.documentElement.style.overflow = 'hidden';
+        const dismiss = () => {
+            const remain = Math.max(0, MIN_VISIBLE_MS - (performance.now() - startedAt));
+            window.setTimeout(() => {
+                arrival.classList.add('is-leaving');
+                arrival.setAttribute('aria-busy', 'false');
+                const finish = () => {
+                    arrival.remove();
+                    document.documentElement.style.overflow = '';
+                    document.documentElement.classList.remove('mori-surface-arrival');
+                };
+                arrival.addEventListener('animationend', (event) => {
+                    if (event.target === arrival) finish();
+                }, { once: true });
+                window.setTimeout(finish, EXIT_MS);
+            }, remain);
+        };
+        if (document.readyState === 'complete') dismiss();
+        else window.addEventListener('load', dismiss, { once: true });
+    }
 })();
