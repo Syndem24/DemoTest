@@ -109,7 +109,7 @@ public sealed class PaymentService : IPaymentService
 
         var balanceAfter = decimal.Round(stayTotal - (postedPaid + amount), 2, MidpointRounding.AwayFromZero);
 
-        // Bank transfer / e-wallet references and receipt image path come from the request.
+        // Bank transfer / e-wallet references come from the request.
 
         var now = DateTime.UtcNow;
         var record = new PaymentRecord
@@ -125,7 +125,6 @@ public sealed class PaymentService : IPaymentService
             ReceivedBy = receivedBy,
             ExternalReference = TrimOrNull(request.ExternalReference, 120),
             BankTransferReference = TrimOrNull(request.BankTransferReference, 120),
-            ReceiptImagePath = TrimOrNull(request.ReceiptImagePath, 500),
             Notes = TrimOrNull(notes, 1000),
             Status = PaymentRecordStatus.Posted
         };
@@ -192,9 +191,8 @@ public sealed class PaymentService : IPaymentService
         return Map(record, record.Booking);
     }
 
-    public async Task<PaymentRecordDto> UpdateReceiptDetailsAsync(
+    public async Task<PaymentRecordDto> VerifyAsync(
         int paymentId,
-        UpdatePaymentReceiptDetailsRequest request,
         CancellationToken cancellationToken = default)
     {
         var record = await _db.PaymentRecords
@@ -204,71 +202,35 @@ public sealed class PaymentService : IPaymentService
 
         if (record.Status == PaymentRecordStatus.Voided)
         {
-            throw new InvalidOperationException("Refunded payments cannot be edited.");
+            throw new InvalidOperationException("Refunded payments cannot be verified.");
         }
 
-        record.ExternalReference = TrimOrNull(request.ExternalReference, 120);
-
-        var existingNotes = record.Notes ?? string.Empty;
-        var channel = TrimOrNull(request.Channel, 40)
-            ?? ExtractOcrField(existingNotes, "Channel")
-            ?? "Digital";
-        var from = TrimOrNull(request.TransferFrom, 160);
-        var to = TrimOrNull(request.TransferTo, 160);
-        var receiptAmount = request.ReceiptAmount is > 0
-            ? decimal.Round(request.ReceiptAmount.Value, 2, MidpointRounding.AwayFromZero)
-            : (decimal?)null;
-
-        var partyBits = new List<string> { $"Channel: {channel}" };
-        if (!string.IsNullOrWhiteSpace(from))
+        if (!IsDigitalPaymentMethod(record.Method))
         {
-            partyBits.Add($"From: {from}");
+            throw new ArgumentException("Only e-wallet / digital payments need verification.");
         }
 
-        if (!string.IsNullOrWhiteSpace(to))
+        if (record.VerifiedAtUtc.HasValue)
         {
-            partyBits.Add($"To: {to}");
+            return Map(record, record.Booking);
         }
 
-        if (receiptAmount.HasValue)
-        {
-            partyBits.Add($"Receipt amount: ₱{receiptAmount.Value:N2}");
-        }
-
-        var stamp = $"Digital OCR · {string.Join(" · ", partyBits)}";
-        if (System.Text.RegularExpressions.Regex.IsMatch(
-                existingNotes,
-                @"(?:Digital|E-wallet) OCR ·[^\n]*",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase))
-        {
-            record.Notes = TrimOrNull(
-                System.Text.RegularExpressions.Regex.Replace(
-                    existingNotes,
-                    @"(?:Digital|E-wallet) OCR ·[^\n]*",
-                    stamp,
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase),
-                1000);
-        }
-        else
-        {
-            var combined = string.IsNullOrWhiteSpace(existingNotes)
-                ? stamp
-                : $"{existingNotes.Trim()}\n{stamp}";
-            record.Notes = TrimOrNull(combined, 1000);
-        }
-
-        record.Booking.UpdatedAtUtc = DateTime.UtcNow;
+        var actor = _audit.CurrentActor();
+        var now = DateTime.UtcNow;
+        record.VerifiedAtUtc = now;
+        record.VerifiedBy = actor.DisplayName;
+        record.Booking.UpdatedAtUtc = now;
+        _audit.Record(
+            SystemAuditIntent.AdministrativeAction,
+            SystemAuditDomain.Payment,
+            "Payment.Verified",
+            "Payment",
+            record.Id.ToString(),
+            record.ReceiptNumber,
+            summary: $"Verified {record.ReceiptNumber} on {record.Booking.Reference} · ₱{record.Amount:N2}.");
         await _db.SaveChangesAsync(cancellationToken);
-        return Map(record, record.Booking);
-    }
 
-    private static string? ExtractOcrField(string notes, string label)
-    {
-        var match = System.Text.RegularExpressions.Regex.Match(
-            notes,
-            $@"{System.Text.RegularExpressions.Regex.Escape(label)}:\s*([^·\n]+)",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        return match.Success ? TrimOrNull(match.Groups[1].Value, 160) : null;
+        return Map(record, record.Booking);
     }
 
     public async Task<PagedPaymentsDto> GetPagedAsync(
@@ -484,14 +446,6 @@ public sealed class PaymentService : IPaymentService
                 summary += $" Export capped at {MaxFlushPaymentsPerRun} rows; run flush again if more remain.";
             }
 
-            var receiptPaths = clearAfterExport
-                ? payments
-                    .Select(p => p.ReceiptImagePath)
-                    .Where(path => !string.IsNullOrWhiteSpace(path))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList()
-                : new List<string?>();
-
             if (clearAfterExport)
             {
                 _db.PaymentRecords.RemoveRange(payments);
@@ -524,10 +478,8 @@ public sealed class PaymentService : IPaymentService
             await _db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
-            return (pdfBytes, fileName, log, receiptPaths);
+            return (pdfBytes, fileName, log);
         });
-
-        TryDeleteReceiptFiles(flushed.receiptPaths);
 
         return new FlushPaymentsResult(
             flushed.pdfBytes,
@@ -570,31 +522,6 @@ public sealed class PaymentService : IPaymentService
 
         _db.SystemFlushLogs.RemoveRange(expired);
         await _db.SaveChangesAsync(cancellationToken);
-    }
-
-    private void TryDeleteReceiptFiles(IEnumerable<string?> relativePaths)
-    {
-        foreach (var relative in relativePaths)
-        {
-            if (string.IsNullOrWhiteSpace(relative))
-            {
-                continue;
-            }
-
-            try
-            {
-                var trimmed = relative.TrimStart('~', '/').Replace('/', Path.DirectorySeparatorChar);
-                var fullPath = Path.Combine(_environment.WebRootPath, trimmed);
-                if (File.Exists(fullPath))
-                {
-                    File.Delete(fullPath);
-                }
-            }
-            catch
-            {
-                // Best-effort cleanup; PDF softcopy is the retained record.
-            }
-        }
     }
 
     private static PaymentFlushLogDto MapFlushLog(SystemFlushLog log)
@@ -711,11 +638,12 @@ public sealed class PaymentService : IPaymentService
             record.ReceivedBy,
             record.ExternalReference,
             record.BankTransferReference,
-            record.ReceiptImagePath,
             record.Notes,
             record.Status,
             record.VoidedAtUtc,
             record.VoidReason,
-            record.VoidedBy);
+            record.VoidedBy,
+            record.VerifiedAtUtc,
+            record.VerifiedBy);
     }
 }

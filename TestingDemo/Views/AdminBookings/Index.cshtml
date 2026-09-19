@@ -474,31 +474,15 @@
                 </div>
 
                 <div class="admin-payment-epay-panel" data-payment-epay-panel hidden>
-                    <p class="admin-payment-panel-title">Digital payment proof</p>
+                    <p class="admin-payment-panel-title">Digital payment</p>
                     <p class="admin-payment-prices-hint" data-payment-epay-hint>
-                        Guest pays via hotel InstaPay QR (e-wallet). Attach a photo of their receipt.
+                        Guest pays via hotel InstaPay QR (e-wallet). Verify the receipt on the
+                        guest’s phone before saving.
                     </p>
                     <label>
                         <span>Amount paid (₱) <em>locked</em></span>
                         <input type="text" inputmode="decimal" data-payment-epay-amount readonly tabindex="-1" />
                     </label>
-                    <div class="admin-payment-receipt-actions">
-                        <span class="admin-payment-receipt-label">Receipt photo</span>
-                        <div class="admin-payment-receipt-buttons">
-                            <button type="button" class="admin-booking-confirm" data-payment-open-camera>Open
-                                camera</button>
-                            <button type="button" data-payment-choose-photo>Choose photo</button>
-                        </div>
-                        <input type="file" accept="image/*" data-payment-receipt-upload hidden />
-                        <input type="file" accept="image/*" capture="environment" data-payment-receipt-capture hidden />
-                    </div>
-                    <figure data-payment-receipt-preview-wrap hidden>
-                        <img class="admin-payment-receipt-preview" alt="Uploaded payment receipt"
-                            data-payment-receipt-preview data-photo-zoom data-photo-zoom-alt="Payment receipt"
-                            title="Click to zoom · Esc to exit" />
-                    </figure>
-                    <p class="admin-payment-ocr-status" data-payment-ocr-status hidden role="status"></p>
-                    <input type="hidden" data-payment-receipt-path value="" />
                 </div>
 
                 <label>
@@ -514,56 +498,11 @@
         <div class="admin-payment-add-popup" data-payment-add-popup hidden>
             <div class="admin-payment-add-popup-card" role="alertdialog" aria-modal="true"
                 aria-labelledby="paymentAddPopupTitle">
-                <h3 id="paymentAddPopupTitle">Apply receipt first</h3>
+                <h3 id="paymentAddPopupTitle">Check payment details</h3>
                 <p data-payment-add-popup-text></p>
                 <button type="button" class="admin-booking-confirm" data-payment-add-popup-ok>OK</button>
             </div>
         </div>
-    </section>
-</div>
-
-<div class="admin-booking-modal" data-payment-camera-modal hidden>
-    <button type="button" class="admin-booking-modal-backdrop" data-payment-camera-close
-        aria-label="Close camera"></button>
-    <section class="admin-booking-modal-dialog admin-payment-camera-dialog" role="dialog" aria-modal="true"
-        aria-labelledby="paymentCameraTitle">
-        <header>
-            <div>
-                <span class="admin-booking-reference">E-payment</span>
-                <h2 id="paymentCameraTitle">Scan receipt</h2>
-            </div>
-            <button type="button" class="admin-booking-modal-close" data-payment-camera-close
-                aria-label="Close">&times;</button>
-        </header>
-        <div class="admin-booking-detail-body admin-payment-camera-body">
-            <p class="admin-payment-prices-hint">
-                Hold the guest’s phone upright. Fit the full mobile receipt inside the portrait frame — capture is
-                automatic when details are clear, or tap Capture anytime.
-            </p>
-            <div class="admin-payment-camera-stage">
-                <video data-payment-camera-video playsinline autoplay muted></video>
-                <canvas data-payment-camera-canvas hidden></canvas>
-                <div class="admin-payment-camera-guide" aria-hidden="true">
-                    <div class="admin-payment-camera-guide-frame" data-payment-camera-guide-frame>
-                        <span class="admin-payment-camera-guide-corner is-tl"></span>
-                        <span class="admin-payment-camera-guide-corner is-tr"></span>
-                        <span class="admin-payment-camera-guide-corner is-bl"></span>
-                        <span class="admin-payment-camera-guide-corner is-br"></span>
-                        <span class="admin-payment-camera-guide-tick is-top"></span>
-                        <span class="admin-payment-camera-guide-tick is-bottom"></span>
-                        <span class="admin-payment-camera-guide-tick is-left"></span>
-                        <span class="admin-payment-camera-guide-tick is-right"></span>
-                        <p class="admin-payment-camera-guide-label" data-payment-camera-guide-label>Mobile receipt</p>
-                    </div>
-                </div>
-            </div>
-            <p class="admin-payment-ocr-status" data-payment-camera-status hidden role="status"></p>
-        </div>
-        <footer class="admin-booking-detail-actions">
-            <button type="button" data-payment-camera-close>Cancel</button>
-            <button type="button" data-payment-camera-switch>Flip camera</button>
-            <button type="button" class="admin-booking-confirm" data-payment-camera-capture>Capture photo</button>
-        </footer>
     </section>
 </div>
 

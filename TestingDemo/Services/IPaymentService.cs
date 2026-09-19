@@ -3,20 +3,6 @@ using TestingDemo.Models;
 
 namespace TestingDemo.Services;
 
-/// <summary>
-/// Stores e-payment receipt proof images for company records.
-/// </summary>
-public interface IPaymentReceiptStorage
-{
-    Task<string> SaveAsync(
-        int bookingId,
-        string receiptNumber,
-        Stream content,
-        string fileName,
-        string contentType,
-        CancellationToken cancellationToken = default);
-}
-
 public interface IPaymentService
 {
     Task<PaymentRecordDto> RecordAsync(
@@ -28,9 +14,12 @@ public interface IPaymentService
         VoidPaymentRequest request,
         CancellationToken cancellationToken = default);
 
-    Task<PaymentRecordDto> UpdateReceiptDetailsAsync(
+    /// <summary>
+    /// Marks a posted digital payment as manually verified by front-desk staff
+    /// (receipt checked on the guest's e-wallet). Idempotent.
+    /// </summary>
+    Task<PaymentRecordDto> VerifyAsync(
         int paymentId,
-        UpdatePaymentReceiptDetailsRequest request,
         CancellationToken cancellationToken = default);
 
     Task<PagedPaymentsDto> GetPagedAsync(

@@ -14,27 +14,12 @@ public sealed class RecordPaymentRequest
 
     /// <summary>Bank transfer / clearing reference when Method is BankTransfer.</summary>
     public string? BankTransferReference { get; set; }
-
-    /// <summary>Relative path to stored e-wallet receipt image under wwwroot.</summary>
-    public string? ReceiptImagePath { get; set; }
 }
 
 public sealed class VoidPaymentRequest
 {
     public string VoidedBy { get; set; } = string.Empty;
     public string Reason { get; set; } = string.Empty;
-}
-
-/// <summary>
-/// Manual corrections to receipt proof metadata (does not change posted Amount).
-/// </summary>
-public sealed class UpdatePaymentReceiptDetailsRequest
-{
-    public string? ExternalReference { get; set; }
-    public string? TransferFrom { get; set; }
-    public string? TransferTo { get; set; }
-    public string? Channel { get; set; }
-    public decimal? ReceiptAmount { get; set; }
 }
 
 public sealed record PaymentRecordDto(
@@ -52,12 +37,13 @@ public sealed record PaymentRecordDto(
     string ReceivedBy,
     string? ExternalReference,
     string? BankTransferReference,
-    string? ReceiptImagePath,
     string? Notes,
     PaymentRecordStatus Status,
     DateTime? VoidedAtUtc,
     string? VoidReason,
-    string? VoidedBy);
+    string? VoidedBy,
+    DateTime? VerifiedAtUtc,
+    string? VerifiedBy);
 
 public sealed record BookingPaymentSummaryDto(
     int BookingId,

@@ -61,24 +61,24 @@
         // switch in sessionStorage; claim it here so the arrival loader below
         // covers the first paint and exits with the shared animation.
         try {
-            if (window.sessionStorage && sessionStorage.getItem('mori-surface-arrive') === '1') {
-                sessionStorage.removeItem('mori-surface-arrive');
+            var ss = window.sessionStorage;
+            if (ss && ss.getItem('mori-surface-arrive') === '1') {
+                ss.removeItem('mori-surface-arrive');
                 document.documentElement.classList.add('mori-surface-arrival');
+                var lbl = ss.getItem('mori-surface-label');
+                if (lbl) {
+                    ss.removeItem('mori-surface-label');
+                    document.documentElement.setAttribute('data-surface-label', lbl);
+                }
             }
         } catch (e) { /* storage unavailable */ }
     </script>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/TestingDemo.styles.css" asp-append-version="true" />
-    @if (!string.IsNullOrEmpty(adminBookingsActive)
-        || !string.IsNullOrEmpty(adminFlushLogsActive)
-        || !string.IsNullOrEmpty(adminPaymentsActive)
-        || !string.IsNullOrEmpty(dashboardActive))
-    {
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    }
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
     @if (!string.IsNullOrEmpty(adminBookingsActive))
     {
         <link rel="stylesheet" href="~/css/booking.css" asp-append-version="true" />
@@ -344,11 +344,9 @@
                     '@Url.Content("~/lib/fullcalendar/core.min.js")',
                     '@Url.Content("~/lib/fullcalendar/daygrid.min.js")',
                     '@Url.Content("~/lib/fullcalendar/list.min.js")'
-                ],
-                tesseract: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'
+                ]
             };
         </script>
-        <script src="~/js/admin-bookings-ocr-parse.js" asp-append-version="true"></script>
         <script src="~/js/admin-bookings.js" asp-append-version="true"></script>
     }
     else

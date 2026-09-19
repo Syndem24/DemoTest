@@ -66,16 +66,35 @@ public sealed partial class BookingService
         var logoPath = Path.Combine(_environment.WebRootPath, "Images", "Logo.png");
         var pdfBytes = BookingHistoryPdfBuilder.Build(archived, performedBy, flushedAtUtc, logoPath);
 
-        var clearNote = clearAfterExport ? " then deleted." : " Data was kept (export only).";
-        var summary = BuildFlushSummary(archived) + dateRange.DescribeForSummary()
-            + (clearAfterExport ? " Cleared after export." : " Export only — records kept.");
-        var auditSummary =
-            $"{archived.Count} archived stay(s) exported to {fileName},{clearNote}{dateRange.DescribeForSummary()}";
         var recordCount = archived.Count;
+        var keptForReview = 0;
+        var deletable = archived;
 
         if (clearAfterExport)
         {
-            _db.Bookings.RemoveRange(archived);
+            var archivedIds = archived.Select(booking => booking.Id).ToList();
+            var reviewedIds = await _db.StayReviews
+                .Where(review => archivedIds.Contains(review.BookingId))
+                .Select(review => review.BookingId)
+                .ToListAsync(ct);
+            var keep = reviewedIds.ToHashSet();
+            keptForReview = keep.Count;
+            deletable = archived.Where(booking => !keep.Contains(booking.Id)).ToList();
+        }
+
+        var keptNote = keptForReview > 0
+            ? $" Kept {keptForReview} stay(s) that have guest reviews — reviews are never flushed."
+            : string.Empty;
+        var clearNote = clearAfterExport ? " then deleted." : " Data was kept (export only).";
+        var summary = BuildFlushSummary(archived) + dateRange.DescribeForSummary()
+            + (clearAfterExport ? " Cleared after export." : " Export only — records kept.")
+            + keptNote;
+        var auditSummary =
+            $"{archived.Count} archived stay(s) exported to {fileName},{clearNote}{dateRange.DescribeForSummary()}{keptNote}";
+
+        if (clearAfterExport)
+        {
+            _db.Bookings.RemoveRange(deletable);
         }
 
         var log = new SystemFlushLog

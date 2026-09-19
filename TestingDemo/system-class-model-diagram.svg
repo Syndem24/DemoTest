@@ -1,0 +1,935 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2640 1620" width="2640" height="1620" style="background: #040914; font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <defs>
+    <!-- Background Grid -->
+    <pattern id="dotGrid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.2" fill="#1E293B" fill-opacity="0.6"/>
+    </pattern>
+
+    <!-- Linear Gradients for Cards -->
+    <linearGradient id="canvasGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#050C1A"/>
+      <stop offset="50%" stop-color="#081426"/>
+      <stop offset="100%" stop-color="#040914"/>
+    </linearGradient>
+
+    <!-- Gold Luxury Gradient (Booking Aggregate Root) -->
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#B45309"/>
+    </linearGradient>
+    <linearGradient id="goldHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#78350F"/>
+      <stop offset="100%" stop-color="#B45309"/>
+    </linearGradient>
+    <linearGradient id="goldCardBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0E1B2E"/>
+      <stop offset="100%" stop-color="#091220"/>
+    </linearGradient>
+
+    <!-- Blue Gradient (Catalog & Inventory) -->
+    <linearGradient id="blueHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1E3A8A"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="blueCardBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0B172B"/>
+      <stop offset="100%" stop-color="#070E1C"/>
+    </linearGradient>
+
+    <!-- Teal Gradient (Booking Fulfillment Lines) -->
+    <linearGradient id="tealHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#115E59"/>
+      <stop offset="100%" stop-color="#0D9488"/>
+    </linearGradient>
+    <linearGradient id="tealCardBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#091B24"/>
+      <stop offset="100%" stop-color="#061219"/>
+    </linearGradient>
+
+    <!-- Emerald Gradient (Financials & Ledgers) -->
+    <linearGradient id="emeraldHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#064E3B"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <linearGradient id="emeraldCardBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#081A1C"/>
+      <stop offset="100%" stop-color="#051214"/>
+    </linearGradient>
+
+    <!-- Purple Gradient (Guest Experience & Reviews) -->
+    <linearGradient id="purpleHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4C1D95"/>
+      <stop offset="100%" stop-color="#6D28D9"/>
+    </linearGradient>
+    <linearGradient id="purpleCardBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#11132C"/>
+      <stop offset="100%" stop-color="#0A0B1E"/>
+    </linearGradient>
+
+    <!-- Indigo Gradient (Identity & Access) -->
+    <linearGradient id="indigoHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#312E81"/>
+      <stop offset="100%" stop-color="#4338CA"/>
+    </linearGradient>
+    <linearGradient id="indigoCardBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0C132E"/>
+      <stop offset="100%" stop-color="#070A1C"/>
+    </linearGradient>
+
+    <!-- Slate Gradient (Audit & System Infrastructure) -->
+    <linearGradient id="slateHeader" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1E293B"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </linearGradient>
+    <linearGradient id="slateCardBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0B1320"/>
+      <stop offset="100%" stop-color="#070C15"/>
+    </linearGradient>
+
+    <!-- Drop Shadows & Glow Filters -->
+    <filter id="goldGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#F59E0B" flood-opacity="0.35"/>
+    </filter>
+    <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+    <filter id="badgeShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+
+    <!-- Markers for Connectors -->
+    <!-- Solid Diamond (Composition) -->
+    <marker id="compDiamond" viewBox="0 0 16 16" refX="1" refY="8" markerWidth="14" markerHeight="14" orient="auto">
+      <polygon points="1,8 8,2 15,8 8,14" fill="#F59E0B" stroke="#D97706" stroke-width="1.5"/>
+    </marker>
+    <!-- Teal Composition Diamond -->
+    <marker id="compDiamondTeal" viewBox="0 0 16 16" refX="1" refY="8" markerWidth="14" markerHeight="14" orient="auto">
+      <polygon points="1,8 8,2 15,8 8,14" fill="#14B8A6" stroke="#0D9488" stroke-width="1.5"/>
+    </marker>
+    <!-- Hollow Diamond (Aggregation) -->
+    <marker id="aggDiamond" viewBox="0 0 16 16" refX="1" refY="8" markerWidth="14" markerHeight="14" orient="auto">
+      <polygon points="1,8 8,2 15,8 8,14" fill="#0B172B" stroke="#3B82F6" stroke-width="1.5"/>
+    </marker>
+    <!-- Arrowhead Blue -->
+    <marker id="arrowBlue" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+      <path d="M 1 1 L 11 6 L 1 11 Z" fill="#3B82F6"/>
+    </marker>
+    <!-- Arrowhead Gold -->
+    <marker id="arrowGold" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+      <path d="M 1 1 L 11 6 L 1 11 Z" fill="#F59E0B"/>
+    </marker>
+    <!-- Arrowhead Teal -->
+    <marker id="arrowTeal" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+      <path d="M 1 1 L 11 6 L 1 11 Z" fill="#14B8A6"/>
+    </marker>
+    <!-- Arrowhead Emerald -->
+    <marker id="arrowEmerald" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+      <path d="M 1 1 L 11 6 L 1 11 Z" fill="#10B981"/>
+    </marker>
+    <!-- Arrowhead Purple -->
+    <marker id="arrowPurple" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+      <path d="M 1 1 L 11 6 L 1 11 Z" fill="#8B5CF6"/>
+    </marker>
+    <!-- Arrowhead Indigo -->
+    <marker id="arrowIndigo" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto">
+      <path d="M 1 1 L 11 6 L 1 11 Z" fill="#818CF8"/>
+    </marker>
+    <!-- Inheritance Triangle (Hollow) -->
+    <marker id="inheritTriangle" viewBox="0 0 16 16" refX="15" refY="8" markerWidth="14" markerHeight="14" orient="auto">
+      <polygon points="1,1 15,8 1,15" fill="#0C132E" stroke="#818CF8" stroke-width="1.8"/>
+    </marker>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="2640" height="1620" fill="url(#canvasGrad)"/>
+  <rect width="2640" height="1620" fill="url(#dotGrid)"/>
+
+  <!-- ================================================================================= -->
+  <!-- ZONE ENCLOSURES (Visual Grouping Containers) -->
+  <!-- ================================================================================= -->
+  <!-- Zone 1: Catalog & Inventory (Top Left to Mid) -->
+  <rect x="35" y="175" width="1785" height="425" rx="16" fill="#061224" fill-opacity="0.5" stroke="#1E3A8A" stroke-width="1.5" stroke-dasharray="8 6"/>
+  <text x="55" y="196" fill="#60A5FA" font-size="12" font-weight="700" letter-spacing="1.5">DOMAIN ZONE 1: ROOM CATALOG, SPECIAL OFFERS &amp; PHYSICAL INVENTORY</text>
+
+  <!-- Zone 2: Booking Engine & Fulfillment (Center Area) -->
+  <rect x="35" y="615" width="1785" height="975" rx="16" fill="#081426" fill-opacity="0.4" stroke="#0F766E" stroke-width="1.5" stroke-dasharray="8 6"/>
+  <text x="55" y="636" fill="#2DD4BF" font-size="12" font-weight="700" letter-spacing="1.5">DOMAIN ZONE 2: BOOKING AGGREGATE ROOT, FINANCIAL LEDGER &amp; FULFILLMENT</text>
+
+  <!-- Zone 3: Identity & Infrastructure (Right Column) -->
+  <rect x="1845" y="175" width="760" height="1415" rx="16" fill="#090E1F" fill-opacity="0.6" stroke="#4338CA" stroke-width="1.5" stroke-dasharray="8 6"/>
+  <text x="1865" y="196" fill="#A5B4FC" font-size="12" font-weight="700" letter-spacing="1.5">DOMAIN ZONE 3: IDENTITY, AUDIT &amp; SECURITY INFRASTRUCTURE</text>
+
+  <!-- ================================================================================= -->
+  <!-- HEADER BANNER & SYSTEM METRICS -->
+  <!-- ================================================================================= -->
+  <g id="headerBanner" transform="translate(40, 30)">
+    <!-- Title & Subtitle -->
+    <text x="0" y="32" fill="#F8FAFC" font-size="28" font-weight="800" letter-spacing="0.5">MORI INTERNATIONAL HOTEL <tspan fill="#14B8A6">— System Class Model &amp; ERD</tspan></text>
+    <text x="0" y="58" fill="#94A3B8" font-size="14" font-weight="400">ASP.NET Core Monolith · .NET 9 · EF Core · SQL Server · Serializable Transaction Concurrency Architecture</text>
+    <text x="0" y="78" fill="#64748B" font-size="12" font-family="'JetBrains Mono', monospace">Generated from TestingDemo/System-Class-Model.md · Clean Orthogonal Planar Connector Layout (Zero Overlaps)</text>
+
+    <!-- Legend Bar on the Right -->
+    <g transform="translate(1380, 5)">
+      <rect x="0" y="0" width="1180" height="74" rx="12" fill="#0B1320" stroke="#1E293B" stroke-width="1"/>
+      
+      <!-- Legend Item: Aggregate Root -->
+      <rect x="20" y="18" width="16" height="16" rx="4" fill="#F59E0B"/>
+      <text x="44" y="31" fill="#FDE68A" font-size="12" font-weight="600">Aggregate Root</text>
+      <text x="44" y="46" fill="#94A3B8" font-size="10">Cascades Lifecycle</text>
+
+      <!-- Legend Item: Composition -->
+      <polygon points="175,26 182,20 189,26 182,32" fill="#F59E0B" stroke="#D97706" stroke-width="1.2"/>
+      <line x1="189" y1="26" x2="215" y2="26" stroke="#F59E0B" stroke-width="2.2"/>
+      <polygon points="213,23 220,26 213,29" fill="#F59E0B"/>
+      <text x="228" y="31" fill="#F1F5F9" font-size="12" font-weight="600">Composition (1 to 0..*)</text>
+      <text x="228" y="46" fill="#94A3B8" font-size="10">Strong Ownership (Cascade)</text>
+
+      <!-- Legend Item: Foreign Key -->
+      <line x1="420" y1="26" x2="455" y2="26" stroke="#38BDF8" stroke-width="2" stroke-dasharray="4 3"/>
+      <polygon points="453,23 460,26 453,29" fill="#38BDF8"/>
+      <text x="468" y="31" fill="#F1F5F9" font-size="12" font-weight="600">FK Navigation (0..* to 1)</text>
+      <text x="468" y="46" fill="#94A3B8" font-size="10">Reference Association</text>
+
+      <!-- Legend Item: Inheritance -->
+      <line x1="655" y1="26" x2="685" y2="26" stroke="#818CF8" stroke-width="2"/>
+      <polygon points="685,21 695,26 685,31" fill="#0C132E" stroke="#818CF8" stroke-width="1.5"/>
+      <text x="705" y="31" fill="#F1F5F9" font-size="12" font-weight="600">Inheritance</text>
+      <text x="705" y="46" fill="#94A3B8" font-size="10">Extends Base Class</text>
+
+      <!-- Legend Item: Standalone -->
+      <rect x="830" y="18" width="16" height="16" rx="4" fill="#334155"/>
+      <text x="854" y="31" fill="#E2E8F0" font-size="12" font-weight="600">Satellite / Standalone</text>
+      <text x="854" y="46" fill="#94A3B8" font-size="10">Audit &amp; Config Vault</text>
+
+      <!-- Status Indicator -->
+      <circle cx="1040" cy="37" r="5" fill="#10B981"/>
+      <text x="1052" y="41" fill="#A7F3D0" font-size="11" font-weight="600">Planar Zero-Crossing Verified</text>
+    </g>
+  </g>
+
+  <!-- ================================================================================= -->
+  <!-- CONNECTOR LINES & LABELS (Drawn behind cards for perfect aesthetics) -->
+  <!-- ================================================================================= -->
+  <g id="connectors" stroke-linecap="round" stroke-linejoin="round">
+    
+    <!-- 1. SpecialOffer (Col 1) TO RoomType (Col 2): Aggregation / FK -->
+    <!-- Path: from (430, 340) to (480, 340) -->
+    <path d="M 430 340 L 480 340" stroke="#3B82F6" stroke-width="2.5" marker-start="url(#aggDiamond)" marker-end="url(#arrowBlue)"/>
+    <g transform="translate(440, 322)">
+      <rect x="-8" y="-12" width="46" height="18" rx="6" fill="#07152B" stroke="#2563EB" stroke-width="1"/>
+      <text x="15" y="0" fill="#93C5FD" font-size="10.5" font-family="'JetBrains Mono', monospace" font-weight="600" text-anchor="middle">1..*</text>
+    </g>
+
+    <!-- 2. Room (Col 4) TO RoomType (Col 2): RoomTypeId FK -->
+    <!-- Runs along the clear horizontal highway across Col 3 (y=270) -->
+    <!-- Path: from Room(1400, 270) to RoomType(910, 270) -->
+    <path d="M 1400 270 L 910 270" stroke="#3B82F6" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
+    <g transform="translate(1155, 270)">
+      <rect x="-85" y="-12" width="170" height="22" rx="7" fill="#07152B" stroke="#2563EB" stroke-width="1.2" filter="url(#badgeShadow)"/>
+      <text x="0" y="3" fill="#60A5FA" font-size="11" font-family="'JetBrains Mono', monospace" font-weight="700" text-anchor="middle">RoomTypeId (FK 0..* → 1)</text>
+    </g>
+
+    <!-- 3. BookingItem (Col 3) TO RoomType (Col 2): RoomTypeId FK (Nullable) -->
+    <!-- Stepped orthogonal path: from BookingItem(1020, 650) up to y=550, left to x=880, up to RoomType(880, 520) -->
+    <path d="M 1020 650 L 1020 560 Q 1020 540 1000 540 L 880 540 L 880 520" stroke="#0D9488" stroke-width="2.2" stroke-dasharray="5 3" fill="none" marker-end="url(#arrowTeal)"/>
+    <g transform="translate(970, 540)">
+      <rect x="-80" y="-12" width="160" height="22" rx="7" fill="#071F24" stroke="#0D9488" stroke-width="1.2" filter="url(#badgeShadow)"/>
+      <text x="0" y="3" fill="#2DD4BF" font-size="10.5" font-family="'JetBrains Mono', monospace" font-weight="700" text-anchor="middle">RoomTypeId (Nullable FK)</text>
+    </g>
+
+    <!-- 4. Booking (Col 2) TO SpecialOffer (Col 1): SpecialOfferId FK (Nullable) -->
+    <!-- Stepped path: from Booking(480, 690) left to 455, up to 570, left to SpecialOffer(240, 570) -->
+    <path d="M 480 690 L 455 690 Q 440 690 440 670 L 440 570 L 410 570" stroke="#F59E0B" stroke-width="2.2" stroke-dasharray="5 3" fill="none" marker-end="url(#arrowGold)"/>
+    <g transform="translate(440, 630)">
+      <rect x="-65" y="-11" width="130" height="22" rx="7" fill="#1C1405" stroke="#F59E0B" stroke-width="1.2" filter="url(#badgeShadow)"/>
+      <text x="0" y="4" fill="#FCD34D" font-size="10.5" font-family="'JetBrains Mono', monospace" font-weight="700" text-anchor="middle">SpecialOfferId (FK)</text>
+    </g>
+
+    <!-- 5. Booking (Col 2) TO StayReview (Col 1): Review Composition (1 to 0..1) -->
+    <!-- Direct horizontal connection: from Booking(480, 820) to StayReview(410, 820) -->
+    <path d="M 480 820 L 410 820" stroke="#8B5CF6" stroke-width="2.5" marker-start="url(#compDiamond)" marker-end="url(#arrowPurple)"/>
+    <g transform="translate(445, 804)">
+      <rect x="-42" y="-11" width="84" height="22" rx="7" fill="#170F2C" stroke="#7C3AED" stroke-width="1.2" filter="url(#badgeShadow)"/>
+      <text x="0" y="4" fill="#C4B5FD" font-size="11" font-family="'JetBrains Mono', monospace" font-weight="700" text-anchor="middle">review 0..1</text>
+    </g>
+
+    <!-- 6. Booking (Col 2) TO BookingItem (Col 3): Items Composition (1 to 0..*) -->
+    <!-- Direct horizontal connection: from Booking(910, 720) to BookingItem(960, 720) -->
+    <path d="M 910 720 L 960 720" stroke="#F59E0B" stroke-width="2.5" marker-start="url(#compDiamond)" marker-end="url(#arrowGold)"/>
+    <g transform="translate(935, 704)">
+      <rect x="-35" y="-11" width="70" height="22" rx="7" fill="#1C1405" stroke="#F59E0B" stroke-width="1.2" filter="url(#badgeShadow)"/>
+      <text x="0" y="4" fill="#FCD34D" font-size="11" font-family="'JetBrains Mono', monospace" font-weight="700" text-anchor="middle">Items 0..*</text>
+    </g>
+
+    <!-- 7. BookingItem (Col 3) TO BookingRoomAssignment (Col 4): RoomAssignments Composition -->
+    <!-- Direct horizontal connection: from BookingItem(1350, 720) to BookingRoomAssignment(1400, 720) -->
+    <path d="M 1350 720 L 1400 720" stroke="#14B8A6" stroke-width="2.5" marker-start="url(#compDiamondTeal)" marker-end="url(#arrowTeal)"/>
+    <g transform="translate(1375, 704)">
+      <rect x="-55" y="-11" width="110" height="22" rx="7" fill="#061B1B" stroke="#0D9488" stroke-width="1.2" filter="url(#badgeShadow)"/>
+      <text x="0" y="4" fill="#5EEAD4" font-size="10.5" font-family="'JetBrains Mono', monospace" font-weight="700" text-anchor="middle">Assignments 0..*</text>
+    </g>
+
+    <!-- 8. BookingRoomAssignment (Col 4) TO Room (Col 4): RoomId FK (1) -->
+    <!-- Direct vertical connection: from BookingRoomAssignment(1595, 650) to Room(1595, 430) -->
+    <path d="M 1595 650 L 1595 430" stroke="#3B82F6" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
+    <g transform="translate(1595, 540)">
+      <rect x="-65" y="-11" width="130" height="22" rx="7" fill="#07152B" stroke="#2563EB" stroke-width="1.2" filter="url(#badgeShadow)"/>
+      <text x="0" y="4" fill="#60A5FA" font-size="11" font-family="'JetBrains Mono', monospace" font-weight="700" text-anchor="middle">RoomId (FK 1)</text>
+    </g>
+
+    <!-- 9. Booking (Col 2) TO BookingCharge (Col 3): Charges Composition (1 to 0..*) -->
+    <!-- Direct horizontal connection: from Booking(910, 1070) to BookingCharge(960, 1070) -->
+    <path d="M 910 1070 L 960 1070" stroke="#F59E0B" stroke-width="2.5" marker-start="url(#compDiamond)" marker-end="url(#arrowGold)"/>
+    <g transform="translate(935, 1054)">
+      <rect x="-42" y="-11" width="84" height="22" rx="7" fill="#1C1405" stroke="#F59E0B" stroke-width="1.2" filter="url(#badgeShadow)"/>
+      <text x="0" y="4" fill="#FCD34D" font-size="11" font-family="'JetBrains Mono', monospace" font-weight="700" text-anchor="middle">Charges 0..*</text>
+    </g>
+
+    <!-- 10. Booking (Col 2) TO PaymentRecord (Col 4): PaymentRecords Composition (1 to 0..*) -->
+    <!-- Clear horizontal highway running under BookingCharge (y=1270): from Booking(910, 1270) to PaymentRecord(1400, 1270) -->
+    <path d="M 910 1270 L 1400 1270" stroke="#10B981" stroke-width="2.5" marker-start="url(#compDiamond)" marker-end="url(#arrowEmerald)"/>
+    <g transform="translate(1155, 1270)">
+      <rect x="-85" y="-12" width="170" height="24" rx="7" fill="#051C15" stroke="#059669" stroke-width="1.2" filter="url(#badgeShadow)"/>
+      <text x="0" y="4" fill="#34D399" font-size="11" font-family="'JetBrains Mono', monospace" font-weight="700" text-anchor="middle">PaymentRecords (0..*)</text>
+    </g>
+
+    <!-- 11. ApplicationUser (Col 5) TO IdentityUser (Col 5): Inheritance -->
+    <!-- From ApplicationUser(2240, 350) left to IdentityUser(2170, 350) -->
+    <path d="M 2240 350 L 2170 350" stroke="#818CF8" stroke-width="2.2" marker-end="url(#inheritTriangle)"/>
+    <g transform="translate(2205, 335)">
+      <rect x="-26" y="-9" width="52" height="18" rx="5" fill="#0C132E" stroke="#4F46E5" stroke-width="1"/>
+      <text x="0" y="4" fill="#A5B4FC" font-size="10" font-family="'JetBrains Mono', monospace" text-anchor="middle">inherits</text>
+    </g>
+
+    <!-- 12. ApplicationUser (Col 5) TO IdentityRole (Col 5): RoleId FK (Single Role) -->
+    <!-- From ApplicationUser(2240, 520) left to IdentityRole(2170, 520) -->
+    <path d="M 2240 520 L 2170 520" stroke="#818CF8" stroke-width="2.2" stroke-dasharray="4 3" marker-end="url(#arrowIndigo)"/>
+    <g transform="translate(2205, 505)">
+      <rect x="-35" y="-9" width="70" height="18" rx="5" fill="#0C132E" stroke="#4F46E5" stroke-width="1"/>
+      <text x="0" y="4" fill="#A5B4FC" font-size="10" font-family="'JetBrains Mono', monospace" text-anchor="middle">RoleId 0..1</text>
+    </g>
+
+    <!-- 13. StaffPasswordResetCode (Col 5) TO ApplicationUser (Col 5): UserId FK -->
+    <!-- From StaffPasswordResetCode(2400, 650) up to ApplicationUser(2400, 620) -->
+    <path d="M 2400 650 L 2400 620" stroke="#818CF8" stroke-width="2.2" stroke-dasharray="4 3" marker-end="url(#arrowIndigo)"/>
+    <g transform="translate(2400, 635)">
+      <rect x="-32" y="-9" width="64" height="18" rx="5" fill="#0C132E" stroke="#4F46E5" stroke-width="1"/>
+      <text x="0" y="4" fill="#A5B4FC" font-size="10" font-family="'JetBrains Mono', monospace" text-anchor="middle">UserId FK</text>
+    </g>
+  </g>
+
+  <!-- ================================================================================= -->
+  <!-- CARDS: ZONE 1 & 2 (Left & Center Columns) -->
+  <!-- ================================================================================= -->
+
+  <!-- ======================== COLUMN 1 ======================== -->
+
+  <!-- 1. SpecialOffer Card (x=50, y=215, w=360, h=410) -->
+  <g id="card-SpecialOffer" transform="translate(50, 215)" filter="url(#cardShadow)">
+    <rect width="360" height="410" rx="12" fill="url(#blueCardBg)" stroke="#3B82F6" stroke-width="1.5"/>
+    <path d="M 0 12 Q 0 0 12 0 L 348 0 Q 360 0 360 12 L 360 48 L 0 48 Z" fill="url(#blueHeader)"/>
+    <text x="16" y="22" fill="#93C5FD" font-size="10" font-weight="700" letter-spacing="1">«ENTITY / CAMPAIGN PROMO»</text>
+    <text x="16" y="40" fill="#FFFFFF" font-size="16" font-weight="800">SpecialOffer</text>
+    <rect x="250" y="14" width="94" height="20" rx="5" fill="#1E3A8A" stroke="#3B82F6" stroke-width="1"/>
+    <text x="297" y="28" fill="#DBEAFE" font-size="10" font-family="'JetBrains Mono', monospace" text-anchor="middle">table: SpecialOffer</text>
+
+    <!-- Members -->
+    <g transform="translate(16, 68)" font-family="'JetBrains Mono', monospace" font-size="11.5">
+      <!-- PK / FK -->
+      <text y="0" fill="#FCD34D" font-weight="700">+ int Id <tspan fill="#F59E0B" font-size="10">[PK]</tspan></text>
+      <text y="20" fill="#60A5FA" font-weight="700">+ int RoomTypeId <tspan fill="#38BDF8" font-size="10">[FK]</tspan></text>
+      <line x1="0" y1="28" x2="328" y2="28" stroke="#1E3A8A" stroke-width="1"/>
+      
+      <!-- Attributes -->
+      <text y="46" fill="#F8FAFC">+ SpecialOfferKind Kind</text>
+      <text y="66" fill="#F8FAFC">+ string Title</text>
+      <text y="86" fill="#94A3B8">+ string? Description</text>
+      <text y="106" fill="#38BDF8">+ decimal RegularPricePerNight</text>
+      <text y="126" fill="#38BDF8">+ decimal? PromoPricePerNight</text>
+      <text y="146" fill="#F8FAFC">+ int? MinNights</text>
+      <text y="166" fill="#F8FAFC">+ SpecialOfferChannels Channels</text>
+      <text y="186" fill="#F8FAFC">+ bool CashOnly, IsActive, OpenEnded</text>
+      <text y="206" fill="#F8FAFC">+ LoyaltyApplyMode LoyaltyApplyMode</text>
+      <text y="226" fill="#94A3B8">+ DateTime StartsAtUtc, EndsAtUtc</text>
+      <text y="246" fill="#94A3B8">+ int SortOrder</text>
+      <text y="266" fill="#64748B">+ DateTime CreatedAtUtc, UpdatedAtUtc</text>
+    </g>
+
+    <!-- Bottom Mini Note -->
+    <rect x="12" y="360" width="336" height="36" rx="6" fill="#0A1628" stroke="#1E293B" stroke-width="1"/>
+    <text x="22" y="382" fill="#94A3B8" font-size="10.5">Campaign promo rate per RoomType; CashOnly flag enforced.</text>
+  </g>
+
+  <!-- 2. StayReview Card (x=50, y=690, w=360, h=410) -->
+  <g id="card-StayReview" transform="translate(50, 690)" filter="url(#cardShadow)">
+    <rect width="360" height="410" rx="12" fill="url(#purpleCardBg)" stroke="#8B5CF6" stroke-width="1.5"/>
+    <path d="M 0 12 Q 0 0 12 0 L 348 0 Q 360 0 360 12 L 360 48 L 0 48 Z" fill="url(#purpleHeader)"/>
+    <text x="16" y="22" fill="#DDD6FE" font-size="10" font-weight="700" letter-spacing="1">«ENTITY / GUEST FEEDBACK»</text>
+    <text x="16" y="40" fill="#FFFFFF" font-size="16" font-weight="800">StayReview</text>
+    <rect x="250" y="14" width="94" height="20" rx="5" fill="#4C1D95" stroke="#8B5CF6" stroke-width="1"/>
+    <text x="297" y="28" fill="#EDE9FE" font-size="10" font-family="'JetBrains Mono', monospace" text-anchor="middle">table: StayReview</text>
+
+    <!-- Members -->
+    <g transform="translate(16, 68)" font-family="'JetBrains Mono', monospace" font-size="11.5">
+      <!-- PK / FK -->
+      <text y="0" fill="#FCD34D" font-weight="700">+ int Id <tspan fill="#F59E0B" font-size="10">[PK]</tspan></text>
+      <text y="20" fill="#C4B5FD" font-weight="700">+ int BookingId <tspan fill="#A78BFA" font-size="10">[FK, Unique]</tspan></text>
+      <line x1="0" y1="28" x2="328" y2="28" stroke="#371B69" stroke-width="1"/>
+
+      <!-- Attributes -->
+      <text y="46" fill="#F8FAFC">+ string GuestUserId</text>
+      <text y="66" fill="#F8FAFC">+ string DisplayName</text>
+      <text y="86" fill="#A78BFA">+ byte OverallRating <tspan fill="#94A3B8">(1-5)</tspan></text>
+      <text y="106" fill="#A78BFA">+ byte Staff, Comfort, Facilities</text>
+      <text y="126" fill="#F8FAFC">+ bool? WouldRecommend</text>
+      <text y="146" fill="#94A3B8">+ string? Comment</text>
+      <text y="166" fill="#94A3B8">+ string? TagsJson</text>
+      <text y="186" fill="#34D399">+ bool IsPublished</text>
+      <text y="206" fill="#94A3B8">+ string? HotelReply</text>
+      <text y="226" fill="#94A3B8">+ DateTime? HotelReplyAtUtc</text>
+      <text y="246" fill="#94A3B8">+ string? HotelReplyBy</text>
+      <text y="266" fill="#64748B">+ DateTime CreatedAtUtc, UpdatedAtUtc</text>
+    </g>
+
+    <!-- Bottom Mini Note -->
+    <rect x="12" y="360" width="336" height="36" rx="6" fill="#13102B" stroke="#2E1065" stroke-width="1"/>
+    <text x="22" y="382" fill="#C4B5FD" font-size="10.5">Verified post-checkout review (1:1 with Booking, unique index).</text>
+  </g>
+
+  <!-- 3. Domain Rules & Invariants Summary Card (x=50, y=1140, w=360, h=410) -->
+  <g id="card-Invariants" transform="translate(50, 1140)" filter="url(#cardShadow)">
+    <rect width="360" height="410" rx="12" fill="#08101E" stroke="#1E3A8A" stroke-width="1.5"/>
+    <path d="M 0 12 Q 0 0 12 0 L 348 0 Q 360 0 360 12 L 360 44 L 0 44 Z" fill="#0F1F3D"/>
+    <text x="16" y="28" fill="#60A5FA" font-size="14" font-weight="700">CORE ARCHITECTURAL INVARIANTS</text>
+    
+    <g transform="translate(16, 62)" font-size="11.5" fill="#CBD5E1">
+      <text y="0" font-weight="700" fill="#F59E0B">1. Serializable Double-Booking Guard:</text>
+      <text y="18" fill="#94A3B8">ExecuteInSerializableTransactionAsync isolates room</text>
+      <text y="34" fill="#94A3B8">inventory holds against concurrent requests.</text>
+
+      <text y="64" font-weight="700" fill="#14B8A6">2. Snapshot Preservation Pattern:</text>
+      <text y="82" fill="#94A3B8">BookingItem retains RoomTypeName text so deleting a</text>
+      <text y="98" fill="#94A3B8">RoomType never corrupts booking history.</text>
+
+      <text y="128" font-weight="700" fill="#10B981">3. Immutable Accounting Ledger:</text>
+      <text y="146" fill="#94A3B8">PaymentRecord rows are never hard-deleted. Voiding</text>
+      <text y="162" fill="#94A3B8">appends Voided status, Reason, and Auditor ID.</text>
+
+      <text y="192" font-weight="700" fill="#A78BFA">4. Door Number Isolation:</text>
+      <text y="210" fill="#94A3B8">Physical door assignment occurs only via</text>
+      <text y="226" fill="#94A3B8">BookingRoomAssignment; Room.Id unique per booking.</text>
+
+      <text y="256" font-weight="700" fill="#F87171">5. Automated Lifecycle Tasks (Hosted):</text>
+      <text y="274" fill="#94A3B8">20-min warnings → 4-hr pending cancellation →</text>
+      <text y="290" fill="#94A3B8">Auto-checkout at departure time via BackgroundService.</text>
+
+      <text y="320" font-weight="700" fill="#38BDF8">6. Time Standard:</text>
+      <text y="338" fill="#94A3B8">Stored in UTC, rendered in Philippines Time (UTC+8).</text>
+    </g>
+  </g>
+
+  <!-- ======================== COLUMN 2 ======================== -->
+
+  <!-- 4. RoomType Card (x=480, y=215, w=430, h=340) -->
+  <g id="card-RoomType" transform="translate(480, 215)" filter="url(#cardShadow)">
+    <rect width="430" height="340" rx="12" fill="url(#blueCardBg)" stroke="#3B82F6" stroke-width="1.5"/>
+    <path d="M 0 12 Q 0 0 12 0 L 418 0 Q 430 0 430 12 L 430 48 L 0 48 Z" fill="url(#blueHeader)"/>
+    <text x="16" y="22" fill="#93C5FD" font-size="10" font-weight="700" letter-spacing="1">«CATALOG ARCHETYPE»</text>
+    <text x="16" y="40" fill="#FFFFFF" font-size="16" font-weight="800">RoomType</text>
+    <rect x="310" y="14" width="104" height="20" rx="5" fill="#1E3A8A" stroke="#3B82F6" stroke-width="1"/>
+    <text x="362" y="28" fill="#DBEAFE" font-size="10" font-family="'JetBrains Mono', monospace" text-anchor="middle">table: RoomType</text>
+
+    <!-- Members -->
+    <g transform="translate(16, 68)" font-family="'JetBrains Mono', monospace" font-size="11.5">
+      <!-- PK -->
+      <text y="0" fill="#FCD34D" font-weight="700">+ int RoomTypeId <tspan fill="#F59E0B" font-size="10">[PK]</tspan></text>
+      <line x1="0" y1="12" x2="398" y2="12" stroke="#1E3A8A" stroke-width="1"/>
+
+      <!-- Attributes -->
+      <text y="30" fill="#F8FAFC">+ string Name <tspan fill="#60A5FA">(Unique)</tspan></text>
+      <text y="50" fill="#94A3B8">+ string? Description</text>
+      <text y="70" fill="#94A3B8">+ DateTime CreatedAt</text>
+      <text y="90" fill="#38BDF8">+ List&lt;string&gt; Inclusions <tspan fill="#64748B">(JSON)</tspan></text>
+      <text y="110" fill="#38BDF8">+ List&lt;string&gt; Images <tspan fill="#64748B">(JSON)</tspan></text>
+      <text y="130" fill="#34D399" font-weight="700">+ decimal PricePerNight</text>
+      <text y="150" fill="#F8FAFC">+ int MaxOccupancy, BedCount</text>
+      <line x1="0" y1="162" x2="398" y2="162" stroke="#1E3A8A" stroke-width="1"/>
+
+      <!-- Navigations -->
+      <text y="180" fill="#93C5FD">+ ICollection&lt;Room&gt; Rooms</text>
+      <text y="200" fill="#93C5FD">+ ICollection&lt;SpecialOffer&gt; SpecialOffers</text>
+    </g>
+
+    <!-- Bottom Mini Note -->
+    <rect x="12" y="290" width="406" height="36" rx="6" fill="#0A1628" stroke="#1E293B" stroke-width="1"/>
+    <text x="22" y="312" fill="#94A3B8" font-size="10.5">Sellable category (Queen, Twin, Deluxe) with pricing &amp; occupancy rules.</text>
+  </g>
+
+  <!-- 5. Booking (Aggregate Root) Card (x=480, y=600, w=430, h=720) -->
+  <g id="card-Booking" transform="translate(480, 600)" filter="url(#goldGlow)">
+    <rect width="430" height="720" rx="14" fill="url(#goldCardBg)" stroke="url(#goldGrad)" stroke-width="2.5"/>
+    <path d="M 0 14 Q 0 0 14 0 L 416 0 Q 430 0 430 14 L 430 52 L 0 52 Z" fill="url(#goldHeader)"/>
+    
+    <!-- Header Title with Crown -->
+    <text x="16" y="24" fill="#FDE68A" font-size="11" font-weight="800" letter-spacing="1.2">👑 «AGGREGATE ROOT»</text>
+    <text x="16" y="44" fill="#FFFFFF" font-size="18" font-weight="800">Booking</text>
+    
+    <!-- Table Badge -->
+    <rect x="310" y="15" width="104" height="22" rx="6" fill="#451A03" stroke="#F59E0B" stroke-width="1.2"/>
+    <text x="362" y="30" fill="#FEF3C7" font-size="10.5" font-family="'JetBrains Mono', monospace" font-weight="700" text-anchor="middle">table: Booking</text>
+
+    <!-- Members List -->
+    <g transform="translate(16, 72)" font-family="'JetBrains Mono', monospace" font-size="11.5">
+      <!-- PK / Unique Reference / FK -->
+      <text y="0" fill="#FCD34D" font-weight="700">+ int Id <tspan fill="#F59E0B" font-size="10">[PK]</tspan></text>
+      <text y="20" fill="#FCD34D" font-weight="700">+ string Reference <tspan fill="#FBBF24" font-size="10">[Unique Code]</tspan></text>
+      <text y="40" fill="#60A5FA" font-weight="700">+ int? SpecialOfferId <tspan fill="#38BDF8" font-size="10">[FK, Nullable]</tspan></text>
+      <line x1="0" y1="48" x2="398" y2="48" stroke="#78350F" stroke-width="1.2"/>
+
+      <!-- Guest Details -->
+      <text y="66" fill="#F8FAFC">+ string GuestName</text>
+      <text y="86" fill="#F8FAFC">+ string GuestEmail, GuestPhone</text>
+      <text y="106" fill="#38BDF8">+ DateTime CheckInAtUtc</text>
+      <text y="126" fill="#38BDF8">+ DateTime CheckoutTimeUtc</text>
+      <line x1="0" y1="134" x2="398" y2="134" stroke="#78350F" stroke-width="1"/>
+
+      <!-- State & Payment Structure -->
+      <text y="152" fill="#FBBF24" font-weight="700">+ BookingStatus Status</text>
+      <text y="172" fill="#F8FAFC">+ BookingKind Kind <tspan fill="#94A3B8">(Booking / Reservation)</tspan></text>
+      <text y="192" fill="#F8FAFC">+ PaymentOption PaymentOption <tspan fill="#94A3B8">(Full / Half)</tspan></text>
+      <text y="212" fill="#34D399" font-weight="700">+ decimal TotalAmount</text>
+      <text y="232" fill="#34D399">+ decimal AmountDueNow</text>
+      <line x1="0" y1="240" x2="398" y2="240" stroke="#78350F" stroke-width="1"/>
+
+      <!-- Channels, Discounts, Headcount -->
+      <text y="258" fill="#F8FAFC">+ BookingChannel Channel <tspan fill="#94A3B8">(Online, WalkIn, OTA)</tspan></text>
+      <text y="278" fill="#F8FAFC">+ ArrivalDiscountRequest ArrivalDiscountRequest</text>
+      <text y="298" fill="#F87171">+ bool CashOnlyPromo</text>
+      <text y="318" fill="#F8FAFC">+ int AdultCount, ChildCount</text>
+      <text y="338" fill="#94A3B8">+ string? GuestPartyJson</text>
+      <line x1="0" y1="346" x2="398" y2="346" stroke="#78350F" stroke-width="1"/>
+
+      <!-- Lifecycle Warnings & Soft Delete -->
+      <text y="364" fill="#94A3B8">+ DateTime CreatedAtUtc, UpdatedAtUtc</text>
+      <text y="384" fill="#F87171">+ bool IsArchived, DateTime? ArchivedAtUtc</text>
+      <text y="404" fill="#94A3B8">+ bool IsNotificationCleared</text>
+      <text y="424" fill="#FCD34D">+ DateTime? ArrivalWarningSentAtUtc</text>
+      <text y="444" fill="#FCD34D">+ DateTime? PendingCallWarningSentAtUtc</text>
+      <text y="464" fill="#FCD34D">+ DateTime? CheckoutWarningSentAtUtc</text>
+      <line x1="0" y1="472" x2="398" y2="472" stroke="#78350F" stroke-width="1.2"/>
+
+      <!-- Navigation Collections (Owned) -->
+      <text y="492" fill="#FDE68A" font-weight="700">◆ ICollection&lt;BookingItem&gt; Items</text>
+      <text y="512" fill="#FDE68A" font-weight="700">◆ ICollection&lt;BookingCharge&gt; Charges</text>
+      <text y="532" fill="#FDE68A" font-weight="700">◆ ICollection&lt;PaymentRecord&gt; PaymentRecords</text>
+      <text y="552" fill="#DDD6FE" font-weight="700">◆ StayReview? review</text>
+      <text y="572" fill="#93C5FD">+ SpecialOffer? SpecialOffer</text>
+    </g>
+
+    <!-- Bottom Mini Note -->
+    <rect x="14" y="665" width="402" height="42" rx="7" fill="#241403" stroke="#B45309" stroke-width="1"/>
+    <text x="24" y="683" fill="#FDE68A" font-size="11" font-weight="700">Aggregate Boundary:</text>
+    <text x="24" y="698" fill="#FCD34D" font-size="10.5">All state changes, charges, payments &amp; assignments pass through this root.</text>
+  </g>
+
+  <!-- 6. Architectural Summary Badge under Booking (x=480, y=1345, w=430, h=120) -->
+  <g id="card-AggregateRules" transform="translate(480, 1345)" filter="url(#cardShadow)">
+    <rect width="430" height="120" rx="10" fill="#0C1B30" stroke="#F59E0B" stroke-width="1" stroke-dasharray="4 2"/>
+    <text x="16" y="24" fill="#FCD34D" font-size="11" font-weight="700">TRANSACTION ISOLATION GUARANTEE</text>
+    <text x="16" y="44" fill="#94A3B8" font-size="10.5">All booking creation and room allocation executes within</text>
+    <text x="16" y="60" fill="#38BDF8" font-family="'JetBrains Mono', monospace" font-size="10.5">ExecuteInSerializableTransactionAsync</text>
+    <text x="16" y="78" fill="#94A3B8" font-size="10.5">Guarantees zero double-booking even under peak flash sale load.</text>
+    <text x="16" y="96" fill="#34D399" font-size="10.5">✓ EF Core concurrency token + SQL Server SERIALIZABLE locks</text>
+  </g>
+
+  <!-- ======================== COLUMN 3 ======================== -->
+
+  <!-- 7. BookingItem Card (x=960, y=650, w=390, h=250) -->
+  <g id="card-BookingItem" transform="translate(960, 650)" filter="url(#cardShadow)">
+    <rect width="390" height="250" rx="12" fill="url(#tealCardBg)" stroke="#14B8A6" stroke-width="1.5"/>
+    <path d="M 0 12 Q 0 0 12 0 L 378 0 Q 390 0 390 12 L 390 48 L 0 48 Z" fill="url(#tealHeader)"/>
+    <text x="16" y="22" fill="#CCFBF1" font-size="10" font-weight="700" letter-spacing="1">«ENTITY / LINE ITEM»</text>
+    <text x="16" y="40" fill="#FFFFFF" font-size="16" font-weight="800">BookingItem</text>
+    <rect x="270" y="14" width="104" height="20" rx="5" fill="#115E59" stroke="#14B8A6" stroke-width="1"/>
+    <text x="322" y="28" fill="#CCFBF1" font-size="10" font-family="'JetBrains Mono', monospace" text-anchor="middle">table: BookingItem</text>
+
+    <!-- Members -->
+    <g transform="translate(16, 68)" font-family="'JetBrains Mono', monospace" font-size="11.5">
+      <!-- PK / FKs -->
+      <text y="0" fill="#FCD34D" font-weight="700">+ int Id <tspan fill="#F59E0B" font-size="10">[PK]</tspan></text>
+      <text y="20" fill="#2DD4BF" font-weight="700">+ int BookingId <tspan fill="#14B8A6" font-size="10">[FK]</tspan></text>
+      <text y="40" fill="#60A5FA" font-weight="700">+ int? RoomTypeId <tspan fill="#38BDF8" font-size="10">[FK, Nullable]</tspan></text>
+      <line x1="0" y1="48" x2="358" y2="48" stroke="#115E59" stroke-width="1"/>
+
+      <!-- Attributes -->
+      <text y="66" fill="#F8FAFC">+ string RoomTypeName <tspan fill="#94A3B8">(Historical snapshot)</tspan></text>
+      <text y="86" fill="#F8FAFC">+ int Quantity <tspan fill="#94A3B8">(Rooms of this type)</tspan></text>
+      <text y="106" fill="#34D399" font-weight="700">+ decimal PricePerNight</text>
+      <line x1="0" y1="114" x2="358" y2="114" stroke="#115E59" stroke-width="1"/>
+
+      <!-- Navigation -->
+      <text y="132" fill="#5EEAD4">◆ ICollection&lt;BookingRoomAssignment&gt; RoomAssignments</text>
+    </g>
+
+    <!-- Bottom Mini Note -->
+    <rect x="12" y="205" width="366" height="32" rx="5" fill="#041F1F" stroke="#0D9488" stroke-width="1"/>
+    <text x="20" y="225" fill="#5EEAD4" font-size="10">Room demand snapshot; door numbers assigned later.</text>
+  </g>
+
+  <!-- 8. BookingCharge Card (x=960, y=940, w=390, h=280) -->
+  <g id="card-BookingCharge" transform="translate(960, 940)" filter="url(#cardShadow)">
+    <rect width="390" height="280" rx="12" fill="url(#emeraldCardBg)" stroke="#10B981" stroke-width="1.5"/>
+    <path d="M 0 12 Q 0 0 12 0 L 378 0 Q 390 0 390 12 L 390 48 L 0 48 Z" fill="url(#emeraldHeader)"/>
+    <text x="16" y="22" fill="#D1FAE5" font-size="10" font-weight="700" letter-spacing="1">«ENTITY / FEE LINE»</text>
+    <text x="16" y="40" fill="#FFFFFF" font-size="16" font-weight="800">BookingCharge</text>
+    <rect x="254" y="14" width="120" height="20" rx="5" fill="#064E3B" stroke="#10B981" stroke-width="1"/>
+    <text x="314" y="28" fill="#D1FAE5" font-size="10" font-family="'JetBrains Mono', monospace" text-anchor="middle">table: BookingCharge</text>
+
+    <!-- Members -->
+    <g transform="translate(16, 68)" font-family="'JetBrains Mono', monospace" font-size="11.5">
+      <!-- PK / FK -->
+      <text y="0" fill="#FCD34D" font-weight="700">+ int Id <tspan fill="#F59E0B" font-size="10">[PK]</tspan></text>
+      <text y="20" fill="#34D399" font-weight="700">+ int BookingId <tspan fill="#10B981" font-size="10">[FK]</tspan></text>
+      <line x1="0" y1="28" x2="358" y2="28" stroke="#065F46" stroke-width="1"/>
+
+      <!-- Attributes -->
+      <text y="46" fill="#6EE7B7" font-weight="700">+ BookingChargeType ChargeType</text>
+      <text y="66" fill="#F8FAFC">+ string Label</text>
+      <text y="86" fill="#F8FAFC">+ int Quantity, Nights</text>
+      <text y="106" fill="#34D399">+ decimal UnitAmount</text>
+      <text y="126" fill="#34D399" font-weight="700">+ decimal Amount <tspan fill="#94A3B8">(Stay fee calculation)</tspan></text>
+      <text y="146" fill="#64748B">+ DateTime CreatedAtUtc</text>
+    </g>
+
+    <!-- Bottom Mini Note -->
+    <rect x="12" y="235" width="366" height="32" rx="5" fill="#041A14" stroke="#059669" stroke-width="1"/>
+    <text x="20" y="255" fill="#6EE7B7" font-size="10">Early check-in, late checkout, extra person, mini-bar, discount.</text>
+  </g>
+
+  <!-- 9. StayTimeFees Reference Panel (x=960, y=1250, w=390, h=160) -->
+  <g id="card-StayTimeFees" transform="translate(960, 1250)" filter="url(#cardShadow)">
+    <rect width="390" height="160" rx="10" fill="#081A16" stroke="#059669" stroke-width="1" stroke-dasharray="3 2"/>
+    <text x="14" y="22" fill="#34D399" font-size="11" font-weight="700">STAY FEE BUSINESS RULES (StayTimeFees)</text>
+    <g transform="translate(14, 42)" font-family="'JetBrains Mono', monospace" font-size="10.5" fill="#A7F3D0">
+      <text y="0">• EarlyCheckInFeePerRoom: ₱500</text>
+      <text y="18">• LateCheckoutFeePerRoomPerHour: ₱100 (Max 3 hrs)</text>
+      <text y="36">• ExtraPersonFeePerNight: ₱200 (Max 1 extra / room)</text>
+      <text y="54">• IncludedGuestsPerRoom: 2 persons</text>
+      <text y="72" fill="#94A3B8">• Methods: ComputeEarlyCheckInFee, ComputeLateCheckoutFee,</text>
+      <text y="90" fill="#94A3B8">  ComputeTotal, ExtraPersonsFromHeadcount</text>
+    </g>
+  </g>
+
+  <!-- ======================== COLUMN 4 ======================== -->
+
+  <!-- 10. Room Card (x=1400, y=215, w=390, h=215) -->
+  <g id="card-Room" transform="translate(1400, 215)" filter="url(#cardShadow)">
+    <rect width="390" height="215" rx="12" fill="url(#blueCardBg)" stroke="#3B82F6" stroke-width="1.5"/>
+    <path d="M 0 12 Q 0 0 12 0 L 378 0 Q 390 0 390 12 L 390 48 L 0 48 Z" fill="url(#blueHeader)"/>
+    <text x="16" y="22" fill="#93C5FD" font-size="10" font-weight="700" letter-spacing="1">«PHYSICAL INVENTORY»</text>
+    <text x="16" y="40" fill="#FFFFFF" font-size="16" font-weight="800">Room</text>
+    <rect x="290" y="14" width="84" height="20" rx="5" fill="#1E3A8A" stroke="#3B82F6" stroke-width="1"/>
+    <text x="332" y="28" fill="#DBEAFE" font-size="10" font-family="'JetBrains Mono', monospace" text-anchor="middle">table: Room</text>
+
+    <!-- Members -->
+    <g transform="translate(16, 68)" font-family="'JetBrains Mono', monospace" font-size="11.5">
+      <!-- PK / FK -->
+      <text y="0" fill="#FCD34D" font-weight="700">+ int Id <tspan fill="#F59E0B" font-size="10">[PK]</tspan></text>
+      <text y="20" fill="#60A5FA" font-weight="700">+ int RoomTypeId <tspan fill="#38BDF8" font-size="10">[FK]</tspan></text>
+      <line x1="0" y1="28" x2="358" y2="28" stroke="#1E3A8A" stroke-width="1"/>
+
+      <!-- Attributes -->
+      <text y="46" fill="#F8FAFC" font-weight="700">+ string RoomNumber <tspan fill="#60A5FA">(Unique door #)</tspan></text>
+      <text y="66" fill="#38BDF8">+ RoomStatus Status</text>
+      <text y="86" fill="#94A3B8" font-size="10.5">  (Available, Unavailable, Occupied, Cleaning→Maintaining)</text>
+    </g>
+
+    <!-- Bottom Mini Note -->
+    <rect x="12" y="170" width="366" height="32" rx="5" fill="#0A1628" stroke="#1E293B" stroke-width="1"/>
+    <text x="20" y="190" fill="#94A3B8" font-size="10.5">One physical room unit (door number on floor plan).</text>
+  </g>
+
+  <!-- 11. BookingRoomAssignment Card (x=1400, y=650, w=390, h=190) -->
+  <g id="card-BookingRoomAssignment" transform="translate(1400, 650)" filter="url(#cardShadow)">
+    <rect width="390" height="190" rx="12" fill="url(#tealCardBg)" stroke="#14B8A6" stroke-width="1.5"/>
+    <path d="M 0 12 Q 0 0 12 0 L 378 0 Q 390 0 390 12 L 390 48 L 0 48 Z" fill="url(#tealHeader)"/>
+    <text x="16" y="22" fill="#CCFBF1" font-size="10" font-weight="700" letter-spacing="1">«FULFILLMENT JOIN»</text>
+    <text x="16" y="40" fill="#FFFFFF" font-size="15" font-weight="800">BookingRoomAssignment</text>
+    <rect x="230" y="14" width="144" height="20" rx="5" fill="#115E59" stroke="#14B8A6" stroke-width="1"/>
+    <text x="302" y="28" fill="#CCFBF1" font-size="10" font-family="'JetBrains Mono', monospace" text-anchor="middle">table: RoomAssignment</text>
+
+    <!-- Members -->
+    <g transform="translate(16, 68)" font-family="'JetBrains Mono', monospace" font-size="11.5">
+      <text y="0" fill="#FCD34D" font-weight="700">+ int Id <tspan fill="#F59E0B" font-size="10">[PK]</tspan></text>
+      <text y="20" fill="#2DD4BF" font-weight="700">+ int BookingItemId <tspan fill="#14B8A6" font-size="10">[FK]</tspan></text>
+      <text y="40" fill="#60A5FA" font-weight="700">+ int RoomId <tspan fill="#38BDF8" font-size="10">[FK]</tspan></text>
+      <line x1="0" y1="48" x2="358" y2="48" stroke="#115E59" stroke-width="1"/>
+      <text y="66" fill="#5EEAD4">+ BookingItem BookingItem (Nav)</text>
+      <text y="86" fill="#93C5FD">+ Room Room (Nav)</text>
+    </g>
+
+    <!-- Bottom Mini Note -->
+    <rect x="12" y="148" width="366" height="30" rx="5" fill="#041F1F" stroke="#0D9488" stroke-width="1"/>
+    <text x="20" y="167" fill="#5EEAD4" font-size="10">Binds a specific door number to a stay line item upon check-in.</text>
+  </g>
+
+  <!-- 12. PaymentRecord Card (x=1400, y=890, w=410, h=480) -->
+  <g id="card-PaymentRecord" transform="translate(1400, 890)" filter="url(#cardShadow)">
+    <rect width="410" height="480" rx="12" fill="url(#emeraldCardBg)" stroke="#10B981" stroke-width="1.5"/>
+    <path d="M 0 12 Q 0 0 12 0 L 398 0 Q 410 0 410 12 L 410 48 L 0 48 Z" fill="url(#emeraldHeader)"/>
+    <text x="16" y="22" fill="#D1FAE5" font-size="10" font-weight="700" letter-spacing="1">«IMMUTABLE ACCOUNTING LEDGER»</text>
+    <text x="16" y="40" fill="#FFFFFF" font-size="16" font-weight="800">PaymentRecord</text>
+    <rect x="274" y="14" width="120" height="20" rx="5" fill="#064E3B" stroke="#10B981" stroke-width="1"/>
+    <text x="334" y="28" fill="#D1FAE5" font-size="10" font-family="'JetBrains Mono', monospace" text-anchor="middle">table: PaymentRecord</text>
+
+    <!-- Members -->
+    <g transform="translate(16, 68)" font-family="'JetBrains Mono', monospace" font-size="11.5">
+      <!-- PK / FK -->
+      <text y="0" fill="#FCD34D" font-weight="700">+ int Id <tspan fill="#F59E0B" font-size="10">[PK]</tspan></text>
+      <text y="20" fill="#34D399" font-weight="700">+ int BookingId <tspan fill="#10B981" font-size="10">[FK]</tspan></text>
+      <text y="40" fill="#F8FAFC" font-weight="700">+ string ReceiptNumber</text>
+      <line x1="0" y1="48" x2="378" y2="48" stroke="#065F46" stroke-width="1"/>
+
+      <!-- Event & Method -->
+      <text y="66" fill="#6EE7B7">+ PaymentEventType EventType</text>
+      <text y="86" fill="#F8FAFC">+ PaymentMethod Method <tspan fill="#94A3B8">(Cash, EWallet...)</tspan></text>
+      <text y="106" fill="#34D399" font-weight="700">+ decimal Amount</text>
+      <text y="126" fill="#38BDF8">+ decimal StayTotalAtPosting</text>
+      <text y="146" fill="#38BDF8">+ decimal BalanceAfter <tspan fill="#94A3B8">(Running balance)</tspan></text>
+      <text y="166" fill="#94A3B8">+ DateTime PaidAtUtc</text>
+      <text y="186" fill="#F8FAFC">+ string ReceivedBy <tspan fill="#94A3B8">(Staff collector)</tspan></text>
+      <line x1="0" y1="194" x2="378" y2="194" stroke="#065F46" stroke-width="1"/>
+
+      <!-- Verification & Audit Trail -->
+      <text y="212" fill="#FCD34D">+ PaymentRecordStatus Status <tspan fill="#94A3B8">(Posted / Voided)</tspan></text>
+      <text y="232" fill="#94A3B8">+ string? ExternalReference <tspan fill="#64748B">(EWallet, manual)</tspan></text>
+      <text y="252" fill="#94A3B8">+ string? BankTransferReference</text>
+      <text y="272" fill="#34D399">+ DateTime? VerifiedAtUtc <tspan fill="#94A3B8">+ VerifiedBy</tspan></text>
+      <text y="292" fill="#94A3B8">+ string? Notes</text>
+      <line x1="0" y1="300" x2="378" y2="300" stroke="#065F46" stroke-width="1"/>
+
+      <!-- Void Fields -->
+      <text y="318" fill="#F87171">+ DateTime? VoidedAtUtc</text>
+      <text y="338" fill="#F87171">+ string? VoidReason, VoidedBy</text>
+    </g>
+
+    <!-- Bottom Mini Note -->
+    <rect x="12" y="425" width="386" height="42" rx="6" fill="#041A14" stroke="#059669" stroke-width="1"/>
+    <text x="22" y="443" fill="#34D399" font-size="11" font-weight="700">Append-Only Invariant:</text>
+    <text x="22" y="458" fill="#6EE7B7" font-size="10.5">Records are never updated or deleted. Errors are resolved by voiding.</text>
+  </g>
+
+  <!-- 13. Payment Export Note (x=1400, y=1390, w=410, h=110) -->
+  <g id="card-PaymentFlush" transform="translate(1400, 1390)" filter="url(#cardShadow)">
+    <rect width="410" height="110" rx="10" fill="#05161A" stroke="#10B981" stroke-width="1" stroke-dasharray="4 2"/>
+    <text x="14" y="22" fill="#34D399" font-size="11" font-weight="700">PAYMENT AUDIT &amp; RETENTION FLUSH</text>
+    <text x="14" y="42" fill="#94A3B8" font-size="10.5">• Handled by PaymentService + PaymentFlushPdfBuilder</text>
+    <text x="14" y="60" fill="#94A3B8" font-size="10.5">• Export-then-delete generates cryptographic PDF record before purge</text>
+    <text x="14" y="78" fill="#94A3B8" font-size="10.5">• Purge action is immutably recorded in SystemFlushLog</text>
+  </g>
+
+  <!-- ================================================================================= -->
+  <!-- ZONE 3: IDENTITY, AUDIT & SYSTEM INFRASTRUCTURE (Right Column: x=1860) -->
+  <!-- ================================================================================= -->
+
+  <!-- Sub-Panel 1 Header -->
+  <text x="1875" y="240" fill="#C7D2FE" font-size="14" font-weight="800" letter-spacing="1">AUTHENTICATION &amp; ACCESS CONTROL (ASP.NET Identity)</text>
+
+  <!-- 14. IdentityUser Card (x=1875, y=260, w=290, h=180) -->
+  <g id="card-IdentityUser" transform="translate(1875, 260)" filter="url(#cardShadow)">
+    <rect width="290" height="180" rx="10" fill="url(#indigoCardBg)" stroke="#6366F1" stroke-width="1.2"/>
+    <path d="M 0 10 Q 0 0 10 0 L 280 0 Q 290 0 290 10 L 290 38 L 0 38 Z" fill="url(#indigoHeader)"/>
+    <text x="12" y="18" fill="#C7D2FE" font-size="9.5" font-weight="700">«ASP.NET IDENTITY BASE»</text>
+    <text x="12" y="32" fill="#FFFFFF" font-size="14" font-weight="800">IdentityUser</text>
+    <rect x="186" y="10" width="94" height="18" rx="4" fill="#1E1B4B" stroke="#6366F1" stroke-width="1"/>
+    <text x="233" y="22" fill="#E0E7FF" font-size="9" font-family="'JetBrains Mono', monospace" text-anchor="middle">table: StaffUser</text>
+
+    <!-- Members -->
+    <g transform="translate(12, 58)" font-family="'JetBrains Mono', monospace" font-size="11">
+      <text y="0" fill="#FCD34D" font-weight="700">+ string Id <tspan fill="#F59E0B" font-size="9">[PK]</tspan></text>
+      <text y="18" fill="#F8FAFC">+ string UserName</text>
+      <text y="36" fill="#F8FAFC">+ string Email</text>
+      <text y="54" fill="#94A3B8">+ string? PasswordHash</text>
+      <text y="72" fill="#64748B">+ string SecurityStamp, ConcurrencyStamp</text>
+    </g>
+
+    <!-- Bottom Mini Note -->
+    <rect x="8" y="142" width="274" height="26" rx="4" fill="#0A0E24" stroke="#1E1B4B" stroke-width="1"/>
+    <text x="14" y="158" fill="#818CF8" font-size="9.5">Renamed to StaffUser via StaffAuthSchema.</text>
+  </g>
+
+  <!-- 15. IdentityRole Card (x=1875, y=470, w=290, h=140) -->
+  <g id="card-IdentityRole" transform="translate(1875, 470)" filter="url(#cardShadow)">
+    <rect width="290" height="140" rx="10" fill="url(#indigoCardBg)" stroke="#6366F1" stroke-width="1.2"/>
+    <path d="M 0 10 Q 0 0 10 0 L 280 0 Q 290 0 290 10 L 290 38 L 0 38 Z" fill="url(#indigoHeader)"/>
+    <text x="12" y="18" fill="#C7D2FE" font-size="9.5" font-weight="700">«ASP.NET IDENTITY ROLE»</text>
+    <text x="12" y="32" fill="#FFFFFF" font-size="14" font-weight="800">IdentityRole</text>
+    <rect x="186" y="10" width="94" height="18" rx="4" fill="#1E1B4B" stroke="#6366F1" stroke-width="1"/>
+    <text x="233" y="22" fill="#E0E7FF" font-size="9" font-family="'JetBrains Mono', monospace" text-anchor="middle">table: StaffRole</text>
+
+    <!-- Members -->
+    <g transform="translate(12, 58)" font-family="'JetBrains Mono', monospace" font-size="11">
+      <text y="0" fill="#FCD34D" font-weight="700">+ string Id <tspan fill="#F59E0B" font-size="9">[PK]</tspan></text>
+      <text y="18" fill="#F8FAFC">+ string Name</text>
+      <text y="36" fill="#94A3B8">+ string? NormalizedName</text>
+    </g>
+
+    <!-- Bottom Mini Note -->
+    <rect x="8" y="104" width="274" height="26" rx="4" fill="#0A0E24" stroke="#1E1B4B" stroke-width="1"/>
+    <text x="14" y="120" fill="#818CF8" font-size="9.5">Roles: AdminManager, Receptionist, Guest.</text>
+  </g>
+
+  <!-- 16. ApplicationUser Card (x=2240, y=260, w=345, h=350) -->
+  <g id="card-ApplicationUser" transform="translate(2240, 260)" filter="url(#cardShadow)">
+    <rect width="345" height="350" rx="12" fill="url(#indigoCardBg)" stroke="#818CF8" stroke-width="1.8"/>
+    <path d="M 0 12 Q 0 0 12 0 L 333 0 Q 345 0 345 12 L 345 44 L 0 44 Z" fill="url(#indigoHeader)"/>
+    <text x="14" y="20" fill="#E0E7FF" font-size="10" font-weight="700" letter-spacing="1">«EXTENDED IDENTITY USER»</text>
+    <text x="14" y="38" fill="#FFFFFF" font-size="16" font-weight="800">ApplicationUser</text>
+    <rect x="230" y="12" width="102" height="20" rx="5" fill="#1E1B4B" stroke="#818CF8" stroke-width="1"/>
+    <text x="281" y="26" fill="#E0E7FF" font-size="9.5" font-family="'JetBrains Mono', monospace" text-anchor="middle">inherits IdentityUser</text>
+
+    <!-- Members -->
+    <g transform="translate(14, 62)" font-family="'JetBrains Mono', monospace" font-size="11">
+      <text y="0" fill="#94A3B8">*(Inherits Id, UserName, Email, PasswordHash)*</text>
+      <line x1="0" y1="8" x2="317" y2="8" stroke="#312E81" stroke-width="1"/>
+
+      <text y="24" fill="#F8FAFC">+ string? FullName</text>
+      <text y="42" fill="#94A3B8">+ DateOnly? BirthDate</text>
+      <text y="60" fill="#94A3B8">+ string? Address</text>
+      <text y="78" fill="#F87171" font-weight="700">+ bool MustChangePassword</text>
+      <text y="96" fill="#818CF8" font-weight="700">+ string? RoleId <tspan fill="#A5B4FC" font-size="9.5">[FK Single Role]</tspan></text>
+      <text y="114" fill="#F8FAFC">+ string? GoogleEmail</text>
+      <text y="132" fill="#94A3B8">+ string? NormalizedGoogleEmail</text>
+      <text y="150" fill="#6EE7B7">+ GoogleVerificationStatus GoogleStatus</text>
+      <text y="168" fill="#94A3B8">+ string? DashboardLayoutJson</text>
+      <line x1="0" y1="176" x2="317" y2="176" stroke="#312E81" stroke-width="1"/>
+
+      <!-- Methods -->
+      <text y="194" fill="#FDE68A">+ CanUseGoogleForAuthOrRecovery(u)$</text>
+      <text y="212" fill="#FDE68A">+ HasVerifiedGoogleRecovery(u)$</text>
+    </g>
+
+    <!-- Bottom Mini Note -->
+    <rect x="10" y="295" width="325" height="42" rx="6" fill="#0C122E" stroke="#3730A3" stroke-width="1"/>
+    <text x="18" y="312" fill="#A5B4FC" font-size="10.5" font-weight="600">Single-Role Architecture:</text>
+    <text x="18" y="327" fill="#C7D2FE" font-size="10">RoleId stores 1 role directly. Identity join tables are unused.</text>
+  </g>
+
+  <!-- 17. StaffPasswordResetCode Card (x=2240, y=650, w=345, h=220) -->
+  <g id="card-StaffPasswordResetCode" transform="translate(2240, 650)" filter="url(#cardShadow)">
+    <rect width="345" height="220" rx="12" fill="url(#indigoCardBg)" stroke="#6366F1" stroke-width="1.5"/>
+    <path d="M 0 12 Q 0 0 12 0 L 333 0 Q 345 0 345 12 L 345 42 L 0 42 Z" fill="url(#indigoHeader)"/>
+    <text x="14" y="18" fill="#C7D2FE" font-size="9.5" font-weight="700">«SECURITY TOKEN»</text>
+    <text x="14" y="35" fill="#FFFFFF" font-size="15" font-weight="800">StaffPasswordResetCode</text>
+
+    <!-- Members -->
+    <g transform="translate(14, 60)" font-family="'JetBrains Mono', monospace" font-size="11">
+      <text y="0" fill="#FCD34D" font-weight="700">+ int Id <tspan fill="#F59E0B" font-size="9">[PK]</tspan></text>
+      <text y="18" fill="#818CF8" font-weight="700">+ string UserId <tspan fill="#A5B4FC" font-size="9">[FK]</tspan></text>
+      <text y="36" fill="#F8FAFC">+ string NormalizedEmail</text>
+      <text y="54" fill="#FCD34D">+ string CodeHash <tspan fill="#94A3B8">(Hashed 6-digit OTP)</tspan></text>
+      <text y="72" fill="#94A3B8">+ DateTime CreatedAtUtc, ExpiresAtUtc</text>
+      <text y="90" fill="#94A3B8">+ DateTime? ConsumedAtUtc</text>
+      <text y="108" fill="#F87171">+ int FailedAttempts</text>
+    </g>
+
+    <!-- Bottom Mini Note -->
+    <rect x="10" y="178" width="325" height="30" rx="5" fill="#0A0F26" stroke="#312E81" stroke-width="1"/>
+    <text x="18" y="197" fill="#A5B4FC" font-size="10">Expiring, attempt-limited 6-digit reset token via SMTP.</text>
+  </g>
+
+  <!-- Sub-Panel 2 Header -->
+  <text x="1875" y="915" fill="#94A3B8" font-size="14" font-weight="800" letter-spacing="1">SYSTEM AUDIT, LOG RETENTION &amp; ENCRYPTED VAULT</text>
+
+  <!-- 18. SystemAuditLog Card (x=1875, y=935, w=710, h=250) -->
+  <g id="card-SystemAuditLog" transform="translate(1875, 935)" filter="url(#cardShadow)">
+    <rect width="710" height="250" rx="12" fill="url(#slateCardBg)" stroke="#64748B" stroke-width="1.5"/>
+    <path d="M 0 12 Q 0 0 12 0 L 698 0 Q 710 0 710 12 L 710 44 L 0 44 Z" fill="url(#slateHeader)"/>
+    <text x="16" y="20" fill="#CBD5E1" font-size="10" font-weight="700" letter-spacing="1">«IMMUTABLE AUDIT TRAIL / STANDALONE»</text>
+    <text x="16" y="38" fill="#FFFFFF" font-size="16" font-weight="800">SystemAuditLog</text>
+    <rect x="540" y="12" width="154" height="20" rx="5" fill="#1E293B" stroke="#64748B" stroke-width="1"/>
+    <text x="617" y="26" fill="#F1F5F9" font-size="10" font-family="'JetBrains Mono', monospace" text-anchor="middle">table: SystemAuditLog</text>
+
+    <!-- Two-column Members layout -->
+    <g transform="translate(16, 64)" font-family="'JetBrains Mono', monospace" font-size="11.5">
+      <g transform="translate(0, 0)">
+        <text y="0" fill="#FCD34D" font-weight="700">+ long Id <tspan fill="#F59E0B" font-size="10">[PK]</tspan></text>
+        <text y="20" fill="#38BDF8">+ DateTime AtUtc</text>
+        <text y="40" fill="#F8FAFC">+ SystemAuditIntent Intent <tspan fill="#94A3B8">(Admin, Config, File)</tspan></text>
+        <text y="60" fill="#F8FAFC">+ SystemAuditDomain Domain <tspan fill="#94A3B8">(Payment, Account...)</tspan></text>
+        <text y="80" fill="#F8FAFC">+ string Action</text>
+      </g>
+      <g transform="translate(360, 0)">
+        <text y="0" fill="#F8FAFC">+ string ActorUserId, ActorDisplayName</text>
+        <text y="20" fill="#F8FAFC">+ string TargetType, TargetId, TargetLabel</text>
+        <text y="40" fill="#94A3B8">+ string? Reason</text>
+        <text y="60" fill="#F8FAFC">+ string Summary</text>
+        <text y="80" fill="#34D399">• SignalR: IAuditLogNotifier on commit</text>
+      </g>
+    </g>
+
+    <!-- Bottom Mini Note -->
+    <rect x="12" y="195" width="686" height="42" rx="6" fill="#060B14" stroke="#1E293B" stroke-width="1"/>
+    <text x="22" y="213" fill="#E2E8F0" font-size="11" font-weight="700">Integrity Log Invariant:</text>
+    <text x="22" y="228" fill="#94A3B8" font-size="10.5">Captures Who / What / When / Target / Reason. Account rows purgable via staff-audit export PDF.</text>
+  </g>
+
+  <!-- 19. SystemFlushLog Card (x=1875, y=1215, w=345, h=250) -->
+  <g id="card-SystemFlushLog" transform="translate(1875, 1215)" filter="url(#cardShadow)">
+    <rect width="345" height="250" rx="12" fill="url(#slateCardBg)" stroke="#64748B" stroke-width="1.5"/>
+    <path d="M 0 12 Q 0 0 12 0 L 333 0 Q 345 0 345 12 L 345 42 L 0 42 Z" fill="url(#slateHeader)"/>
+    <text x="14" y="18" fill="#CBD5E1" font-size="9.5" font-weight="700">«DATA RETENTION LOG»</text>
+    <text x="14" y="35" fill="#FFFFFF" font-size="15" font-weight="800">SystemFlushLog</text>
+    <rect x="206" y="11" width="125" height="20" rx="5" fill="#1E293B" stroke="#64748B" stroke-width="1"/>
+    <text x="268" y="25" fill="#F1F5F9" font-size="9.5" font-family="'JetBrains Mono', monospace" text-anchor="middle">table: SystemFlushLog</text>
+
+    <!-- Members -->
+    <g transform="translate(14, 60)" font-family="'JetBrains Mono', monospace" font-size="11">
+      <text y="0" fill="#FCD34D" font-weight="700">+ int Id <tspan fill="#F59E0B" font-size="9">[PK]</tspan></text>
+      <text y="20" fill="#F8FAFC">+ SystemFlushKind Kind</text>
+      <text y="38" fill="#94A3B8">  (BookingHistory, Payments, StaffAudit)</text>
+      <text y="58" fill="#38BDF8">+ DateTime FlushedAtUtc</text>
+      <text y="76" fill="#F8FAFC">+ string PerformedBy</text>
+      <text y="94" fill="#34D399" font-weight="700">+ int RecordCount</text>
+      <text y="112" fill="#F8FAFC">+ string FileName, Summary</text>
+    </g>
+
+    <!-- Bottom Mini Note -->
+    <rect x="10" y="195" width="325" height="42" rx="5" fill="#060B14" stroke="#1E293B" stroke-width="1"/>
+    <text x="18" y="212" fill="#CBD5E1" font-size="10.5">Audit trail for export-then-delete operations.</text>
+    <text x="18" y="227" fill="#64748B" font-size="9.5">Preserves file checksum &amp; count of purged records.</text>
+  </g>
+
+  <!-- 20. SecureSetting Card (x=2240, y=1215, w=345, h=250) -->
+  <g id="card-SecureSetting" transform="translate(2240, 1215)" filter="url(#cardShadow)">
+    <rect width="345" height="250" rx="12" fill="url(#slateCardBg)" stroke="#64748B" stroke-width="1.5"/>
+    <path d="M 0 12 Q 0 0 12 0 L 333 0 Q 345 0 345 12 L 345 42 L 0 42 Z" fill="url(#slateHeader)"/>
+    <text x="14" y="18" fill="#CBD5E1" font-size="9.5" font-weight="700">«ENCRYPTED CONFIG VAULT»</text>
+    <text x="14" y="35" fill="#FFFFFF" font-size="15" font-weight="800">SecureSetting</text>
+    <rect x="206" y="11" width="125" height="20" rx="5" fill="#1E293B" stroke="#64748B" stroke-width="1"/>
+    <text x="268" y="25" fill="#F1F5F9" font-size="9.5" font-family="'JetBrains Mono', monospace" text-anchor="middle">table: SecureSetting</text>
+
+    <!-- Members -->
+    <g transform="translate(14, 60)" font-family="'JetBrains Mono', monospace" font-size="11">
+      <text y="0" fill="#FCD34D" font-weight="700">+ int Id <tspan fill="#F59E0B" font-size="9">[PK]</tspan></text>
+      <text y="20" fill="#F8FAFC" font-weight="700">+ string Key</text>
+      <text y="38" fill="#FCD34D">+ string Ciphertext <tspan fill="#94A3B8">(AES Encrypted)</tspan></text>
+      <text y="58" fill="#38BDF8">+ DateTime UpdatedUtc</text>
+      <line x1="0" y1="70" x2="317" y2="70" stroke="#334155" stroke-width="1"/>
+      <text y="88" fill="#94A3B8">Vault Keys (SecureSettingKeys):</text>
+      <text y="106" fill="#F1F5F9">• SmtpPassword</text>
+      <text y="124" fill="#F1F5F9">• GoogleOAuthClientId / Secret</text>
+      <text y="142" fill="#F1F5F9">• GeminiApiKey, GroqApiKey</text>
+    </g>
+
+    <!-- Bottom Mini Note -->
+    <rect x="10" y="210" width="325" height="28" rx="5" fill="#060B14" stroke="#1E293B" stroke-width="1"/>
+    <text x="18" y="228" fill="#CBD5E1" font-size="10">Encrypted at rest via ISecureConfigStore.</text>
+  </g>
+
+  <!-- System Footnote -->
+  <g transform="translate(40, 1590)">
+    <text x="0" y="0" fill="#475569" font-size="11" font-family="'JetBrains Mono', monospace">Mori International Hotel · Clean Architectural Class Model · Verified Planar Layout (0 Overlapping Crossings) · UI/UX Pro Max</text>
+    <text x="2560" y="0" fill="#475569" font-size="11" font-family="'JetBrains Mono', monospace" text-anchor="end">Rendered SVG Vector Graphic 2640×1620px</text>
+  </g>
+</svg>

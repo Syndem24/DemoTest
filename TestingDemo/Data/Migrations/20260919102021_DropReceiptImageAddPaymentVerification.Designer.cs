@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TestingDemo.Data;
 
@@ -11,9 +12,11 @@ using TestingDemo.Data;
 namespace TestingDemo.Data.Migrations
 {
     [DbContext(typeof(HotelBookingDbContext))]
-    partial class HotelBookingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260919102021_DropReceiptImageAddPaymentVerification")]
+    partial class DropReceiptImageAddPaymentVerification
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -842,11 +845,6 @@ namespace TestingDemo.Data.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
-                    b.Property<bool>("HasHotelReply")
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("bit")
-                        .HasComputedColumnSql("(CASE WHEN [HotelReply] IS NULL OR [HotelReply] = N'' THEN CONVERT(bit,0) ELSE CONVERT(bit,1) END)", true);
-
                     b.Property<string>("HotelReply")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
@@ -884,15 +882,7 @@ namespace TestingDemo.Data.Migrations
 
                     b.HasIndex("GuestUserId");
 
-                    b.HasIndex("CreatedAtUtc", "Id")
-                        .IsDescending()
-                        .HasDatabaseName("IX_StayReview_Created_Id");
-
                     b.HasIndex("IsPublished", "CreatedAtUtc");
-
-                    b.HasIndex("HasHotelReply", "CreatedAtUtc", "Id")
-                        .IsDescending(false, true, true)
-                        .HasDatabaseName("IX_StayReview_Reply_Created_Id");
 
                     b.ToTable("StayReview", (string)null);
                 });

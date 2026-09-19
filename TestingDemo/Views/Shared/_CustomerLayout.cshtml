@@ -58,9 +58,15 @@
         // Consume any surface-transition arrival flag left by page-transition.js
         // (the guest loader already covers this page's first paint).
         try {
-            if (window.sessionStorage && sessionStorage.getItem('mori-surface-arrive') === '1') {
-                sessionStorage.removeItem('mori-surface-arrive');
+            var ss = window.sessionStorage;
+            if (ss && ss.getItem('mori-surface-arrive') === '1') {
+                ss.removeItem('mori-surface-arrive');
                 document.documentElement.classList.add('mori-surface-arrival');
+                var lbl = ss.getItem('mori-surface-label');
+                if (lbl) {
+                    ss.removeItem('mori-surface-label');
+                    document.documentElement.setAttribute('data-surface-label', lbl);
+                }
             }
         } catch (e) { /* storage unavailable */ }
     </script>

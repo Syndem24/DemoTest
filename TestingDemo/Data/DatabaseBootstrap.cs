@@ -408,6 +408,7 @@ public static class DatabaseBootstrap
                         OR OBJECT_ID(N'[dbo].[SystemAuditLog]', N'U') IS NULL
                         OR OBJECT_ID(N'[dbo].[StaffShift]', N'U') IS NOT NULL
                         OR OBJECT_ID(N'[dbo].[StayReview]', N'U') IS NULL
+                        OR COL_LENGTH(N'dbo.StayReview', N'HasHotelReply') IS NULL
                     THEN 1 ELSE 0 END
                     """;
                 var result = command.ExecuteScalar();
@@ -913,7 +914,8 @@ public static class DatabaseBootstrap
                         [Status] nvarchar(20) NOT NULL,
                         [ExternalReference] nvarchar(120) NULL,
                         [BankTransferReference] nvarchar(120) NULL,
-                        [ReceiptImagePath] nvarchar(500) NULL,
+                        [VerifiedAtUtc] datetime2 NULL,
+                        [VerifiedBy] nvarchar(120) NULL,
                         [VoidedAtUtc] datetime2 NULL,
                         [VoidReason] nvarchar(500) NULL,
                         [VoidedBy] nvarchar(120) NULL,
@@ -1028,6 +1030,8 @@ public static class DatabaseBootstrap
                         [HotelReply] nvarchar(1000) NULL,
                         [HotelReplyAtUtc] datetime2 NULL,
                         [HotelReplyBy] nvarchar(120) NULL,
+                        [HasHotelReply] AS (CASE WHEN [HotelReply] IS NULL OR [HotelReply] = N''
+                            THEN CONVERT(bit,0) ELSE CONVERT(bit,1) END) PERSISTED,
                         [IsPublished] bit NOT NULL CONSTRAINT [DF_StayReview_IsPublished] DEFAULT (1),
                         [CreatedAtUtc] datetime2 NOT NULL,
                         [UpdatedAtUtc] datetime2 NOT NULL,
@@ -1043,6 +1047,10 @@ public static class DatabaseBootstrap
                     CREATE INDEX [IX_StayReview_GuestUserId] ON [dbo].[StayReview] ([GuestUserId]);
                     CREATE INDEX [IX_StayReview_IsPublished_CreatedAtUtc]
                         ON [dbo].[StayReview] ([IsPublished], [CreatedAtUtc] DESC);
+                    CREATE INDEX [IX_StayReview_Created_Id]
+                        ON [dbo].[StayReview] ([CreatedAtUtc] DESC, [Id] DESC);
+                    CREATE INDEX [IX_StayReview_Reply_Created_Id]
+                        ON [dbo].[StayReview] ([HasHotelReply] ASC, [CreatedAtUtc] DESC, [Id] DESC);
                 END
                 ELSE
                 BEGIN
@@ -1052,6 +1060,20 @@ public static class DatabaseBootstrap
                         ALTER TABLE [dbo].[StayReview] ADD [HotelReplyAtUtc] datetime2 NULL;
                     IF COL_LENGTH(N'dbo.StayReview', N'HotelReplyBy') IS NULL
                         ALTER TABLE [dbo].[StayReview] ADD [HotelReplyBy] nvarchar(120) NULL;
+                    IF COL_LENGTH(N'dbo.StayReview', N'HasHotelReply') IS NULL
+                        ALTER TABLE [dbo].[StayReview] ADD [HasHotelReply]
+                            AS (CASE WHEN [HotelReply] IS NULL OR [HotelReply] = N''
+                                THEN CONVERT(bit,0) ELSE CONVERT(bit,1) END) PERSISTED;
+                    IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                                   WHERE name = N'IX_StayReview_Created_Id'
+                                     AND object_id = OBJECT_ID(N'dbo.StayReview'))
+                        CREATE INDEX [IX_StayReview_Created_Id]
+                            ON [dbo].[StayReview] ([CreatedAtUtc] DESC, [Id] DESC);
+                    IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                                   WHERE name = N'IX_StayReview_Reply_Created_Id'
+                                     AND object_id = OBJECT_ID(N'dbo.StayReview'))
+                        CREATE INDEX [IX_StayReview_Reply_Created_Id]
+                            ON [dbo].[StayReview] ([HasHotelReply] ASC, [CreatedAtUtc] DESC, [Id] DESC);
                 END
                 """);
         }

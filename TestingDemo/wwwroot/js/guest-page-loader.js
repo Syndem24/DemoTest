@@ -1,4 +1,4 @@
-(() => {
+     (() => {
   const html = document.documentElement;
   const loader = document.getElementById('guestPageLoader');
   if (!loader) {
@@ -6,7 +6,8 @@
     return;
   }
 
-  const MIN_VISIBLE_MS = 900;
+  const isSurfaceArrival = html.classList.contains('mori-surface-arrival');
+  const MIN_VISIBLE_MS = isSurfaceArrival ? 450 : 900;
   const MAX_WAIT_MS = 8000;
   const EXIT_MS = 780;
   const LINE_MS = 2200;
@@ -15,6 +16,17 @@
   let lineTimer = 0;
 
   const statusLines = Array.from(loader.querySelectorAll('.guest-page-loader-status span'));
+
+  // Arriving from the staff side: keep the departing overlay's message so the
+  // label doesn't swap mid-handoff. data-i18n is removed so the translator
+  // doesn't overwrite it.
+  const arrivalLabel = html.getAttribute('data-surface-label');
+  if (arrivalLabel && statusLines.length) {
+    const active = statusLines.find((line) => line.classList.contains('is-active')) || statusLines[0];
+    active.textContent = arrivalLabel;
+    active.removeAttribute('data-i18n');
+    html.removeAttribute('data-surface-label');
+  }
   const rotateWelcome = () => {
     if (statusLines.length < 2) return;
     let index = Math.max(0, statusLines.findIndex((line) => line.classList.contains('is-active')));
@@ -43,6 +55,7 @@
       loader.classList.add('is-leaving');
       loader.setAttribute('aria-busy', 'false');
       html.classList.remove('guest-is-loading');
+      html.classList.remove('mori-surface-arrival');
       document.body?.classList.remove('guest-is-loading');
       document.dispatchEvent(new CustomEvent('mori:guestchrome', { detail: { reason: 'page-loader-done' } }));
 

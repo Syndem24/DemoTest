@@ -35,6 +35,10 @@
             <p>List stays lightweight with summaries. Open a review to view full content and actions.</p>
         </header>
         <div class="admin-reviews-toolbar">
+            <label class="admin-reviews-search">
+                <span>Search</span>
+                <input type="search" data-admin-reviews-q placeholder="Guest, booking ref, or comment…" autocomplete="off" />
+            </label>
             <label class="admin-reviews-page-size">
                 <span>Rows</span>
                 <select data-admin-reviews-page-size aria-label="Reviews per page">
@@ -53,8 +57,24 @@
                 </select>
             </label>
         </div>
-        <div class="admin-reviews-list" data-admin-reviews-list>
-            <p class="admin-reviews-empty">Loading reviews…</p>
+        <div class="admin-bookings-table-wrap admin-reviews-table-wrap">
+            <table class="admin-bookings-table admin-reviews-table">
+                <thead>
+                    <tr>
+                        <th>When (PH)</th>
+                        <th>Booking</th>
+                        <th>Guest</th>
+                        <th>Rating</th>
+                        <th>Comment</th>
+                        <th>Reply</th>
+                        <th>Status</th>
+                        <th><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody class="admin-reviews-list" data-admin-reviews-list>
+                    <tr><td colspan="8" class="admin-bookings-loading">Loading reviews…</td></tr>
+                </tbody>
+            </table>
         </div>
         <nav class="admin-bookings-pagination" data-admin-reviews-pager hidden>
             <button type="button" data-admin-reviews-prev>Previous</button>

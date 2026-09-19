@@ -1,6 +1,7 @@
 using System.Data;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using TestingDemo.Data;
 using TestingDemo.DTOs;
 using TestingDemo.Models;
@@ -35,6 +36,7 @@ public interface IStayReviewService
         int page = 1,
         int pageSize = 20,
         string replyState = "all",
+        string? q = null,
         CancellationToken cancellationToken = default);
 
     Task<AdminStayReviewDto> GetAdminDetailAsync(
@@ -76,15 +78,31 @@ public sealed class StayReviewService : IStayReviewService
     };
 
     private static readonly TimeSpan EditWindow = TimeSpan.FromDays(14);
+    private static readonly TimeSpan AdminCountCacheTtl = TimeSpan.FromSeconds(60);
 
     private readonly HotelBookingDbContext _db;
     private readonly ISystemAuditRecorder _audit;
+    private readonly IMemoryCache _cache;
 
-    public StayReviewService(HotelBookingDbContext db, ISystemAuditRecorder audit)
+    public StayReviewService(HotelBookingDbContext db, ISystemAuditRecorder audit, IMemoryCache cache)
     {
         _db = db;
         _audit = audit;
+        _cache = cache;
     }
+
+    // Version stamp invalidates every cached count at once (IMemoryCache has no prefix removal).
+    private const string AdminCountVersionKey = "reviews:total:version";
+
+    private long AdminCountVersion() =>
+        _cache.GetOrCreate(AdminCountVersionKey, entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(7);
+            return 0L;
+        });
+
+    private void InvalidateAdminCounts() =>
+        _cache.Set(AdminCountVersionKey, AdminCountVersion() + 1, TimeSpan.FromDays(7));
 
     public async Task<StayReviewPublicPageDto> GetPublicAsync(
         int take = 12,
@@ -290,6 +308,7 @@ public sealed class StayReviewService : IStayReviewService
                 actorUserId: guestUserId,
                 actorDisplayName: review.DisplayName);
             await _db.SaveChangesAsync(ct);
+            InvalidateAdminCounts();
 
             return ToMineDto(review, booking.Reference, booking.CheckoutTimeUtc, canEdit: true);
         }, cancellationToken);
@@ -346,6 +365,7 @@ public sealed class StayReviewService : IStayReviewService
             actorUserId: guestUserId,
             actorDisplayName: review.DisplayName);
         await _db.SaveChangesAsync(cancellationToken);
+        InvalidateAdminCounts();
 
         return ToMineDto(review, review.Booking.Reference, review.Booking.CheckoutTimeUtc, canEdit: true);
     }
@@ -354,50 +374,58 @@ public sealed class StayReviewService : IStayReviewService
         int page = 1,
         int pageSize = 20,
         string replyState = "all",
+        string? q = null,
         CancellationToken cancellationToken = default)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 10, 100);
+        replyState = string.IsNullOrWhiteSpace(replyState) ? "all" : replyState.Trim().ToLowerInvariant();
+        q = string.IsNullOrWhiteSpace(q) ? null : q.Trim();
 
         var query = _db.StayReviews.AsNoTracking();
-        replyState = string.IsNullOrWhiteSpace(replyState) ? "all" : replyState.Trim().ToLowerInvariant();
 
         query = replyState switch
         {
-            "replied" => query.Where(r => r.HotelReply != null && r.HotelReply != ""),
-            "pending" => query.Where(r => r.HotelReply == null || r.HotelReply == ""),
+            "replied" => query.Where(r => r.HasHotelReply),
+            "pending" => query.Where(r => !r.HasHotelReply),
             _ => query
         };
 
-        var total = await query.CountAsync(cancellationToken);
+        if (q is not null)
+        {
+            query = query.Where(r =>
+                r.DisplayName.Contains(q)
+                || r.Booking.Reference.Contains(q)
+                || (r.Comment != null && r.Comment.Contains(q)));
+        }
+
+        var cacheKey = $"reviews:total:{replyState}:{q ?? string.Empty}:v{AdminCountVersion()}";
+        var total = await _cache.GetOrCreateAsync(cacheKey, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = AdminCountCacheTtl;
+            return await query.CountAsync(cancellationToken);
+        });
         var skip = (page - 1) * pageSize;
 
         var rows = await query
             .OrderByDescending(r => r.CreatedAtUtc)
+            .ThenByDescending(r => r.Id)
             .Skip(skip)
             .Take(pageSize)
-            .Select(r => new
-            {
+            .Select(r => new AdminStayReviewListItemDto(
                 r.Id,
-                BookingReference = r.Booking.Reference,
-                GuestDisplayName = r.DisplayName,
+                r.Booking.Reference,
+                r.DisplayName,
                 r.OverallRating,
-                r.Comment,
                 r.IsPublished,
                 r.CreatedAtUtc,
-                HasHotelReply = r.HotelReply != null && r.HotelReply != ""
-            })
+                r.Comment == null ? "" : r.Comment.Substring(0, 240),
+                r.HasHotelReply))
             .ToListAsync(cancellationToken);
 
-        var items = rows.Select(r => new AdminStayReviewListItemDto(
-            r.Id,
-            r.BookingReference,
-            r.GuestDisplayName,
-            r.OverallRating,
-            r.IsPublished,
-            r.CreatedAtUtc,
-            SummarizeText(r.Comment),
-            r.HasHotelReply)).ToList();
+        var items = rows
+            .Select(r => r with { CommentPreview = SummarizeText(r.CommentPreview) })
+            .ToList();
 
         return new AdminStayReviewPageDto(items, total, page, pageSize);
     }
@@ -441,6 +469,7 @@ public sealed class StayReviewService : IStayReviewService
             actorDisplayName: actorDisplayName);
 
         await _db.SaveChangesAsync(cancellationToken);
+        InvalidateAdminCounts();
         return ToAdminDto(review);
     }
 
@@ -476,6 +505,7 @@ public sealed class StayReviewService : IStayReviewService
             actorDisplayName: actorDisplayName);
 
         await _db.SaveChangesAsync(cancellationToken);
+        InvalidateAdminCounts();
         return ToAdminDto(review);
     }
 

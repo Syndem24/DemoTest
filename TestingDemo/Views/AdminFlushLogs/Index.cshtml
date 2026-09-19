@@ -239,7 +239,7 @@
                             <span class="admin-flush-kind-box" aria-hidden="true"></span>
                             <span class="admin-flush-kind-copy">
                                 <strong>Booking history</strong>
-                                <small>Archived bookings · filtered by archive date</small>
+                                <small>Archived bookings · filtered by archive date · stays with guest reviews are kept</small>
                             </span>
                             <span class="admin-retention-count">@Model.HistoryPending</span>
                         </label>
@@ -579,7 +579,8 @@
                     if (confirmBody) {
                         confirmBody.textContent =
                             `Export ${labels.join(', ')} for ${fromDate} to ${toDate} (PH). ` +
-                            `Just export keeps data intact. Export and clear permanently deletes the exported rows for those types.`;
+                            `Just export keeps data intact. Export and clear permanently deletes the exported rows for those types ` +
+                            `(stays with guest reviews are kept).`;
                     }
                     if (overlay) overlay.hidden = false;
                     document.getElementById('adminFlushExportOnly')?.focus();

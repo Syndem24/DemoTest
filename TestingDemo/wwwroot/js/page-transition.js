@@ -41,8 +41,12 @@
         document.body.appendChild(overlay);
         document.documentElement.style.overflow = 'hidden';
         // Flag the destination surface so it can cover its own first paint
-        // and play the shared exit animation (guest → admin handoff).
-        try { window.sessionStorage?.setItem('mori-surface-arrive', '1'); } catch (e) { /* storage unavailable */ }
+        // and play the shared exit animation (guest → admin handoff). The
+        // label travels too so the arrival loader keeps the same message.
+        try {
+            window.sessionStorage?.setItem('mori-surface-arrive', '1');
+            window.sessionStorage?.setItem('mori-surface-label', label);
+        } catch (e) { /* storage unavailable */ }
     };
 
     document.addEventListener('click', (event) => {
@@ -75,19 +79,33 @@
     if (arrival && document.documentElement.classList.contains('mori-surface-arrival')) {
         const MIN_VISIBLE_MS = 500;
         const EXIT_MS = 780;
+        const MAX_WAIT_MS = 6000;
         const startedAt = performance.now();
+        // Keep the departing overlay's message so the text doesn't swap mid-handoff.
+        const label = document.documentElement.getAttribute('data-surface-label');
+        if (label) {
+            const status = arrival.querySelector('.guest-page-loader-status span.is-active');
+            if (status) status.textContent = label;
+        }
         arrival.removeAttribute('hidden');
         document.documentElement.style.overflow = 'hidden';
+        let finished = false;
+        const finish = () => {
+            if (finished) return;
+            finished = true;
+            arrival.remove();
+            document.documentElement.style.overflow = '';
+            document.documentElement.classList.remove('mori-surface-arrival');
+            document.documentElement.removeAttribute('data-surface-label');
+        };
+        let dismissed = false;
         const dismiss = () => {
+            if (dismissed) return;
+            dismissed = true;
             const remain = Math.max(0, MIN_VISIBLE_MS - (performance.now() - startedAt));
             window.setTimeout(() => {
                 arrival.classList.add('is-leaving');
                 arrival.setAttribute('aria-busy', 'false');
-                const finish = () => {
-                    arrival.remove();
-                    document.documentElement.style.overflow = '';
-                    document.documentElement.classList.remove('mori-surface-arrival');
-                };
                 arrival.addEventListener('animationend', (event) => {
                     if (event.target === arrival) finish();
                 }, { once: true });
@@ -95,6 +113,9 @@
             }, remain);
         };
         if (document.readyState === 'complete') dismiss();
-        else window.addEventListener('load', dismiss, { once: true });
+        else {
+            window.addEventListener('load', dismiss, { once: true });
+            window.setTimeout(dismiss, MAX_WAIT_MS);
+        }
     }
 })();

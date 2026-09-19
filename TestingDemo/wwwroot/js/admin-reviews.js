@@ -15,15 +15,27 @@
   const pageLabel = root.querySelector('[data-admin-reviews-page-label]');
   const pageSizeSelect = root.querySelector('[data-admin-reviews-page-size]');
   const replyStateSelect = root.querySelector('[data-admin-reviews-reply-state]');
+  const searchEl = root.querySelector('[data-admin-reviews-q]');
   const modal = root.querySelector('[data-admin-reviews-modal]');
   const modalTitle = root.querySelector('[data-admin-reviews-modal-title]');
   const modalBody = root.querySelector('[data-admin-reviews-modal-body]');
   const modalCloseButtons = root.querySelectorAll('[data-admin-reviews-modal-close]');
 
-  let currentPage = 1;
-  let total = 0;
-  let pageSize = Number(pageSizeSelect?.value || 20);
-  let replyState = String(replyStateSelect?.value || 'all');
+  // --- store ---------------------------------------------------------------
+  const store = {
+    items: new Map(), // id -> list dto
+    page: 1,
+    total: 0,
+    pageSize: Number(pageSizeSelect?.value || 20),
+    replyState: String(replyStateSelect?.value || 'all'),
+    q: '',
+    loading: false,
+  };
+  let reqSeq = 0;
+  let listAbort = null;
+  let detailAbort = null;
+  let prefetched = null; // { key, data }
+
   let activeReviewId = 0;
   let lastFocused = null;
   const REPLY_TEMPLATES = {
@@ -52,6 +64,26 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+
+  // Mirrors StayReviewService.SummarizeText so mutation responses can patch
+  // the list card without a full page refetch.
+  function summarizeText(value) {
+    const oneLine = String(value || '')
+      .split(/\r?\n/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(' ');
+    if (!oneLine) return 'No written comment.';
+    return oneLine.length <= 150 ? oneLine : `${oneLine.slice(0, 150).trimEnd()}...`;
+  }
+
+  const debounce = (fn, ms) => {
+    let t = 0;
+    return (...args) => {
+      window.clearTimeout(t);
+      t = window.setTimeout(() => fn(...args), ms);
+    };
+  };
 
   function needsTranslation(text) {
     const value = String(text || '').trim();
@@ -173,14 +205,16 @@
     return res.status === 204 ? null : res.json();
   }
 
+  // --- rendering ------------------------------------------------------------
+
   function renderPager(itemsCount) {
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const totalPages = Math.max(1, Math.ceil(store.total / store.pageSize));
     if (!pagerEl || !prevBtn || !nextBtn || !pageLabel) return;
 
-    pagerEl.hidden = total <= itemsCount;
-    prevBtn.disabled = currentPage <= 1;
-    nextBtn.disabled = currentPage >= totalPages;
-    pageLabel.textContent = `Page ${currentPage} of ${totalPages}`;
+    pagerEl.hidden = store.total <= itemsCount;
+    prevBtn.disabled = store.loading || store.page <= 1;
+    nextBtn.disabled = store.loading || store.page >= totalPages;
+    pageLabel.textContent = `Page ${store.page} of ${totalPages}`;
   }
 
   function rowHtml(item) {
@@ -189,26 +223,136 @@
       : '<span class="admin-reviews-status-tag is-pending">Not replied yet</span>';
 
     return `
-      <article class="admin-reviews-card" data-review-id="${Number(item.id)}">
-        <header class="admin-reviews-card-head">
-          <div>
-            <strong>${esc(item.bookingReference)} · ${esc(item.guestDisplayName)}</strong>
-            <p>${esc(phDate(item.createdAtUtc))}</p>
-          </div>
-          <span class="admin-flush-badge ${item.isPublished ? 'is-ok' : 'is-admin'}">${item.isPublished ? 'Published' : 'Hidden'}</span>
-        </header>
-
-        <p class="admin-reviews-comment">${esc(item.commentPreview || 'No written comment.')}</p>
-        <div class="admin-reviews-list-meta">
-          ${replyTag}
-        </div>
-
-        <div class="admin-reviews-actions admin-reviews-actions-list">
-          <button type="button" class="admin-flush-submit admin-reviews-view-btn" data-action-view>View</button>
-        </div>
-      </article>
+      <tr data-review-id="${Number(item.id)}">
+        <td data-label="When (PH)">${esc(phDate(item.createdAtUtc))}</td>
+        <td data-label="Booking"><strong>${esc(item.bookingReference)}</strong></td>
+        <td data-label="Guest">${esc(item.guestDisplayName)}</td>
+        <td data-label="Rating">${Number(item.overallRating || 0)}/5</td>
+        <td data-label="Comment" class="admin-reviews-comment-cell">${esc(item.commentPreview || 'No written comment.')}</td>
+        <td data-label="Reply">${replyTag}</td>
+        <td data-label="Status"><span class="admin-flush-badge ${item.isPublished ? 'is-ok' : 'is-admin'}">${item.isPublished ? 'Published' : 'Hidden'}</span></td>
+        <td class="admin-booking-table-actions" data-label="Actions">
+          <button type="button" data-action-view>View</button>
+        </td>
+      </tr>
     `;
   }
+
+  function buildRow(item) {
+    const template = document.createElement('template');
+    template.innerHTML = rowHtml(item).trim();
+    return template.content.firstElementChild;
+  }
+
+  function renderItems(items) {
+    const frag = document.createDocumentFragment();
+    for (const item of items) {
+      store.items.set(item.id, item);
+      frag.appendChild(buildRow(item));
+    }
+    listEl.replaceChildren(frag); // single DOM flush — no per-row reflow
+  }
+
+  // Patch one row in place after a mutation — no list reload, no scroll jump.
+  function patchFromDetail(detail) {
+    const item = {
+      id: detail.id,
+      bookingReference: detail.bookingReference,
+      guestDisplayName: detail.guestDisplayName,
+      overallRating: detail.overallRating,
+      isPublished: detail.isPublished,
+      createdAtUtc: detail.createdAtUtc,
+      commentPreview: summarizeText(detail.comment),
+      hasHotelReply: !!detail.hotelReply,
+    };
+    store.items.set(item.id, item);
+    const old = listEl?.querySelector(`[data-review-id="${item.id}"]`);
+    if (old) old.replaceWith(buildRow(item));
+  }
+
+  // --- fetching -------------------------------------------------------------
+
+  const pageUrl = (page) =>
+    `/api/admin/reviews?page=${encodeURIComponent(String(page))}` +
+    `&pageSize=${encodeURIComponent(String(store.pageSize))}` +
+    `&replyState=${encodeURIComponent(store.replyState)}` +
+    `&q=${encodeURIComponent(store.q)}`;
+
+  const prefetchKey = (page) =>
+    `${page}|${store.pageSize}|${store.replyState}|${store.q}`;
+
+  function schedulePrefetch() {
+    const totalPages = Math.ceil(store.total / store.pageSize);
+    if (store.page >= totalPages) return;
+    const next = store.page + 1;
+    const key = prefetchKey(next);
+    if (prefetched?.key === key) return;
+    const idle = window.requestIdleCallback || ((fn) => window.setTimeout(fn, 250));
+    idle(async () => {
+      try {
+        const data = await apiFetch(pageUrl(next));
+        prefetched = { key, data };
+      } catch {
+        prefetched = null;
+      }
+    });
+  }
+
+  async function loadPage() {
+    if (!listEl) return;
+    listAbort?.abort();
+    const ctl = new AbortController();
+    listAbort = ctl;
+    const seq = ++reqSeq;
+    store.loading = true;
+    renderPager(listEl.childElementCount);
+    showMessage('');
+
+    // Keep existing rows while fetching — only show the empty "Loading" state
+    // when the list has nothing yet (first paint).
+    if (!listEl.childElementCount) {
+      listEl.innerHTML = '<tr><td colspan="8" class="admin-bookings-loading">Loading reviews…</td></tr>';
+    } else {
+      listEl.classList.add('is-updating');
+    }
+
+    try {
+      let page;
+      const key = prefetchKey(store.page);
+      if (prefetched?.key === key) {
+        page = prefetched.data;
+        prefetched = null;
+      } else {
+        page = await apiFetch(pageUrl(store.page), { signal: ctl.signal });
+      }
+      if (seq !== reqSeq) return; // a newer request already superseded this one
+
+      const items = Array.isArray(page?.items) ? page.items : [];
+      store.total = Number(page?.total || 0);
+      store.page = Math.max(1, Number(page?.page || store.page));
+      store.items = new Map(items.map((i) => [i.id, i]));
+      if (totalEl) totalEl.textContent = String(store.total);
+
+      listEl.classList.remove('is-updating');
+      if (!items.length) {
+        listEl.innerHTML = '<tr><td colspan="8" class="admin-bookings-loading">No reviews found.</td></tr>';
+      } else {
+        renderItems(items);
+      }
+      renderPager(items.length);
+      schedulePrefetch();
+    } catch (err) {
+      if (ctl.signal.aborted || err?.name === 'AbortError') return;
+      listEl.classList.remove('is-updating');
+      listEl.innerHTML = '<tr><td colspan="8" class="admin-bookings-loading">Unable to load reviews.</td></tr>';
+      showMessage(err instanceof Error ? err.message : 'Unable to load reviews.', true);
+    } finally {
+      if (seq === reqSeq) store.loading = false;
+      renderPager(listEl.childElementCount);
+    }
+  }
+
+  // --- detail modal -----------------------------------------------------------
 
   function openModal() {
     if (!modal) return;
@@ -221,6 +365,7 @@
     if (!modal) return;
     modal.hidden = true;
     document.body.classList.remove('admin-reviews-modal-open');
+    detailAbort?.abort();
     activeReviewId = 0;
     if (lastFocused instanceof HTMLElement) lastFocused.focus();
   }
@@ -271,18 +416,30 @@
 
   async function loadDetail(id) {
     if (!modalBody) return;
+    detailAbort?.abort();
+    const ctl = new AbortController();
+    detailAbort = ctl;
     activeReviewId = id;
     modalBody.innerHTML = '<p class="admin-reviews-empty">Loading full review…</p>';
     try {
-      const detail = await apiFetch(`/api/admin/reviews/${id}`);
+      const detail = await apiFetch(`/api/admin/reviews/${id}`, { signal: ctl.signal });
+      if (ctl.signal.aborted) return;
       if (modalTitle) modalTitle.textContent = `Review details · ${detail.bookingReference}`;
       modalBody.innerHTML = detailHtml(detail);
       bindDetailActions();
       modalBody.querySelector('[data-action-publish]')?.focus();
     } catch (err) {
+      if (ctl.signal.aborted || err?.name === 'AbortError') return;
       modalBody.innerHTML = '<p class="admin-reviews-empty">Unable to load review details.</p>';
       showMessage(err instanceof Error ? err.message : 'Unable to load review details.', true);
     }
+  }
+
+  // Refresh strategy after a reply mutation: under an active reply-state filter
+  // the item may no longer belong in this list — reload. Under "all", patch.
+  async function refreshAfterReplyChange() {
+    if (store.replyState === 'all') return; // card already patched in place
+    await loadPage();
   }
 
   function bindDetailActions() {
@@ -299,12 +456,13 @@
       const willHide = btn?.getAttribute('data-action-publish') === 'hide';
       if (btn) btn.disabled = true;
       try {
-        await apiFetch(`/api/admin/reviews/${activeReviewId}/publish`, {
+        const updated = await apiFetch(`/api/admin/reviews/${activeReviewId}/publish`, {
           method: 'PUT',
           body: JSON.stringify({ isPublished: !willHide }),
         });
+        patchFromDetail(updated);
         showMessage(willHide ? 'Review hidden.' : 'Review published.');
-        await Promise.all([loadPage(), loadDetail(activeReviewId)]);
+        await loadDetail(activeReviewId);
       } catch (err) {
         showMessage(err instanceof Error ? err.message : 'Unable to update review.', true);
       } finally {
@@ -317,12 +475,13 @@
       const text = modalBody.querySelector('[data-reply-input]')?.value ?? '';
       if (btn) btn.disabled = true;
       try {
-        await apiFetch(`/api/admin/reviews/${activeReviewId}/reply`, {
+        const updated = await apiFetch(`/api/admin/reviews/${activeReviewId}/reply`, {
           method: 'PUT',
           body: JSON.stringify({ reply: text }),
         });
+        patchFromDetail(updated);
         closeModal();
-        await loadPage();
+        await refreshAfterReplyChange();
         showMessage('Successfully responded to the review.');
         if (typeof window.showMoriNotice === 'function') {
           window.showMoriNotice('Successfully responded to the review.', 'success');
@@ -338,12 +497,13 @@
       const btn = event.currentTarget;
       if (btn) btn.disabled = true;
       try {
-        await apiFetch(`/api/admin/reviews/${activeReviewId}/reply`, {
+        const updated = await apiFetch(`/api/admin/reviews/${activeReviewId}/reply`, {
           method: 'PUT',
           body: JSON.stringify({ reply: '' }),
         });
+        patchFromDetail(updated);
+        await Promise.all([loadDetail(activeReviewId), refreshAfterReplyChange()]);
         showMessage('Hotel reply cleared.');
-        await Promise.all([loadPage(), loadDetail(activeReviewId)]);
       } catch (err) {
         showMessage(err instanceof Error ? err.message : 'Unable to clear reply.', true);
       } finally {
@@ -364,63 +524,58 @@
     });
   }
 
-  async function loadPage() {
-    if (!listEl) return;
-    showMessage('');
-    listEl.innerHTML = '<p class="admin-reviews-empty">Loading reviews…</p>';
-    try {
-      const page = await apiFetch(
-        `/api/admin/reviews?page=${encodeURIComponent(String(currentPage))}&pageSize=${encodeURIComponent(String(pageSize))}&replyState=${encodeURIComponent(replyState)}`
-      );
-      const items = Array.isArray(page?.items) ? page.items : [];
-      total = Number(page?.total || 0);
-      currentPage = Math.max(1, Number(page?.page || currentPage));
-      if (totalEl) totalEl.textContent = String(total);
+  // --- events (delegated — bound once, survive re-renders) --------------------
 
-      if (!items.length) {
-        listEl.innerHTML = '<p class="admin-reviews-empty">No reviews found on this page.</p>';
-      } else {
-        listEl.innerHTML = items.map(rowHtml).join('');
-        listEl.querySelectorAll('[data-action-view]').forEach((btn) => {
-          btn.addEventListener('click', async () => {
-            const card = btn.closest('[data-review-id]');
-            const id = Number(card?.getAttribute('data-review-id'));
-            if (!id) return;
-            openModal();
-            await loadDetail(id);
-          });
-        });
-      }
-      renderPager(items.length);
-    } catch (err) {
-      listEl.innerHTML = '<p class="admin-reviews-empty">Unable to load reviews.</p>';
-      showMessage(err instanceof Error ? err.message : 'Unable to load reviews.', true);
-    }
-  }
+  listEl?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-action-view]');
+    if (!btn) return;
+    const card = btn.closest('[data-review-id]');
+    const id = Number(card?.getAttribute('data-review-id'));
+    if (!id) return;
+    openModal();
+    void loadDetail(id);
+  });
 
   prevBtn?.addEventListener('click', async () => {
-    if (currentPage <= 1) return;
-    currentPage -= 1;
+    if (store.loading || store.page <= 1) return;
+    store.page -= 1;
     await loadPage();
   });
 
   nextBtn?.addEventListener('click', async () => {
-    currentPage += 1;
+    if (store.loading) return;
+    const totalPages = Math.ceil(store.total / store.pageSize);
+    if (store.page >= totalPages) return;
+    store.page += 1;
     await loadPage();
   });
 
   pageSizeSelect?.addEventListener('change', async () => {
     const next = Number(pageSizeSelect.value || 20);
-    pageSize = Number.isFinite(next) ? Math.max(10, Math.min(100, next)) : 20;
-    currentPage = 1;
+    store.pageSize = Number.isFinite(next) ? Math.max(10, Math.min(100, next)) : 20;
+    store.page = 1;
+    prefetched = null;
     await loadPage();
   });
 
   replyStateSelect?.addEventListener('change', async () => {
-    replyState = String(replyStateSelect.value || 'all');
-    currentPage = 1;
+    store.replyState = String(replyStateSelect.value || 'all');
+    store.page = 1;
+    prefetched = null;
     await loadPage();
   });
+
+  searchEl?.addEventListener(
+    'input',
+    debounce(() => {
+      const next = searchEl.value.trim();
+      if (next === store.q) return;
+      store.q = next;
+      store.page = 1;
+      prefetched = null;
+      void loadPage();
+    }, 300)
+  );
 
   modalCloseButtons.forEach((button) => button.addEventListener('click', closeModal));
   document.addEventListener('keydown', (event) => {

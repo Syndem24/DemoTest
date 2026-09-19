@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mori International Hotel — System Class Model &amp; ERD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #040914;
+      --navy: #0B1F3A;
+      --teal: #0D9488;
+      --teal-light: #2DD4BF;
+      --gold: #F59E0B;
+      --border-color: rgba(255, 255, 255, 0.1);
+      --text-white: #F8FAFC;
+      --text-muted: #94A3B8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-white);
+      font-family: 'Outfit', sans-serif;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* Top Control Bar */
+    header {
+      background: rgba(11, 31, 58, 0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 100;
+      flex-shrink: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-logo {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #0D9488, #0B1F3A);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 18px;
+      color: #FFF;
+      border: 1.5px solid var(--teal-light);
+      box-shadow: 0 0 14px rgba(45, 212, 191, 0.3);
+    }
+
+    .brand-text h1 {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: var(--text-white);
+    }
+
+    .brand-text p {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--text-white);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      user-select: none;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.16);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #0D9488, #0F766E);
+      border-color: var(--teal-light);
+      box-shadow: 0 0 10px rgba(45, 212, 191, 0.25);
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #14B8A6, #0D9488);
+      box-shadow: 0 0 16px rgba(45, 212, 191, 0.45);
+    }
+
+    .zoom-level {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--teal-light);
+      min-width: 50px;
+      text-align: center;
+    }
+
+    /* Diagram Canvas Container */
+    #viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      cursor: grab;
+      background: radial-gradient(circle at center, #08162B 0%, #040914 100%);
+    }
+
+    #viewport.dragging {
+      cursor: grabbing;
+    }
+
+    #diagram-wrapper {
+      position: absolute;
+      transform-origin: 0 0;
+      will-change: transform;
+      user-select: none;
+    }
+
+    #diagram-wrapper object,
+    #diagram-wrapper img,
+    #diagram-wrapper svg {
+      display: block;
+      width: 2640px;
+      height: 1620px;
+      pointer-events: auto;
+    }
+
+    /* Status Bar */
+    footer {
+      background: #03070F;
+      border-top: 1px solid var(--border-color);
+      padding: 6px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      z-index: 100;
+    }
+
+    .hotkeys {
+      display: flex;
+      gap: 14px;
+    }
+
+    .badge {
+      background: rgba(13, 148, 136, 0.15);
+      border: 1px solid var(--teal);
+      color: var(--teal-light);
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="brand-logo">M</div>
+      <div class="brand-text">
+        <h1>Mori International Hotel — System Class Model</h1>
+        <p>Planar Architecture · Clean Line Routing · Entity Framework Core .NET 9</p>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn" id="btn-zoom-out" title="Zoom Out (Alt + Scroll Down)">−</button>
+      <span class="zoom-level" id="zoom-text">100%</span>
+      <button class="btn" id="btn-zoom-in" title="Zoom In (Alt + Scroll Up)">+</button>
+      <button class="btn" id="btn-fit" title="Fit Entire Architecture on Screen">Fit Screen</button>
+      <button class="btn" id="btn-reset" title="Reset View (100%)">1:1 Actual</button>
+      <span style="width: 1px; height: 24px; background: rgba(255,255,255,0.15); margin: 0 4px;"></span>
+      <a href="system-class-model-diagram.svg" download="system-class-model-diagram.svg" class="btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download SVG
+      </a>
+      <button class="btn btn-primary" id="btn-export-png">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        Export PNG Image
+      </button>
+    </div>
+  </header>
+
+  <div id="viewport">
+    <div id="diagram-wrapper">
+      <!-- Embedded Vector SVG Diagram -->
+      <img id="diagram-img" src="system-class-model-diagram.svg" width="2640" height="1620" alt="System Class Model Diagram" />
+    </div>
+  </div>
+
+  <footer>
+    <div>
+      <span class="badge">PLANAR ARCHITECTURE</span>
+      <span>16 Domain Entities · 0 Crossed Lines · Serializable Transactions</span>
+    </div>
+    <div class="hotkeys">
+      <span>Drag: Pan canvas</span>
+      <span>Mouse Wheel: Zoom</span>
+      <span>Double Click: Center</span>
+    </div>
+  </footer>
+
+  <script>
+    const viewport = document.getElementById('viewport');
+    const wrapper = document.getElementById('diagram-wrapper');
+    const zoomText = document.getElementById('zoom-text');
+    const btnZoomIn = document.getElementById('btn-zoom-in');
+    const btnZoomOut = document.getElementById('btn-zoom-out');
+    const btnReset = document.getElementById('btn-reset');
+    const btnFit = document.getElementById('btn-fit');
+    const btnExportPng = document.getElementById('btn-export-png');
+
+    const DIAGRAM_WIDTH = 2640;
+    const DIAGRAM_HEIGHT = 1620;
+
+    let scale = 1;
+    let pointX = 0;
+    let pointY = 0;
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+
+    function updateTransform() {
+      wrapper.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`;
+      zoomText.textContent = `${Math.round(scale * 100)}%`;
+    }
+
+    function fitToScreen() {
+      const vWidth = viewport.clientWidth;
+      const vHeight = viewport.clientHeight;
+      const scaleX = (vWidth - 40) / DIAGRAM_WIDTH;
+      const scaleY = (vHeight - 40) / DIAGRAM_HEIGHT;
+      scale = Math.min(scaleX, scaleY);
+      pointX = (vWidth - DIAGRAM_WIDTH * scale) / 2;
+      pointY = (vHeight - DIAGRAM_HEIGHT * scale) / 2;
+      updateTransform();
+    }
+
+    // Pan interaction
+    viewport.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      isDragging = true;
+      startX = e.clientX - pointX;
+      startY = e.clientY - pointY;
+      viewport.classList.add('dragging');
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      pointX = e.clientX - startX;
+      pointY = e.clientY - startY;
+      updateTransform();
+    });
+
+    window.addEventListener('mouseup', () => {
+      isDragging = false;
+      viewport.classList.remove('dragging');
+    });
+
+    // Zoom on Wheel
+    viewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+      const newScale = Math.min(Math.max(scale * zoomFactor, 0.15), 3.5);
+
+      pointX = mouseX - (mouseX - pointX) * (newScale / scale);
+      pointY = mouseY - (mouseY - pointY) * (newScale / scale);
+      scale = newScale;
+      updateTransform();
+    }, { passive: false });
+
+    // Buttons
+    btnZoomIn.addEventListener('click', () => {
+      const newScale = Math.min(scale * 1.25, 3.5);
+      pointX = pointX - (viewport.clientWidth / 2 - pointX) * (newScale / scale - 1);
+      pointY = pointY - (viewport.clientHeight / 2 - pointY) * (newScale / scale - 1);
+      scale = newScale;
+      updateTransform();
+    });
+
+    btnZoomOut.addEventListener('click', () => {
+      const newScale = Math.max(scale * 0.8, 0.15);
+      pointX = pointX - (viewport.clientWidth / 2 - pointX) * (newScale / scale - 1);
+      pointY = pointY - (viewport.clientHeight / 2 - pointY) * (newScale / scale - 1);
+      scale = newScale;
+      updateTransform();
+    });
+
+    btnReset.addEventListener('click', () => {
+      scale = 1;
+      pointX = (viewport.clientWidth - DIAGRAM_WIDTH) / 2;
+      pointY = (viewport.clientHeight - DIAGRAM_HEIGHT) / 2;
+      updateTransform();
+    });
+
+    btnFit.addEventListener('click', fitToScreen);
+
+    // PNG Export via Canvas
+    btnExportPng.addEventListener('click', async () => {
+      try {
+        const response = await fetch('system-class-model-diagram.svg');
+        const svgText = await response.text();
+        const img = new Image();
+        const svgBlob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
+
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = DIAGRAM_WIDTH;
+          canvas.height = DIAGRAM_HEIGHT;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          URL.revokeObjectURL(url);
+
+          const a = document.createElement('a');
+          a.download = 'system-class-model-diagram.png';
+          a.href = canvas.toDataURL('image/png');
+          a.click();
+        };
+        img.src = url;
+      } catch (err) {
+        alert('PNG generation failed: ' + err.message);
+      }
+    });
+
+    // Initialize fitted to viewport
+    window.addEventListener('load', fitToScreen);
+    window.addEventListener('resize', fitToScreen);
+  </script>
+</body>
+</html>

@@ -45,6 +45,9 @@ public class StayReview
     public DateTime? HotelReplyAtUtc { get; set; }
     public string? HotelReplyBy { get; set; }
 
+    /// <summary>Persisted computed column — makes the reply-state filter index-friendly.</summary>
+    public bool HasHotelReply { get; private set; }
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 

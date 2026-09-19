@@ -262,11 +262,6 @@ try
     builder.Services.AddScoped<ISystemAuditRecorder, SystemAuditRecorder>();
     builder.Services.AddScoped<ISystemAuditQuery>(sp => (SystemAuditRecorder)sp.GetRequiredService<ISystemAuditRecorder>());
     builder.Services.AddScoped<ISystemFlushService, SystemFlushService>();
-    builder.Services.AddSingleton<IPaymentReceiptStorage, LocalPaymentReceiptStorage>();
-    builder.Services.Configure<AzureDocumentIntelligenceOptions>(
-        builder.Configuration.GetSection(AzureDocumentIntelligenceOptions.SectionName));
-    builder.Services.AddSingleton<OcrUsageTracker>();
-    builder.Services.AddScoped<IReceiptOcrService, AzureReceiptOcrService>();
     builder.Services.AddHostedService<AutomaticCheckoutBackgroundService>();
     builder.Services.AddHostedService<OfferExpiryWarningBackgroundService>();
     builder.Services.AddScoped<IAdminManagerSeed, AdminManagerSeed>();

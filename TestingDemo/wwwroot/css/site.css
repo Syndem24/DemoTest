@@ -4372,6 +4372,10 @@ a:hover {
 }
 
 #walkInBookModal .admin-walkin-selection-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
   flex-shrink: 0;
   min-height: 44px;
   padding: 0.4rem 0.6rem;
@@ -4641,6 +4645,10 @@ a:hover {
 }
 
 .admin-walkin-selection-dialog li button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
   flex-shrink: 0;
   min-height: 40px;
   padding: 0.35rem 0.6rem;
@@ -5809,228 +5817,9 @@ body.is-exporting {
   width: min(32rem, calc(100vw - 1.5rem));
 }
 
-.admin-payment-modal-dialog.is-wide {
-  width: min(54rem, calc(100vw - 1.5rem));
-  max-height: calc(100vh - 1.25rem);
-}
-
 .admin-payment-modal-body {
   display: grid;
   gap: 0.85rem;
-}
-
-.admin-payment-receipt-actions {
-  display: grid;
-  gap: 0.45rem;
-}
-
-.admin-payment-receipt-label {
-  color: var(--navy);
-  font-size: 0.86rem;
-  font-weight: 650;
-}
-
-.admin-payment-receipt-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.admin-payment-receipt-buttons button {
-  cursor: pointer;
-  min-height: 2.5rem;
-  padding: 0.45rem 0.9rem;
-  border-radius: 8px;
-  border: 1px solid var(--navy-line);
-  background: var(--white);
-  color: var(--navy);
-  font-weight: 650;
-  transition: background-color 180ms ease, border-color 180ms ease;
-}
-
-.admin-payment-receipt-buttons button:hover,
-.admin-payment-receipt-buttons button:focus-visible {
-  border-color: var(--teal);
-  background: color-mix(in srgb, var(--teal-soft) 55%, var(--white));
-}
-
-.admin-payment-receipt-buttons button:focus-visible {
-  outline: 2px solid var(--teal);
-  outline-offset: 2px;
-}
-
-.admin-payment-camera-dialog {
-  width: min(26rem, calc(100vw - 1.25rem));
-}
-
-.admin-payment-camera-body {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.admin-payment-camera-stage {
-  position: relative;
-  overflow: hidden;
-  border-radius: 14px;
-  border: 1px solid var(--navy-line);
-  background: color-mix(in srgb, var(--navy) 88%, black);
-  /* Portrait preview Ã¢â‚¬â€ mobile payment receipts */
-  aspect-ratio: 9 / 16;
-  max-height: min(72vh, 38rem);
-  margin-inline: auto;
-  width: min(100%, 22rem);
-}
-
-.admin-payment-camera-stage video {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.admin-payment-camera-guide {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  pointer-events: none;
-  z-index: 2;
-}
-
-.admin-payment-camera-guide-frame {
-  position: relative;
-  width: min(86%, 18.5rem);
-  /* Tall phone screen Ã¢â‚¬â€ GCash / Maya receipt */
-  aspect-ratio: 9 / 19.5;
-  max-height: 94%;
-  border-radius: 22px;
-  box-shadow:
-    0 0 0 999px rgb(8 18 36 / 0.55),
-    inset 0 0 0 1.5px rgb(255 255 255 / 0.45);
-  transition: box-shadow 0.18s ease, transform 0.18s ease;
-}
-
-.admin-payment-camera-guide-frame.is-scanning {
-  box-shadow:
-    0 0 0 999px rgb(8 18 36 / 0.52),
-    inset 0 0 0 2.5px rgb(26 166 166 / 0.9);
-}
-
-.admin-payment-camera-guide-frame.is-ready {
-  transform: scale(1.012);
-  box-shadow:
-    0 0 0 999px rgb(8 18 36 / 0.48),
-    inset 0 0 0 3px var(--teal),
-    0 0 0 5px rgb(26 166 166 / 0.4);
-}
-
-.admin-payment-camera-guide-frame.is-ready .admin-payment-camera-guide-label {
-  background: var(--teal);
-  color: var(--white);
-}
-
-.admin-payment-camera-guide-corner {
-  position: absolute;
-  width: 1.7rem;
-  height: 1.7rem;
-  border: 3.5px solid var(--teal);
-  border-radius: 4px;
-}
-
-.admin-payment-camera-guide-corner.is-tl {
-  top: -3px;
-  left: -3px;
-  border-right: 0;
-  border-bottom: 0;
-}
-
-.admin-payment-camera-guide-corner.is-tr {
-  top: -3px;
-  right: -3px;
-  border-left: 0;
-  border-bottom: 0;
-}
-
-.admin-payment-camera-guide-corner.is-bl {
-  bottom: -3px;
-  left: -3px;
-  border-right: 0;
-  border-top: 0;
-}
-
-.admin-payment-camera-guide-corner.is-br {
-  bottom: -3px;
-  right: -3px;
-  border-left: 0;
-  border-top: 0;
-}
-
-.admin-payment-camera-guide-tick {
-  position: absolute;
-  background: var(--teal);
-  opacity: 0.9;
-}
-
-.admin-payment-camera-guide-tick.is-top,
-.admin-payment-camera-guide-tick.is-bottom {
-  left: 50%;
-  width: 1.5rem;
-  height: 3px;
-  transform: translateX(-50%);
-}
-
-.admin-payment-camera-guide-tick.is-top { top: -2px; }
-.admin-payment-camera-guide-tick.is-bottom { bottom: -2px; }
-
-.admin-payment-camera-guide-tick.is-left,
-.admin-payment-camera-guide-tick.is-right {
-  top: 50%;
-  width: 3px;
-  height: 1.5rem;
-  transform: translateY(-50%);
-}
-
-.admin-payment-camera-guide-tick.is-left { left: -2px; }
-.admin-payment-camera-guide-tick.is-right { right: -2px; }
-
-.admin-payment-camera-guide-label {
-  position: absolute;
-  left: 50%;
-  bottom: 0.7rem;
-  top: auto;
-  transform: translateX(-50%);
-  margin: 0;
-  padding: 0.38rem 0.72rem;
-  border-radius: 999px;
-  background: rgb(8 18 36 / 0.78);
-  color: var(--white);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  text-align: center;
-}
-
-@media (max-width: 640px) {
-  .admin-payment-receipt-buttons {
-    display: grid;
-    grid-template-columns: 1fr;
-  }
-
-  .admin-payment-camera-dialog {
-    width: min(100vw - 0.75rem, 26rem);
-  }
-
-  .admin-payment-camera-stage {
-    width: min(100%, 20rem);
-    aspect-ratio: 9 / 16;
-    max-height: min(68vh, 34rem);
-  }
-
-  .admin-payment-camera-guide-frame {
-    width: min(90%, 17.5rem);
-    aspect-ratio: 9 / 19.5;
-  }
 }
 
 .admin-payment-add-banner {
@@ -6089,201 +5878,9 @@ body.is-exporting {
   justify-self: end;
 }
 
-.admin-payment-ocr-status {
-  margin: 0;
-  padding: 0.55rem 0.7rem;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--teal-soft) 55%, var(--white));
-  color: var(--navy);
-  font-size: 0.88rem;
-}
-
-.admin-payment-ocr-status.is-error {
-  background: color-mix(in srgb, #c45c5c 18%, var(--white));
-}
-
-.admin-payment-ocr-compare {
-  display: grid;
-  gap: 0.65rem;
-  padding: 0.75rem;
-  border: 1px solid var(--navy-line);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--white) 88%, var(--teal-soft));
-}
-
-.admin-payment-ocr-grid {
-  display: grid;
-  gap: 0.85rem;
-  grid-template-columns: 1fr;
-}
-
-.admin-payment-ocr-photo {
-  margin: 0;
-  display: grid;
-  grid-template-rows: 22rem auto;
-  gap: 0.45rem;
-  align-content: start;
-  min-width: 0;
-}
-
-.admin-payment-ocr-photo-frame {
-  position: relative;
-  height: 22rem;
-  min-height: 22rem;
-  max-height: 22rem;
-  border-radius: 8px;
-  border: 1px solid var(--navy-line);
-  background: color-mix(in srgb, var(--navy) 6%, var(--white));
-  overflow: hidden;
-}
-
-.admin-payment-ocr-photo img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  max-height: none;
-  object-fit: contain;
-  object-position: center top;
-  border-radius: 0;
-  border: 0;
-  background: transparent;
-  cursor: zoom-in;
-}
-
-.admin-payment-ocr-photo img.hotel-photo-zoomable:focus-visible {
-  outline: 2px solid var(--teal);
-  outline-offset: -2px;
-}
-
-.admin-payment-ocr-photo-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.45rem 0.75rem;
-  min-height: 2rem;
-  margin: 0;
-  padding: 0.15rem 0 0;
-  font-size: 0.8rem;
-  color: color-mix(in srgb, var(--navy) 70%, white);
-  flex-shrink: 0;
-  position: relative;
-  z-index: 1;
-  background: transparent;
-}
-
-.admin-payment-ocr-caption {
-  margin: 0;
-  flex: 1 1 10rem;
-  font-size: inherit;
-  color: inherit;
-}
-
-.admin-payment-ocr-filter-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  margin: 0;
-  cursor: pointer;
-  user-select: none;
-  color: var(--navy);
-  font-size: 0.82rem;
-  font-weight: 650;
-  flex: 0 0 auto;
-}
-
-.admin-payment-ocr-filter-switch input {
-  position: absolute;
-  opacity: 0;
-  width: 1px;
-  height: 1px;
-  pointer-events: none;
-}
-
-.admin-payment-ocr-filter-track {
-  position: relative;
-  width: 2.4rem;
-  height: 1.3rem;
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--navy) 18%, var(--white));
-  border: 1px solid var(--navy-line);
-  transition: background-color 160ms ease, border-color 160ms ease;
-}
-
-.admin-payment-ocr-filter-track::after {
-  content: '';
-  position: absolute;
-  top: 1px;
-  left: 2px;
-  width: 1rem;
-  height: 1rem;
-  border-radius: 50%;
-  background: var(--white);
-  border: 1px solid var(--navy-line);
-  transition: transform 160ms ease, background-color 160ms ease;
-}
-
-.admin-payment-ocr-filter-switch input:checked + .admin-payment-ocr-filter-track {
-  background: var(--teal);
-  border-color: var(--teal);
-}
-
-.admin-payment-ocr-filter-switch input:checked + .admin-payment-ocr-filter-track::after {
-  transform: translateX(1rem);
-  border-color: var(--white);
-}
-
-.admin-payment-ocr-filter-switch input:focus-visible + .admin-payment-ocr-filter-track {
-  outline: 2px solid var(--teal);
-  outline-offset: 2px;
-}
-
-.admin-payment-ocr-fields {
-  display: grid;
-  gap: 0.65rem;
-  align-content: start;
-}
-
-.admin-payment-ocr-fields textarea {
-  min-height: 7rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.78rem;
-  line-height: 1.35;
-}
-
-.admin-payment-ocr-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  justify-content: flex-end;
-}
-
 .admin-payment-method-cell {
   white-space: pre-line;
   font-size: 0.88rem;
-}
-
-.admin-payment-receipt-link {
-  color: var(--teal);
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.admin-payment-receipt-link:hover,
-.admin-payment-receipt-link:focus-visible {
-  text-decoration: underline;
-}
-
-.admin-payment-receipt-preview {
-  display: block;
-  width: min(100%, 22rem);
-  max-height: 18rem;
-  object-fit: contain;
-  margin-top: 0.35rem;
-  border-radius: 8px;
-  border: 1px solid var(--navy-line);
-  background: color-mix(in srgb, var(--navy) 6%, var(--white));
 }
 
 .admin-payment-detail-dialog {
@@ -6361,6 +5958,105 @@ body.is-exporting {
   color: rgba(241, 245, 249, 0.78);
 }
 
+.admin-payment-detail-stats .is-verified {
+  gap: 6px;
+  border-color: rgba(45, 212, 191, 0.45);
+  background: rgba(26, 166, 166, 0.24);
+  color: #5eead4;
+}
+
+.admin-payment-detail-stats .is-verified svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.admin-payment-verify {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 1px solid #d97706;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fbbf24, #f59e0b);
+  color: #42260a;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 0 0 0 rgb(245 158 11 / 0.45);
+  animation: admin-payment-verify-pulse 2.4s ease-out infinite;
+  transition: background-color 180ms ease, transform 150ms ease, box-shadow 180ms ease;
+}
+
+.admin-payment-verify svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.admin-payment-verify:hover:not(:disabled) {
+  background: linear-gradient(180deg, #f59e0b, #d97706);
+  box-shadow: 0 4px 14px rgb(245 158 11 / 0.4);
+  animation: none;
+}
+
+.admin-payment-verify:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.admin-payment-verify:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.admin-payment-verify:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  animation: none;
+}
+
+@keyframes admin-payment-verify-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(245 158 11 / 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgb(245 158 11 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(245 158 11 / 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-payment-verify {
+    animation: none;
+  }
+}
+
+.admin-booking-table-actions button.needs-verify {
+  position: relative;
+  border-color: color-mix(in srgb, #f59e0b 55%, var(--border, #cbd5e1));
+}
+
+.admin-payment-view-badge {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: inline-grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #f59e0b;
+  color: #42260a;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--white, #fff);
+  pointer-events: none;
+}
+
 .admin-payment-detail-close {
   flex: none;
   display: grid;
@@ -6394,188 +6090,6 @@ body.is-exporting {
 
   [data-payment-detail-modal] .admin-payment-detail-head h2 {
     white-space: normal;
-  }
-}
-
-.admin-booking-modal.has-receipt-proof .admin-payment-detail-dialog {
-  width: min(96vw, 64rem);
-}
-
-.admin-payment-detail-compare {
-  margin-top: 1rem;
-}
-
-.admin-payment-detail-compare-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.15rem;
-}
-
-.admin-payment-detail-compare-head .admin-payment-panel-title {
-  margin: 0;
-}
-
-.admin-payment-detail-channel {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.2rem 0.55rem;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--teal) 35%, var(--navy-line));
-  background: color-mix(in srgb, var(--teal-soft) 55%, var(--white));
-  color: var(--navy);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.admin-payment-detail-facts {
-  display: grid;
-  gap: 0.75rem;
-  align-content: start;
-  min-width: 0;
-}
-
-.admin-payment-detail-amount {
-  display: grid;
-  gap: 0.2rem;
-  padding: 0.75rem 0.85rem;
-  border-radius: 8px;
-  border: 1px solid var(--navy-line);
-  background: color-mix(in srgb, var(--white) 70%, var(--teal-soft));
-}
-
-.admin-payment-detail-amount input {
-  width: 100%;
-  margin: 0;
-  padding: 0.15rem 0;
-  border: 0;
-  background: transparent;
-  color: var(--navy);
-  font: inherit;
-  font-size: clamp(1.35rem, 2.4vw, 1.7rem);
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-  outline: none;
-}
-
-.admin-payment-detail-amount input:focus-visible {
-  box-shadow: inset 0 -2px 0 var(--teal);
-}
-
-.admin-payment-detail-edit-fields {
-  gap: 0.55rem;
-}
-
-.admin-payment-detail-edit-fields label span {
-  color: color-mix(in srgb, var(--navy) 62%, white);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.admin-payment-detail-edit-fields input {
-  width: 100%;
-  margin-top: 0.2rem;
-  padding: 0.55rem 0.7rem;
-  border: 1px solid var(--navy-line);
-  border-radius: 8px;
-  background: var(--white);
-  color: var(--navy);
-  font: inherit;
-  font-size: 0.95rem;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-
-.admin-payment-detail-edit-fields input:focus-visible {
-  border-color: var(--teal);
-  outline: 2px solid color-mix(in srgb, var(--teal) 35%, transparent);
-  outline-offset: 1px;
-}
-
-.admin-payment-detail-edit-fields input[readonly],
-.admin-payment-detail-amount input[readonly] {
-  cursor: default;
-  background: color-mix(in srgb, var(--navy) 4%, var(--white));
-}
-
-.admin-payment-save-receipt {
-  border-color: var(--teal) !important;
-  background: color-mix(in srgb, var(--teal-soft) 45%, var(--white)) !important;
-  color: var(--navy) !important;
-  font-weight: 700 !important;
-}
-
-.admin-payment-save-receipt:hover,
-.admin-payment-save-receipt:focus-visible {
-  background: color-mix(in srgb, var(--teal-soft) 70%, var(--white)) !important;
-}
-
-.admin-payment-detail-fact-label {
-  color: color-mix(in srgb, var(--navy) 62%, white);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.admin-payment-detail-amount strong {
-  color: var(--navy);
-  font-size: clamp(1.35rem, 2.4vw, 1.7rem);
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
-
-.admin-payment-detail-fact-list {
-  display: grid;
-  gap: 0.55rem;
-  margin: 0;
-}
-
-.admin-payment-detail-fact-list > div {
-  display: grid;
-  gap: 0.15rem;
-  padding: 0.55rem 0.7rem;
-  border-radius: 8px;
-  border: 1px solid var(--navy-line);
-  background: var(--white);
-}
-
-.admin-payment-detail-fact-list dt {
-  margin: 0;
-  color: color-mix(in srgb, var(--navy) 62%, white);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.admin-payment-detail-fact-list dd {
-  margin: 0;
-  color: var(--navy);
-  font-size: 0.95rem;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-  word-break: break-word;
-}
-
-.admin-payment-ocr-photo img.is-scanner-preview {
-  filter: grayscale(1) contrast(1.28) brightness(1.04);
-}
-
-.admin-payment-ocr-photo-meta .admin-payment-receipt-link {
-  margin-left: auto;
-}
-
-@media (min-width: 760px) {
-  .admin-payment-ocr-grid {
-    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-    align-items: start;
   }
 }
 
@@ -14728,24 +14242,26 @@ body.hotel-photo-zoom-open {
   box-shadow: 0 8px 24px rgba(11, 31, 58, 0.08);
 }
 
-/* Admin review moderation */
-.admin-reviews-list {
-  display: grid;
-  gap: 0.9rem;
-}
-
+/* Admin review moderation — compact table keeps the DOM light per row and
+   packs ~15+ reviews per viewport instead of ~3 cards. */
 .admin-reviews-empty {
   margin: 0;
   color: rgba(11, 31, 58, 0.65);
 }
 
-.admin-reviews-card {
-  border: 1px solid var(--navy-line);
-  border-radius: 14px;
-  background: var(--white);
-  padding: 0.95rem;
-  box-shadow: 0 8px 26px rgba(11, 31, 58, 0.08);
+.admin-reviews-table {
+  width: 100%;
 }
+
+.admin-reviews-table .admin-reviews-comment-cell {
+  max-width: 22rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: rgba(11, 31, 58, 0.78);
+}
+
+
 
 .admin-reviews-toolbar {
   display: flex;
@@ -14773,21 +14289,40 @@ body.hotel-photo-zoom-open {
   background: var(--white);
 }
 
-.admin-reviews-card-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 0.75rem;
+.admin-reviews-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 14rem;
+  max-width: 26rem;
 }
 
-.admin-reviews-card-head strong {
+.admin-reviews-search span {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: rgba(11, 31, 58, 0.76);
+}
+
+.admin-reviews-search input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--navy-line);
+  border-radius: 8px;
+  padding: 0.3rem 0.55rem;
+  background: var(--white);
   color: var(--navy);
+  font: inherit;
 }
 
-.admin-reviews-card-head p {
-  margin: 0.2rem 0 0;
-  color: rgba(11, 31, 58, 0.7);
-  font-size: 0.86rem;
+.admin-reviews-search input:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
+.admin-reviews-list.is-updating {
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 140ms ease;
 }
 
 .admin-reviews-comment {
@@ -14874,13 +14409,6 @@ body.hotel-photo-zoom-open {
   color: rgba(11, 31, 58, 0.6);
 }
 
-.admin-reviews-list-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-}
-
 .admin-reviews-status-tag {
   display: inline-flex;
   align-items: center;
@@ -14965,18 +14493,6 @@ body.hotel-photo-zoom-open {
   flex-wrap: wrap;
   gap: 0.55rem;
   margin-top: 0.7rem;
-}
-
-.admin-reviews-actions-list {
-  justify-content: flex-end;
-}
-
-.admin-reviews-view-btn {
-  width: auto;
-  min-width: 8.5rem;
-  min-height: 2.15rem;
-  padding: 0 1rem;
-  border-radius: 10px;
 }
 
 .admin-reviews-scoreline {
@@ -15098,6 +14614,17 @@ body.admin-reviews-modal-open {
 
 html.mori-surface-arrival .admin-page-loader {
   display: grid;
+}
+
+/* Arrival handoff: the loader covers first paint already visible, so the
+   inner must not replay its enter animation (a blank flash then pop-in reads
+   as a blink). The bar also completes quickly instead of restarting. */
+html.mori-surface-arrival .guest-page-loader .guest-page-loader-inner {
+  animation: none;
+}
+
+html.mori-surface-arrival .guest-page-loader .guest-page-loader-bar-fill {
+  animation-duration: 900ms;
 }
 
 @keyframes guest-loader-fade-in {

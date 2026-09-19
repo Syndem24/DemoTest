@@ -26,7 +26,8 @@
   const paymentDetailModal = document.querySelector('[data-payment-detail-modal]');
   const paymentDetailBody = paymentDetailModal?.querySelector('[data-payment-detail-body]');
   const paymentVoidButton = paymentDetailModal?.querySelector('[data-payment-void]');
-  const paymentSaveReceiptButton = paymentDetailModal?.querySelector('[data-payment-save-receipt]');
+  const paymentVerifyButton = paymentDetailModal?.querySelector('[data-payment-verify]');
+  const paymentVerifiedChip = paymentDetailModal?.querySelector('[data-payment-detail-verified]');
   const paymentRefundModal = document.querySelector('[data-payment-refund-modal]');
   const paymentRefundReason = paymentRefundModal?.querySelector('[data-payment-refund-reason]');
   const paymentRefundError = paymentRefundModal?.querySelector('[data-payment-refund-error]');
@@ -281,6 +282,15 @@
         const view = document.createElement('button');
         view.type = 'button';
         view.textContent = 'View';
+        if (isDigitalPayment(payment) && !payment.verifiedAtUtc && !isRefunded(payment)) {
+          view.classList.add('needs-verify');
+          const badge = document.createElement('span');
+          badge.className = 'admin-payment-view-badge';
+          badge.textContent = '1';
+          badge.setAttribute('aria-hidden', 'true');
+          view.appendChild(badge);
+          view.title = 'E-wallet payment not yet verified — open to verify';
+        }
         view.addEventListener('click', () => openPaymentDetail(payment));
         action.appendChild(view);
         row.appendChild(action);
@@ -298,22 +308,6 @@
     }
   }
 
-  function parseOcrNotes(notes) {
-    const text = String(notes || '');
-    const pick = (label) => {
-      const match = text.match(new RegExp(`${label}:\\s*([^·\\n]+)`, 'i'));
-      return match ? match[1].trim() : '';
-    };
-    const amountMatch = text.match(/Receipt amount:\s*₱?\s*([\d,]+(?:\.\d+)?)/i);
-    return {
-      channel: pick('Channel'),
-      from: pick('From'),
-      to: pick('To'),
-      receiptAmount: amountMatch ? amountMatch[1].replace(/,/g, '') : '',
-      stamp: /Digital OCR|E-wallet OCR/i.test(text) ? text : '',
-    };
-  }
-
   function appendDetailField(grid, label, value) {
     const dt = document.createElement('dt');
     dt.textContent = label;
@@ -322,104 +316,8 @@
     grid.append(dt, dd);
   }
 
-  function buildReceiptComparePanel(payment) {
-    const ocr = parseOcrNotes(payment.notes);
-    const amountDisplay = ocr.receiptAmount
-      ? Number(ocr.receiptAmount).toFixed(2)
-      : Number(payment.amount || 0).toFixed(2);
-    const channelLabel = ocr.channel || formatPaymentMethod(payment.method) || 'Digital';
-    const canEdit = !isRefunded(payment);
-
-    const compare = document.createElement('div');
-    compare.className = 'admin-payment-ocr-compare admin-payment-detail-compare';
-    compare.innerHTML = `
-      <div class="admin-payment-detail-compare-head">
-        <p class="admin-payment-panel-title">Receipt proof</p>
-        <span class="admin-payment-detail-channel" data-payment-detail-channel>${escapeHtml(channelLabel)}</span>
-      </div>
-      <div class="admin-payment-ocr-grid">
-        <figure class="admin-payment-ocr-photo">
-          <div class="admin-payment-ocr-photo-frame">
-            <img
-              alt="Payment receipt for ${escapeHtml(payment.receiptNumber || '')}"
-              data-payment-detail-receipt-image
-              data-photo-zoom
-              data-photo-zoom-src="${escapeHtml(payment.receiptImagePath)}"
-              data-photo-zoom-alt="Payment receipt"
-              title="Click to zoom · Esc to exit"
-              src="${escapeHtml(payment.receiptImagePath)}" />
-          </div>
-          <div class="admin-payment-ocr-photo-meta">
-            <p class="admin-payment-ocr-caption">Click photo to zoom</p>
-            <label class="admin-payment-ocr-filter-switch">
-              <input type="checkbox" data-payment-detail-scanner-filter />
-              <span class="admin-payment-ocr-filter-track" aria-hidden="true"></span>
-              <span class="admin-payment-ocr-filter-text">Scanner filter</span>
-            </label>
-            <a class="admin-payment-receipt-link" href="${escapeHtml(payment.receiptImagePath)}" target="_blank" rel="noopener noreferrer">Open full size</a>
-          </div>
-        </figure>
-        <div class="admin-payment-detail-facts admin-payment-detail-edit" role="group" aria-label="Receipt details">
-          <label class="admin-payment-detail-amount">
-            <span class="admin-payment-detail-fact-label">Amount on receipt (₱)</span>
-            <input
-              type="text"
-              inputmode="decimal"
-              data-payment-detail-amount
-              value="${escapeHtml(amountDisplay)}"
-              ${canEdit ? '' : 'readonly'}
-              autocomplete="off" />
-          </label>
-          <div class="admin-payment-ocr-fields admin-payment-detail-edit-fields">
-            <label>
-              <span>Transfer from / sender</span>
-              <input
-                type="text"
-                maxlength="160"
-                data-payment-detail-from
-                value="${escapeHtml(ocr.from)}"
-                placeholder="Sender name or number"
-                ${canEdit ? '' : 'readonly'} />
-            </label>
-            <label>
-              <span>Transfer to / recipient</span>
-              <input
-                type="text"
-                maxlength="160"
-                data-payment-detail-to
-                value="${escapeHtml(ocr.to)}"
-                placeholder="Recipient name or number"
-                ${canEdit ? '' : 'readonly'} />
-            </label>
-          </div>
-          <p class="admin-payment-prices-hint">
-            ${canEdit
-              ? 'Edit fields to correct OCR, then Save receipt details. Posted payment amount is unchanged.'
-              : 'Refunded — receipt details are locked.'}
-          </p>
-        </div>
-      </div>
-    `;
-
-    const filterToggle = compare.querySelector('[data-payment-detail-scanner-filter]');
-    const image = compare.querySelector('[data-payment-detail-receipt-image]');
-    filterToggle?.addEventListener('change', () => {
-      image?.classList.toggle('is-scanner-preview', Boolean(filterToggle.checked));
-    });
-
-    if (typeof window.initPhotoZoom === 'function') {
-      window.initPhotoZoom(compare);
-    }
-    return compare;
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+  function isDigitalPayment(payment) {
+    return ['EWallet', 'BankTransfer', 'Maya', 'Card', 'GCash'].includes(payment?.method);
   }
 
   function openPaymentDetail(payment) {
@@ -437,8 +335,7 @@
       statusChip.classList.toggle('is-voided', isRefunded(payment));
     }
 
-    const hasReceipt = Boolean(payment.receiptImagePath);
-    paymentDetailModal.classList.toggle('has-receipt-proof', hasReceipt);
+    const verified = Boolean(payment.verifiedAtUtc);
 
     const fields = [
       ['When (PH)', formatDateTime(payment.paidAtUtc)],
@@ -449,15 +346,16 @@
       ['Amount', money(payment.amount)],
       ['Stay total at posting', money(payment.stayTotalAtPosting)],
       ['Balance after', money(payment.balanceAfter)],
+      ['Payment reference', payment.externalReference || payment.bankTransferReference || '—'],
+      ['Notes', payment.notes || '—'],
       ['Received by', payment.receivedBy],
       ['Status', formatPaymentStatus(payment.status)],
     ];
-    if (!hasReceipt) {
-      fields.splice(
-        8,
-        0,
-        ['Payment reference', payment.externalReference || payment.bankTransferReference || '—'],
-        ['Notes', payment.notes || '—']
+    if (isDigitalPayment(payment)) {
+      fields.push(
+        ['Verification', verified ? 'Verified' : 'Not verified'],
+        ['Verified by', payment.verifiedBy || '—'],
+        ['Verified at (PH)', verified ? formatDateTime(payment.verifiedAtUtc) : '—']
       );
     }
     if (isRefunded(payment)) {
@@ -474,15 +372,14 @@
     fields.forEach(([label, value]) => appendDetailField(grid, label, value));
     paymentDetailBody.appendChild(grid);
 
-    if (hasReceipt) {
-      paymentDetailBody.appendChild(buildReceiptComparePanel(payment));
-    }
-
     if (paymentVoidButton) {
       paymentVoidButton.hidden = isRefunded(payment);
     }
-    if (paymentSaveReceiptButton) {
-      paymentSaveReceiptButton.hidden = !hasReceipt || isRefunded(payment);
+    if (paymentVerifiedChip) {
+      paymentVerifiedChip.hidden = !verified;
+    }
+    if (paymentVerifyButton) {
+      paymentVerifyButton.hidden = verified || isRefunded(payment) || !isDigitalPayment(payment);
     }
     paymentDetailModal.hidden = false;
   }
@@ -490,40 +387,30 @@
   function closePaymentDetail() {
     if (paymentDetailModal) {
       paymentDetailModal.hidden = true;
-      paymentDetailModal.classList.remove('has-receipt-proof');
+    }
+    if (paymentVerifiedChip) {
+      paymentVerifiedChip.hidden = true;
     }
     selectedPayment = null;
   }
 
-  async function saveReceiptDetails() {
-    if (!selectedPayment || !paymentDetailBody) return;
-    const amountRaw = paymentDetailBody.querySelector('[data-payment-detail-amount]')?.value?.trim() || '';
-    const amountValue = Number(String(amountRaw).replace(/,/g, ''));
-    const channel =
-      paymentDetailBody.querySelector('[data-payment-detail-channel]')?.textContent?.trim() || '';
-    const body = {
-      externalReference: selectedPayment.externalReference || selectedPayment.bankTransferReference || null,
-      transferFrom: paymentDetailBody.querySelector('[data-payment-detail-from]')?.value?.trim() || null,
-      transferTo: paymentDetailBody.querySelector('[data-payment-detail-to]')?.value?.trim() || null,
-      channel: channel || null,
-      receiptAmount: Number.isFinite(amountValue) && amountValue > 0 ? amountValue : null,
-    };
-
-    if (paymentSaveReceiptButton) paymentSaveReceiptButton.disabled = true;
+  async function verifySelectedPayment() {
+    if (!selectedPayment) return;
+    if (paymentVerifyButton) paymentVerifyButton.disabled = true;
     try {
-      const updated = await apiFetch(`/api/admin/payments/${selectedPayment.id}/receipt-details`, {
+      const updated = await apiFetch(`/api/admin/payments/${selectedPayment.id}/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({}),
       });
       selectedPayment = updated;
       openPaymentDetail(updated);
-      showPaymentsMessage(`Saved receipt details for ${updated.receiptNumber}.`);
+      showPaymentsMessage(`Payment ${updated.receiptNumber} marked as verified.`);
       await refreshPayments();
     } catch (error) {
-      showPaymentsMessage(error.message || 'Could not save receipt details.', true);
+      showPaymentsMessage(error.message || 'Could not verify this payment.', true);
     } finally {
-      if (paymentSaveReceiptButton) paymentSaveReceiptButton.disabled = false;
+      if (paymentVerifyButton) paymentVerifyButton.disabled = false;
     }
   }
 
@@ -959,7 +846,7 @@
     button.addEventListener('click', closePaymentDetail);
   });
   paymentVoidButton?.addEventListener('click', openRefundModal);
-  paymentSaveReceiptButton?.addEventListener('click', saveReceiptDetails);
+  paymentVerifyButton?.addEventListener('click', verifySelectedPayment);
   paymentRefundModal?.querySelectorAll('[data-payment-refund-cancel]').forEach((button) => {
     button.addEventListener('click', closeRefundModal);
   });

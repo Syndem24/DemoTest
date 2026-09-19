@@ -78,8 +78,8 @@
             <button type="button" data-payments-next disabled>Next</button>
         </nav>
         <p class="admin-payments-future-note">
-            Digital payments with a scanned or uploaded receipt open in a compare view (photo + references).
-            New payments are still recorded from a booking’s details.
+            E-wallet payments are verified manually — open a payment and use Verify after checking
+            the guest’s receipt. New payments are still recorded from a booking’s details.
         </p>
     </div>
     </section>
@@ -96,6 +96,14 @@
                     <span class="is-receipt" data-payment-detail-receipt></span>
                     <span class="is-amount" data-payment-detail-amount-chip></span>
                     <span class="is-status" data-payment-detail-status></span>
+                    <span class="is-verified" data-payment-detail-verified hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            <path d="m9 12 2 2 4-4" />
+                        </svg>
+                        Verified
+                    </span>
                 </div>
             </div>
             <button type="button" class="admin-payment-detail-close" data-payment-detail-close aria-label="Close">&times;</button>
@@ -104,8 +112,15 @@
             <p>Loading…</p>
         </div>
         <footer class="admin-booking-detail-actions">
+            <button type="button" class="admin-payment-verify" data-payment-verify hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    <path d="m9 12 2 2 4-4" />
+                </svg>
+                Verify payment
+            </button>
             <button type="button" data-payment-detail-close>Close</button>
-            <button type="button" class="admin-payment-save-receipt" data-payment-save-receipt hidden>Save receipt details</button>
             <button type="button" class="admin-booking-delete" data-payment-void hidden>Refund payment</button>
         </footer>
     </section>

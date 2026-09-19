@@ -242,7 +242,8 @@
     const { existing, maximum } = walkInQuantityLimit(typeId);
     quantityTitle.textContent = mode === 'add' ? `How many ${type.name} rooms?` : `Edit ${type.name} quantity`;
     quantityInput.value = String(mode === 'add' ? 1 : Math.min(existing, maximum));
-    quantityConfirm.textContent = mode === 'add' ? 'Add rooms' : 'Save quantity';
+    const confirmLabel = quantityConfirm.querySelector?.('[data-quantity-label]') || quantityConfirm;
+    confirmLabel.textContent = mode === 'add' ? 'Add rooms' : 'Save quantity';
     quantityError.hidden = true;
     quantityInput.removeAttribute('aria-invalid');
     syncWalkInQuantityControls();
@@ -404,6 +405,11 @@
       ? `<span class="guest-offer-selected-badge" data-walkin-selected-badge>${quantity} selected</span>`
       : '';
     const selectLabel = soldOut ? 'Fully booked' : 'Select room';
+    const pickIcon = soldOut
+      ? '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m5.5 5.5 13 13"/></svg>'
+      : '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+    const editIcon = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
+    const trashIcon = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
 
     return `
       <article
@@ -454,12 +460,12 @@
                 data-walkin-pick-type="${item.roomTypeId}"
                 ${roomsNeeded() > 1 ? 'aria-haspopup="dialog"' : ''}
                 ${canAdd ? '' : 'disabled'}>
-                <span>${selectLabel}</span>
+                ${pickIcon}<span>${selectLabel}</span>
               </button>
               ${isSelected ? `
                 <div class="admin-walkin-selection-actions">
-                  <button type="button" data-walkin-edit-type="${item.roomTypeId}" aria-haspopup="dialog">Edit quantity (${quantity})</button>
-                  <button type="button" data-walkin-remove-type="${item.roomTypeId}" aria-label="Remove all ${safeName} selections">Remove</button>
+                  <button type="button" data-walkin-edit-type="${item.roomTypeId}" aria-haspopup="dialog">${editIcon}<span>Edit quantity (${quantity})</span></button>
+                  <button type="button" data-walkin-remove-type="${item.roomTypeId}" aria-label="Remove all ${safeName} selections">${trashIcon}<span>Remove</span></button>
                 </div>` : ''}
             </div>
           </div>
@@ -477,13 +483,15 @@
       '<svg class="admin-walkin-slot-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>';
     const pendingIcon =
       '<svg class="admin-walkin-slot-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/></svg>';
+    const editIcon = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
+    const trashIcon = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
     if (typeSelectionSummary) {
       typeSelectionSummary.innerHTML = Array.from({ length: needed }, (_, index) => {
         const type = roomTypes.find((item) => item.roomTypeId === selections[index]);
         return `<li class="${type ? 'is-selected' : 'is-pending'}">
           ${type ? selectedIcon : pendingIcon}
           <span><strong>Room ${index + 1}</strong> · ${type ? escapeHtml(type.name) : 'Not selected'}</span>
-          ${type ? `<button type="button" data-walkin-remove-slot="${index}" aria-label="Remove selection for Room ${index + 1}">Remove</button>` : ''}
+          ${type ? `<button type="button" data-walkin-remove-slot="${index}" aria-label="Remove selection for Room ${index + 1}">${trashIcon}<span>Remove</span></button>` : ''}
         </li>`;
       }).join('');
     }
@@ -500,8 +508,8 @@
           ${selectedIcon}
           <span><strong>${name}</strong> · ${qty} room${qty === 1 ? '' : 's'}</span>
           <span class="admin-walkin-selection-actions">
-            <button type="button" data-walkin-edit-type="${typeId}" aria-haspopup="dialog">Edit quantity</button>
-            <button type="button" data-walkin-remove-type="${typeId}" aria-label="Remove all ${name} selections">Remove all</button>
+            <button type="button" data-walkin-edit-type="${typeId}" aria-haspopup="dialog">${editIcon}<span>Edit quantity</span></button>
+            <button type="button" data-walkin-remove-type="${typeId}" aria-label="Remove all ${name} selections">${trashIcon}<span>Remove all</span></button>
           </span>
         </li>`;
       }).join('');
@@ -719,7 +727,11 @@
     if (paymentDue) paymentDue.textContent = money(total);
     const method = String(paymentMethod?.value || 'Cash');
     if (!isCashPaymentMethod(method)) {
-      if (paymentDigitalAmount && !paymentDigitalAmount.value.trim()) {
+      // Keep the suggested amount in step with the total (discounts, dates,
+      // fees) until the staff types their own amount — a manual entry stays.
+      if (paymentDigitalAmount
+          && (!paymentDigitalAmount.value.trim() || paymentDigitalAmount.dataset.autofilled === '1')) {
+        paymentDigitalAmount.dataset.autofilled = '1';
         paymentDigitalAmount.value = total > 0 ? total.toFixed(2) : '';
       }
       return;
@@ -2105,7 +2117,10 @@
     syncWalkInPaymentChange();
     paymentTendered.focus();
   });
-  paymentDigitalAmount?.addEventListener('input', () => syncWalkInPaymentChange());
+  paymentDigitalAmount?.addEventListener('input', () => {
+    delete paymentDigitalAmount.dataset.autofilled;
+    syncWalkInPaymentChange();
+  });
 
   // Inline format feedback on the Guest step as soon as the field is left.
   document.getElementById('walkInGuestEmail')?.addEventListener('blur', (event) => {

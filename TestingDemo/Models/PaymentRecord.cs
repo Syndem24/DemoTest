@@ -59,9 +59,13 @@ public class PaymentRecord
     public string? BankTransferReference { get; set; }
 
     /// <summary>
-    /// Stored path for uploaded e-wallet / InstaPay receipt image.
+    /// When staff manually verified the e-wallet receipt (checked on the guest's phone).
+    /// Null = not yet verified.
     /// </summary>
-    public string? ReceiptImagePath { get; set; }
+    public DateTime? VerifiedAtUtc { get; set; }
+
+    /// <summary>Staff display name who verified the e-wallet receipt.</summary>
+    public string? VerifiedBy { get; set; }
 
     public DateTime? VoidedAtUtc { get; set; }
     public string? VoidReason { get; set; }

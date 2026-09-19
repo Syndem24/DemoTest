@@ -15,25 +15,16 @@ namespace TestingDemo.Controllers;
 public sealed class AdminPaymentsApiController : ControllerBase
 {
     private readonly IPaymentService _paymentService;
-    private readonly IPaymentReceiptStorage _receiptStorage;
-    private readonly IReceiptOcrService _receiptOcr;
     private readonly IHubContext<BookingNotificationsHub, IBookingNotificationsClient> _hub;
-    private readonly ISystemAuditRecorder _audit;
     private readonly UserManager<ApplicationUser> _userManager;
 
     public AdminPaymentsApiController(
         IPaymentService paymentService,
-        IPaymentReceiptStorage receiptStorage,
-        IReceiptOcrService receiptOcr,
         IHubContext<BookingNotificationsHub, IBookingNotificationsClient> hub,
-        ISystemAuditRecorder audit,
         UserManager<ApplicationUser> userManager)
     {
         _paymentService = paymentService;
-        _receiptStorage = receiptStorage;
-        _receiptOcr = receiptOcr;
         _hub = hub;
-        _audit = audit;
         _userManager = userManager;
     }
 
@@ -134,16 +125,19 @@ public sealed class AdminPaymentsApiController : ControllerBase
         }
     }
 
-    [HttpPost("{id:int}/receipt-details")]
+    /// <summary>
+    /// Marks a posted e-wallet payment as manually verified by front-desk staff
+    /// (receipt checked on the guest's phone — no photo stored).
+    /// </summary>
+    [HttpPost("{id:int}/verify")]
     [ValidateAntiForgeryToken]
-    public async Task<ActionResult<PaymentRecordDto>> UpdateReceiptDetails(
+    public async Task<ActionResult<PaymentRecordDto>> VerifyPayment(
         int id,
-        [FromBody] UpdatePaymentReceiptDetailsRequest request,
         CancellationToken cancellationToken)
     {
         try
         {
-            var payment = await _paymentService.UpdateReceiptDetailsAsync(id, request, cancellationToken);
+            var payment = await _paymentService.VerifyAsync(id, cancellationToken);
             await _hub.Clients.All.PaymentChanged(payment.BookingId);
             return Ok(payment);
         }
@@ -151,97 +145,14 @@ public sealed class AdminPaymentsApiController : ControllerBase
         {
             return NotFound(new { message = "Payment was not found." });
         }
-        catch (InvalidOperationException ex)
-        {
-            return Conflict(new { message = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Uploads an e-wallet receipt image before or after OCR review.
-    /// </summary>
-    [HttpPost("receipt-upload")]
-    [ValidateAntiForgeryToken]
-    [RequestSizeLimit(8_000_000)]
-    public async Task<ActionResult<object>> UploadReceipt(
-        [FromForm] int bookingId,
-        IFormFile? file,
-        CancellationToken cancellationToken)
-    {
-        if (file == null || file.Length == 0)
-        {
-            return BadRequest(new { message = "Choose a receipt photo to upload." });
-        }
-
-        if (bookingId <= 0)
-        {
-            return BadRequest(new { message = "Booking id is required." });
-        }
-
-        try
-        {
-            await using var stream = file.OpenReadStream();
-            var path = await _receiptStorage.SaveAsync(
-                bookingId,
-                $"pending-{bookingId}",
-                stream,
-                file.FileName,
-                file.ContentType,
-                cancellationToken);
-            await _audit.RecordCommittedAsync(
-                SystemAuditIntent.FileModification,
-                SystemAuditDomain.File,
-                "Receipt.Uploaded",
-                "Receipt",
-                path,
-                Path.GetFileName(path),
-                summary: $"Receipt image stored for booking {bookingId}.",
-                cancellationToken: cancellationToken);
-            return Ok(new { path });
-        }
         catch (ArgumentException ex)
         {
             return BadRequest(new { message = ex.Message });
         }
-    }
-
-    /// <summary>
-    /// Azure Document Intelligence prebuilt-read OCR for a receipt image.
-    /// Returns engine Azure on success; otherwise Fallback/Unavailable/QuotaExceeded for client Tesseract.
-    /// </summary>
-    [HttpPost("receipt-ocr")]
-    [ValidateAntiForgeryToken]
-    [RequestSizeLimit(8_000_000)]
-    public async Task<ActionResult<object>> AnalyzeReceiptOcr(
-        [FromForm] int bookingId,
-        IFormFile? file,
-        CancellationToken cancellationToken)
-    {
-        if (file == null || file.Length == 0)
+        catch (InvalidOperationException ex)
         {
-            return BadRequest(new { message = "Choose a receipt photo to analyze." });
+            return Conflict(new { message = ex.Message });
         }
-
-        if (bookingId <= 0)
-        {
-            return BadRequest(new { message = "Booking id is required." });
-        }
-
-        await using var stream = file.OpenReadStream();
-        var result = await _receiptOcr.AnalyzeAsync(
-            stream,
-            file.FileName,
-            file.ContentType,
-            cancellationToken);
-
-        return Ok(new
-        {
-            engine = result.Engine.ToString(),
-            text = result.Text,
-            fallbackReason = result.FallbackReason,
-            pagesUsedThisMonth = result.PagesUsedThisMonth,
-            monthlyBudget = result.MonthlyBudget,
-        });
     }
 
     [HttpGet("flush-logs")]

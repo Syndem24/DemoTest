@@ -36,7 +36,10 @@
             </section>
 
             <div class="guest-modal-actions guest-book-modal-actions">
-                <button type="button" class="guest-btn guest-btn-ghost" data-walkin-source-close>Cancel</button>
+                <button type="button" class="guest-btn guest-btn-ghost" data-walkin-source-close>
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    Cancel
+                </button>
                 <button type="button" class="guest-btn guest-btn-primary" id="walkInSourceNextBtn">
                     Continue
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
@@ -62,7 +65,10 @@
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                 Add room
             </button>
-            <button type="button" class="guest-btn guest-btn-primary" id="walkInGuestsSubmitBtn">Continue</button>
+            <button type="button" class="guest-btn guest-btn-primary" id="walkInGuestsSubmitBtn">
+                Continue
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
         </footer>
     </div>
 </div>
@@ -272,7 +278,8 @@
                             </div>
                             <p class="admin-walkin-change" id="walkInPaymentChange" role="status" hidden>Change: ₱0.00</p>
                             <p class="admin-walkin-hint" id="walkInPaymentDigitalHint" hidden>
-                                Receipt proof can be uploaded from booking details after check-in if needed.
+                                Verify the guest’s e-wallet receipt on their phone — payments can be
+                                marked verified later from the Payments page.
                             </p>
                         </div>
                     </div>
@@ -299,13 +306,22 @@
             </div>
 
             <div class="guest-modal-actions guest-book-modal-actions guest-book-wizard-actions">
-                <button type="button" class="guest-btn guest-btn-ghost" id="walkInWizardBackBtn">Back</button>
-                <button type="button" class="guest-btn guest-btn-primary" id="walkInWizardNextBtn">Next</button>
+                <button type="button" class="guest-btn guest-btn-ghost" id="walkInWizardBackBtn">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                    Back
+                </button>
+                <button type="button" class="guest-btn guest-btn-primary" id="walkInWizardNextBtn">
+                    Next
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                </button>
                 <button type="submit" class="guest-btn guest-btn-primary guest-btn-lg" id="walkInSubmitBtn" hidden>
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
                     Confirm walk-in
                 </button>
-                <button type="button" class="guest-btn guest-btn-ghost" data-walkin-close>Cancel</button>
+                <button type="button" class="guest-btn guest-btn-ghost" data-walkin-close>
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    Cancel
+                </button>
                 <button type="button" id="walkInTypeSelectionProgress" class="admin-walkin-selection-progress" aria-haspopup="dialog" aria-controls="walkInSelectionDialog" aria-live="polite" hidden>
                     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>
                     <span data-progress-text>0 of 0 selected</span>
@@ -333,8 +349,14 @@
         </div>
         <p id="walkInTypeQuantityError" class="guest-form-message is-error" role="alert" hidden></p>
         <footer>
-            <button type="button" class="guest-btn guest-btn-ghost" data-walkin-quantity-close>Cancel</button>
-            <button type="submit" class="guest-btn guest-btn-primary" id="walkInTypeQuantityConfirm">Add rooms</button>
+            <button type="button" class="guest-btn guest-btn-ghost" data-walkin-quantity-close>
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                Cancel
+            </button>
+            <button type="submit" class="guest-btn guest-btn-primary" id="walkInTypeQuantityConfirm">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                <span data-quantity-label>Add rooms</span>
+            </button>
         </footer>
     </form>
 </dialog>
@@ -362,7 +384,10 @@
             <ul id="walkInTypeSelectionSummary" aria-label="Selected and unselected rooms"></ul>
         </div>
         <footer>
-            <button type="button" class="guest-btn guest-btn-primary" data-walkin-selection-close>Done</button>
+            <button type="button" class="guest-btn guest-btn-primary" data-walkin-selection-close>
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                Done
+            </button>
         </footer>
     </div>
 </dialog>
@@ -375,7 +400,10 @@
         <h2 id="walkInSuccessTitle">Walk-in confirmed</h2>
         <p class="guest-modal-lede" id="walkInSuccessMessage">The stay is confirmed and rooms are assigned.</p>
         <div class="guest-modal-actions">
-            <button type="button" class="guest-btn guest-btn-primary" id="walkInSuccessDoneBtn">Done</button>
+            <button type="button" class="guest-btn guest-btn-primary" id="walkInSuccessDoneBtn">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                Done
+            </button>
         </div>
     </div>
 </div>

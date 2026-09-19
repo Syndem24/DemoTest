@@ -24,9 +24,10 @@ public sealed class AdminReviewsApiController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] string replyState = "all",
+        [FromQuery] string? q = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await _reviews.GetAdminPageAsync(page, pageSize, replyState, cancellationToken);
+        var result = await _reviews.GetAdminPageAsync(page, pageSize, replyState, q, cancellationToken);
         return Ok(result);
     }
 

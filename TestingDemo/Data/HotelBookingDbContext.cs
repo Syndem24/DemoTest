@@ -296,10 +296,10 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.ReceivedBy).HasMaxLength(120).IsRequired();
             entity.Property(e => e.ExternalReference).HasMaxLength(120);
             entity.Property(e => e.BankTransferReference).HasMaxLength(120);
-            entity.Property(e => e.ReceiptImagePath).HasMaxLength(500);
             entity.Property(e => e.Notes).HasMaxLength(1000);
             entity.Property(e => e.VoidReason).HasMaxLength(500);
             entity.Property(e => e.VoidedBy).HasMaxLength(120);
+            entity.Property(e => e.VerifiedBy).HasMaxLength(120);
             entity.HasIndex(e => e.PaidAtUtc);
             entity.HasIndex(e => new { e.BookingId, e.PaidAtUtc });
             entity.HasOne(e => e.Booking)
@@ -318,9 +318,19 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.TagsJson).HasMaxLength(1000);
             entity.Property(e => e.HotelReply).HasMaxLength(1000);
             entity.Property(e => e.HotelReplyBy).HasMaxLength(120);
+            entity.Property(e => e.HasHotelReply)
+                .HasComputedColumnSql(
+                    "(CASE WHEN [HotelReply] IS NULL OR [HotelReply] = N'' THEN CONVERT(bit,0) ELSE CONVERT(bit,1) END)",
+                    stored: true);
             entity.HasIndex(e => e.BookingId).IsUnique();
             entity.HasIndex(e => e.GuestUserId);
             entity.HasIndex(e => new { e.IsPublished, e.CreatedAtUtc });
+            entity.HasIndex(e => new { e.CreatedAtUtc, e.Id })
+                .IsDescending()
+                .HasDatabaseName("IX_StayReview_Created_Id");
+            entity.HasIndex(e => new { e.HasHotelReply, e.CreatedAtUtc, e.Id })
+                .IsDescending(false, true, true)
+                .HasDatabaseName("IX_StayReview_Reply_Created_Id");
             entity.HasOne(e => e.Booking)
                 .WithMany()
                 .HasForeignKey(e => e.BookingId)
