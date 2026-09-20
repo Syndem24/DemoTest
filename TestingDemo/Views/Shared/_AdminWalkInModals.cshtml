@@ -102,18 +102,6 @@
                         <span>Room type</span>
                     </button>
                 </li>
-                <li>
-                    <button type="button" data-walkin-step-tab="payment">
-                        <span class="admin-walkin-step-number" aria-hidden="true">4</span>
-                        <span>Payment</span>
-                    </button>
-                </li>
-                <li>
-                    <button type="button" data-walkin-step-tab="rooms">
-                        <span class="admin-walkin-step-number" aria-hidden="true">5</span>
-                        <span>Assign rooms</span>
-                    </button>
-                </li>
             </ol>
             <p class="guest-book-party" id="walkInBookPartySummary"></p>
         </header>
@@ -146,6 +134,29 @@
                         <span>Phone</span>
                         <input type="tel" name="guestPhone" id="walkInGuestPhone" placeholder="+63 9XX XXX XXXX" required maxlength="40" autocomplete="tel" inputmode="tel" data-mori-filter="phone" />
                     </label>
+                </div>
+
+                <div class="guest-field admin-walkin-channel-field" hidden>
+                    <label for="walkInChannel" class="form-label">Booking channel</label>
+                    <select id="walkInChannel" class="form-select" required>
+                        <option value="" selected>Select channel…</option>
+                        <option value="WalkIn">Walk-in</option>
+                        <option value="Agoda">Agoda</option>
+                        <option value="Expedia">Expedia</option>
+                        <option value="RedDoorz">RedDoorz</option>
+                        <option value="OtherThirdParty">Other OTA</option>
+                    </select>
+                    <div class="form-text">Required. Agoda, Expedia, and RedDoorz use standard OTA rates. Other OTA can optionally apply a special offer.</div>
+                </div>
+
+                <div class="guest-field admin-walkin-arrival-field">
+                    <label for="walkInArrivalDiscount" class="form-label">Senior / PWD (flag for arrival)</label>
+                    <select id="walkInArrivalDiscount" class="form-select">
+                        <option value="None" selected>None</option>
+                        <option value="SeniorCitizen">Senior Citizen — 20% off (verify ID on arrival)</option>
+                        <option value="Pwd">PWD — 20% off (verify ID on arrival)</option>
+                    </select>
+                    <div class="form-text" id="walkInArrivalDiscountHint">Walk-in channel: 20% off stay when selected (verify ID on arrival). Not combinable with promo rates.</div>
                 </div>
             </section>
 
@@ -195,111 +206,10 @@
                     </div>
                 </div>
                 <p class="guest-availability-notice" id="walkInTypesAvailabilityNotice" data-walkin-availability-notice role="status" hidden></p>
+                <p class="guest-room-capacity-msg" id="walkInCapacityWarn" hidden></p>
                 <div class="admin-walkin-types-layout">
                     <div class="admin-walkin-type-picker" id="walkInRoomTypePicker" aria-live="polite"></div>
                 </div>
-            </section>
-
-            <section class="guest-book-section is-payment is-wizard-panel" data-walkin-step-panel="payment" hidden>
-                <div class="guest-book-section-head">
-                    <span class="guest-book-section-num">4</span>
-                    <div>
-                        <h3>
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
-                            Payment
-                        </h3>
-                        <p>Collect payment before assigning room numbers. Limited Time walk-in promos apply automatically when active (cash only).</p>
-                    </div>
-                </div>
-
-                <div class="admin-walkin-payment-layout">
-                    <div class="admin-walkin-price-card">
-                        <p class="admin-walkin-price-heading">Stay summary</p>
-                        <div class="guest-booking-cart admin-walkin-price-breakdown" aria-live="polite">
-                            <div class="guest-cart-summary" id="walkInConfirmSummary">
-                                <span id="walkInConfirmLabel">—</span>
-                                <strong id="walkInConfirmTotal">₱0.00</strong>
-                            </div>
-                            <p class="admin-walkin-price-heading admin-walkin-price-heading--lines">Price breakdown</p>
-                            <div class="admin-walkin-fees" id="walkInFeeBreakdown"></div>
-                        </div>
-
-                        <div class="guest-field admin-walkin-channel-field" hidden>
-                            <label for="walkInChannel" class="form-label">Booking channel</label>
-                            <select id="walkInChannel" class="form-select" required>
-                                <option value="" selected>Select channel…</option>
-                                <option value="WalkIn">Walk-in</option>
-                                <option value="Agoda">Agoda</option>
-                                <option value="Expedia">Expedia</option>
-                                <option value="RedDoorz">RedDoorz</option>
-                                <option value="OtherThirdParty">Other OTA</option>
-                            </select>
-                            <div class="form-text">Required. Agoda, Expedia, and RedDoorz use standard OTA rates. Other OTA can optionally apply a special offer.</div>
-                        </div>
-
-                        <div class="guest-field admin-walkin-arrival-field">
-                            <label for="walkInArrivalDiscount" class="form-label">Senior / PWD (flag for arrival)</label>
-                            <select id="walkInArrivalDiscount" class="form-select">
-                                <option value="None" selected>None</option>
-                                <option value="SeniorCitizen">Senior Citizen — 20% off (verify ID on arrival)</option>
-                                <option value="Pwd">PWD — 20% off (verify ID on arrival)</option>
-                            </select>
-                            <div class="form-text" id="walkInArrivalDiscountHint">Walk-in channel: 20% off stay when selected (verify ID on arrival). Not combinable with promo rates.</div>
-                        </div>
-                    </div>
-
-                    <div class="admin-walkin-payment-form">
-                        <div class="admin-walkin-payment-collect">
-                            <p class="admin-walkin-price-heading">Collect payment</p>
-                            <div id="walkInPaymentCashDueWrap" class="admin-walkin-due">
-                                <span id="walkInPaymentDueLabel" class="admin-walkin-due-label">Amount due</span>
-                                <output id="walkInPaymentDue" class="admin-walkin-due-value" aria-labelledby="walkInPaymentDueLabel" aria-live="polite">₱0.00</output>
-                                <span class="admin-walkin-due-note">Calculated from the stay summary</span>
-                            </div>
-                            <div class="admin-walkin-payment-grid">
-                                <label class="admin-walkin-span-full">
-                                    <span>Payment method</span>
-                                    <select id="walkInPaymentMethod" class="form-select">
-                                        <option value="Cash" selected>Cash</option>
-                                        <option value="EWallet">E-wallet (InstaPay QR)</option>
-                                    </select>
-                                </label>
-                                <label id="walkInPaymentCashTenderWrap" class="admin-walkin-span-full admin-walkin-tender">
-                                    <span>Cash from guest (₱) <em class="admin-walkin-required">Type the amount handed over</em></span>
-                                    <span class="admin-walkin-tender-row">
-                                        <input type="text" id="walkInPaymentTendered" class="form-control admin-walkin-tender-input" inputmode="decimal" placeholder="e.g. 3500" autocomplete="off" aria-describedby="walkInPaymentChange" />
-                                        <button type="button" class="admin-walkin-exact" id="walkInPaymentExactBtn">Exact amount</button>
-                                    </span>
-                                </label>
-                                <label id="walkInPaymentDigitalWrap" class="admin-walkin-span-full" hidden>
-                                    <span>E-wallet amount received (₱)</span>
-                                    <input type="text" id="walkInPaymentDigitalAmount" class="form-control admin-walkin-tender-input" inputmode="decimal" placeholder="0.00" autocomplete="off" aria-describedby="walkInPaymentDigitalHint" />
-                                </label>
-                            </div>
-                            <p class="admin-walkin-change" id="walkInPaymentChange" role="status" hidden>Change: ₱0.00</p>
-                            <p class="admin-walkin-hint" id="walkInPaymentDigitalHint" hidden>
-                                Verify the guest’s e-wallet receipt on their phone — payments can be
-                                marked verified later from the Payments page.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <section class="guest-book-section is-rooms is-wizard-panel" data-walkin-step-panel="rooms" hidden>
-                <div class="guest-book-section-head">
-                    <span class="guest-book-section-num">5</span>
-                    <div>
-                        <h3>
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-6h6v6"/></svg>
-                            Assign rooms
-                        </h3>
-                        <p id="walkInRoomsIntro">Pick an available room number for each room in the party.</p>
-                    </div>
-                </div>
-                <p class="guest-room-capacity-msg" id="walkInCapacityWarn" hidden></p>
-                <p class="guest-availability-notice" id="walkInAvailabilityNotice" data-walkin-availability-notice role="status" hidden></p>
-                <div class="admin-walkin-assign-list" id="walkInRoomSlots"></div>
             </section>
 
             <p class="guest-form-message" id="walkInFormMessage" hidden></p>
@@ -316,7 +226,7 @@
                 </button>
                 <button type="submit" class="guest-btn guest-btn-primary guest-btn-lg" id="walkInSubmitBtn" hidden>
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-                    Confirm walk-in
+                    Create booking
                 </button>
                 <button type="button" class="guest-btn guest-btn-ghost" data-walkin-close>
                     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -392,18 +302,3 @@
     </div>
 </dialog>
 
-<div class="guest-modal" id="walkInSuccessModal" data-walkin-success-modal hidden>
-    <div class="guest-modal-backdrop" data-walkin-close></div>
-    <div class="guest-modal-dialog guest-modal-dialog-sm" role="dialog" aria-modal="true" aria-labelledby="walkInSuccessTitle">
-        <button type="button" class="guest-modal-close" data-walkin-close aria-label="Close">&times;</button>
-        <p class="guest-eyebrow">Walk-in</p>
-        <h2 id="walkInSuccessTitle">Walk-in confirmed</h2>
-        <p class="guest-modal-lede" id="walkInSuccessMessage">The stay is confirmed and rooms are assigned.</p>
-        <div class="guest-modal-actions">
-            <button type="button" class="guest-btn guest-btn-primary" id="walkInSuccessDoneBtn">
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-                Done
-            </button>
-        </div>
-    </div>
-</div>

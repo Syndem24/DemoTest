@@ -1,7 +1,7 @@
 namespace TestingDemo.Models;
 
 /// <summary>
-/// Explicit Google ownership state. Do not infer from <c>StaffExternalLogin</c> alone.
+/// Explicit Google ownership state. Do not infer from <c>AccountExternalLogin</c> alone.
 /// </summary>
 public enum GoogleVerificationStatus
 {

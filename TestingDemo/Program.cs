@@ -92,7 +92,7 @@ try
                     QueueLimit = 0,
                     AutoReplenishment = true
                 }));
-        options.AddPolicy("staff-password-reset", context =>
+        options.AddPolicy("password-reset", context =>
             RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions
@@ -102,7 +102,7 @@ try
                     QueueLimit = 0,
                     AutoReplenishment = true
                 }));
-        options.AddPolicy("staff-password-reset-verify", context =>
+        options.AddPolicy("password-reset-verify", context =>
             RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions
@@ -269,7 +269,7 @@ try
     builder.Services.AddScoped<ISecureConfigStore, SecureConfigStore>();
     builder.Services.AddScoped<IStaffEmailSender, SmtpStaffEmailSender>();
     builder.Services.AddScoped<IStaffOnboardingEmailSender, SmtpStaffEmailSender>();
-    builder.Services.AddScoped<IStaffPasswordResetCodeService, StaffPasswordResetCodeService>();
+    builder.Services.AddScoped<IPasswordResetCodeService, PasswordResetCodeService>();
     builder.Services.Configure<ChatbotOptions>(
         builder.Configuration.GetSection(ChatbotOptions.SectionName));
     builder.Services.AddHttpClient("chat-gemini", client =>

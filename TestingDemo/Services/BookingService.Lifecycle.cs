@@ -416,11 +416,11 @@ public sealed partial class BookingService
                 {
                     line = new BookingItem { RoomTypeId = requested.RoomTypeId };
                     booking.Items.Add(line);
+                    line.PricePerNight = slot.PricePerNight;
                 }
 
                 line.RoomTypeName = slot.RoomTypeName;
                 line.Quantity = requested.Quantity;
-                line.PricePerNight = slot.PricePerNight;
             }
         }
 

@@ -20,7 +20,7 @@ public class AccountController : Controller
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IStaffEmailSender _emailSender;
-    private readonly IStaffPasswordResetCodeService _passwordResetCode;
+    private readonly IPasswordResetCodeService _passwordResetCode;
     private readonly HotelBookingDbContext _db;
     private readonly ILogger<AccountController> _logger;
     private readonly ISystemAuditRecorder _audit;
@@ -31,7 +31,7 @@ public class AccountController : Controller
         SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager,
         IStaffEmailSender emailSender,
-        IStaffPasswordResetCodeService passwordResetCode,
+        IPasswordResetCodeService passwordResetCode,
         HotelBookingDbContext db,
         ILogger<AccountController> logger,
         ISystemAuditRecorder audit,
@@ -830,7 +830,7 @@ public class AccountController : Controller
     [HttpPost]
     [AllowAnonymous]
     [ValidateAntiForgeryToken]
-    [EnableRateLimiting("staff-password-reset")]
+    [EnableRateLimiting("password-reset")]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordViewModel model, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -868,7 +868,7 @@ public class AccountController : Controller
     [HttpPost]
     [AllowAnonymous]
     [ValidateAntiForgeryToken]
-    [EnableRateLimiting("staff-password-reset-verify")]
+    [EnableRateLimiting("password-reset-verify")]
     public async Task<IActionResult> VerifyResetOtp(VerifyResetOtpViewModel model, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -883,19 +883,19 @@ public class AccountController : Controller
 
         switch (result.Status)
         {
-            case StaffPasswordResetCodeVerifyStatus.Success when result.User is not null:
+            case PasswordResetCodeVerifyStatus.Success when result.User is not null:
                 var token = await _userManager.GeneratePasswordResetTokenAsync(result.User);
                 var encoded = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
                 PasswordResetSession.SetGrant(HttpContext.Session, model.Email.Trim(), encoded);
                 return RedirectToAction(nameof(ResetPassword));
-            case StaffPasswordResetCodeVerifyStatus.Expired:
+            case PasswordResetCodeVerifyStatus.Expired:
                 ModelState.AddModelError(string.Empty, "That code has expired. Request a new one.");
                 break;
-            case StaffPasswordResetCodeVerifyStatus.TooManyAttempts:
+            case PasswordResetCodeVerifyStatus.TooManyAttempts:
                 ModelState.AddModelError(string.Empty, "Too many incorrect attempts. This code has expired — request a new one.");
                 model.RemainingAttempts = 0;
                 break;
-            case StaffPasswordResetCodeVerifyStatus.NotFound:
+            case PasswordResetCodeVerifyStatus.NotFound:
                 ModelState.AddModelError(string.Empty, "No active reset code for that email. Check the address or request a new code.");
                 break;
             default:
@@ -1350,7 +1350,7 @@ public class AccountController : Controller
             SystemAuditIntent.AdministrativeAction,
             SystemAuditDomain.Account,
             StaffAccountActivityMapper.ToAccountAction(action),
-            StaffAuthSchema.AuditTargetType,
+            AccountAuthSchema.AuditTargetType,
             userId,
             targetLabel,
             summary: clipped,

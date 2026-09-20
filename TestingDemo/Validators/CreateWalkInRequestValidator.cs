@@ -33,15 +33,22 @@ public sealed class CreateWalkInRequestValidator : AbstractValidator<CreateWalkI
                 PhilippinesTime.ToUtc(checkout) > PhilippinesTime.ToUtc(request.CheckInAtUtc))
             .WithMessage("Check-out must be after check-in.");
 
-        RuleFor(x => x.Assignments)
+        RuleFor(x => x.Items)
             .NotEmpty()
-            .WithMessage("Assign at least one room for the walk-in.");
+            .When(x => x.Assignments is null || x.Assignments.Count == 0)
+            .WithMessage("Select at least one room type for the walk-in.");
 
         RuleFor(x => x.ExtraPersons)
             .GreaterThanOrEqualTo(0)
             .Must((request, extras) =>
-                extras <= StayTimeFees.MaxExtraPersonsForRooms(
-                    request.Assignments?.Sum(item => item.RoomIds?.Count ?? 0) ?? 0))
+            {
+                var roomCount = request.Assignments?.Sum(item => item.RoomIds?.Count ?? 0) ?? 0;
+                if (roomCount == 0)
+                {
+                    roomCount = request.Items?.Sum(item => item.Quantity) ?? 0;
+                }
+                return extras <= StayTimeFees.MaxExtraPersonsForRooms(roomCount);
+            })
             .WithMessage("At most one extra guest per room is allowed (₱200 / night).");
 
         RuleFor(x => x.Channel)
@@ -58,6 +65,12 @@ public sealed class CreateWalkInRequestValidator : AbstractValidator<CreateWalkI
             assignment.RuleFor(a => a.RoomIds)
                 .NotEmpty()
                 .WithMessage("Select a room number for each room type.");
+        });
+
+        RuleForEach(x => x.Items).ChildRules(item =>
+        {
+            item.RuleFor(i => i.RoomTypeId).GreaterThan(0);
+            item.RuleFor(i => i.Quantity).GreaterThan(0);
         });
     }
 }

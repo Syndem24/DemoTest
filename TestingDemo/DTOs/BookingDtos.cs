@@ -11,7 +11,10 @@ public sealed class CreateWalkInRequest
     public DateTime CheckoutTimeUtc { get; set; }
     /// <summary>One extra guest per room beyond 2 included occupants (₱200/night each).</summary>
     public int ExtraPersons { get; set; }
+    /// <summary>Optional room numbers to assign at create; when empty the booking is created unassigned.</summary>
     public List<ConfirmRoomAssignmentRequest> Assignments { get; set; } = new();
+    /// <summary>Room type + quantity lines; required when <see cref="Assignments"/> is empty.</summary>
+    public List<CreateBookingItemRequest> Items { get; set; } = new();
     /// <summary>WalkIn, FrontDeskExtension, or OTA channel (Agoda/Expedia/…).</summary>
     public BookingChannel Channel { get; set; } = BookingChannel.WalkIn;
     public int? SpecialOfferId { get; set; }

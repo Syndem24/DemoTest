@@ -31,16 +31,16 @@ public static class StaffAccountActivityMapper
             return string.Empty;
 
         var trimmed = action.Trim();
-        if (trimmed.StartsWith(StaffAuthSchema.AccountActionPrefix, StringComparison.Ordinal))
-            return trimmed[StaffAuthSchema.AccountActionPrefix.Length..];
+        if (trimmed.StartsWith(AccountAuthSchema.AccountActionPrefix, StringComparison.Ordinal))
+            return trimmed[AccountAuthSchema.AccountActionPrefix.Length..];
 
         return trimmed;
     }
 
     public static string ToAccountAction(string actionKey) =>
-        actionKey.StartsWith(StaffAuthSchema.AccountActionPrefix, StringComparison.Ordinal)
+        actionKey.StartsWith(AccountAuthSchema.AccountActionPrefix, StringComparison.Ordinal)
             ? actionKey
-            : StaffAuthSchema.AccountActionPrefix + actionKey;
+            : AccountAuthSchema.AccountActionPrefix + actionKey;
 
     public static AccountActivityItem MapActivity(SystemAuditLog row)
     {

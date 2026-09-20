@@ -3129,17 +3129,26 @@
     return hasShortage;
   }
 
+  let liveAvailabilityAbort = null;
+  let liveAvailabilitySeq = 0;
   async function refreshLiveAvailability(checkIn, checkOut, options = {}) {
     if (validateDates(checkIn, checkOut)) return false;
+    liveAvailabilityAbort?.abort();
+    const controller = new AbortController();
+    liveAvailabilityAbort = controller;
+    const seq = ++liveAvailabilitySeq;
     try {
       const checkInAtUtc = toManilaDateTimeIso(checkIn, selectedCheckInTime());
       const checkoutTimeUtc = toManilaDateTimeIso(checkOut, selectedCheckOutTime());
       const query = new URLSearchParams({ checkInAtUtc, checkoutTimeUtc });
       const response = await fetch(`/api/bookings/availability?${query}`, {
         headers: { Accept: 'application/json' },
+        signal: controller.signal,
       });
       if (!response.ok) return false;
-      const hasShortage = applyLiveAvailability(await response.json());
+      const payload = await response.json();
+      if (seq !== liveAvailabilitySeq) return false;
+      const hasShortage = applyLiveAvailability(payload);
       if (hasShortage) {
         if (options.fromRealtime || bookingCart.length) {
           notifyCartAvailabilityExceeded(true);

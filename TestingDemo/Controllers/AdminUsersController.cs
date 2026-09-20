@@ -443,7 +443,7 @@ public class AdminUsersController : Controller
             SystemAuditIntent.AdministrativeAction,
             SystemAuditDomain.Account,
             StaffAccountActivityMapper.ToAccountAction(action),
-            StaffAuthSchema.AuditTargetType,
+            AccountAuthSchema.AuditTargetType,
             targetUserId,
             targetLabel,
             summary: summary,

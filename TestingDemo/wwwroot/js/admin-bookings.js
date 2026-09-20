@@ -134,6 +134,8 @@
   let history = false;
   let page = 1;
   let totalPages = 1;
+  let listAbort = null;
+  let listRequestSeq = 0;
   let paymentBookingContext = null;
   let paymentPriceContext = {
     stayTotal: 0,
@@ -645,7 +647,14 @@
     }
     paymentBookingContext = booking;
     const summary = await loadBookingPaymentSummary(booking);
-    if (summary) fillPaymentSummaryFields(booking, summary);
+    if (!summary) {
+      showBookingMessage(
+        'Could not load the payment summary. Check the connection and try again — never pay against a guessed balance.',
+        true
+      );
+      return;
+    }
+    fillPaymentSummaryFields(booking, summary);
 
     if (paymentPriceContext.balanceDue <= 0.009) {
       showBookingMessage('This booking is already fully paid.', true);
@@ -6339,13 +6348,13 @@
     const label = bookingsRoot?.querySelector('.admin-room-type-availability-label');
     if (!chips || isLeavingBookingsPage) return;
     try {
-      // Stay inventory for tonight (Pending + Confirmed holds). Door assignment does not change this.
-      const rows = await apiFetch('/api/admin/bookings/room-type-availability');
+      // Physical door availability right now — same counts as Room Management.
+      const rows = await apiFetch('/api/rooms/types');
       const list = Array.isArray(rows) ? rows : [];
       chips.replaceChildren();
       if (label) {
-        label.textContent = 'Available tonight';
-        label.title = 'Remaining sellable rooms for tonight after pending/confirmed bookings (not door assignment)';
+        label.textContent = 'Available now';
+        label.title = 'Rooms marked Available in Room Management right now';
       }
       if (!list.length) {
         const empty = document.createElement('span');
@@ -6376,7 +6385,7 @@
           name.textContent = type.roomTypeName || type.name || `Type ${type.roomTypeId}`;
           const count = document.createElement('em');
           count.textContent = total > 0 ? `${available}/${total}` : String(available);
-          chip.title = `${name.textContent}: ${available} sellable of ${total} tonight (pending + confirmed holds)`;
+          chip.title = `${name.textContent}: ${available} of ${total} rooms free right now`;
           chip.append(name, count);
           chips.append(chip);
         });
@@ -6393,14 +6402,21 @@
   async function refreshBookings() {
     if (!bookingList) return;
     if (isLeavingBookingsPage) return;
+    listAbort?.abort();
+    const controller = new AbortController();
+    listAbort = controller;
+    const seq = ++listRequestSeq;
     renderBookingsTableSkeleton();
     showBookingMessage('');
+    if (prevButton) prevButton.disabled = true;
+    if (nextButton) nextButton.disabled = true;
     try {
       const query = new URLSearchParams({ page: String(page), pageSize: '25' });
       if (filter) query.set('status', filter);
       if (search) query.set('search', search);
       if (history) query.set('history', 'true');
-      const payload = await apiFetch(`/api/admin/bookings?${query}`);
+      const payload = await apiFetch(`/api/admin/bookings?${query}`, { signal: controller.signal });
+      if (seq !== listRequestSeq) return;
       totalPages = Math.max(1, Math.ceil(Number(payload.total || 0) / Number(payload.pageSize || 25)));
       page = Math.min(Number(payload.page || 1), totalPages);
       bookingList.replaceChildren();
@@ -6434,6 +6450,7 @@
         }
       }
     } catch (error) {
+      if (error?.name === 'AbortError' || seq !== listRequestSeq) return;
       bookingList.replaceChildren();
       const row = document.createElement('tr');
       const cell = document.createElement('td');
@@ -6443,6 +6460,8 @@
       row.append(cell);
       bookingList.append(row);
       showBookingMessage(error instanceof Error ? error.message : 'Unable to load bookings.', true);
+      if (prevButton) prevButton.disabled = page <= 1;
+      if (nextButton) nextButton.disabled = page >= totalPages;
     }
   }
 
@@ -7232,6 +7251,7 @@
     isLeavingBookingsPage = true;
     if (pollTimer) window.clearInterval(pollTimer);
     if (searchTimer) window.clearTimeout(searchTimer);
+    listAbort?.abort();
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden || isLeavingBookingsPage) return;
@@ -7279,4 +7299,7 @@
   void refreshBookings();
   void refreshRoomTypeAvailability();
   wireRealtime();
+
+  // Lets sibling page scripts (walk-in success flow) open a booking without a reload.
+  window.MoriOpenAdminBooking = openBookingDetails;
 })();

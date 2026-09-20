@@ -174,14 +174,8 @@ public sealed partial class BookingService
         var checkInAtUtc = PhilippinesTime.ToUtc(request.CheckInAtUtc);
         var checkoutTimeUtc = PhilippinesTime.ToUtc(request.CheckoutTimeUtc);
         ValidateDates(checkInAtUtc, checkoutTimeUtc);
-        EnsureRoomAssignmentAllowed(checkInAtUtc);
 
-        if (request.Assignments is null || request.Assignments.Count == 0)
-        {
-            throw new ArgumentException("Assign at least one room for the walk-in.");
-        }
-
-        var assignments = request.Assignments
+        var assignments = (request.Assignments ?? [])
             .GroupBy(item => item.RoomTypeId)
             .Select(group => new ConfirmRoomAssignmentRequest
             {
@@ -194,9 +188,26 @@ public sealed partial class BookingService
             .Where(item => item.RoomIds.Count > 0)
             .ToList();
 
-        if (assignments.Count == 0)
+        var requestedItems = (request.Items ?? [])
+            .Where(line => line.Quantity > 0)
+            .GroupBy(line => line.RoomTypeId)
+            .Select(group => new CreateBookingItemRequest
+            {
+                RoomTypeId = group.Key,
+                Quantity = group.Sum(line => line.Quantity)
+            })
+            .ToList();
+
+        if (assignments.Count == 0 && requestedItems.Count == 0)
         {
-            throw new ArgumentException("Assign at least one room for the walk-in.");
+            throw new ArgumentException("Select at least one room type for the walk-in.");
+        }
+
+        // Room numbers may still be assigned at create; otherwise the booking is
+        // created unassigned and rooms are picked later from the detail modal.
+        if (assignments.Count > 0)
+        {
+            EnsureRoomAssignmentAllowed(checkInAtUtc);
         }
 
         var allRoomIds = assignments.SelectMany(item => item.RoomIds).ToList();
@@ -207,9 +218,13 @@ public sealed partial class BookingService
 
         return await ExecuteInSerializableTransactionAsync(async ct =>
         {
-        var quantityByType = assignments
-            .Select(item => (item.RoomTypeId, Quantity: item.RoomIds.Count))
-            .ToList();
+        var quantityByType = assignments.Count > 0
+            ? assignments
+                .Select(item => (item.RoomTypeId, Quantity: item.RoomIds.Count))
+                .ToList()
+            : requestedItems
+                .Select(item => (item.RoomTypeId, item.Quantity))
+                .ToList();
         await EnsureTypeInventoryAvailableAsync(
             quantityByType,
             checkInAtUtc,
@@ -217,41 +232,45 @@ public sealed partial class BookingService
             excludeBookingId: null,
             ct);
 
-        var blockedRoomIds = await GetRoomIdsAssignedOnOverlappingStaysAsync(
-            checkInAtUtc,
-            checkoutTimeUtc,
-            excludeBookingId: null,
-            ct);
-
-        var rooms = await _db.Rooms
-            .Include(room => room.RoomType)
-            .Where(room => allRoomIds.Contains(room.Id))
-            .ToListAsync(ct);
-
-        if (rooms.Count != allRoomIds.Count)
+        var roomsById = new Dictionary<int, Room>();
+        if (assignments.Count > 0)
         {
-            throw new BookingAvailabilityException("One or more selected rooms no longer exist.");
-        }
+            var blockedRoomIds = await GetRoomIdsAssignedOnOverlappingStaysAsync(
+                checkInAtUtc,
+                checkoutTimeUtc,
+                excludeBookingId: null,
+                ct);
 
-        foreach (var room in rooms)
-        {
-            if (room.Status != RoomStatus.Available || blockedRoomIds.Contains(room.Id))
+            var rooms = await _db.Rooms
+                .Include(room => room.RoomType)
+                .Where(room => allRoomIds.Contains(room.Id))
+                .ToListAsync(ct);
+
+            if (rooms.Count != allRoomIds.Count)
             {
-                throw new BookingAvailabilityException(
-                    $"Room {room.RoomNumber} is no longer available for those dates.");
+                throw new BookingAvailabilityException("One or more selected rooms no longer exist.");
             }
-        }
 
-        var roomsById = rooms.ToDictionary(room => room.Id);
-        foreach (var assignment in assignments)
-        {
-            foreach (var roomId in assignment.RoomIds)
+            foreach (var room in rooms)
             {
-                var room = roomsById[roomId];
-                if (room.RoomTypeId != assignment.RoomTypeId)
+                if (room.Status != RoomStatus.Available || blockedRoomIds.Contains(room.Id))
                 {
-                    throw new ArgumentException(
-                        $"Room {room.RoomNumber} does not match the selected room type.");
+                    throw new BookingAvailabilityException(
+                        $"Room {room.RoomNumber} is no longer available for those dates.");
+                }
+            }
+
+            roomsById = rooms.ToDictionary(room => room.Id);
+            foreach (var assignment in assignments)
+            {
+                foreach (var roomId in assignment.RoomIds)
+                {
+                    var room = roomsById[roomId];
+                    if (room.RoomTypeId != assignment.RoomTypeId)
+                    {
+                        throw new ArgumentException(
+                            $"Room {room.RoomNumber} does not match the selected room type.");
+                    }
                 }
             }
         }
@@ -275,7 +294,7 @@ public sealed partial class BookingService
                 or BookingChannel.FrontDeskExtension
                 or BookingChannel.OtherThirdParty)
         {
-            foreach (var roomTypeId in assignments.Select(a => a.RoomTypeId).Distinct())
+            foreach (var roomTypeId in quantityByType.Select(a => a.RoomTypeId).Distinct())
             {
                 var offer = await ResolveWalkInOfferAsync(
                     roomTypeId,
@@ -319,33 +338,63 @@ public sealed partial class BookingService
             IsNotificationCleared = false
         };
 
-        foreach (var assignment in assignments)
+        if (assignments.Count > 0)
         {
-            var sample = roomsById[assignment.RoomIds[0]];
-            if (sample.RoomType is null)
+            foreach (var assignment in assignments)
             {
-                throw new ArgumentException(
-                    $"Room {sample.RoomNumber} is missing a room type and cannot be booked.");
-            }
+                var sample = roomsById[assignment.RoomIds[0]];
+                if (sample.RoomType is null)
+                {
+                    throw new ArgumentException(
+                        $"Room {sample.RoomNumber} is missing a room type and cannot be booked.");
+                }
 
-            var price = sample.RoomType.PricePerNight;
-            if (offersByType.TryGetValue(assignment.RoomTypeId, out var typeOffer)
-                && typeOffer.PromoPricePerNight is decimal promo)
-            {
-                price = promo;
-            }
+                var price = sample.RoomType.PricePerNight;
+                if (offersByType.TryGetValue(assignment.RoomTypeId, out var typeOffer)
+                    && typeOffer.PromoPricePerNight is decimal promo)
+                {
+                    price = promo;
+                }
 
-            booking.Items.Add(new BookingItem
+                booking.Items.Add(new BookingItem
+                {
+                    RoomTypeId = assignment.RoomTypeId,
+                    RoomTypeName = sample.RoomType.Name,
+                    Quantity = assignment.RoomIds.Count,
+                    PricePerNight = price
+                });
+            }
+        }
+        else
+        {
+            var itemTypeIds = requestedItems.Select(line => line.RoomTypeId).ToList();
+            var typesById = await _db.RoomTypes
+                .AsNoTracking()
+                .Where(type => itemTypeIds.Contains(type.RoomTypeId))
+                .ToDictionaryAsync(type => type.RoomTypeId, ct);
+
+            foreach (var line in requestedItems)
             {
-                RoomTypeId = assignment.RoomTypeId,
-                RoomTypeName = sample.RoomType.Name,
-                Quantity = assignment.RoomIds.Count,
-                PricePerNight = price
-            });
+                var roomType = typesById[line.RoomTypeId];
+                var price = roomType.PricePerNight;
+                if (offersByType.TryGetValue(line.RoomTypeId, out var typeOffer)
+                    && typeOffer.PromoPricePerNight is decimal promo)
+                {
+                    price = promo;
+                }
+
+                booking.Items.Add(new BookingItem
+                {
+                    RoomTypeId = line.RoomTypeId,
+                    RoomTypeName = roomType.Name,
+                    Quantity = line.Quantity,
+                    PricePerNight = price
+                });
+            }
         }
 
         var typeMeta = await LoadRoomTypeMetaAsync(
-            assignments.Select(item => item.RoomTypeId),
+            quantityByType.Select(item => item.RoomTypeId),
             ct);
         ReplaceTimeFees(
             booking,
@@ -359,8 +408,16 @@ public sealed partial class BookingService
         _db.Bookings.Add(booking);
         await _db.SaveChangesAsync(ct);
 
-        await AssignAndOccupyRoomsAsync(booking, assignments, ct);
-        AuditBooking(booking, "Booking.WalkInCreated", "Walk-in stay created and rooms assigned.");
+        if (assignments.Count > 0)
+        {
+            await AssignAndOccupyRoomsAsync(booking, assignments, ct);
+        }
+        AuditBooking(
+            booking,
+            "Booking.WalkInCreated",
+            assignments.Count > 0
+                ? "Walk-in stay created and rooms assigned."
+                : "Walk-in stay created — payment and room assignment pending.");
         await _db.SaveChangesAsync(ct);
 
         var saved = await _db.Bookings

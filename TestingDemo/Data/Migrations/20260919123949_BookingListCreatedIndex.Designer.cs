@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TestingDemo.Data;
 
@@ -11,9 +12,11 @@ using TestingDemo.Data;
 namespace TestingDemo.Data.Migrations
 {
     [DbContext(typeof(HotelBookingDbContext))]
-    partial class HotelBookingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260919123949_BookingListCreatedIndex")]
+    partial class BookingListCreatedIndex
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -46,7 +49,7 @@ namespace TestingDemo.Data.Migrations
                         .HasDatabaseName("RoleNameIndex")
                         .HasFilter("[NormalizedName] IS NOT NULL");
 
-                    b.ToTable("AccountRole", (string)null);
+                    b.ToTable("StaffRole", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -118,7 +121,7 @@ namespace TestingDemo.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("AccountExternalLogin", (string)null);
+                    b.ToTable("StaffExternalLogin", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<string>", b =>
@@ -152,7 +155,7 @@ namespace TestingDemo.Data.Migrations
 
                     b.HasKey("UserId", "LoginProvider", "Name");
 
-                    b.ToTable("AccountAuthToken", (string)null);
+                    b.ToTable("StaffAuthToken", (string)null);
                 });
 
             modelBuilder.Entity("TestingDemo.Models.ApplicationUser", b =>
@@ -257,7 +260,7 @@ namespace TestingDemo.Data.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.ToTable("AccountUser", (string)null);
+                    b.ToTable("StaffUser", (string)null);
                 });
 
             modelBuilder.Entity("TestingDemo.Models.Booking", b =>
@@ -493,50 +496,6 @@ namespace TestingDemo.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("BookingRoomAssignment", (string)null);
-                });
-
-            modelBuilder.Entity("TestingDemo.Models.PasswordResetCode", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("CodeHash")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
-
-                    b.Property<DateTime?>("ConsumedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime>("ExpiresAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("FailedAttempts")
-                        .HasColumnType("int");
-
-                    b.Property<string>("NormalizedEmail")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("NormalizedEmail", "ExpiresAtUtc");
-
-                    b.HasIndex("UserId", "CreatedAtUtc");
-
-                    b.ToTable("PasswordResetCode", (string)null);
                 });
 
             modelBuilder.Entity("TestingDemo.Models.PaymentRecord", b =>
@@ -810,6 +769,50 @@ namespace TestingDemo.Data.Migrations
                     b.HasIndex("RoomTypeId", "IsActive", "StartsAtUtc", "EndsAtUtc");
 
                     b.ToTable("SpecialOffer", (string)null);
+                });
+
+            modelBuilder.Entity("TestingDemo.Models.StaffPasswordResetCode", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<DateTime?>("ConsumedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("FailedAttempts")
+                        .HasColumnType("int");
+
+                    b.Property<string>("NormalizedEmail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NormalizedEmail", "ExpiresAtUtc");
+
+                    b.HasIndex("UserId", "CreatedAtUtc");
+
+                    b.ToTable("StaffPasswordResetCode", (string)null);
                 });
 
             modelBuilder.Entity("TestingDemo.Models.StayReview", b =>

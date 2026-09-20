@@ -202,7 +202,7 @@ public sealed class StaffAccountCreateService : IStaffAccountCreateService
             SystemAuditIntent.AdministrativeAction,
             SystemAuditDomain.Account,
             StaffAccountActivityMapper.ToAccountAction("Created"),
-            StaffAuthSchema.AuditTargetType,
+            AccountAuthSchema.AuditTargetType,
             user.Id,
             string.IsNullOrWhiteSpace(user.FullName) ? user.UserName ?? user.Id : user.FullName,
             summary: $"Staff account created · role {dto.Role}.",

@@ -86,9 +86,10 @@ public sealed class PaymentService : IPaymentService
         var balanceDue = decimal.Round(stayTotal - postedPaid, 2, MidpointRounding.AwayFromZero);
         var notes = request.Notes;
 
-        // Digital transfers often exceed the bill (wrong amount / OCR). Cap to balance and note excess.
-        if (IsDigitalPaymentMethod(request.Method)
-            && request.EventType is not PaymentEventType.Refund and not PaymentEventType.Adjustment
+        // Payments never exceed the bill: cap to the live balance so a stale
+        // client-side total cannot produce an overpaid booking. Cash overage is
+        // change handled at the desk (recorded in notes), not posted to the bill.
+        if (request.EventType is not PaymentEventType.Refund and not PaymentEventType.Adjustment
             && amount > 0)
         {
             if (balanceDue <= 0m)
@@ -102,7 +103,7 @@ public sealed class PaymentService : IPaymentService
                 var excess = decimal.Round(receiptAmount - balanceDue, 2, MidpointRounding.AwayFromZero);
                 amount = balanceDue;
                 var capNote =
-                    $"Receipt/transfer ₱{receiptAmount:N2} · Applied ₱{amount:N2} (excess ₱{excess:N2} not posted)";
+                    $"Received ₱{receiptAmount:N2} · Applied ₱{amount:N2} (excess ₱{excess:N2} not posted)";
                 notes = string.IsNullOrWhiteSpace(notes) ? capNote : $"{notes.Trim()}\n{capNote}";
             }
         }

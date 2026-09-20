@@ -53,6 +53,7 @@ public sealed partial class BookingService
 
             var pageBookingIds = await query
                 .OrderByDescending(booking => booking.CreatedAtUtc)
+                .ThenByDescending(booking => booking.Id)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .Select(booking => booking.Id)
@@ -206,6 +207,7 @@ public sealed partial class BookingService
 
         var stays = await _db.Bookings
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(booking => booking.Items)
                 .ThenInclude(line => line.RoomAssignments)
                     .ThenInclude(assignment => assignment.Room)

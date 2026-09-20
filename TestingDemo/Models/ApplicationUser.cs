@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Identity;
 namespace TestingDemo.Models;
 
 /// <summary>
-/// Table <c>StaffUser</c> — staff login profile (ASP.NET Identity). Role is stored on <see cref="RoleId"/> (<c>StaffRole</c>).
+/// Table <c>AccountUser</c> — login profile for staff and Google guests (ASP.NET Identity). Role is stored on <see cref="RoleId"/> (<c>AccountRole</c>).
 /// </summary>
 public class ApplicationUser : IdentityUser
 {
@@ -16,7 +16,7 @@ public class ApplicationUser : IdentityUser
 
     public bool MustChangePassword { get; set; }
 
-    /// <summary>StaffRole.Id for this account (one role per login).</summary>
+    /// <summary>AccountRole.Id for this account (one role per login).</summary>
     public string? RoleId { get; set; }
 
     /// <summary>Gmail address intended for future 2FA / password reset.</summary>

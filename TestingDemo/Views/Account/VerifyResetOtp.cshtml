@@ -22,7 +22,7 @@
             <header class="guest-auth-card-header">
                 <h1 id="guestAuthTitle" data-i18n="auth.otpTitle">Enter verification code</h1>
                 <p class="guest-auth-card-lede" data-i18n="auth.otpLede">
-                    We emailed a 6-digit code to your staff account. Enter it below within 15 minutes. Each code works once.
+                    We emailed a 6-digit code to your account. Enter it below within 15 minutes. Each code works once.
                 </p>
             </header>
 
@@ -30,7 +30,7 @@
                   asp-action="VerifyResetOtp"
                   method="post"
                   class="guest-auth-card-form guest-auth-otp-form"
-                  id="staffResetOtpForm"
+                  id="resetOtpForm"
                   novalidate>
                 @Html.AntiForgeryToken()
 
@@ -59,7 +59,7 @@
                         <span data-i18n="auth.otpAttemptsLabel">Attempts remaining</span>:
                         <strong id="otpAttemptsCount">@attempts</strong>
                         <span data-i18n="auth.otpAttemptsOf">of</span>
-                        <span>@StaffPasswordResetCodeService.MaxFailedAttempts</span>
+                        <span>@PasswordResetCodeService.MaxFailedAttempts</span>
                         <span data-i18n="auth.otpAttemptsBeforeFail">before this code is cancelled.</span>
                     </p>
                 }
@@ -74,7 +74,7 @@
                     <label for="OtpDigit0" class="guest-auth-field-label">
                         <span data-i18n="auth.otpCodeLabel">VERIFICATION CODE</span>
                     </label>
-                    <div class="guest-auth-otp-row" id="staffOtpDigits" role="group" aria-labelledby="guestAuthTitle">
+                    <div class="guest-auth-otp-row" id="otpDigits" role="group" aria-labelledby="guestAuthTitle">
                         @for (var i = 0; i < 6; i++)
                         {
                             <input type="text"
@@ -117,5 +117,5 @@
 </section>
 
 @section Scripts {
-    <script src="~/js/staff-reset-otp.js" asp-append-version="true"></script>
+    <script src="~/js/reset-otp.js" asp-append-version="true"></script>
 }

@@ -412,7 +412,7 @@ public sealed class AdminUsersApiController : ControllerBase
             SystemAuditIntent.AdministrativeAction,
             SystemAuditDomain.Account,
             StaffAccountActivityMapper.ToAccountAction(action),
-            StaffAuthSchema.AuditTargetType,
+            AccountAuthSchema.AuditTargetType,
             targetUserId,
             targetLabel,
             summary: summary,

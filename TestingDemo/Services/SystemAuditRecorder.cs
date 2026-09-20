@@ -539,7 +539,7 @@ public sealed class SystemAuditRecorder : ISystemAuditRecorder, ISystemAuditQuer
         Guid.TryParse(value, out _);
 
     private static bool IsStaffUserTarget(string? targetType) =>
-        string.Equals(targetType, StaffAuthSchema.AuditTargetType, StringComparison.Ordinal)
+        string.Equals(targetType, AccountAuthSchema.AuditTargetType, StringComparison.Ordinal)
         || string.Equals(targetType, "StaffAccount", StringComparison.Ordinal);
 
     private static SystemAuditLogDto Map(

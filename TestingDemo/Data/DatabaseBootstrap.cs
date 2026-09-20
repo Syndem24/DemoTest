@@ -32,7 +32,7 @@ public static class DatabaseBootstrap
 
             db.Database.Migrate();
             EnsureSecureSettingTable(db);
-            EnsureStaffPasswordResetCodeTable(db);
+            EnsurePasswordResetCodeTable(db);
             EnsureSystemAuditLogTable(db);
             EnsureStaffDashboardLayoutColumn(db);
             DropStaffShiftTableIfExists(db);
@@ -48,6 +48,7 @@ public static class DatabaseBootstrap
                 EnsureReadableIdentityNames(db);
                 EnsureStaffJoinTablesMerged(db);
                 EnsureConsolidatedStaffAuthSchema(db);
+                RenameStaffAuthTablesToAccount(db);
                 EnsureSystemFlushLogTable(db);
                 EnsurePaymentRecordTable(db);
                 EnsureBookingChargeTable(db);
@@ -308,6 +309,9 @@ public static class DatabaseBootstrap
 
                         IF COL_LENGTH(N'dbo.Booking', N'PendingCallWarningSentAtUtc') IS NULL
                             ALTER TABLE [dbo].[Booking] ADD [PendingCallWarningSentAtUtc] datetime2 NULL;
+
+                        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Booking_List_Created' AND object_id = OBJECT_ID(N'dbo.Booking'))
+                            CREATE INDEX [IX_Booking_List_Created] ON [dbo].[Booking] ([IsArchived], [Status], [CreatedAtUtc] DESC, [Id] DESC);
                     END
 
                     IF OBJECT_ID(N'[dbo].[LegacyBooking]', N'U') IS NOT NULL
@@ -392,6 +396,7 @@ public static class DatabaseBootstrap
                         OR COL_LENGTH(N'dbo.Booking', N'ArrivalWarningSentAtUtc') IS NULL
                         OR COL_LENGTH(N'dbo.Booking', N'PendingCallWarningSentAtUtc') IS NULL
                         OR COL_LENGTH(N'dbo.Booking', N'CheckoutWarningSentAtUtc') IS NULL
+                        OR NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Booking_List_Created' AND object_id = OBJECT_ID(N'dbo.Booking'))
                         OR OBJECT_ID(N'[dbo].[PaymentRecord]', N'U') IS NULL
                         OR OBJECT_ID(N'[dbo].[BookingCharge]', N'U') IS NULL
                         OR OBJECT_ID(N'[dbo].[AssignedRoom]', N'U') IS NOT NULL
@@ -635,16 +640,36 @@ public static class DatabaseBootstrap
         }
     }
 
-    private static void EnsureStaffPasswordResetCodeTable(HotelBookingDbContext db)
+    private static void EnsurePasswordResetCodeTable(HotelBookingDbContext db)
     {
         try
         {
             db.Database.ExecuteSqlRaw(
                 """
-                IF OBJECT_ID(N'[dbo].[StaffPasswordResetCode]', N'U') IS NULL
-                   AND OBJECT_ID(N'[dbo].[StaffPasswordResetOtp]', N'U') IS NULL
+                IF OBJECT_ID(N'[dbo].[StaffPasswordResetCode]', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'[dbo].[PasswordResetCode]', N'U') IS NULL
+                    EXEC sp_rename N'[dbo].[StaffPasswordResetCode]', N'PasswordResetCode';
+                ELSE IF OBJECT_ID(N'[dbo].[StaffPasswordResetOtp]', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'[dbo].[PasswordResetCode]', N'U') IS NULL
+                    EXEC sp_rename N'[dbo].[StaffPasswordResetOtp]', N'PasswordResetCode';
+
+                IF OBJECT_ID(N'PK_StaffPasswordResetCode', N'PK') IS NOT NULL
+                    EXEC sp_rename N'PK_StaffPasswordResetCode', N'PK_PasswordResetCode', N'OBJECT';
+                IF OBJECT_ID(N'PK_StaffPasswordResetOtp', N'PK') IS NOT NULL
+                    EXEC sp_rename N'PK_StaffPasswordResetOtp', N'PK_PasswordResetCode', N'OBJECT';
+
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_StaffPasswordResetCode_UserId_CreatedAtUtc' AND object_id = OBJECT_ID(N'dbo.PasswordResetCode'))
+                    EXEC sp_rename N'dbo.PasswordResetCode.IX_StaffPasswordResetCode_UserId_CreatedAtUtc', N'IX_PasswordResetCode_UserId_CreatedAtUtc', N'INDEX';
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_StaffPasswordResetCode_NormalizedEmail_ExpiresAtUtc' AND object_id = OBJECT_ID(N'dbo.PasswordResetCode'))
+                    EXEC sp_rename N'dbo.PasswordResetCode.IX_StaffPasswordResetCode_NormalizedEmail_ExpiresAtUtc', N'IX_PasswordResetCode_NormalizedEmail_ExpiresAtUtc', N'INDEX';
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_StaffPasswordResetOtp_UserId_CreatedAtUtc' AND object_id = OBJECT_ID(N'dbo.PasswordResetCode'))
+                    EXEC sp_rename N'dbo.PasswordResetCode.IX_StaffPasswordResetOtp_UserId_CreatedAtUtc', N'IX_PasswordResetCode_UserId_CreatedAtUtc', N'INDEX';
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_StaffPasswordResetOtp_NormalizedEmail_ExpiresAtUtc' AND object_id = OBJECT_ID(N'dbo.PasswordResetCode'))
+                    EXEC sp_rename N'dbo.PasswordResetCode.IX_StaffPasswordResetOtp_NormalizedEmail_ExpiresAtUtc', N'IX_PasswordResetCode_NormalizedEmail_ExpiresAtUtc', N'INDEX';
+
+                IF OBJECT_ID(N'[dbo].[PasswordResetCode]', N'U') IS NULL
                 BEGIN
-                    CREATE TABLE [dbo].[StaffPasswordResetCode] (
+                    CREATE TABLE [dbo].[PasswordResetCode] (
                         [Id] int NOT NULL IDENTITY,
                         [UserId] nvarchar(450) NOT NULL,
                         [NormalizedEmail] nvarchar(256) NOT NULL,
@@ -653,12 +678,12 @@ public static class DatabaseBootstrap
                         [ExpiresAtUtc] datetime2 NOT NULL,
                         [ConsumedAtUtc] datetime2 NULL,
                         [FailedAttempts] int NOT NULL DEFAULT 0,
-                        CONSTRAINT [PK_StaffPasswordResetCode] PRIMARY KEY ([Id])
+                        CONSTRAINT [PK_PasswordResetCode] PRIMARY KEY ([Id])
                     );
-                    CREATE INDEX [IX_StaffPasswordResetCode_UserId_CreatedAtUtc]
-                        ON [dbo].[StaffPasswordResetCode] ([UserId], [CreatedAtUtc]);
-                    CREATE INDEX [IX_StaffPasswordResetCode_NormalizedEmail_ExpiresAtUtc]
-                        ON [dbo].[StaffPasswordResetCode] ([NormalizedEmail], [ExpiresAtUtc]);
+                    CREATE INDEX [IX_PasswordResetCode_UserId_CreatedAtUtc]
+                        ON [dbo].[PasswordResetCode] ([UserId], [CreatedAtUtc]);
+                    CREATE INDEX [IX_PasswordResetCode_NormalizedEmail_ExpiresAtUtc]
+                        ON [dbo].[PasswordResetCode] ([NormalizedEmail], [ExpiresAtUtc]);
                 END
                 """);
         }
@@ -768,6 +793,79 @@ public static class DatabaseBootstrap
                 UPDATE [dbo].[SystemAuditLog]
                 SET [TargetType] = 'StaffUser'
                 WHERE [TargetType] = 'StaffAccount';
+                """);
+        }
+        catch (Exception)
+        {
+            // Next EF migrate / explicit reset still applies the named migration.
+        }
+    }
+
+    /// <summary>
+    /// Renames the shared Identity tables Staff* → Account* for drifted databases that
+    /// bypassed the RenameStaffAuthToAccount migration. Mirrors that migration exactly.
+    /// </summary>
+    private static void RenameStaffAuthTablesToAccount(HotelBookingDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw(
+                """
+                IF OBJECT_ID(N'dbo.StaffUser', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'dbo.AccountUser', N'U') IS NULL
+                    EXEC sp_rename N'dbo.StaffUser', N'AccountUser';
+                IF OBJECT_ID(N'dbo.StaffRole', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'dbo.AccountRole', N'U') IS NULL
+                    EXEC sp_rename N'dbo.StaffRole', N'AccountRole';
+                IF OBJECT_ID(N'dbo.StaffExternalLogin', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'dbo.AccountExternalLogin', N'U') IS NULL
+                    EXEC sp_rename N'dbo.StaffExternalLogin', N'AccountExternalLogin';
+                IF OBJECT_ID(N'dbo.StaffAuthToken', N'U') IS NOT NULL
+                   AND OBJECT_ID(N'dbo.AccountAuthToken', N'U') IS NULL
+                    EXEC sp_rename N'dbo.StaffAuthToken', N'AccountAuthToken';
+
+                IF OBJECT_ID(N'PK_StaffUser', N'PK') IS NOT NULL
+                    EXEC sp_rename N'PK_StaffUser', N'PK_AccountUser', N'OBJECT';
+                IF OBJECT_ID(N'PK_StaffAccount', N'PK') IS NOT NULL
+                    EXEC sp_rename N'PK_StaffAccount', N'PK_AccountUser', N'OBJECT';
+                IF OBJECT_ID(N'PK_StaffRole', N'PK') IS NOT NULL
+                    EXEC sp_rename N'PK_StaffRole', N'PK_AccountRole', N'OBJECT';
+                IF OBJECT_ID(N'PK_StaffExternalLogin', N'PK') IS NOT NULL
+                    EXEC sp_rename N'PK_StaffExternalLogin', N'PK_AccountExternalLogin', N'OBJECT';
+                IF OBJECT_ID(N'PK_StaffAccountLogin', N'PK') IS NOT NULL
+                    EXEC sp_rename N'PK_StaffAccountLogin', N'PK_AccountExternalLogin', N'OBJECT';
+                IF OBJECT_ID(N'PK_StaffAuthToken', N'PK') IS NOT NULL
+                    EXEC sp_rename N'PK_StaffAuthToken', N'PK_AccountAuthToken', N'OBJECT';
+                IF OBJECT_ID(N'PK_StaffAccountToken', N'PK') IS NOT NULL
+                    EXEC sp_rename N'PK_StaffAccountToken', N'PK_AccountAuthToken', N'OBJECT';
+
+                IF OBJECT_ID(N'FK_StaffUser_StaffRole_RoleId', N'F') IS NOT NULL
+                    EXEC sp_rename N'FK_StaffUser_StaffRole_RoleId', N'FK_AccountUser_AccountRole_RoleId', N'OBJECT';
+                IF OBJECT_ID(N'FK_StaffAccount_StaffRole_RoleId', N'F') IS NOT NULL
+                    EXEC sp_rename N'FK_StaffAccount_StaffRole_RoleId', N'FK_AccountUser_AccountRole_RoleId', N'OBJECT';
+                IF OBJECT_ID(N'FK_StaffExternalLogin_StaffUser_UserId', N'F') IS NOT NULL
+                    EXEC sp_rename N'FK_StaffExternalLogin_StaffUser_UserId', N'FK_AccountExternalLogin_AccountUser_UserId', N'OBJECT';
+                IF OBJECT_ID(N'FK_StaffAccountLogin_StaffAccount_UserId', N'F') IS NOT NULL
+                    EXEC sp_rename N'FK_StaffAccountLogin_StaffAccount_UserId', N'FK_AccountExternalLogin_AccountUser_UserId', N'OBJECT';
+                IF OBJECT_ID(N'FK_StaffAuthToken_StaffUser_UserId', N'F') IS NOT NULL
+                    EXEC sp_rename N'FK_StaffAuthToken_StaffUser_UserId', N'FK_AccountAuthToken_AccountUser_UserId', N'OBJECT';
+                IF OBJECT_ID(N'FK_StaffAccountToken_StaffAccount_UserId', N'F') IS NOT NULL
+                    EXEC sp_rename N'FK_StaffAccountToken_StaffAccount_UserId', N'FK_AccountAuthToken_AccountUser_UserId', N'OBJECT';
+
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_StaffUser_RoleId' AND object_id = OBJECT_ID(N'dbo.AccountUser'))
+                    EXEC sp_rename N'dbo.AccountUser.IX_StaffUser_RoleId', N'IX_AccountUser_RoleId', N'INDEX';
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_StaffAccount_RoleId' AND object_id = OBJECT_ID(N'dbo.AccountUser'))
+                    EXEC sp_rename N'dbo.AccountUser.IX_StaffAccount_RoleId', N'IX_AccountUser_RoleId', N'INDEX';
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_StaffUser_NormalizedGoogleEmail' AND object_id = OBJECT_ID(N'dbo.AccountUser'))
+                    EXEC sp_rename N'dbo.AccountUser.IX_StaffUser_NormalizedGoogleEmail', N'IX_AccountUser_NormalizedGoogleEmail', N'INDEX';
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_StaffAccount_NormalizedGoogleEmail' AND object_id = OBJECT_ID(N'dbo.AccountUser'))
+                    EXEC sp_rename N'dbo.AccountUser.IX_StaffAccount_NormalizedGoogleEmail', N'IX_AccountUser_NormalizedGoogleEmail', N'INDEX';
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_StaffExternalLogin_UserId' AND object_id = OBJECT_ID(N'dbo.AccountExternalLogin'))
+                    EXEC sp_rename N'dbo.AccountExternalLogin.IX_StaffExternalLogin_UserId', N'IX_AccountExternalLogin_UserId', N'INDEX';
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_StaffAccountLogin_UserId' AND object_id = OBJECT_ID(N'dbo.AccountExternalLogin'))
+                    EXEC sp_rename N'dbo.AccountExternalLogin.IX_StaffAccountLogin_UserId', N'IX_AccountExternalLogin_UserId', N'INDEX';
+
+                UPDATE [dbo].[SystemAuditLog] SET [TargetType] = N'AccountUser' WHERE [TargetType] = N'StaffUser';
                 """);
         }
         catch (Exception)

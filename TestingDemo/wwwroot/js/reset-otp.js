@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  var form = document.getElementById('staffResetOtpForm');
+  var form = document.getElementById('resetOtpForm');
   if (!form) return;
 
   var hidden = document.getElementById('Otp');

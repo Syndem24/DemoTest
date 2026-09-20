@@ -23,27 +23,10 @@
   const timeFeesHint = document.getElementById('walkInTimeFeesHint');
   const extraPersonWrap = document.getElementById('walkInExtraPersonWrap');
   const extraPersonInput = document.getElementById('walkInExtraPerson');
-  const roomsIntro = document.getElementById('walkInRoomsIntro');
-  const roomSlots = document.getElementById('walkInRoomSlots');
   const capacityWarn = document.getElementById('walkInCapacityWarn');
-  const availabilityNotice = document.getElementById('walkInAvailabilityNotice');
-  const confirmLabel = document.getElementById('walkInConfirmLabel');
-  const confirmTotal = document.getElementById('walkInConfirmTotal');
-  const feeBreakdown = document.getElementById('walkInFeeBreakdown');
   const backBtn = document.getElementById('walkInWizardBackBtn');
   const nextBtn = document.getElementById('walkInWizardNextBtn');
   const submitBtn = document.getElementById('walkInSubmitBtn');
-  const successMessage = document.getElementById('walkInSuccessMessage');
-  const successDoneBtn = document.getElementById('walkInSuccessDoneBtn');
-  const paymentMethod = document.getElementById('walkInPaymentMethod');
-  const paymentDue = document.getElementById('walkInPaymentDue');
-  const paymentTendered = document.getElementById('walkInPaymentTendered');
-  const paymentDigitalAmount = document.getElementById('walkInPaymentDigitalAmount');
-  const paymentChange = document.getElementById('walkInPaymentChange');
-  const paymentCashDueWrap = document.getElementById('walkInPaymentCashDueWrap');
-  const paymentCashTenderWrap = document.getElementById('walkInPaymentCashTenderWrap');
-  const paymentDigitalWrap = document.getElementById('walkInPaymentDigitalWrap');
-  const paymentDigitalHint = document.getElementById('walkInPaymentDigitalHint');
   const roomTypePicker = document.getElementById('walkInRoomTypePicker');
   const typesLede = document.getElementById('walkInTypesLede');
   const typeSelectionSummary = document.getElementById('walkInTypeSelectionSummary');
@@ -88,8 +71,7 @@
     '20:00', '20:30', '21:00', '21:30', '22:00', '22:30',
     '23:00', '23:30',
   ];
-  const STEPS = ['guest', 'dates', 'types', 'payment', 'rooms'];
-  const WALK_IN_ARRIVAL_DISCOUNT_RATE = 0.2;
+  const STEPS = ['guest', 'dates', 'types'];
 
   /** @type {{ adults: number, children: number, childAges: (number|null)[] }[]} */
   let guestRooms = [{ adults: 2, children: 0, childAges: [] }];
@@ -111,6 +93,7 @@
   let lastFocused = null;
   let guestsHintTimer = null;
   let inventoryReady = false;
+  let inventoryFailed = false;
 
   function money(value) {
     return `₱${Number(value || 0).toLocaleString(undefined, {
@@ -167,9 +150,6 @@
   }
 
   function commitWalkInTypeSelections(selections) {
-    if (selections.some((id, index) => id !== walkInTypeSelections[index])) {
-      roomSlots?.replaceChildren();
-    }
     walkInTypeSelections = selections;
     renderWalkInTypePicker();
     refreshTotals();
@@ -585,8 +565,8 @@
   function syncWalkInTypesStepState() {
     renderWalkInSelectionSummary();
     updateWalkInAvailabilityNotice();
-    if (nextBtn && wizardStep === 'types') {
-      nextBtn.disabled = !canProceedFromTypesStep();
+    if (submitBtn && wizardStep === 'types') {
+      submitBtn.disabled = !canProceedFromTypesStep();
     }
   }
 
@@ -631,36 +611,9 @@
     return `${type.name} · ${money(base)}/night · ${remaining} left for dates · max ${type.maxOccupancy}`;
   }
 
-  function isWalkInChannel() {
-    return String(document.getElementById('walkInChannel')?.value || '') === 'WalkIn';
-  }
-
-  function walkInArrivalDiscountSelection() {
-    return String(document.getElementById('walkInArrivalDiscount')?.value || 'None');
-  }
-
   function isOnWalkInPromoRate() {
     if (isThirdPartyChannel()) return false;
     return getWalkInTypeSelections().filter(Boolean).some((typeId) => Boolean(walkInOfferForType(typeId)));
-  }
-
-  function walkInArrivalDiscountActive() {
-    if (!isWalkInChannel()) return false;
-    if (isOnWalkInPromoRate()) return false;
-    const selection = walkInArrivalDiscountSelection();
-    return selection === 'SeniorCitizen' || selection === 'Pwd';
-  }
-
-  function walkInArrivalDiscountAmount(staySubtotal) {
-    if (!walkInArrivalDiscountActive() || !(staySubtotal > 0)) return 0;
-    return Math.round(staySubtotal * WALK_IN_ARRIVAL_DISCOUNT_RATE * 100) / 100;
-  }
-
-  function walkInArrivalDiscountLabel() {
-    const selection = walkInArrivalDiscountSelection();
-    if (selection === 'SeniorCitizen') return 'Senior Citizen discount (20%)';
-    if (selection === 'Pwd') return 'PWD discount (20%)';
-    return '';
   }
 
   function syncWalkInArrivalDiscountUi() {
@@ -683,134 +636,6 @@
           'Walk-in channel: 20% is deducted from the stay when Senior or PWD is selected (verify ID on arrival).';
       }
     }
-  }
-
-  function parseMoneyInput(value) {
-    const cleaned = String(value || '').replace(/[^\d.]/g, '');
-    const parsed = Number(cleaned);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  function isCashPaymentMethod(method) {
-    return String(method || 'Cash') === 'Cash';
-  }
-
-  function syncWalkInPaymentPanels() {
-    const method = String(paymentMethod?.value || 'Cash');
-    const cash = isCashPaymentMethod(method);
-    const promoCashOnly =
-      !isThirdPartyChannel()
-      && roomTypes.some(
-        (type) => typeRemaining(type.roomTypeId) > 0 && Boolean(walkInOfferForType(type.roomTypeId))
-      );
-    if (paymentMethod && promoCashOnly) {
-      paymentMethod.value = 'Cash';
-      paymentMethod.querySelectorAll('option').forEach((option) => {
-        if (option.value !== 'Cash') option.disabled = true;
-      });
-    } else if (paymentMethod) {
-      paymentMethod.querySelectorAll('option').forEach((option) => {
-        option.disabled = false;
-      });
-    }
-    const effectiveCash = isCashPaymentMethod(paymentMethod?.value || 'Cash');
-    if (paymentCashDueWrap) paymentCashDueWrap.hidden = false;
-    if (paymentCashTenderWrap) paymentCashTenderWrap.hidden = !effectiveCash;
-    if (paymentChange) paymentChange.hidden = !effectiveCash;
-    if (paymentDigitalWrap) paymentDigitalWrap.hidden = effectiveCash;
-    if (paymentDigitalHint) paymentDigitalHint.hidden = effectiveCash;
-    syncWalkInPaymentChange();
-  }
-
-  function syncWalkInPaymentChange() {
-    const total = computeGrandTotal();
-    if (paymentDue) paymentDue.textContent = money(total);
-    const method = String(paymentMethod?.value || 'Cash');
-    if (!isCashPaymentMethod(method)) {
-      // Keep the suggested amount in step with the total (discounts, dates,
-      // fees) until the staff types their own amount — a manual entry stays.
-      if (paymentDigitalAmount
-          && (!paymentDigitalAmount.value.trim() || paymentDigitalAmount.dataset.autofilled === '1')) {
-        paymentDigitalAmount.dataset.autofilled = '1';
-        paymentDigitalAmount.value = total > 0 ? total.toFixed(2) : '';
-      }
-      return;
-    }
-    const raw = String(paymentTendered?.value || '').trim();
-    const tendered = parseMoneyInput(raw);
-    const short = total - tendered;
-    if (paymentChange) {
-      paymentChange.hidden = false;
-      paymentChange.classList.remove('is-short', 'is-exact', 'is-change', 'is-waiting');
-      if (!raw) {
-        paymentChange.classList.add('is-waiting');
-        paymentChange.textContent = `Waiting for cash — guest needs to pay ${money(total)}.`;
-      } else if (short > 0.009) {
-        paymentChange.classList.add('is-short');
-        paymentChange.textContent = `Short by ${money(short)} — collect ${money(total)} in total.`;
-      } else if (short > -0.009) {
-        paymentChange.classList.add('is-exact');
-        paymentChange.textContent = 'Exact amount — no change to give.';
-      } else {
-        paymentChange.classList.add('is-change');
-        paymentChange.textContent = `Change to give back: ${money(-short)}`;
-      }
-    }
-    paymentTendered?.classList.toggle('is-invalid', Boolean(raw) && short > 0.009);
-  }
-
-  function estimatedStayTotal() {
-    const count = roomsNeeded();
-    const nights = nightCount();
-    if (count < 1 || nights < 1) return 0;
-    const available = roomTypes.filter((type) => typeRemaining(type.roomTypeId) > 0);
-    if (!available.length) return 0;
-    const cheapest = Math.min(
-      ...available.map((type) => effectiveNightlyRate(type.roomTypeId, type.pricePerNight))
-    );
-    return cheapest * nights * count;
-  }
-
-  function computeStaySubtotal() {
-    const nights = nightCount();
-    const assignments = selectedAssignments().filter((item) => item.roomId);
-    if (assignments.length) {
-      let stay = 0;
-      assignments.forEach((item) => {
-        const room = rooms.find((r) => r.id === item.roomId);
-        const type = roomTypes.find((t) => t.roomTypeId === (room?.roomTypeId || item.typeId));
-        const typeId = Number(type?.roomTypeId || room?.roomTypeId || item.typeId || 0);
-        const listPrice = Number(room?.pricePerNight || type?.pricePerNight || 0);
-        const rate = effectiveNightlyRate(typeId, listPrice);
-        stay += rate * Math.max(1, nights);
-      });
-      return stay;
-    }
-    const selections = getWalkInTypeSelections().filter((id) => id > 0);
-    if (selections.length) {
-      let stay = 0;
-      selections.forEach((typeId) => {
-        const type = roomTypes.find((t) => t.roomTypeId === typeId);
-        if (!type) return;
-        stay += effectiveNightlyRate(typeId, type.pricePerNight) * Math.max(1, nights);
-      });
-      return stay;
-    }
-    return estimatedStayTotal();
-  }
-
-  function computeGrandTotal() {
-    const count = roomsNeeded();
-    const nights = nightCount();
-    const assignments = selectedAssignments().filter((item) => item.roomId);
-    const stay = computeStaySubtotal();
-    const typeCount = getWalkInTypeSelections().filter(Boolean).length;
-    const feeRooms = Math.max(count, assignments.length || typeCount);
-    const early = earlyFee(feeRooms);
-    const late = lateFee(feeRooms);
-    const extra = extraPersonFee();
-    const arrivalDiscount = walkInArrivalDiscountAmount(stay);
-    return stay - arrivalDiscount + early + late + extra;
   }
 
   function todayIso() {
@@ -1113,13 +938,6 @@
     }, 0);
   }
 
-  function extraPersonFee() {
-    const extras = extraPersonsFromGuests();
-    const count = extras > 0 ? extras : (extraPersonInput?.checked ? 1 : 0);
-    if (count < 1) return 0;
-    return 200 * count * Math.max(1, nightCount());
-  }
-
   function syncExtraPersonOption() {
     const fromGuests = extraPersonsFromGuests() > 0;
     if (extraPersonWrap) extraPersonWrap.hidden = !fromGuests;
@@ -1191,22 +1009,6 @@
     timeFeesHint.textContent = `${parts.join(' · ')} (${count} room${count === 1 ? '' : 's'})`;
   }
 
-  function selectedAssignments() {
-    const count = roomsNeeded();
-    return Array.from({ length: count }, (_, index) => {
-      let roomId = 0;
-      if (roomSlots) {
-        const slot = roomSlots.querySelector(`[data-slot][data-slot-index="${index}"]`);
-        roomId = Number(slot?.querySelector('[data-slot-room]')?.value || 0);
-      }
-      return {
-        index,
-        typeId: Number(walkInTypeSelections[index] || 0),
-        roomId,
-      };
-    });
-  }
-
   async function refreshDateAvailability() {
     if (!checkInDate?.value || !checkOutDate?.value) {
       remainingByType = new Map();
@@ -1266,7 +1068,11 @@
     const soldOutMessages = buildSoldOutTypeMessages();
     let message = '';
 
-    if (totalRemaining < needed) {
+    if (!inventoryReady) {
+      message = inventoryFailed
+        ? 'Room inventory failed to load — reopen the walk-in panel to retry.'
+        : 'Loading room inventory…';
+    } else if (totalRemaining < needed) {
       const shortage =
         totalRemaining === 0
           ? `No rooms are available for these dates — you need ${needed} room${needed === 1 ? '' : 's'}. Try different dates or room types.`
@@ -1284,125 +1090,13 @@
     });
   }
 
-  function syncWalkInRoomsStepState() {
-    updateWalkInAvailabilityNotice();
-    const canAssign = totalRemainingInventory() >= roomsNeeded();
-    if (nextBtn && wizardStep === 'rooms') {
-      nextBtn.disabled = !canAssign;
-    }
-  }
-
   function typeRemaining(typeId) {
     if (remainingByType.has(typeId)) return Number(remainingByType.get(typeId) || 0);
     // Fallback before availability loads: count Available physical rooms.
     return rooms.filter((room) => room.roomTypeId === typeId && room.status === 'Available').length;
   }
 
-  function availableRoomsForType(typeId, excludeIds = []) {
-    return rooms.filter(
-      (room) =>
-        room.roomTypeId === typeId
-        && room.status === 'Available'
-        && !excludeIds.includes(room.id)
-    );
-  }
 
-  function refreshSlotRoomOptions(slot, preferredRoomId = null) {
-    const slotIndex = Number(slot.dataset.slotIndex || 0);
-    const roomSelect = slot.querySelector('[data-slot-room]');
-    if (!roomSelect) return;
-    const typeId = Number(walkInTypeSelections[slotIndex] || slot.querySelector('[data-slot-type]')?.value || 0);
-    const selectedElsewhere = selectedAssignments()
-      .filter((item) => item.index !== slotIndex)
-      .map((item) => item.roomId)
-      .filter(Boolean);
-    const current = preferredRoomId || Number(roomSelect.value || 0);
-    const options = availableRoomsForType(typeId, selectedElsewhere.filter((id) => id !== current));
-    roomSelect.innerHTML = typeId
-      ? '<option value="">Select room number…</option>'
-      : '<option value="">Select a room type first…</option>';
-    options.forEach((room) => {
-      const option = document.createElement('option');
-      option.value = String(room.id);
-      option.textContent = room.roomNumber;
-      roomSelect.append(option);
-    });
-    if (current && options.some((room) => room.id === current)) {
-      roomSelect.value = String(current);
-    } else if (typeId && !options.length) {
-      roomSelect.innerHTML = '<option value="">No available rooms</option>';
-    }
-  }
-
-  function refreshAllSlotOptions() {
-    roomSlots?.querySelectorAll('[data-slot]').forEach((slot) => {
-      const roomSelect = slot.querySelector('[data-slot-room]');
-      refreshSlotRoomOptions(slot, Number(roomSelect?.value || 0));
-    });
-  }
-
-  function bindSlot(slot) {
-    slot.querySelector('[data-slot-room]')?.addEventListener('change', () => {
-      refreshAllSlotOptions();
-      refreshTotals();
-    });
-  }
-
-  function formatWalkInSlotTypeLabel(typeId) {
-    const type = roomTypes.find((item) => item.roomTypeId === typeId);
-    if (!type) return 'Room type not selected';
-    const rate = effectiveNightlyRate(type.roomTypeId, type.pricePerNight);
-    return `${type.name} · ${money(rate)}/night · max ${type.maxOccupancy}`;
-  }
-
-  function renderRoomSlots() {
-    if (!roomSlots) return;
-    const previous = selectedAssignments();
-    const count = roomsNeeded();
-    syncWalkInTypeSelectionLength();
-
-    roomSlots.replaceChildren();
-    for (let i = 0; i < count; i += 1) {
-      const prev = previous[i];
-      const typeId = Number(walkInTypeSelections[i] || prev?.typeId || 0);
-      const slot = document.createElement('article');
-      slot.className = 'guest-guests-room admin-walkin-slot';
-      slot.dataset.slot = 'true';
-      slot.dataset.slotIndex = String(i);
-      slot.innerHTML = `
-        <div class="guest-guests-room-head">
-          <h3>Room ${i + 1}</h3>
-        </div>
-        <p class="admin-walkin-slot-type-label">${escapeHtml(formatWalkInSlotTypeLabel(typeId))}</p>
-        <input type="hidden" data-slot-type value="${typeId || ''}" />
-          <label>
-            <span>Room number</span>
-            <select data-slot-room required>
-            <option value="">Select room number…</option>
-            </select>
-          </label>
-      `;
-      bindSlot(slot);
-      roomSlots.append(slot);
-      refreshSlotRoomOptions(slot, prev?.roomId || null);
-    }
-    if (!allWalkInTypesSelected() || totalRemainingInventory() < count) {
-      const soldOutMessages = buildSoldOutTypeMessages();
-      if (!allWalkInTypesSelected()) {
-      roomSlots.innerHTML =
-          '<p class="guest-guests-rule">Go back to Room type and select a room type for each room in the party.</p>';
-      } else if (soldOutMessages.length) {
-        roomSlots.innerHTML = `<p class="guest-guests-rule">${escapeHtml(soldOutMessages.join(' '))}</p>`;
-      } else if (totalRemainingInventory() < count) {
-        roomSlots.innerHTML =
-          '<p class="guest-guests-rule">No room types are available for these dates — try different check-in or check-out dates.</p>';
-      }
-    }
-    if (roomsIntro) {
-      roomsIntro.textContent = `Assign ${count} available room${count === 1 ? '' : 's'} for this party of ${guestCount()}. Remaining counts include pending and confirmed holds.`;
-    }
-    syncWalkInRoomsStepState();
-  }
 
   function escapeHtml(value) {
     return String(value || '')
@@ -1416,13 +1110,6 @@
     const count = roomsNeeded();
     let sum = 0;
     for (let i = 0; i < count; i += 1) {
-      const item = selectedAssignments()[i];
-      if (item?.roomId) {
-      const room = rooms.find((r) => r.id === item.roomId);
-      const type = roomTypes.find((t) => t.roomTypeId === (room?.roomTypeId || item.typeId));
-        sum += Number(type?.maxOccupancy || room?.maxOccupancy || MAX_GUESTS_PER_ROOM);
-        continue;
-      }
       const typeId = Number(walkInTypeSelections[i] || 0);
       if (!typeId) continue;
       sum += effectiveRoomTypeCapacity(typeId);
@@ -1432,63 +1119,13 @@
 
   function refreshTotals() {
     rebuildWalkInOffersByType();
-    const count = roomsNeeded();
-    const nights = nightCount();
-    const assignments = selectedAssignments().filter((item) => item.roomId);
-    const stay = computeStaySubtotal();
-    const typeCount = getWalkInTypeSelections().filter(Boolean).length;
-    const feeRooms = Math.max(count, assignments.length || typeCount);
-    const early = earlyFee(feeRooms);
-    const late = lateFee(feeRooms);
     syncExtraPersonOption();
-    const extra = extraPersonFee();
-    const arrivalDiscount = walkInArrivalDiscountAmount(stay);
-    const total = computeGrandTotal();
-    const usingEstimate = !allWalkInTypesSelected() && assignments.length === 0 && wizardStep !== 'payment';
-    const typeIdsForPromo = assignments.length
-      ? assignments.map((item) =>
-          Number(item.typeId || rooms.find((r) => r.id === item.roomId)?.roomTypeId || 0)
-        )
-      : getWalkInTypeSelections();
-
-    if (feeBreakdown) {
-      const lines = [];
-      if (nights > 0) {
-        const promoNote =
-          !isThirdPartyChannel()
-          && typeIdsForPromo.some((typeId) => Boolean(walkInOfferForType(typeId)))
-            ? ' · special offer'
-            : '';
-        const roomLabel = assignments.length || typeCount || count;
-        const stayLabel = usingEstimate
-          ? `Stay estimate (${nights} night${nights === 1 ? '' : 's'} × ${roomLabel} room${roomLabel === 1 ? '' : 's'}${promoNote})`
-          : `Stay (${nights} night${nights === 1 ? '' : 's'} × ${roomLabel} room${roomLabel === 1 ? '' : 's'}${promoNote})`;
-        lines.push(
-          `<div><span>${stayLabel}</span><strong>${stay > 0 ? money(stay) : '—'}</strong></div>`
-        );
-      }
-      if (arrivalDiscount > 0) {
-        lines.push(
-          `<div class="admin-walkin-discount-row"><span>${walkInArrivalDiscountLabel()}</span><strong>−${money(arrivalDiscount).replace(/^₱/, '')}</strong></div>`
-        );
-      }
-      if (early > 0) lines.push(`<div><span>Early check-in (${checkInTime?.value || '5:00 AM \u2013 11:00 AM'})</span><strong>${money(early)}</strong></div>`);
-      if (late > 0) lines.push(`<div><span>Late check-out (+${lateHours()}h)</span><strong>${money(late)}</strong></div>`);
-      if (extra > 0) {
-        const extras = extraPersonsFromGuests() || (extraPersonInput?.checked ? 1 : 0);
-        const extraLabel = extras > 1 ? `Extra person · ${extras}` : 'Extra person';
-        lines.push(`<div><span>${extraLabel}</span><strong>${money(extra)}</strong></div>`);
-      }
-      if (!lines.length) lines.push('<div><span>Set stay dates to see pricing</span><strong>—</strong></div>');
-      feeBreakdown.innerHTML = lines.join('');
-    }
 
     const hold = capacityHold();
     const guests = guestCount();
     if (capacityWarn) {
-      const roomsAssigned = assignments.length === count;
       const typesReady = allWalkInTypesSelected();
-      if ((roomsAssigned || typesReady) && hold > 0 && guests > hold) {
+      if (typesReady && hold > 0 && guests > hold) {
         capacityWarn.hidden = false;
         capacityWarn.textContent = `Party of ${guests} exceeds selected rooms’ capacity (${hold}). Choose larger types or add rooms.`;
       } else {
@@ -1496,12 +1133,9 @@
       }
     }
 
-    if (confirmLabel) confirmLabel.textContent = `${partySummaryText()} · PH time fees included`;
-    if (confirmTotal) confirmTotal.textContent = money(total);
     if (partySummary) partySummary.textContent = partySummaryText();
     refreshFeeHint();
     syncWalkInArrivalDiscountUi();
-    syncWalkInPaymentPanels();
   }
 
   async function setWizardStep(step) {
@@ -1523,34 +1157,23 @@
     });
 
     const isFirst = step === 'guest';
-    const isLast = step === 'rooms';
+    const isLast = step === 'types';
     if (backBtn) {
       backBtn.hidden = false;
       backBtn.textContent = isFirst ? 'Back to guests' : 'Back';
     }
     if (nextBtn) nextBtn.hidden = isLast;
     if (submitBtn) submitBtn.hidden = !isLast;
-    if (nextBtn && step !== 'rooms') nextBtn.disabled = false;
+    if (nextBtn) nextBtn.disabled = false;
     showFormMessage('');
 
-    if (step === 'rooms' || step === 'payment' || step === 'types' || step === 'dates') {
+    if (step === 'types' || step === 'dates') {
       await refreshDateAvailability();
     }
     if (step === 'types') {
       renderWalkInTypePicker();
       refreshTotals();
-    }
-    if (step === 'payment') {
-      refreshTotals();
-      syncWalkInPaymentPanels();
-      if (isCashPaymentMethod(paymentMethod?.value || 'Cash') && !String(paymentTendered?.value || '').trim()) {
-        window.setTimeout(() => paymentTendered?.focus({ preventScroll: true }), 60);
-      }
-    }
-    if (step === 'rooms') {
-      renderRoomSlots();
-      refreshTotals();
-      syncWalkInRoomsStepState();
+      syncWalkInTypesStepState();
     }
     if (step === 'dates') refreshTotals();
   }
@@ -1610,6 +1233,11 @@
       return true;
     }
     if (step === 'types') {
+      const channel = String(document.getElementById('walkInChannel')?.value || '');
+      if (!channel) {
+        showFormMessage('Select a booking channel (Walk-in, Agoda, Expedia, RedDoorz, or Other OTA).', true);
+        return false;
+      }
       if (totalRemainingInventory() < roomsNeeded()) {
         updateWalkInAvailabilityNotice();
         const notice = document.getElementById('walkInTypesAvailabilityNotice');
@@ -1649,78 +1277,6 @@
           true
         );
         return false;
-      }
-      return true;
-    }
-    if (step === 'payment') {
-      const channel = String(document.getElementById('walkInChannel')?.value || '');
-      if (!channel) {
-        showFormMessage('Select a booking channel (Walk-in, Agoda, Expedia, RedDoorz, or Other OTA).', true);
-        return false;
-      }
-      if (totalRemainingInventory() < roomsNeeded()) {
-        updateWalkInAvailabilityNotice();
-        const notice = document.querySelector('[data-walkin-availability-notice]');
-        showFormMessage(
-          notice?.textContent ||
-            'No rooms are available for these dates. Try different dates or room types.',
-          true
-        );
-        return false;
-      }
-      const total = computeGrandTotal();
-      if (total <= 0) {
-        showFormMessage('Set valid stay dates to see the amount due.', true);
-        return false;
-      }
-      const method = String(paymentMethod?.value || 'Cash');
-      if (isCashPaymentMethod(method)) {
-        const raw = String(paymentTendered?.value || '').trim();
-        const tendered = parseMoneyInput(raw);
-        if (!raw) {
-          paymentTendered?.focus();
-          showFormMessage(`Type the cash the guest handed over (at least ${money(total)}).`, true);
-          return false;
-        }
-        if (tendered < total - 0.009) {
-          paymentTendered?.focus();
-          showFormMessage(`Cash from guest is short by ${money(total - tendered)}. Collect ${money(total)} in total.`, true);
-          return false;
-        }
-      } else {
-        const digital = parseMoneyInput(paymentDigitalAmount?.value);
-        if (digital <= 0) {
-          showFormMessage('Enter the amount received from the guest.', true);
-          return false;
-        }
-      }
-      return true;
-    }
-    if (step === 'rooms') {
-      const assignments = selectedAssignments();
-      if (assignments.length !== roomsNeeded() || assignments.some((item) => !item.roomId || !item.typeId)) {
-        showFormMessage(`Select a room number for all ${roomsNeeded()} room${roomsNeeded() === 1 ? '' : 's'}.`, true);
-        return false;
-      }
-      const hold = capacityHold();
-      if (guestCount() > hold) {
-        showFormMessage(`Party of ${guestCount()} exceeds selected rooms’ capacity (${hold}).`, true);
-        return false;
-      }
-      const selectedByType = new Map();
-      assignments.forEach((item) => {
-        selectedByType.set(item.typeId, (selectedByType.get(item.typeId) || 0) + 1);
-      });
-      for (const [typeId, qty] of selectedByType.entries()) {
-        const remaining = typeRemaining(typeId);
-        if (qty > remaining) {
-          const type = roomTypes.find((item) => item.roomTypeId === typeId);
-          showFormMessage(
-            `${type?.name || 'Room type'} has only ${remaining} room(s) left for these dates (other bookings may hold them).`,
-            true
-          );
-          return false;
-        }
       }
       return true;
     }
@@ -1820,11 +1376,17 @@
     guestRooms = [{ adults: 2, children: 0, childAges: [] }];
     walkInTypeSelections = [];
     inventoryReady = false;
+    inventoryFailed = false;
     renderGuestsRooms();
     closeModal(bookModal);
     closeModal(successModal);
     openModal(guestsModal);
-    loadInventory().catch((error) => {
+    updateWalkInAvailabilityNotice();
+    loadInventory().then(() => {
+      updateWalkInAvailabilityNotice();
+    }).catch((error) => {
+      inventoryFailed = true;
+      updateWalkInAvailabilityNotice();
       showGuestsHint(error instanceof Error ? error.message : 'Unable to load rooms.');
     });
   }
@@ -1858,9 +1420,6 @@
     if (channelEl) channelEl.value = sourceSelect?.value || 'WalkIn';
     if (partySummary) partySummary.textContent = partySummaryText();
     setWizardStep('guest');
-    if (paymentTendered) paymentTendered.value = '';
-    if (paymentDigitalAmount) paymentDigitalAmount.value = '';
-    if (paymentMethod) paymentMethod.value = 'Cash';
     openModal(bookModal);
     refreshTotals();
   }
@@ -2040,8 +1599,6 @@
     el.addEventListener('click', () => closeAllWalkInModals());
   });
 
-  successDoneBtn?.addEventListener('click', () => closeAllWalkInModals());
-
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     if (![guestsModal, bookModal, successModal].some((m) => m && !m.hidden)) return;
@@ -2084,10 +1641,7 @@
       await refreshDateAvailability();
       if (wizardStep === 'types') {
         renderWalkInTypePicker();
-      }
-      if (wizardStep === 'rooms') {
-        renderRoomSlots();
-        syncWalkInRoomsStepState();
+        syncWalkInTypesStepState();
       }
       refreshTotals();
     };
@@ -2099,28 +1653,10 @@
 
   document.getElementById('walkInChannel')?.addEventListener('change', () => {
     if (wizardStep === 'types') renderWalkInTypePicker();
-    if (wizardStep === 'rooms') renderRoomSlots();
     refreshTotals();
-    syncWalkInPaymentPanels();
   });
 
   document.getElementById('walkInArrivalDiscount')?.addEventListener('change', () => refreshTotals());
-
-  paymentMethod?.addEventListener('change', () => {
-    syncWalkInPaymentPanels();
-    refreshTotals();
-  });
-  paymentTendered?.addEventListener('input', () => syncWalkInPaymentChange());
-  document.getElementById('walkInPaymentExactBtn')?.addEventListener('click', () => {
-    if (!paymentTendered) return;
-    paymentTendered.value = computeGrandTotal().toFixed(2);
-    syncWalkInPaymentChange();
-    paymentTendered.focus();
-  });
-  paymentDigitalAmount?.addEventListener('input', () => {
-    delete paymentDigitalAmount.dataset.autofilled;
-    syncWalkInPaymentChange();
-  });
 
   // Inline format feedback on the Guest step as soon as the field is left.
   document.getElementById('walkInGuestEmail')?.addEventListener('blur', (event) => {
@@ -2138,55 +1674,40 @@
 
   bookForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (
-      !validateStep('guest')
-      || !validateStep('dates')
-      || !validateStep('types')
-      || !validateStep('payment')
-      || !validateStep('rooms')
-    ) {
+    if (!validateStep('guest') || !validateStep('dates') || !validateStep('types')) {
       if (!validateStep('guest')) setWizardStep('guest');
       else if (!validateStep('dates')) setWizardStep('dates');
-      else if (!validateStep('types')) setWizardStep('types');
-      else if (!validateStep('payment')) setWizardStep('payment');
-      else setWizardStep('rooms');
+      else setWizardStep('types');
       return;
     }
 
-    const assignments = selectedAssignments();
-    const byType = new Map();
-    assignments.forEach((item) => {
-      const list = byType.get(item.typeId) || [];
-      list.push(item.roomId);
-      byType.set(item.typeId, list);
+    const itemsByType = new Map();
+    getWalkInTypeSelections().filter(Boolean).forEach((typeId) => {
+      itemsByType.set(typeId, (itemsByType.get(typeId) || 0) + 1);
     });
-    const payloadAssignments = Array.from(byType.entries()).map(([roomTypeId, roomIds]) => ({
+    const payloadItems = Array.from(itemsByType.entries()).map(([roomTypeId, quantity]) => ({
       roomTypeId,
-      roomIds,
+      quantity,
     }));
-
-    const finalTotal = computeGrandTotal();
-    const payMethod = String(paymentMethod?.value || 'Cash');
-    if (isCashPaymentMethod(payMethod)) {
-      const tendered = parseMoneyInput(paymentTendered?.value);
-      if (tendered < finalTotal - 0.009) {
-        showFormMessage(
-          `Room assignment changed the total to ${money(finalTotal)}. Go back to Payment and update cash tender.`,
-          true
-        );
-        await setWizardStep('payment');
-        return;
-      }
-    }
 
     if (submitBtn) {
       submitBtn.disabled = true;
       submitBtn.dataset.originalText = submitBtn.textContent || '';
-      submitBtn.textContent = 'Saving…';
+      submitBtn.textContent = 'Creating…';
     }
 
+    const restoreSubmit = () => {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = submitBtn.dataset.originalText || 'Create booking';
+      }
+    };
+
     try {
+      // Refresh offers + inventory first so creation uses the same prices and
+      // availability the server will see (offers can change mid-entry).
       await loadInventory();
+
       const booking = await apiFetch('/api/admin/bookings/walk-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2197,44 +1718,26 @@
           checkInAtUtc: toManilaIso(checkInDate.value, checkInTime.value),
           checkoutTimeUtc: toManilaIso(checkOutDate.value, checkOutTime.value),
           extraPersons: extraPersonsFromGuests() || (extraPersonInput?.checked ? 1 : 0),
-          assignments: payloadAssignments,
+          items: payloadItems,
           channel: String(document.getElementById('walkInChannel')?.value || ''),
           arrivalDiscountRequest: String(document.getElementById('walkInArrivalDiscount')?.value || 'None'),
         }),
       });
 
-      const balanceDue = Math.max(0, Number(booking.totalAmount || 0));
-      let payAmount = balanceDue;
-      if (!isCashPaymentMethod(payMethod)) {
-        payAmount = Math.min(balanceDue, parseMoneyInput(paymentDigitalAmount?.value));
-      }
-      if (payAmount > 0) {
-        await apiFetch('/api/admin/payments', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            bookingId: booking.id,
-            eventType: 'ArrivalPayment',
-            method: payMethod,
-            amount: payAmount,
-          }),
-        });
-      }
-
       closeModal(bookModal);
-      if (successMessage) {
-        successMessage.textContent = `${booking.reference} confirmed · ${roomsNeeded()} room${roomsNeeded() === 1 ? '' : 's'} · ${money(booking.totalAmount)}.`;
+      // Stay on the page — the new booking lands in the table and its detail
+      // modal opens in place so payment + room assignment continue there.
+      if (typeof window.MoriOpenAdminBooking === 'function') {
+        window.MoriOpenAdminBooking(booking.id, booking, { markRead: true });
+        window.dispatchEvent(new CustomEvent('mori:admin-refresh', {
+          detail: { scopes: ['bookings'] },
+        }));
+        return;
       }
-      openModal(successModal);
-      window.setTimeout(() => {
-        window.location.href = `/AdminBookings?booking=${booking.id}`;
-      }, 900);
+      window.location.href = `/AdminBookings?booking=${booking.id}`;
     } catch (error) {
-      showFormMessage(error instanceof Error ? error.message : 'Unable to save walk-in.', true);
-      if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.textContent = submitBtn.dataset.originalText || 'Confirm walk-in';
-      }
+      showFormMessage(error instanceof Error ? error.message : 'Unable to create booking.', true);
+      restoreSubmit();
     }
   });
 

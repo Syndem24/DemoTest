@@ -2,7 +2,7 @@
 
 Generated from source analysis of `TestingDemo` (ASP.NET Core MVC, .NET 9, EF Core, SQL Server).
 
-Companion docs: `HotelDb-Schema.md` (database tables), `QA-Test-Checklist.md`.
+Companion docs: `docs/HotelDb-Schema.md` (database tables + ER), `docs/QA-Test-Checklist.md`.
 
 ---
 
@@ -251,13 +251,13 @@ Encrypted config vault (SMTP password, Google OAuth credentials, Gemini/Groq key
 
 `Id` · `Key` · `Ciphertext` · `UpdatedUtc` — keys enumerated in `SecureSettingKeys` (static class).
 
-### 3.13 `StaffPasswordResetCode` — table `StaffPasswordResetCode`
+### 3.13 `PasswordResetCode` — table `PasswordResetCode`
 
-One-time 6-digit staff reset code (hashed, expiring, attempt-limited).
+One-time 6-digit reset code (hashed, expiring, attempt-limited) — staff and guests.
 
 `Id` · `UserId` · `NormalizedEmail` · `CodeHash` · `CreatedAtUtc` · `ExpiresAtUtc` · `ConsumedAtUtc?` · `FailedAttempts`
 
-### 3.14 `ApplicationUser` — table `StaffUser` (Identity)
+### 3.14 `ApplicationUser` — table `AccountUser` (Identity)
 
 Extends `IdentityUser`. One row per login — both staff and Google guests.
 
@@ -268,14 +268,14 @@ Extends `IdentityUser`. One row per login — both staff and Google guests.
 | `BirthDate` | `DateOnly?` | |
 | `Address` | `string?` | |
 | `MustChangePassword` | `bool` | Forced to `/Account/ChangePassword` |
-| `RoleId` | `string?` | Single-role link to `StaffRole` |
+| `RoleId` | `string?` | Single-role link to `AccountRole` |
 | `GoogleEmail` / `NormalizedGoogleEmail` | `string?` | Recovery Gmail (normalized unique) |
 | `GoogleVerificationStatus` | `GoogleVerificationStatus` | |
 | `DashboardLayoutJson` | `string?` | GridStack layout |
 | `CanUseGoogleForAuthOrRecovery(user)` | `static bool` | Verified + has Gmail |
 | `HasVerifiedGoogleRecovery(user)` | `static bool` | Alias of above |
 
-Identity tables renamed via `StaffAuthSchema` (`StaffUser`, `StaffRole`, `StaffExternalLogin`, `StaffAuthToken`). Roles are stored on `ApplicationUser.RoleId` (single role), not Identity join tables.
+Identity tables renamed via `AccountAuthSchema` (`AccountUser`, `AccountRole`, `AccountExternalLogin`, `AccountAuthToken`). Roles are stored on `ApplicationUser.RoleId` (single role), not Identity join tables. `PasswordResetCode` serves staff and guests — every guest gets a local password via forced first-login setup.
 
 ---
 
@@ -318,7 +318,7 @@ Identity tables renamed via `StaffAuthSchema` (`StaffUser`, `StaffRole`, `StaffE
 | `GetAvailabilityForBookingAsync(id, …)` | Availability excluding the booking's own holds (edit preview) |
 | `CreateAsync(CreateBookingRequest)` | Guest online booking |
 | `CreateWalkInAsync(CreateWalkInRequest)` | Staff walk-in booking |
-| `GetPagedAsync(status, search, history, page, pageSize)` | Admin list |
+| `GetPagedAsync(status, search, history, page, pageSize)` | Admin list — `IX_Booking_List_Created` offset paging (`CreatedAtUtc`+`Id` desc), batched exceeds-inventory flags |
 | `GetByIdAsync` / `GetActiveStayByRoomIdAsync` / `GetActiveStaysByRoomIdsAsync` | Lookups |
 | `GetReservationCalendarAsync(start, end)` | Calendar occupancy |
 | `GetRecentNotificationsAsync` / `GetUnreadCountAsync` / `MarkReadAsync` / `MarkAllAsReadAsync` | Admin bell |
@@ -387,7 +387,7 @@ Helpers: `RoomMappings` (entity↔DTO), `RoomImageStorage` (image files), `Inclu
 | `StaffRoleStore : RoleStore<…>` | Identity role store |
 | `IAdminManagerSeed` / `AdminManagerSeed` | Seeds first admin (`EnsureAsync`) |
 | `IStaffAccountCreateService` / `StaffAccountCreateService` | Creates staff accounts + temporary password |
-| `IStaffPasswordResetCodeService` / `StaffPasswordResetCodeService` | Issues/verifies 6-digit SMTP codes |
+| `IPasswordResetCodeService` / `PasswordResetCodeService` | Issues/verifies 6-digit SMTP codes |
 | `IStaffEmailSender` / `SmtpStaffEmailSender` | SMTP mail (also `IStaffOnboardingEmailSender`) |
 | `LoggingStaffOnboardingEmailSender` | Dev fallback sender |
 | `IGoogleVerificationTokenService` / `GoogleVerificationTokenService` | Data-protection tokens for Gmail verify |
@@ -702,7 +702,7 @@ classDiagram
         +string Name
     }
 
-    class StaffPasswordResetCode {
+    class PasswordResetCode {
         +int Id
         +string UserId
         +string NormalizedEmail
@@ -767,7 +767,7 @@ classDiagram
     SystemAuditLog : standalone audit trail
     SystemFlushLog : standalone export log
     SecureSetting : standalone secret vault
-    StaffPasswordResetCode "0..*" --> "0..1" ApplicationUser : UserId
+    PasswordResetCode "0..*" --> "0..1" ApplicationUser : UserId
 ```
 
 **Reading the data model:**
@@ -777,7 +777,7 @@ classDiagram
 - `SpecialOffer` hangs off `RoomType` (one row per type per campaign); `Booking.SpecialOfferId` records which promo was applied.
 - `PaymentRecord` is append-only — corrections insert a `Voided` status, never delete rows.
 - `ApplicationUser` (single `RoleId`) covers staff **and** Google guests; Identity join tables are unused by design.
-- `SystemAuditLog`, `SystemFlushLog`, `SecureSetting`, `StaffPasswordResetCode` are satellite tables with no navigation back into the booking graph.
+- `SystemAuditLog`, `SystemFlushLog`, `SecureSetting`, `PasswordResetCode` are satellite tables with no navigation back into the booking graph.
 
 ---
 
@@ -800,7 +800,7 @@ classDiagram
         +DbSet~SystemAuditLog~ SystemAuditLogs
         +DbSet~SystemFlushLog~ SystemFlushLogs
         +DbSet~SecureSetting~ SecureSettings
-        +DbSet~StaffPasswordResetCode~ StaffPasswordResetCodes
+        +DbSet~PasswordResetCode~ PasswordResetCodes
         +SaveChangesAsync() int
     }
 
@@ -1071,7 +1071,7 @@ classDiagram
     AdminDashboardApiController --> IDashboardAnalyticsService
     AdminReviewsApiController --> IStayReviewService
     GuestReviewsApiController --> IStayReviewService
-    AccountController --> IStaffPasswordResetCodeService
+    AccountController --> IPasswordResetCodeService
     AccountController --> IStaffEmailSender
     AccountController --> IGoogleAuthSettings
     AccountController --> ISystemAuditRecorder
@@ -1208,7 +1208,7 @@ Every 15 s `AutomaticCheckoutBackgroundService` opens a DI scope → `IBookingSe
 `ISystemAuditRecorder.Record` writes `SystemAuditLog` rows; `SaveChanges` hooks notify `IAuditLogNotifier` → `AuditLogChanged` SignalR event (failures suppressed). Data page: `SystemFlushService.FlushSelectedAsync` / `BookingService.FlushHistoryAsync` / `PaymentService.FlushPaymentsAsync` export branded PDFs, hard-delete the range, and log a `SystemFlushLog` row.
 
 ### 15.9 Auth & recovery
-`AccountController` + Identity (`StaffAccountStore`/`StaffRoleStore`). Google OAuth credentials come from `SecureSetting` via `GoogleAuthSettings`/`ConfigureGoogleOptions` (runtime injection — placeholders in appsettings). Staff reset: `StaffPasswordResetCodeService` issues hashed 6-digit codes via `SmtpStaffEmailSender`. `MustChangePasswordMiddleware` forces password setup for new staff and Google guests.
+`AccountController` + Identity (`StaffAccountStore`/`StaffRoleStore`). Google OAuth credentials come from `SecureSetting` via `GoogleAuthSettings`/`ConfigureGoogleOptions` (runtime injection — placeholders in appsettings). Staff reset: `PasswordResetCodeService` issues hashed 6-digit codes via `SmtpStaffEmailSender`. `MustChangePasswordMiddleware` forces password setup for new staff and Google guests.
 
 ### 15.10 Chat
 `ChatApiController` → `ChatOrchestrator`: guardrails → rule engine (FAQ) → optional LLM fallback (`GeminiChatProvider`/`GroqChatProvider` with per-IP quota + cooldown via `ChatProviderUsageTracker`) → `ChatPublicContextBuilder` supplies live hotel facts → `ChatConversationStore` keeps session history.

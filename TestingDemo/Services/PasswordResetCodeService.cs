@@ -6,7 +6,7 @@ using TestingDemo.Models;
 
 namespace TestingDemo.Services;
 
-public enum StaffPasswordResetCodeVerifyStatus
+public enum PasswordResetCodeVerifyStatus
 {
     Success,
     Invalid,
@@ -15,22 +15,22 @@ public enum StaffPasswordResetCodeVerifyStatus
     NotFound
 }
 
-public sealed record StaffPasswordResetCodeVerifyResult(
-    StaffPasswordResetCodeVerifyStatus Status,
+public sealed record PasswordResetCodeVerifyResult(
+    PasswordResetCodeVerifyStatus Status,
     ApplicationUser? User = null,
     int? RemainingAttempts = null);
 
-public interface IStaffPasswordResetCodeService
+public interface IPasswordResetCodeService
 {
     Task<bool> IssueAndSendAsync(ApplicationUser user, CancellationToken cancellationToken = default);
     Task<int?> GetRemainingAttemptsAsync(string email, CancellationToken cancellationToken = default);
-    Task<StaffPasswordResetCodeVerifyResult> VerifyAsync(
+    Task<PasswordResetCodeVerifyResult> VerifyAsync(
         string email,
         string code,
         CancellationToken cancellationToken = default);
 }
 
-public sealed class StaffPasswordResetCodeService : IStaffPasswordResetCodeService
+public sealed class PasswordResetCodeService : IPasswordResetCodeService
 {
     public const int CodeLength = 6;
     public const int ExpiryMinutes = 15;
@@ -38,12 +38,12 @@ public sealed class StaffPasswordResetCodeService : IStaffPasswordResetCodeServi
 
     private readonly HotelBookingDbContext _db;
     private readonly IStaffEmailSender _emailSender;
-    private readonly ILogger<StaffPasswordResetCodeService> _logger;
+    private readonly ILogger<PasswordResetCodeService> _logger;
 
-    public StaffPasswordResetCodeService(
+    public PasswordResetCodeService(
         HotelBookingDbContext db,
         IStaffEmailSender emailSender,
-        ILogger<StaffPasswordResetCodeService> logger)
+        ILogger<PasswordResetCodeService> logger)
     {
         _db = db;
         _emailSender = emailSender;
@@ -64,7 +64,7 @@ public sealed class StaffPasswordResetCodeService : IStaffPasswordResetCodeServi
         await InvalidatePendingAsync(user.Id, now, cancellationToken);
 
         var code = GenerateCode();
-        var row = new StaffPasswordResetCode
+        var row = new PasswordResetCode
         {
             UserId = user.Id,
             NormalizedEmail = normalizedEmail,
@@ -74,7 +74,7 @@ public sealed class StaffPasswordResetCodeService : IStaffPasswordResetCodeServi
             FailedAttempts = 0
         };
 
-        _db.StaffPasswordResetCodes.Add(row);
+        _db.PasswordResetCodes.Add(row);
         await _db.SaveChangesAsync(cancellationToken);
 
         try
@@ -105,7 +105,7 @@ public sealed class StaffPasswordResetCodeService : IStaffPasswordResetCodeServi
             return null;
 
         var now = DateTime.UtcNow;
-        var row = await _db.StaffPasswordResetCodes.AsNoTracking()
+        var row = await _db.PasswordResetCodes.AsNoTracking()
             .Where(o => o.UserId == user.Id && o.ConsumedAtUtc == null && o.ExpiresAtUtc >= now)
             .OrderByDescending(o => o.CreatedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
@@ -113,7 +113,7 @@ public sealed class StaffPasswordResetCodeService : IStaffPasswordResetCodeServi
         return row is null ? null : RemainingAttemptsFor(row);
     }
 
-    public async Task<StaffPasswordResetCodeVerifyResult> VerifyAsync(
+    public async Task<PasswordResetCodeVerifyResult> VerifyAsync(
         string email,
         string code,
         CancellationToken cancellationToken = default)
@@ -122,8 +122,8 @@ public sealed class StaffPasswordResetCodeService : IStaffPasswordResetCodeServi
         if (!IsValidCodeFormat(code))
         {
             var remaining = await GetRemainingAttemptsAsync(email, cancellationToken);
-            return new StaffPasswordResetCodeVerifyResult(
-                StaffPasswordResetCodeVerifyStatus.Invalid,
+            return new PasswordResetCodeVerifyResult(
+                PasswordResetCodeVerifyStatus.Invalid,
                 null,
                 remaining);
         }
@@ -131,23 +131,23 @@ public sealed class StaffPasswordResetCodeService : IStaffPasswordResetCodeServi
         var user = await _db.Users.AsNoTracking()
             .FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, cancellationToken);
         if (user is null)
-            return new StaffPasswordResetCodeVerifyResult(StaffPasswordResetCodeVerifyStatus.NotFound);
+            return new PasswordResetCodeVerifyResult(PasswordResetCodeVerifyStatus.NotFound);
 
         var now = DateTime.UtcNow;
-        var row = await _db.StaffPasswordResetCodes
+        var row = await _db.PasswordResetCodes
             .Where(o => o.UserId == user.Id && o.ConsumedAtUtc == null)
             .OrderByDescending(o => o.CreatedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (row is null)
-            return new StaffPasswordResetCodeVerifyResult(StaffPasswordResetCodeVerifyStatus.NotFound);
+            return new PasswordResetCodeVerifyResult(PasswordResetCodeVerifyStatus.NotFound);
 
         if (row.ExpiresAtUtc < now)
-            return new StaffPasswordResetCodeVerifyResult(StaffPasswordResetCodeVerifyStatus.Expired);
+            return new PasswordResetCodeVerifyResult(PasswordResetCodeVerifyStatus.Expired);
 
         if (row.FailedAttempts >= MaxFailedAttempts)
-            return new StaffPasswordResetCodeVerifyResult(
-                StaffPasswordResetCodeVerifyStatus.TooManyAttempts,
+            return new PasswordResetCodeVerifyResult(
+                PasswordResetCodeVerifyStatus.TooManyAttempts,
                 null,
                 0);
 
@@ -160,21 +160,21 @@ public sealed class StaffPasswordResetCodeService : IStaffPasswordResetCodeServi
             await _db.SaveChangesAsync(cancellationToken);
             var remaining = RemainingAttemptsFor(row);
             return row.FailedAttempts >= MaxFailedAttempts
-                ? new StaffPasswordResetCodeVerifyResult(StaffPasswordResetCodeVerifyStatus.TooManyAttempts, null, 0)
-                : new StaffPasswordResetCodeVerifyResult(StaffPasswordResetCodeVerifyStatus.Invalid, null, remaining);
+                ? new PasswordResetCodeVerifyResult(PasswordResetCodeVerifyStatus.TooManyAttempts, null, 0)
+                : new PasswordResetCodeVerifyResult(PasswordResetCodeVerifyStatus.Invalid, null, remaining);
         }
 
         row.ConsumedAtUtc = now;
         await _db.SaveChangesAsync(cancellationToken);
-        return new StaffPasswordResetCodeVerifyResult(StaffPasswordResetCodeVerifyStatus.Success, user);
+        return new PasswordResetCodeVerifyResult(PasswordResetCodeVerifyStatus.Success, user);
     }
 
-    private static int RemainingAttemptsFor(StaffPasswordResetCode row) =>
+    private static int RemainingAttemptsFor(PasswordResetCode row) =>
         Math.Max(0, MaxFailedAttempts - row.FailedAttempts);
 
     private async Task InvalidatePendingAsync(string userId, DateTime now, CancellationToken cancellationToken)
     {
-        var pending = await _db.StaffPasswordResetCodes
+        var pending = await _db.PasswordResetCodes
             .Where(o => o.UserId == userId && o.ConsumedAtUtc == null)
             .ToListAsync(cancellationToken);
 

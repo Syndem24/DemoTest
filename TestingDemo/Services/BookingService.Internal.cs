@@ -175,21 +175,70 @@ public sealed partial class BookingService
         IReadOnlyList<Booking> bookings,
         CancellationToken cancellationToken)
     {
-        var flags = new Dictionary<int, bool>();
-        foreach (var booking in bookings)
+        var candidates = bookings
+            .Where(booking =>
+                !booking.IsArchived
+                && booking.Status is BookingStatus.Pending or BookingStatus.Confirmed)
+            .ToList();
+        if (candidates.Count == 0)
         {
-            if (booking.IsArchived
-                || booking.Status is not (BookingStatus.Pending or BookingStatus.Confirmed))
-            {
-                continue;
-            }
+            return new Dictionary<int, bool>();
+        }
 
-            var availability = await GetAvailabilityForBookingAsync(
-                booking.Id,
-                booking.CheckInAtUtc,
-                booking.CheckoutTimeUtc,
-                cancellationToken);
-            var byType = availability.ToDictionary(item => item.RoomTypeId);
+        // Corrupt / over-long windows cannot be scored — flag for staff review and
+        // keep them out of the union range so they can't widen the overlap scan.
+        var flags = new Dictionary<int, bool>();
+        var scorable = new List<Booking>(candidates.Count);
+        foreach (var booking in candidates)
+        {
+            if (booking.CheckoutTimeUtc <= booking.CheckInAtUtc
+                || StayNights(booking.CheckInAtUtc, booking.CheckoutTimeUtc) > MaxStayNights)
+            {
+                flags[booking.Id] = true;
+            }
+            else
+            {
+                scorable.Add(booking);
+            }
+        }
+
+        if (scorable.Count == 0)
+        {
+            return flags;
+        }
+
+        // Batch the inventory math: one overlapping-lines load over the page's
+        // union window instead of one availability round-trip per booking.
+        var capacities = await GetPhysicalCapacityByTypeAsync(cancellationToken);
+        var maintenanceByType = await GetMaintenanceCountByTypeAsync(cancellationToken);
+        var rangeStart = scorable.Min(booking => booking.CheckInAtUtc);
+        var rangeEnd = scorable.Max(booking => booking.CheckoutTimeUtc);
+        var overlapping = await LoadOverlappingBookingLinesAsync(
+            rangeStart,
+            rangeEnd,
+            excludeBookingId: null,
+            cancellationToken);
+        var capacityByType = capacities.ToDictionary(item => item.RoomTypeId);
+
+        foreach (var booking in scorable)
+        {
+            var nights = EnumerateStayNights(booking.CheckInAtUtc, booking.CheckoutTimeUtc);
+
+            var bookingId = booking.Id;
+            var checkIn = booking.CheckInAtUtc;
+            var checkout = booking.CheckoutTimeUtc;
+            var others = overlapping
+                .Where(line =>
+                    line.BookingId != bookingId
+                    && line.CheckInAtUtc < checkout
+                    && line.CheckoutTimeUtc > checkIn)
+                .ToList();
+            var (maxHeld, _) = ComputeNightlyInventory(
+                capacities,
+                maintenanceByType,
+                others,
+                nights);
+
             foreach (var line in booking.Items)
             {
                 var typeId = line.RoomTypeId ?? 0;
@@ -198,13 +247,18 @@ public sealed partial class BookingService
                     continue;
                 }
 
-                if (!byType.TryGetValue(typeId, out var roomType))
+                if (!capacityByType.TryGetValue(typeId, out var roomType))
                 {
                     flags[booking.Id] = true;
                     break;
                 }
 
-                if (line.Quantity > roomType.Remaining)
+                var remaining = Math.Max(
+                    0,
+                    roomType.Capacity
+                        - maintenanceByType.GetValueOrDefault(typeId)
+                        - maxHeld.GetValueOrDefault(typeId));
+                if (line.Quantity > remaining)
                 {
                     flags[booking.Id] = true;
                     break;
@@ -216,6 +270,7 @@ public sealed partial class BookingService
     }
 
     private sealed record OverlappingBookingLine(
+        int BookingId,
         int RoomTypeId,
         int Quantity,
         DateTime CheckInAtUtc,
@@ -269,6 +324,7 @@ public sealed partial class BookingService
 
         return await query
             .Select(line => new OverlappingBookingLine(
+                line.BookingId,
                 line.RoomTypeId!.Value,
                 line.Quantity,
                 line.Booking.CheckInAtUtc,
@@ -1200,6 +1256,9 @@ public sealed partial class BookingService
 
         foreach (var line in booking.Items)
         {
+            // Only price lines added by this edit — existing lines keep the rate booked at
+            // creation so a changed/reactivated offer can't silently reprice a paid stay.
+            if (line.Id != 0) continue;
             if (line.RoomTypeId is int roomTypeId
                 && promoByType.TryGetValue(roomTypeId, out var typeOffer)
                 && typeOffer.PromoPricePerNight is decimal promo
@@ -1217,14 +1276,16 @@ public sealed partial class BookingService
         bool requireGoogleGuest,
         CancellationToken cancellationToken)
     {
-        var hadCoupon = booking.Charges.Any(c => c.ChargeType == BookingChargeType.LoyaltyCoupon);
+        // Admin edits (requireGoogleGuest: false) keep the coupon exactly as booked —
+        // re-deriving it from current offer state would silently move a paid total.
+        if (!requireGoogleGuest)
+            return;
+
         RemoveChargesOfType(booking, BookingChargeType.LoyaltyCoupon);
 
         if (booking.Channel != BookingChannel.Online)
             return;
-        if (requireGoogleGuest && !CurrentUserIsGoogleGuest())
-            return;
-        if (!requireGoogleGuest && !hadCoupon && !CurrentUserIsGoogleGuest())
+        if (!CurrentUserIsGoogleGuest())
             return;
 
         var typeIds = booking.Items

@@ -1,9 +1,9 @@
 (function () {
   'use strict';
 
-  var form = document.getElementById('staffForgotPasswordForm');
-  var loading = document.getElementById('staffForgotPasswordLoading');
-  var submitBtn = document.getElementById('staffForgotPasswordSubmit');
+  var form = document.getElementById('forgotPasswordForm');
+  var loading = document.getElementById('forgotPasswordLoading');
+  var submitBtn = document.getElementById('forgotPasswordSubmit');
   if (!form || !loading) return;
 
   form.addEventListener('submit', function (event) {

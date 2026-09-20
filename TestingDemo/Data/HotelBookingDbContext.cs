@@ -32,7 +32,7 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<PaymentRecord> PaymentRecords => Set<PaymentRecord>();
     public DbSet<SpecialOffer> SpecialOffers => Set<SpecialOffer>();
     public DbSet<SecureSetting> SecureSettings => Set<SecureSetting>();
-    public DbSet<StaffPasswordResetCode> StaffPasswordResetCodes => Set<StaffPasswordResetCode>();
+    public DbSet<PasswordResetCode> PasswordResetCodes => Set<PasswordResetCode>();
     public DbSet<StayReview> StayReviews => Set<StayReview>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -45,13 +45,13 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
 
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.Entity<IdentityRole>().ToTable(StaffAuthSchema.RoleTable);
-        modelBuilder.Entity<IdentityUserLogin<string>>().ToTable(StaffAuthSchema.ExternalLoginTable);
-        modelBuilder.Entity<IdentityUserToken<string>>().ToTable(StaffAuthSchema.AuthTokenTable);
+        modelBuilder.Entity<IdentityRole>().ToTable(AccountAuthSchema.RoleTable);
+        modelBuilder.Entity<IdentityUserLogin<string>>().ToTable(AccountAuthSchema.ExternalLoginTable);
+        modelBuilder.Entity<IdentityUserToken<string>>().ToTable(AccountAuthSchema.AuthTokenTable);
 
         modelBuilder.Entity<ApplicationUser>(entity =>
         {
-            entity.ToTable(StaffAuthSchema.UserTable);
+            entity.ToTable(AccountAuthSchema.UserTable);
             entity.Property(e => e.FullName).HasMaxLength(120);
             entity.Property(e => e.Address).HasMaxLength(300);
             entity.Property(e => e.GoogleEmail).HasMaxLength(256);
@@ -71,9 +71,9 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.DashboardLayoutJson).HasColumnType("nvarchar(max)");
         });
 
-        modelBuilder.Entity<StaffPasswordResetCode>(entity =>
+        modelBuilder.Entity<PasswordResetCode>(entity =>
         {
-            entity.ToTable(StaffAuthSchema.PasswordResetCodeTable);
+            entity.ToTable(AccountAuthSchema.PasswordResetCodeTable);
             entity.HasKey(e => e.Id);
             entity.Property(e => e.UserId).HasMaxLength(450).IsRequired();
             entity.Property(e => e.NormalizedEmail).HasMaxLength(256).IsRequired();
@@ -158,6 +158,9 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.GuestPartyJson).HasMaxLength(4000);
             entity.HasIndex(e => new { e.IsArchived, e.Status, e.CheckInAtUtc, e.CheckoutTimeUtc });
             entity.HasIndex(e => e.CreatedAtUtc);
+            entity.HasIndex(e => new { e.IsArchived, e.Status, e.CreatedAtUtc, e.Id })
+                .IsDescending(false, false, true, true)
+                .HasDatabaseName("IX_Booking_List_Created");
             entity.HasOne(e => e.SpecialOffer)
                 .WithMany()
                 .HasForeignKey(e => e.SpecialOfferId)
