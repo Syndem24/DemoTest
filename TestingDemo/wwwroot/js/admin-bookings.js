@@ -159,6 +159,8 @@
   let pendingCallsFromUrlHandled = false;
   let checkoutsFromUrlHandled = false;
   let daytimeFlowLocalDateIso = '';
+  /** When set, open this day's guest modal once calendar events finish loading. */
+  let pendingDayModalKey = null;
   let pollTimer = null;
   let audioContext = null;
   let audioUnlocked = false;
@@ -6046,10 +6048,7 @@
 
   function notificationTargetForItem(item) {
     const message = String(item?.message || '');
-    const bookingId = Number(item?.id || 0);
-    const pendingCallsUrl = bookingId > 0
-      ? `/AdminBookings?pendingCalls=soon&booking=${bookingId}`
-      : '/AdminBookings?pendingCalls=soon';
+    const pendingCallsUrl = '/AdminBookings?pendingCalls=soon';
 
     if (/call guest: checkout|checkout in 20/i.test(message)) {
       return { type: 'filter', url: pendingCallsUrl };
@@ -6071,7 +6070,9 @@
     }
 
     if (target.type === 'filter') {
-      window.location.assign(target.url);
+      // Already on the bookings page — switch to the calendar and open
+      // today's guest modal in place instead of reloading.
+      openTodayGuestsOnCalendar();
       return;
     }
 
@@ -6348,13 +6349,25 @@
     const label = bookingsRoot?.querySelector('.admin-room-type-availability-label');
     if (!chips || isLeavingBookingsPage) return;
     try {
-      // Physical door availability right now — same counts as Room Management.
-      const rows = await apiFetch('/api/rooms/types');
-      const list = Array.isArray(rows) ? rows : [];
+      // True sellable count: rooms physically free right now AND not already
+      // promised to a pending/confirmed stay tonight. A confirmed booking
+      // without door assignments still holds inventory, so it counts.
+      const [doorRows, sellableRows] = await Promise.all([
+        apiFetch('/api/rooms/types'),
+        apiFetch('/api/admin/bookings/room-type-availability'),
+      ]);
+      const list = Array.isArray(doorRows) ? doorRows : [];
+      const sellableByType = new Map(
+        (Array.isArray(sellableRows) ? sellableRows : []).map((row) => [
+          Number(row.roomTypeId ?? row.RoomTypeId),
+          Number(row.remaining ?? row.Remaining ?? 0),
+        ])
+      );
       chips.replaceChildren();
       if (label) {
         label.textContent = 'Available now';
-        label.title = 'Rooms marked Available in Room Management right now';
+        label.title =
+          'Rooms free right now and not already promised to a pending or confirmed stay tonight';
       }
       if (!list.length) {
         const empty = document.createElement('span');
@@ -6373,8 +6386,13 @@
           )
         )
         .forEach((type) => {
-          const available = Number(type.remaining ?? type.availableCount ?? 0);
-          const total = Number(type.capacity ?? type.roomCount ?? 0);
+          const doorFree = Number(type.availableCount ?? 0);
+          const total = Number(type.roomCount ?? 0);
+          const typeId = Number(type.roomTypeId);
+          const sellable = sellableByType.has(typeId)
+            ? sellableByType.get(typeId)
+            : doorFree;
+          const available = Math.max(0, Math.min(doorFree, sellable));
           const chip = document.createElement('span');
           chip.className = 'admin-room-avail-chip';
           if (available <= 0) chip.classList.add('is-empty');
@@ -6382,10 +6400,13 @@
           else if (available <= 1) chip.classList.add('is-low');
 
           const name = document.createElement('strong');
-          name.textContent = type.roomTypeName || type.name || `Type ${type.roomTypeId}`;
+          name.textContent = type.roomTypeName || type.name || `Type ${typeId}`;
           const count = document.createElement('em');
           count.textContent = total > 0 ? `${available}/${total}` : String(available);
-          chip.title = `${name.textContent}: ${available} of ${total} rooms free right now`;
+          chip.title =
+            sellable < doorFree
+              ? `${name.textContent}: ${available} sellable — ${doorFree} door(s) free but ${doorFree - sellable} already promised tonight`
+              : `${name.textContent}: ${available} of ${total} rooms free right now`;
           chip.append(name, count);
           chips.append(chip);
         });
@@ -6821,6 +6842,38 @@
     }
   }
 
+  /**
+   * Notification deep link (?arrivals=soon / ?checkouts=soon / ?pendingCalls=soon):
+   * show the calendar and open today's guest modal (staying / reserved / checking out).
+   */
+  function openTodayGuestsOnCalendar() {
+    const dayKey = manilaTodayIso();
+    if (!dayKey) return;
+    const calendarButton = bookingsRoot?.querySelector('[data-booking-view="calendar"]');
+    if (!calendarButton) return;
+    const alreadyOnCalendar = calendarButton.classList.contains('is-active');
+    if (reservationCalendar) {
+      // Stay index loaded — open today if the visible month already covers it,
+      // otherwise navigate the calendar to today and open on refetch.
+      if (!alreadyOnCalendar) calendarButton.click();
+      const monthFmt = new Intl.DateTimeFormat('en-CA', {
+        timeZone: PH_TZ,
+        year: 'numeric',
+        month: '2-digit',
+      });
+      const viewStart = reservationCalendar.view?.currentStart;
+      if (viewStart && monthFmt.format(viewStart) === monthFmt.format(new Date())) {
+        openCalendarDayModal(dayKey);
+      } else {
+        pendingDayModalKey = dayKey;
+        reservationCalendar.gotoDate(dayKey);
+      }
+      return;
+    }
+    pendingDayModalKey = dayKey;
+    if (!alreadyOnCalendar) calendarButton.click();
+  }
+
   function openCalendarDayModal(dayKey) {
     if (!calendarDayModal || !dayKey) return;
     const staying = guestsStayingOnDay(dayKey);
@@ -6876,6 +6929,7 @@
     }
     if (!ready || !window.FullCalendar?.Calendar) {
       if (calendarFallback) calendarFallback.hidden = false;
+      pendingDayModalKey = null;
       return;
     }
 
@@ -6908,11 +6962,21 @@
           success([]);
           if (calendarFallback) calendarFallback.hidden = true;
           requestAnimationFrame(refreshCalendarDayCounts);
+          if (pendingDayModalKey) {
+            const dayKey = pendingDayModalKey;
+            pendingDayModalKey = null;
+            openCalendarDayModal(dayKey);
+          }
         } catch (error) {
           indexCalendarStays([]);
           indexCalendarOccupancy([]);
           requestAnimationFrame(refreshCalendarDayCounts);
           if (calendarFallback) calendarFallback.hidden = false;
+          if (pendingDayModalKey) {
+            const dayKey = pendingDayModalKey;
+            pendingDayModalKey = null;
+            openCalendarDayModal(dayKey);
+          }
           failure(error);
         }
       },
@@ -7282,17 +7346,15 @@
     window.history.replaceState({}, '', url.pathname + (url.search || ''));
   }
 
-  const openPendingCallsByUrl =
+  // Arrival / checkout / pending-call notifications open the calendar's
+  // current-day guest modal instead of the pending bookings table.
+  const openTodayGuestsByUrl =
     params.get('pendingCalls') === 'soon'
     || params.get('arrivals') === 'soon'
     || params.get('checkouts') === 'soon';
-  if (openPendingCallsByUrl && !pendingCallsFromUrlHandled) {
+  if (openTodayGuestsByUrl && !pendingCallsFromUrlHandled) {
     pendingCallsFromUrlHandled = true;
-    filter = 'Pending';
-    page = 1;
-    bookingsRoot?.querySelectorAll('[data-booking-filter]').forEach((item) => {
-      item.classList.toggle('is-active', (item.dataset.bookingFilter || '') === 'Pending');
-    });
+    openTodayGuestsOnCalendar();
   }
 
   void refreshNotifications();
