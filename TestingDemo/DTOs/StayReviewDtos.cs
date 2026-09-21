@@ -105,6 +105,13 @@ public sealed class UpsertStayReviewReplyRequest
     public string? Reply { get; set; }
 }
 
+public sealed class DeleteStayReviewRequest
+{
+    public string? Reason { get; set; }
+    public string? Note { get; set; }
+    public bool AllowReReview { get; set; }
+}
+
 public sealed class ReviewTranslateRequest
 {
     public string? Text { get; set; }

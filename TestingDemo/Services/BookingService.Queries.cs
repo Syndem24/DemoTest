@@ -246,7 +246,7 @@ public sealed partial class BookingService
 
                 return new ReservationCalendarEventDto(
                     booking.Id,
-                    $"{kindLabel} Â· {booking.Reference} Â· {booking.GuestName}",
+                    $"{kindLabel} · {booking.Reference} · {booking.GuestName}",
                     booking.CheckInAtUtc,
                     booking.CheckoutTimeUtc,
                     booking.Reference,
@@ -264,7 +264,7 @@ public sealed partial class BookingService
                             .ToList();
                         return assigned.Count > 0
                             ? $"{line.RoomTypeName}: {string.Join(", ", assigned)}"
-                            : $"{line.Quantity}Ã— {line.RoomTypeName}";
+                            : $"{line.Quantity}× {line.RoomTypeName}";
                     })),
                     extensionNights,
                     requestedRooms,
@@ -430,7 +430,7 @@ public sealed partial class BookingService
                 && now >= booking.CheckoutTimeUtc.AddMinutes(-20)
                 && now < booking.CheckoutTimeUtc)
             {
-                message = $"Call guest: checkout in 20 mins â€” ask about late checkout{roomStr}";
+                message = $"Call guest: checkout in 20 mins — ask about late checkout{roomStr}";
             }
             else if (booking.Status == BookingStatus.CheckedOut)
             {

@@ -8,11 +8,6 @@
         <h1>Bookings</h1>
         <p>Review requests in a compact table or scan upcoming reservations on the calendar.</p>
     </div>
-    <div class="hero-meta">
-        <button type="button" class="admin-booking-refresh" data-daytime-flow-open>
-            Daytime arrivals &amp; checkouts
-        </button>
-    </div>
 </section>
 
 <section class="hotel-panel admin-bookings-panel" data-admin-bookings>
@@ -36,13 +31,6 @@
             <div class="admin-room-type-availability-chips" data-room-type-availability-chips>
                 <span class="admin-room-type-availability-loading">Loading…</span>
             </div>
-        </div>
-        <div class="admin-daytime-flow-toolbar-shell" data-daytime-flow-toolbar hidden>
-            <button type="button" class="admin-daytime-back-btn" data-daytime-flow-close
-                aria-label="Back to booking table">
-                <span aria-hidden="true">←</span>
-                <span>Back to booking table</span>
-            </button>
         </div>
     </div>
 
@@ -85,29 +73,6 @@
             </div>
             <div class="admin-arrivals-list" data-checkouts-list>
                 <p class="admin-bookings-loading">Loading checkouts…</p>
-            </div>
-        </div>
-
-        <div class="admin-arrivals-panel admin-daytime-flow-panel" data-daytime-flow-panel hidden>
-            <div class="admin-arrivals-head">
-                <div>
-                    <strong>Daytime flow (today)</strong>
-                    <p>Review expected daytime arrivals and checkouts for today (Philippines time). Opening guest details clears the call highlight.</p>
-                </div>
-            </div>
-            <div class="admin-daytime-flow-grid">
-                <section class="admin-daytime-flow-column">
-                    <h4 data-daytime-arrivals-title>Arrivals · Daytime</h4>
-                    <div class="admin-arrivals-list" data-daytime-arrivals-list>
-                        <p class="admin-bookings-loading">Loading daytime arrivals…</p>
-                    </div>
-                </section>
-                <section class="admin-daytime-flow-column">
-                    <h4 data-daytime-checkouts-title>Checkouts · Daytime</h4>
-                    <div class="admin-arrivals-list" data-daytime-checkouts-list>
-                        <p class="admin-bookings-loading">Loading daytime checkouts…</p>
-                    </div>
-                </section>
             </div>
         </div>
 
@@ -187,50 +152,74 @@
             <div class="admin-cal-day-head-copy">
                 <p class="admin-cal-day-kicker">Guest list</p>
                 <h2 id="calendarDayTitle" data-calendar-day-title>Guests</h2>
-                <div class="admin-cal-day-stats">
-                    <span class="is-stay"><strong data-calendar-day-stay-count>0</strong> stay</span>
-                    <span class="is-out"><strong data-calendar-day-out-count>0</strong> out</span>
+                <div class="admin-cal-day-stats" role="group" aria-label="Filter guests for this day">
+                    <button type="button" class="admin-cal-day-stat is-stay" data-calendar-day-group="stay" aria-pressed="false">
+                        <strong data-calendar-day-stay-count>0</strong> stay
+                    </button>
+                    <button type="button" class="admin-cal-day-stat is-arrive" data-calendar-day-group="arriving" aria-pressed="false">
+                        <strong data-calendar-day-in-count>0</strong> arriving
+                    </button>
+                    <button type="button" class="admin-cal-day-stat is-out" data-calendar-day-group="out" aria-pressed="false">
+                        <strong data-calendar-day-out-count>0</strong> out
+                    </button>
                 </div>
             </div>
             <button type="button" class="admin-cal-day-close" data-calendar-day-close aria-label="Close">&times;</button>
         </header>
         <div class="admin-cal-day-body">
-            <div class="admin-cal-day-occupancy" data-calendar-day-occupancy hidden>
-                <p class="admin-cal-day-occupancy-kicker">Rooms this night</p>
-                <div class="admin-cal-day-stats admin-cal-day-stats--rooms">
-                    <span class="is-reserved"><strong data-calendar-day-reserved>0</strong> reserved</span>
-                    <span class="is-occupied"><strong data-calendar-day-occupied>0</strong> occupied</span>
-                    <span class="is-open"><strong data-calendar-day-available>0</strong> available</span>
+            <details class="admin-cal-day-occupancy" data-calendar-day-occupancy hidden>
+                <summary class="admin-cal-day-occupancy-summary">
+                    <span class="admin-cal-day-occupancy-copy">
+                        <span class="admin-cal-day-occupancy-kicker">Rooms this night</span>
+                        <span class="admin-cal-day-stats admin-cal-day-stats--rooms">
+                            <span class="is-reserved"><strong data-calendar-day-reserved>0</strong> reserved</span>
+                            <span class="is-occupied"><strong data-calendar-day-occupied>0</strong> occupied</span>
+                            <span class="is-open"><strong data-calendar-day-available>0</strong> available</span>
+                        </span>
+                    </span>
+                    <svg class="admin-cal-day-occupancy-chevron" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+                        <path d="M7 10l5 5 5-5z"/>
+                    </svg>
+                </summary>
+                <div class="admin-cal-day-occupancy-detail">
+                    <div class="admin-cal-day-occupancy-inner">
+                        <div class="admin-cal-day-occupancy-meter"
+                             role="meter"
+                             data-calendar-day-occupancy-meter
+                             aria-label="Rooms occupied this night"
+                             aria-valuemin="0"
+                             aria-valuemax="0"
+                             aria-valuenow="0">
+                            <span class="is-occupied" data-calendar-day-occupancy-occupied-fill></span>
+                            <span class="is-reserved" data-calendar-day-occupancy-reserved-fill></span>
+                        </div>
+                        <p class="admin-cal-day-occupancy-hint" data-calendar-day-occupancy-hint></p>
+                        <ul class="admin-cal-day-types" data-calendar-day-types></ul>
+                    </div>
                 </div>
-                <div class="admin-cal-day-occupancy-meter"
-                     role="meter"
-                     data-calendar-day-occupancy-meter
-                     aria-label="Rooms occupied this night"
-                     aria-valuemin="0"
-                     aria-valuemax="0"
-                     aria-valuenow="0">
-                    <span class="is-occupied" data-calendar-day-occupancy-occupied-fill></span>
-                    <span class="is-reserved" data-calendar-day-occupancy-reserved-fill></span>
-                </div>
-                <p class="admin-cal-day-occupancy-hint" data-calendar-day-occupancy-hint></p>
-                <ul class="admin-cal-day-types" data-calendar-day-types></ul>
-            </div>
+            </details>
             <label class="admin-cal-day-find" data-calendar-day-find hidden>
                 <input type="search" data-calendar-day-filter placeholder="Find a guest" aria-label="Find a guest" autocomplete="off">
             </label>
-            <p class="admin-cal-day-empty" data-calendar-day-empty hidden>No guests on this date.</p>
-            <section class="admin-cal-day-group" data-calendar-day-occupied-block hidden>
-                <h3>Occupied <span data-calendar-day-occupied-heading-count></span></h3>
-                <div class="admin-cal-day-rows" data-calendar-day-occupied-list></div>
-            </section>
-            <section class="admin-cal-day-group" data-calendar-day-reserved-block hidden>
-                <h3>Reserved <span data-calendar-day-reserved-heading-count></span></h3>
-                <div class="admin-cal-day-rows" data-calendar-day-reserved-list></div>
-            </section>
-            <section class="admin-cal-day-group" data-calendar-day-out-block hidden>
-                <h3>Checkout <span data-calendar-day-out-heading-count></span></h3>
-                <div class="admin-cal-day-rows" data-calendar-day-out-list></div>
-            </section>
+            <div class="admin-cal-day-groups">
+                <p class="admin-cal-day-empty" data-calendar-day-empty hidden>No guests on this date.</p>
+                <section class="admin-cal-day-group" data-cal-group="arriving" data-calendar-day-arriving-block hidden>
+                    <h3>Arriving today — needs room <span data-calendar-day-arriving-heading-count></span></h3>
+                    <div class="admin-cal-day-rows" data-calendar-day-arriving-list></div>
+                </section>
+                <section class="admin-cal-day-group" data-cal-group="stay" data-calendar-day-occupied-block hidden>
+                    <h3>Occupied <span data-calendar-day-occupied-heading-count></span></h3>
+                    <div class="admin-cal-day-rows" data-calendar-day-occupied-list></div>
+                </section>
+                <section class="admin-cal-day-group" data-cal-group="reserved" data-calendar-day-reserved-block hidden>
+                    <h3>Reserved <span data-calendar-day-reserved-heading-count></span></h3>
+                    <div class="admin-cal-day-rows" data-calendar-day-reserved-list></div>
+                </section>
+                <section class="admin-cal-day-group" data-cal-group="out" data-calendar-day-out-block hidden>
+                    <h3>Checkout <span data-calendar-day-out-heading-count></span></h3>
+                    <div class="admin-cal-day-rows" data-calendar-day-out-list></div>
+                </section>
+            </div>
         </div>
     </section>
 </div>

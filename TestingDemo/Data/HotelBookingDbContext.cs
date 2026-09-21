@@ -321,6 +321,9 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.TagsJson).HasMaxLength(1000);
             entity.Property(e => e.HotelReply).HasMaxLength(1000);
             entity.Property(e => e.HotelReplyBy).HasMaxLength(120);
+            entity.Property(e => e.DeletedReason).HasMaxLength(200);
+            entity.Property(e => e.DeletedNote).HasMaxLength(500);
+            entity.Property(e => e.DeletedBy).HasMaxLength(120);
             entity.Property(e => e.HasHotelReply)
                 .HasComputedColumnSql(
                     "(CASE WHEN [HotelReply] IS NULL OR [HotelReply] = N'' THEN CONVERT(bit,0) ELSE CONVERT(bit,1) END)",

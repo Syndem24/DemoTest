@@ -48,6 +48,12 @@ public class StayReview
     /// <summary>Persisted computed column — makes the reply-state filter index-friendly.</summary>
     public bool HasHotelReply { get; private set; }
 
+    /// <summary>Soft delete — set when an admin removes the review. The row stays so the booking remains ineligible for a new review; excluded from all lists.</summary>
+    public DateTime? DeletedAtUtc { get; set; }
+    public string? DeletedReason { get; set; }
+    public string? DeletedNote { get; set; }
+    public string? DeletedBy { get; set; }
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 

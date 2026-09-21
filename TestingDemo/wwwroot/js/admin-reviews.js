@@ -37,6 +37,7 @@
   let prefetched = null; // { key, data }
 
   let activeReviewId = 0;
+  let activeDetail = null;
   let lastFocused = null;
   const REPLY_TEMPLATES = {
     thanks: 'Thank you for your feedback. We appreciate your stay at Mori International Hotel.',
@@ -367,6 +368,7 @@
     document.body.classList.remove('admin-reviews-modal-open');
     detailAbort?.abort();
     activeReviewId = 0;
+    activeDetail = null;
     if (lastFocused instanceof HTMLElement) lastFocused.focus();
   }
 
@@ -391,8 +393,12 @@
         </p>
 
         <div class="admin-reviews-actions">
-          <button type="button" class="admin-flush-ghost" data-action-publish="${item.isPublished ? 'hide' : 'show'}">
-            ${item.isPublished ? 'Hide review' : 'Publish review'}
+          ${item.isPublished ? '' : `
+          <button type="button" class="admin-flush-ghost" data-action-publish="show">
+            Publish review
+          </button>`}
+          <button type="button" class="admin-flush-ghost is-danger" data-action-delete>
+            Delete review
           </button>
         </div>
 
@@ -414,6 +420,99 @@
     `;
   }
 
+  function deleteConfirmHtml(item) {
+    return `
+      <article class="admin-reviews-detail" data-review-delete-id="${Number(item.id)}">
+        <div class="admin-reviews-delete-warn" role="alert">
+          <strong>Delete this review permanently?</strong>
+          <p>The review from ${esc(item.guestDisplayName)} for ${esc(item.bookingReference)} will be removed for good — this cannot be undone. The reason below is kept in the audit trail. The stay stays marked as reviewed, so the guest cannot post a replacement.</p>
+        </div>
+        <label class="admin-reviews-reply-field">
+          <span>Why is it being deleted? <em aria-hidden="true">*</em></span>
+          <select data-delete-reason>
+            <option value="" selected>Select a reason…</option>
+            <option value="Spam">Spam</option>
+            <option value="Fake or misleading">Fake or misleading review</option>
+            <option value="Explicit or inappropriate content">Explicit or inappropriate content</option>
+            <option value="Other">Other</option>
+          </select>
+        </label>
+        <label class="admin-reviews-reply-field">
+          <span>Note for the record (optional)</span>
+          <textarea maxlength="500" data-delete-note placeholder="e.g. Not a real guest, contains profanity, links to another site…"></textarea>
+        </label>
+        <label class="admin-reviews-delete-recheck">
+          <input type="checkbox" data-delete-allow-rereview />
+          <span>Let the guest write a new review for this stay <em>(use only for genuine removals — not spam or abuse)</em></span>
+        </label>
+        <div class="admin-reviews-actions">
+          <button type="button" class="admin-flush-submit is-danger" data-action-confirm-delete disabled>Delete permanently</button>
+          <button type="button" class="admin-flush-ghost" data-action-cancel-delete>Back to review</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function removeRow(id) {
+    store.items.delete(id);
+    store.total = Math.max(0, store.total - 1);
+    if (totalEl) totalEl.textContent = String(store.total);
+    listEl?.querySelector(`[data-review-id="${id}"]`)?.remove();
+    if (listEl && !listEl.querySelector('[data-review-id]')) {
+      listEl.innerHTML = '<tr><td colspan="8" class="admin-bookings-loading">No reviews found.</td></tr>';
+    }
+    renderPager(listEl?.childElementCount || 0);
+  }
+
+  function bindDeleteConfirm() {
+    if (!modalBody) return;
+    const reasonSel = modalBody.querySelector('[data-delete-reason]');
+    const noteEl = modalBody.querySelector('[data-delete-note]');
+    const confirmBtn = modalBody.querySelector('[data-action-confirm-delete]');
+    const cancelBtn = modalBody.querySelector('[data-action-cancel-delete]');
+
+    reasonSel?.addEventListener('change', () => {
+      if (confirmBtn) confirmBtn.disabled = !reasonSel.value;
+    });
+
+    cancelBtn?.addEventListener('click', () => {
+      if (!activeDetail) return;
+      modalBody.innerHTML = detailHtml(activeDetail);
+      bindDetailActions();
+    });
+
+    confirmBtn?.addEventListener('click', async () => {
+      if (!activeReviewId || !reasonSel?.value) return;
+      confirmBtn.disabled = true;
+      try {
+        await apiFetch(`/api/admin/reviews/${activeReviewId}`, {
+          method: 'DELETE',
+          body: JSON.stringify({
+            reason: reasonSel.value,
+            note: noteEl?.value || '',
+            allowReReview: modalBody.querySelector('[data-delete-allow-rereview]')?.checked === true,
+          }),
+        });
+        const deletedId = activeReviewId;
+        const hadRowsLeft = store.items.size > 1;
+        removeRow(deletedId);
+        closeModal();
+        showMessage('Review deleted.');
+        if (typeof window.showMoriNotice === 'function') {
+          window.showMoriNotice('Review deleted.', 'success');
+        }
+        if (!hadRowsLeft) {
+          store.page = Math.max(1, store.page - 1);
+          prefetched = null;
+          await loadPage();
+        }
+      } catch (err) {
+        showMessage(err instanceof Error ? err.message : 'Unable to delete review.', true);
+        confirmBtn.disabled = false;
+      }
+    });
+  }
+
   async function loadDetail(id) {
     if (!modalBody) return;
     detailAbort?.abort();
@@ -424,10 +523,11 @@
     try {
       const detail = await apiFetch(`/api/admin/reviews/${id}`, { signal: ctl.signal });
       if (ctl.signal.aborted) return;
+      activeDetail = detail;
       if (modalTitle) modalTitle.textContent = `Review details · ${detail.bookingReference}`;
       modalBody.innerHTML = detailHtml(detail);
       bindDetailActions();
-      modalBody.querySelector('[data-action-publish]')?.focus();
+      (modalBody.querySelector('[data-action-publish]') || modalBody.querySelector('[data-action-delete]'))?.focus();
     } catch (err) {
       if (ctl.signal.aborted || err?.name === 'AbortError') return;
       modalBody.innerHTML = '<p class="admin-reviews-empty">Unable to load review details.</p>';
@@ -468,6 +568,13 @@
       } finally {
         if (btn) btn.disabled = false;
       }
+    });
+
+    modalBody.querySelector('[data-action-delete]')?.addEventListener('click', () => {
+      if (!activeDetail || !modalBody) return;
+      modalBody.innerHTML = deleteConfirmHtml(activeDetail);
+      bindDeleteConfirm();
+      modalBody.querySelector('[data-delete-reason]')?.focus();
     });
 
     modalBody.querySelector('[data-action-reply]')?.addEventListener('click', async (event) => {

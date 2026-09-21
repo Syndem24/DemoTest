@@ -87,7 +87,7 @@ public sealed partial class BookingService
             }
             else if (offersByType.Count > 0)
             {
-                // Eligible rate offers replace the sellable rate automatically â€” no guest choice required.
+                // Eligible rate offers replace the sellable rate automatically — no guest choice required.
                 appliedOffer = offersByType.Values
                     .OrderBy(o => o.PromoPricePerNight)
                     .First();

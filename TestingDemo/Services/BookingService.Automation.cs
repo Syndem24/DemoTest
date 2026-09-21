@@ -278,7 +278,7 @@ public sealed partial class BookingService
         CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
-        // Past scheduled check-in only â€” never cancel before arrival time.
+        // Past scheduled check-in only — never cancel before arrival time.
         var candidates = await _db.Bookings
             .Include(item => item.Items)
                 .ThenInclude(line => line.RoomAssignments)

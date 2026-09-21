@@ -74,6 +74,38 @@ public sealed class AdminReviewsApiController : ControllerBase
         }
     }
 
+    [HttpDelete("{id:int}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(
+        int id,
+        [FromBody] DeleteStayReviewRequest request,
+        CancellationToken cancellationToken)
+    {
+        var actorUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(actorUserId)) return Unauthorized();
+        var actorDisplayName = User.FindFirstValue("FullName") ?? User.Identity?.Name ?? "Admin";
+
+        if (string.IsNullOrWhiteSpace(request?.Reason))
+            return BadRequest(new { message = "Choose why this review is being deleted." });
+
+        try
+        {
+            await _reviews.DeleteAsync(
+                id,
+                request.Reason.Trim(),
+                request.Note?.Trim(),
+                request.AllowReReview,
+                actorUserId,
+                actorDisplayName,
+                cancellationToken);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = "Review was not found." });
+        }
+    }
+
     [HttpPut("{id:int}/reply")]
     [ValidateAntiForgeryToken]
     public async Task<ActionResult<AdminStayReviewDto>> SetReply(

@@ -48,6 +48,11 @@
   const calendarDayOccupiedList = calendarDayModal?.querySelector('[data-calendar-day-occupied-list]');
   const calendarDayReservedList = calendarDayModal?.querySelector('[data-calendar-day-reserved-list]');
   const calendarDayOutList = calendarDayModal?.querySelector('[data-calendar-day-out-list]');
+  const calendarDayArrivingBlock = calendarDayModal?.querySelector('[data-calendar-day-arriving-block]');
+  const calendarDayArrivingList = calendarDayModal?.querySelector('[data-calendar-day-arriving-list]');
+  const calendarDayArrivingHeadingCount = calendarDayModal?.querySelector('[data-calendar-day-arriving-heading-count]');
+  const calendarDayInCount = calendarDayModal?.querySelector('[data-calendar-day-in-count]');
+  const calendarDayGroupBtns = calendarDayModal?.querySelectorAll('[data-calendar-day-group]');
   const paymentViewModal = document.querySelector('[data-payment-view-modal]');
   const paymentAddModal = document.querySelector('[data-payment-add-modal]');
   const paymentViewList = paymentViewModal?.querySelector('[data-payment-view-list]');
@@ -59,13 +64,6 @@
   const pendingCallsList = bookingsRoot.querySelector('[data-pending-calls-list]');
   const checkoutsPanel = bookingsRoot.querySelector('[data-checkouts-panel]');
   const checkoutsList = bookingsRoot.querySelector('[data-checkouts-list]');
-  const daytimeFlowOpenButton = document.querySelector('[data-daytime-flow-open]');
-  const daytimeFlowPanel = bookingsRoot.querySelector('[data-daytime-flow-panel]');
-  const daytimeFlowToolbar = bookingsRoot.querySelector('[data-daytime-flow-toolbar]');
-  const daytimeArrivalsList = bookingsRoot.querySelector('[data-daytime-arrivals-list]');
-  const daytimeCheckoutsList = bookingsRoot.querySelector('[data-daytime-checkouts-list]');
-  const daytimeArrivalsTitle = bookingsRoot.querySelector('[data-daytime-arrivals-title]');
-  const daytimeCheckoutsTitle = bookingsRoot.querySelector('[data-daytime-checkouts-title]');
   const detailModal = document.querySelector('[data-booking-modal]');
   const detailBody = detailModal?.querySelector('[data-booking-detail]');
   const detailActions = detailModal?.querySelector('[data-booking-detail-actions]');
@@ -158,35 +156,14 @@
   let arrivalsFromUrlHandled = false;
   let pendingCallsFromUrlHandled = false;
   let checkoutsFromUrlHandled = false;
-  let daytimeFlowLocalDateIso = '';
   /** When set, open this day's guest modal once calendar events finish loading. */
   let pendingDayModalKey = null;
+  let calendarDayGroupFilter = 'all';
+  let calendarDayListTotal = 0;
   let pollTimer = null;
   let audioContext = null;
   let audioUnlocked = false;
   let soundEnabled = localStorage.getItem('moriBookingSound') !== 'off';
-  const DAYTIME_CALL_STATE_KEY = 'moriDaytimeCallState:v1';
-
-  function readDaytimeCallState() {
-    try {
-      const raw = localStorage.getItem(DAYTIME_CALL_STATE_KEY);
-      if (!raw) return {};
-      const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === 'object' ? parsed : {};
-    } catch {
-      return {};
-    }
-  }
-
-  function writeDaytimeCallState(state) {
-    try {
-      localStorage.setItem(DAYTIME_CALL_STATE_KEY, JSON.stringify(state));
-    } catch {
-      // Ignore storage failures (private mode/full quota).
-    }
-  }
-
-  let daytimeCallState = readDaytimeCallState();
 
   function setSoundLabel() {
     if (!soundButton) return;
@@ -1109,23 +1086,6 @@
     return `${formatDateTime(checkIn) || formatDate(checkIn)} \u2192 ${formatDateTime(checkOut) || formatDate(checkOut)}`;
   }
 
-  function daytimeCallStateKey(localDateIso, kind, bookingId) {
-    const date = String(localDateIso || '').slice(0, 10);
-    return `${date}|${kind}|${Number(bookingId || 0)}`;
-  }
-
-  function isDaytimeCallDone(localDateIso, kind, bookingId) {
-    const key = daytimeCallStateKey(localDateIso, kind, bookingId);
-    return Boolean(daytimeCallState[key]);
-  }
-
-  function setDaytimeCallDone(localDateIso, kind, bookingId, done) {
-    const key = daytimeCallStateKey(localDateIso, kind, bookingId);
-    if (done) daytimeCallState[key] = true;
-    else delete daytimeCallState[key];
-    writeDaytimeCallState(daytimeCallState);
-  }
-
   function toManilaDateTimeIso(dateStr, timeStr) {
     const date = String(dateStr || '').slice(0, 10);
     const time = String(timeStr || '00:00').slice(0, 5);
@@ -1257,7 +1217,6 @@
     if (active) {
       if (pendingCallsPanel) pendingCallsPanel.hidden = true;
       if (checkoutsPanel) checkoutsPanel.hidden = true;
-      if (daytimeFlowPanel) daytimeFlowPanel.hidden = true;
     }
     arrivalsPanel.hidden = !active;
     syncListChromeHidden();
@@ -1268,7 +1227,6 @@
     if (active) {
       if (arrivalsPanel) arrivalsPanel.hidden = true;
       if (checkoutsPanel) checkoutsPanel.hidden = true;
-      if (daytimeFlowPanel) daytimeFlowPanel.hidden = true;
     }
     pendingCallsPanel.hidden = !active;
     syncListChromeHidden();
@@ -1279,33 +1237,15 @@
     if (active) {
       if (arrivalsPanel) arrivalsPanel.hidden = true;
       if (pendingCallsPanel) pendingCallsPanel.hidden = true;
-      if (daytimeFlowPanel) daytimeFlowPanel.hidden = true;
     }
     checkoutsPanel.hidden = !active;
-    syncListChromeHidden();
-  }
-
-  function setDaytimeFlowMode(active) {
-    if (!daytimeFlowPanel) return;
-    if (active) {
-      if (arrivalsPanel) arrivalsPanel.hidden = true;
-      if (pendingCallsPanel) pendingCallsPanel.hidden = true;
-      if (checkoutsPanel) checkoutsPanel.hidden = true;
-    }
-    daytimeFlowPanel.hidden = !active;
-    if (daytimeFlowToolbar) daytimeFlowToolbar.hidden = !active;
-    bookingsRoot
-      ?.querySelector('[data-room-type-availability]')
-      ?.toggleAttribute('hidden', Boolean(active));
     syncListChromeHidden();
   }
 
   function syncListChromeHidden() {
     const specialOpen = (arrivalsPanel && !arrivalsPanel.hidden)
       || (pendingCallsPanel && !pendingCallsPanel.hidden)
-      || (checkoutsPanel && !checkoutsPanel.hidden)
-      || (daytimeFlowPanel && !daytimeFlowPanel.hidden);
-    if (daytimeFlowToolbar) daytimeFlowToolbar.hidden = !daytimeFlowPanel || daytimeFlowPanel.hidden;
+      || (checkoutsPanel && !checkoutsPanel.hidden);
     bookingsRoot?.querySelector('.admin-bookings-toolbar')?.toggleAttribute('hidden', specialOpen);
     bookingsRoot?.querySelector('.admin-bookings-table-wrap')?.toggleAttribute('hidden', specialOpen);
     bookingsRoot?.querySelector('.admin-bookings-pagination')?.toggleAttribute('hidden', specialOpen);
@@ -1381,71 +1321,6 @@
     return button;
   }
 
-  function daytimeFlowCard(booking, kind, localDateIso) {
-    const card = document.createElement('article');
-    card.className = 'admin-arrival-card admin-daytime-card';
-    const rooms = (booking.items || [])
-      .flatMap((line) => {
-        const assigned = (line.assignedRooms || []).map((room) => room.roomNumber).filter(Boolean);
-        return assigned.length
-          ? assigned
-          : [`${line.quantity}\u00D7 ${line.roomTypeName}`];
-      })
-      .join(', ');
-    const calledDone = isDaytimeCallDone(localDateIso, kind, booking.id);
-    card.classList.toggle('is-needs-call', !calledDone);
-    card.classList.toggle('is-call-done', calledDone);
-
-    const topRow = document.createElement('div');
-    topRow.className = 'admin-daytime-top';
-    const title = document.createElement('strong');
-    title.textContent = `${booking.reference} \u00B7 ${booking.guestName}`;
-    const timeBadge = document.createElement('span');
-    timeBadge.className = 'admin-daytime-time-badge';
-    timeBadge.textContent = kind === 'arrival'
-      ? `Arrive at ${formatTime(booking.checkInAtUtc || booking.checkIn)}`
-      : `Checkout at ${formatTime(booking.checkoutTimeUtc || booking.checkOut)}`;
-
-    topRow.append(title, timeBadge);
-
-    const callLine = document.createElement('span');
-    callLine.className = 'admin-daytime-call-line';
-    callLine.textContent = booking.guestPhone
-      ? `Call ${booking.guestPhone}`
-      : 'No phone number on file';
-
-    const status = document.createElement('span');
-    status.textContent = `Status: ${displayEnum(booking.status)}`;
-    const meta = document.createElement('span');
-    meta.textContent = rooms || 'Rooms pending assignment';
-    const time = document.createElement('small');
-    time.textContent = kind === 'arrival'
-      ? `Check-in ${formatDateTime(booking.checkInAtUtc || booking.checkIn)}`
-      : `Checkout ${formatDateTime(booking.checkoutTimeUtc || booking.checkOut)}`;
-
-    const actions = document.createElement('div');
-    actions.className = 'admin-daytime-actions';
-    const detailsBtn = document.createElement('button');
-    detailsBtn.type = 'button';
-    detailsBtn.className = 'admin-daytime-action';
-    detailsBtn.textContent = 'Open details';
-    detailsBtn.addEventListener('click', () => {
-      setDaytimeCallDone(localDateIso, kind, booking.id, true);
-      syncMarkVisual(true);
-      openBookingDetails(booking.id, booking);
-    });
-
-    const syncMarkVisual = (done) => {
-      card.classList.toggle('is-needs-call', !done);
-      card.classList.toggle('is-call-done', done);
-    };
-    syncMarkVisual(calledDone);
-
-    actions.append(detailsBtn);
-    card.append(topRow, callLine, status, meta, time, actions);
-    return card;
-  }
-
   async function refreshArrivals() {
     if (!arrivalsList) return;
     arrivalsList.innerHTML = '<p class="admin-bookings-loading">Loading arrivals\u2026</p>';
@@ -1503,62 +1378,6 @@
     }
   }
 
-  function formatDaytimeDateLabel(localDateIso) {
-    if (!localDateIso) return 'today';
-    const dt = new Date(`${localDateIso}T00:00:00`);
-    return Number.isNaN(dt.getTime())
-      ? localDateIso
-      : dt.toLocaleDateString(PH_LOCALE, { month: 'short', day: 'numeric', year: 'numeric' });
-  }
-
-  async function refreshDaytimeFlow() {
-    if (!daytimeArrivalsList || !daytimeCheckoutsList) return;
-    daytimeArrivalsList.innerHTML = '<p class="admin-bookings-loading">Loading daytime arrivals\u2026</p>';
-    daytimeCheckoutsList.innerHTML = '<p class="admin-bookings-loading">Loading daytime checkouts\u2026</p>';
-    try {
-      const payload = await apiFetch('/api/admin/bookings/daytime-flow?startHour=6&endHour=18');
-      const arrivals = payload?.arrivals || [];
-      const checkouts = payload?.checkouts || [];
-      const dateLabel = formatDaytimeDateLabel(payload?.localDateIso);
-      const startHour = Number(payload?.startHour ?? 6);
-      const endHour = Number(payload?.endHour ?? 18);
-      daytimeFlowLocalDateIso = String(payload?.localDateIso || '');
-
-      if (daytimeArrivalsTitle) {
-        daytimeArrivalsTitle.textContent = `Arrivals \u00B7 ${dateLabel} (${startHour}:00-${endHour}:59)`;
-      }
-      if (daytimeCheckoutsTitle) {
-        daytimeCheckoutsTitle.textContent = `Checkouts \u00B7 ${dateLabel} (${startHour}:00-${endHour}:59)`;
-      }
-
-      daytimeArrivalsList.replaceChildren();
-      const visibleArrivals = arrivals.filter((booking) => booking.status === 'Pending');
-      if (!visibleArrivals.length) {
-        const empty = document.createElement('p');
-        empty.className = 'admin-bookings-empty';
-        empty.textContent = 'No daytime arrivals for today.';
-        daytimeArrivalsList.append(empty);
-      } else {
-        visibleArrivals.forEach((booking) => daytimeArrivalsList.append(daytimeFlowCard(booking, 'arrival', daytimeFlowLocalDateIso)));
-      }
-
-      daytimeCheckoutsList.replaceChildren();
-      const visibleCheckouts = checkouts.filter((booking) => booking.status === 'Pending');
-      if (!visibleCheckouts.length) {
-        const empty = document.createElement('p');
-        empty.className = 'admin-bookings-empty';
-        empty.textContent = 'No daytime checkouts for today.';
-        daytimeCheckoutsList.append(empty);
-      } else {
-        visibleCheckouts.forEach((booking) => daytimeCheckoutsList.append(daytimeFlowCard(booking, 'checkout', daytimeFlowLocalDateIso)));
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to load daytime flow.';
-      daytimeArrivalsList.textContent = message;
-      daytimeCheckoutsList.textContent = message;
-    }
-  }
-
   async function openArrivalsSoon() {
     setArrivalsMode(true);
     await refreshArrivals();
@@ -1572,11 +1391,6 @@
   async function openCheckoutsSoon() {
     setCheckoutsMode(true);
     await refreshCheckouts();
-  }
-
-  async function openDaytimeFlow() {
-    setDaytimeFlowMode(true);
-    await refreshDaytimeFlow();
   }
 
   function closeArrivalsSoon() {
@@ -1606,16 +1420,11 @@
     }
   }
 
-  function closeDaytimeFlow() {
-    setDaytimeFlowMode(false);
-  }
-
   function refreshActiveBookingPanel() {
     if (isLeavingBookingsPage) return Promise.resolve();
     if (!arrivalsPanel?.hidden) return refreshArrivals();
     if (!pendingCallsPanel?.hidden) return refreshPendingCalls();
     if (!checkoutsPanel?.hidden) return refreshCheckouts();
-    if (!daytimeFlowPanel?.hidden) return refreshDaytimeFlow();
     return refreshBookings();
   }
 
@@ -1689,6 +1498,13 @@
     const arrival = manilaParts(booking.checkInAtUtc || booking.checkIn)?.date;
     if (!arrival) return false;
     return manilaTodayIso() >= arrival;
+  }
+
+  /** True once the guest is more than 1 hour past the expected check-in time. */
+  function isArrivalOverdue(booking) {
+    const checkIn = parseUtc(booking.checkInAtUtc || booking.checkIn);
+    if (!checkIn) return false;
+    return Date.now() >= checkIn.getTime() + 60 * 60 * 1000;
   }
 
   function arrivalAssignMessage(booking) {
@@ -1812,8 +1628,18 @@
     actionCell.className = 'admin-booking-table-actions';
     const viewButton = document.createElement('button');
     viewButton.type = 'button';
-    viewButton.textContent =
-      needsRooms && canAssignRoomsToday(booking) ? 'Manage booking' : 'View details';
+    const assignableNow = needsRooms && canAssignRoomsToday(booking);
+    viewButton.textContent = assignableNow ? 'Manage booking' : 'View details';
+    if (needsRooms && isArrivalOverdue(booking)) {
+      viewButton.classList.add('needs-verify');
+      const badge = document.createElement('span');
+      badge.className = 'admin-payment-view-badge';
+      badge.textContent = '1';
+      badge.setAttribute('aria-hidden', 'true');
+      viewButton.appendChild(badge);
+      viewButton.title =
+        'Guest is past the expected check-in by over an hour and still has no room — open to assign.';
+    }
     viewButton.addEventListener('click', () => openBookingDetails(booking.id, booking));
     actionCell.append(viewButton);
 
@@ -1824,6 +1650,7 @@
   function closeBookingDetails() {
     if (!detailModal) return;
     detailModal.hidden = true;
+    detailModal.classList.remove('booking-needs-action');
     selectedBooking = null;
     // Keep receptionExtrasStageBookingId so reopening the same guest stays on Checkout (step 5).
     clearReceptionFlowPath();
@@ -2190,6 +2017,8 @@
 
     const status = displayEnum(booking.status);
     const needsRooms = bookingNeedsRooms(booking);
+    // Warn only when the confirmed guest is 1h+ past expected check-in unassigned.
+    detailModal.classList.toggle('booking-needs-action', needsRooms && isArrivalOverdue(booking));
     const statusPill = bookingStatusPill(booking);
     const summary = document.createElement('div');
     summary.className = 'admin-booking-detail-summary';
@@ -6634,6 +6463,10 @@
     calendarElement.querySelectorAll('.fc-daygrid-day[data-date]').forEach((cell) => {
       const dayKey = cell.getAttribute('data-date') || '';
       const staying = guestsStayingOnDay(dayKey);
+      const occupied = staying.filter(stayRoomsAssigned).length;
+      const arriving = staying.filter(
+        (item) => stayBounds(item).start === dayKey && !stayRoomsAssigned(item)
+      ).length;
       const leaving = guestsCheckingOutOnDay(dayKey);
       const occ = occupancyForDay(dayKey);
       cell.classList.toggle('has-guests', staying.length > 0 || leaving.length > 0);
@@ -6653,36 +6486,51 @@
       mount.replaceChildren();
       if (!dayKey) return;
 
-      if (staying.length > 0 || leaving.length > 0) {
-        const pair = document.createElement('button');
-        pair.type = 'button';
-        pair.className = 'admin-cal-counts';
-        pair.setAttribute('data-cal-count', '');
-        pair.setAttribute('data-day', dayKey);
-        pair.setAttribute(
-          'aria-label',
-          `${staying.length} staying, ${leaving.length} checking out on ${formatCalendarDayHeading(dayKey)}`
-        );
+      const pair = document.createElement('button');
+      pair.type = 'button';
+      pair.className = 'admin-cal-counts admin-cal-daybox';
+      pair.setAttribute('data-cal-count', '');
+      pair.setAttribute('data-day', dayKey);
+      pair.setAttribute(
+        'aria-label',
+        `${formatCalendarDayHeading(dayKey)} — ${occupied} staying, ${leaving.length} checking out`
+      );
 
-        const stayEl = document.createElement('span');
-        stayEl.className = 'admin-cal-count is-stay';
-        const stayNum = document.createElement('b');
-        stayNum.textContent = String(staying.length);
-        const stayLbl = document.createElement('small');
-        stayLbl.textContent = 'stay';
-        stayEl.append(stayNum, stayLbl);
+      const dateEl = document.createElement('span');
+      dateEl.className = 'admin-cal-daybox-date';
+      const dayNum = document.createElement('b');
+      dayNum.textContent = String(Number(dayKey.slice(8, 10)) || '');
+      const dayMeta = document.createElement('small');
+      dayMeta.textContent = cell.classList.contains('fc-day-today')
+        ? 'today'
+        : new Date(`${dayKey}T00:00:00Z`).toLocaleDateString(PH_LOCALE, {
+            timeZone: 'UTC',
+            weekday: 'short',
+          });
+      dateEl.append(dayNum, dayMeta);
 
-        const outEl = document.createElement('span');
-        outEl.className = 'admin-cal-count is-out';
-        const outNum = document.createElement('b');
-        outNum.textContent = String(leaving.length);
-        const outLbl = document.createElement('small');
-        outLbl.textContent = 'out';
-        outEl.append(outNum, outLbl);
-
-        pair.append(stayEl, outEl);
-        mount.append(pair);
+      pair.append(dateEl);
+      if (occupied > 0 || arriving > 0 || leaving > 0) {
+        const stats = document.createElement('span');
+        stats.className = 'admin-cal-daybox-stats';
+        const addChip = (cls, count, label) => {
+          const chip = document.createElement('span');
+          chip.className = `admin-cal-count ${cls}`;
+          const num = document.createElement('b');
+          num.textContent = String(count);
+          const lbl = document.createElement('small');
+          lbl.textContent = label;
+          chip.append(num, lbl);
+          stats.append(chip);
+        };
+        if (occupied > 0) addChip('is-stay', occupied, 'stay');
+        if (arriving > 0) addChip('is-in', arriving, 'in');
+        if (leaving > 0) addChip('is-out', leaving, 'out');
+        pair.append(stats);
+      } else {
+        pair.classList.add('is-empty');
       }
+      mount.append(pair);
 
       if (occ) {
         mount.append(occupancyBarEl(occ));
@@ -6779,6 +6627,23 @@
       }
       row.hidden = !String(row.textContent || '').toLowerCase().includes(query);
     });
+    calendarDayModal?.querySelectorAll('.admin-cal-day-group').forEach((block) => {
+      if (!(block instanceof HTMLElement)) return;
+      const groupKeys = String(block.getAttribute('data-cal-group') || 'all').split(/\s+/);
+      const groupMatch = calendarDayGroupFilter === 'all' || groupKeys.includes(calendarDayGroupFilter);
+      const hasGuests = block.querySelector('[data-calendar-guest]') !== null;
+      const hasVisible = block.querySelector('[data-calendar-guest]:not([hidden])') !== null;
+      block.hidden = !hasGuests || !groupMatch || !hasVisible;
+    });
+    if (calendarDayEmpty) {
+      const anyGroupVisible = calendarDayModal?.querySelector('.admin-cal-day-group:not([hidden])') !== null;
+      calendarDayEmpty.hidden = Boolean(anyGroupVisible);
+      if (!anyGroupVisible) {
+        calendarDayEmpty.textContent = calendarDayListTotal > 0
+          ? 'No guests match this view.'
+          : 'No guests on this date.';
+      }
+    }
   }
 
   function stayRoomsAssigned(item) {
@@ -6878,26 +6743,45 @@
     if (!calendarDayModal || !dayKey) return;
     const staying = guestsStayingOnDay(dayKey);
     const leaving = guestsCheckingOutOnDay(dayKey);
+    const arrivingGuests = staying.filter(
+      (item) =>
+        stayBounds(item).start === dayKey &&
+        item.status === 'Confirmed' &&
+        !stayRoomsAssigned(item)
+    );
+    const arrivingIds = new Set(arrivingGuests.map((item) => Number(item.id)));
     const occupiedGuests = staying.filter(stayRoomsAssigned);
-    const reservedGuests = staying.filter((item) => !stayRoomsAssigned(item));
+    const reservedGuests = staying.filter(
+      (item) => !stayRoomsAssigned(item) && !arrivingIds.has(Number(item.id))
+    );
     if (calendarDayTitle) calendarDayTitle.textContent = formatCalendarDayHeading(dayKey);
-    if (calendarDayStayCount) calendarDayStayCount.textContent = String(staying.length);
+    if (calendarDayStayCount) calendarDayStayCount.textContent = String(occupiedGuests.length);
+    if (calendarDayInCount) calendarDayInCount.textContent = String(arrivingGuests.length);
     if (calendarDayOutCount) calendarDayOutCount.textContent = String(leaving.length);
+    fillGuestGroup(calendarDayArrivingBlock, calendarDayArrivingList, arrivingGuests, false, calendarDayArrivingHeadingCount);
     fillGuestGroup(calendarDayOccupiedBlock, calendarDayOccupiedList, occupiedGuests, false, calendarDayOccupiedHeadingCount);
     fillGuestGroup(calendarDayReservedBlock, calendarDayReservedList, reservedGuests, false, calendarDayReservedHeadingCount);
     fillGuestGroup(calendarDayOutBlock, calendarDayOutList, leaving, true, calendarDayOutHeadingCount);
     renderDayOccupancy(dayKey);
-    if (calendarDayEmpty) {
-      calendarDayEmpty.hidden =
-        occupiedGuests.length > 0 || reservedGuests.length > 0 || leaving.length > 0;
+    const guestTotal =
+      occupiedGuests.length + reservedGuests.length + arrivingGuests.length + leaving.length;
+    calendarDayListTotal = guestTotal;
+    // "Rooms this night" stays expanded for quiet days, collapses when the
+    // guest list needs the space.
+    if (calendarDayOccupancy instanceof HTMLDetailsElement) {
+      calendarDayOccupancy.open = guestTotal > 0 && guestTotal < 8;
     }
-    const guestTotal = occupiedGuests.length + reservedGuests.length + leaving.length;
     if (calendarDayFind) {
       calendarDayFind.hidden = guestTotal < 8;
     }
     if (calendarDayFilter) {
       calendarDayFilter.value = '';
     }
+    calendarDayGroupFilter = 'all';
+    calendarDayGroupBtns?.forEach((btn) => {
+      btn.classList.remove('is-active');
+      btn.setAttribute('aria-pressed', 'false');
+    });
     applyCalendarGuestFilter();
 
     calendarDayLastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -7013,6 +6897,19 @@
     button.addEventListener('click', closeCalendarDayModal);
   });
   calendarDayFilter?.addEventListener('input', applyCalendarGuestFilter);
+  calendarDayGroupBtns?.forEach((button) => {
+    button.addEventListener('click', () => {
+      const group = button.getAttribute('data-calendar-day-group') || 'all';
+      // Clicking the active stat again returns to the full list.
+      calendarDayGroupFilter = calendarDayGroupFilter === group ? 'all' : group;
+      calendarDayGroupBtns.forEach((item) => {
+        const active = item === button && calendarDayGroupFilter !== 'all';
+        item.classList.toggle('is-active', active);
+        item.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+      applyCalendarGuestFilter();
+    });
+  });
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape' || isPhotoZoomOpen()) return;
     if (detailModal && !detailModal.hidden) {
@@ -7183,14 +7080,8 @@
       refreshCheckouts();
       return;
     }
-    if (!daytimeFlowPanel?.hidden) {
-      refreshDaytimeFlow();
-      return;
-    }
     refreshBookings();
   });
-  daytimeFlowOpenButton?.addEventListener('click', openDaytimeFlow);
-  bookingsRoot?.querySelector('[data-daytime-flow-close]')?.addEventListener('click', closeDaytimeFlow);
   bookingsRoot?.querySelector('[data-arrivals-close]')?.addEventListener('click', closeArrivalsSoon);
   bookingsRoot?.querySelector('[data-pending-calls-close]')?.addEventListener('click', closePendingCallsSoon);
   bookingsRoot?.querySelector('[data-checkouts-close]')?.addEventListener('click', closeCheckoutsSoon);

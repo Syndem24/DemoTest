@@ -56,6 +56,15 @@ public interface IStayReviewService
         string actorUserId,
         string actorDisplayName,
         CancellationToken cancellationToken = default);
+
+    Task DeleteAsync(
+        int id,
+        string reason,
+        string? note,
+        bool allowReReview,
+        string actorUserId,
+        string actorDisplayName,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class StayReviewService : IStayReviewService
@@ -109,7 +118,7 @@ public sealed class StayReviewService : IStayReviewService
         CancellationToken cancellationToken = default)
     {
         take = Math.Clamp(take, 1, 50);
-        var baseQuery = _db.StayReviews.AsNoTracking().Where(r => r.IsPublished);
+        var baseQuery = _db.StayReviews.AsNoTracking().Where(r => r.IsPublished && r.DeletedAtUtc == null);
 
         var count = await baseQuery.CountAsync(cancellationToken);
         var average = count == 0
@@ -207,8 +216,9 @@ public sealed class StayReviewService : IStayReviewService
 
         // Own reviews + reviews on email-matched stays (so Edit shows when GuestUserId differs).
         var mineRows = await _db.StayReviews.AsNoTracking()
-            .Where(r => r.GuestUserId == guestUserId
-                        || (matchedBookingIds.Count > 0 && matchedBookingIds.Contains(r.BookingId)))
+            .Where(r => r.DeletedAtUtc == null
+                        && (r.GuestUserId == guestUserId
+                        || (matchedBookingIds.Count > 0 && matchedBookingIds.Contains(r.BookingId))))
             .OrderByDescending(r => r.CreatedAtUtc)
             .Take(40)
             .Select(r => new
@@ -274,9 +284,14 @@ public sealed class StayReviewService : IStayReviewService
             if (!EmailMatches(booking.GuestEmail, emails))
                 throw new UnauthorizedAccessException("This stay is not linked to your guest account email.");
 
-            var exists = await _db.StayReviews.AnyAsync(r => r.BookingId == booking.Id, ct);
-            if (exists)
-                throw new InvalidOperationException("This stay already has a review.");
+            var existingStates = await _db.StayReviews
+                .Where(r => r.BookingId == booking.Id)
+                .Select(r => r.DeletedAtUtc)
+                .ToListAsync(ct);
+            if (existingStates.Count > 0)
+                throw new InvalidOperationException(existingStates.Any(d => d is null)
+                    ? "This stay already has a review."
+                    : "A review for this stay was removed by the hotel. Contact the front desk if you believe this was a mistake.");
 
             var now = DateTime.UtcNow;
             var review = new StayReview
@@ -324,7 +339,7 @@ public sealed class StayReviewService : IStayReviewService
 
         var review = await _db.StayReviews
             .Include(r => r.Booking)
-            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken)
+            .FirstOrDefaultAsync(r => r.Id == id && r.DeletedAtUtc == null, cancellationToken)
             ?? throw new KeyNotFoundException("Review was not found.");
 
         var ownsByUserId = string.Equals(review.GuestUserId, guestUserId, StringComparison.Ordinal);
@@ -382,7 +397,7 @@ public sealed class StayReviewService : IStayReviewService
         replyState = string.IsNullOrWhiteSpace(replyState) ? "all" : replyState.Trim().ToLowerInvariant();
         q = string.IsNullOrWhiteSpace(q) ? null : q.Trim();
 
-        var query = _db.StayReviews.AsNoTracking();
+        var query = _db.StayReviews.AsNoTracking().Where(r => r.DeletedAtUtc == null);
 
         query = replyState switch
         {
@@ -437,7 +452,7 @@ public sealed class StayReviewService : IStayReviewService
         var review = await _db.StayReviews
             .AsNoTracking()
             .Include(r => r.Booking)
-            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken)
+            .FirstOrDefaultAsync(r => r.Id == id && r.DeletedAtUtc == null, cancellationToken)
             ?? throw new KeyNotFoundException("Review was not found.");
         return ToAdminDto(review);
     }
@@ -507,6 +522,56 @@ public sealed class StayReviewService : IStayReviewService
         await _db.SaveChangesAsync(cancellationToken);
         InvalidateAdminCounts();
         return ToAdminDto(review);
+    }
+
+    public async Task DeleteAsync(
+        int id,
+        string reason,
+        string? note,
+        bool allowReReview,
+        string actorUserId,
+        string actorDisplayName,
+        CancellationToken cancellationToken = default)
+    {
+        var review = await _db.StayReviews
+            .Include(r => r.Booking)
+            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken)
+            ?? throw new KeyNotFoundException("Review was not found.");
+
+        var detail = TrimOrNull(note, 500);
+        var now = DateTime.UtcNow;
+
+        if (allowReReview)
+        {
+            // Genuine removal — row goes away so the stay can be reviewed again.
+            _db.StayReviews.Remove(review);
+        }
+        else
+        {
+            // Spam/fake/explicit — keep the row so the stay stays "reviewed"
+            // and the guest cannot post a replacement review.
+            review.DeletedAtUtc = now;
+            review.DeletedReason = TrimOrNull(reason, 200);
+            review.DeletedNote = detail;
+            review.DeletedBy = TrimOrNull(actorDisplayName, 120);
+            review.UpdatedAtUtc = now;
+        }
+
+        _audit.Record(
+            SystemAuditIntent.AdministrativeAction,
+            SystemAuditDomain.Review,
+            "StayReview.Deleted",
+            "StayReview",
+            review.Id.ToString(),
+            review.Booking.Reference,
+            summary: $"Deleted review for {review.Booking.Reference} — {TrimOrNull(reason, 200)}"
+                     + (detail is null ? string.Empty : $" ({detail})")
+                     + (allowReReview ? "; re-review allowed" : "; re-review blocked"),
+            actorUserId: actorUserId,
+            actorDisplayName: actorDisplayName);
+
+        await _db.SaveChangesAsync(cancellationToken);
+        InvalidateAdminCounts();
     }
 
     private static StayReviewMineDto ToMineDto(

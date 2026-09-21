@@ -113,7 +113,7 @@ public sealed partial class BookingService
             {
                 if (assignment.Room != null && assignment.Room.Status == RoomStatus.Occupied)
                 {
-                    // Vacant dirty â€” receptionist marks Available after cleaning.
+                    // Vacant dirty — receptionist marks Available after cleaning.
                     assignment.Room.Status = RoomStatus.Cleaning;
                 }
             }
@@ -512,7 +512,7 @@ public sealed partial class BookingService
     }
 
     /// <summary>
-    /// Hotel nights = Manila calendar checkout date âˆ’ check-in date (not elapsed hours).
+    /// Hotel nights = Manila calendar checkout date − check-in date (not elapsed hours).
     /// Early check-in (5:00 AM – 11:00 AM) / late checkout must not inflate the night count.
     /// </summary>
     private static int StayNights(DateTime checkInAtUtc, DateTime checkoutTimeUtc)
@@ -550,7 +550,7 @@ public sealed partial class BookingService
         Booking booking,
         IReadOnlyDictionary<int, (int MaxOccupancy, string Name)> typeMeta)
     {
-        // Extra person (â‚±200/night) is allowed on every room, one extra guest each.
+        // Extra person (₱200/night) is allowed on every room, one extra guest each.
         _ = booking;
         _ = typeMeta;
         return true;
@@ -635,7 +635,7 @@ public sealed partial class BookingService
             booking.Charges.Add(new BookingCharge
             {
                 ChargeType = BookingChargeType.LateCheckout,
-                Label = $"Late check-out (+{lateCheckoutHours}h) Â· {rooms} room{(rooms == 1 ? "" : "s")}",
+                Label = $"Late check-out (+{lateCheckoutHours}h) · {rooms} room{(rooms == 1 ? "" : "s")}",
                 Quantity = lateCheckoutHours,
                 Nights = 1,
                 UnitAmount = StayTimeFees.LateCheckoutFeePerRoomPerHour * rooms,
@@ -650,7 +650,7 @@ public sealed partial class BookingService
             booking.Charges.Add(new BookingCharge
             {
                 ChargeType = BookingChargeType.ExtraPerson,
-                Label = $"Extra person Â· {extraPersons} Ã— {nights} night{(nights == 1 ? "" : "s")}",
+                Label = $"Extra person · {extraPersons} × {nights} night{(nights == 1 ? "" : "s")}",
                 Quantity = extraPersons,
                 Nights = nights,
                 UnitAmount = StayTimeFees.ExtraPersonFeePerNight,
@@ -701,7 +701,7 @@ public sealed partial class BookingService
             UpsertCharge(
                 booking,
                 BookingChargeType.StayExtension,
-                $"Extra night(s) Â· +{totalExtraNights}",
+                $"Extra night(s) · +{totalExtraNights}",
                 quantity: totalExtraNights,
                 nights: totalExtraNights,
                 unitAmount: nightlyRoomTotal,
@@ -715,7 +715,7 @@ public sealed partial class BookingService
             var nightlyRoomTotal = booking.Items.Sum(line => line.PricePerNight * line.Quantity);
             existing.UnitAmount = nightlyRoomTotal;
             existing.Amount = decimal.Round(nightlyRoomTotal * existing.Quantity, 2, MidpointRounding.AwayFromZero);
-            existing.Label = $"Extra night(s) Â· +{existing.Quantity}";
+            existing.Label = $"Extra night(s) · +{existing.Quantity}";
             existing.Nights = existing.Quantity;
         }
     }
@@ -759,8 +759,8 @@ public sealed partial class BookingService
             }
 
             var label = string.IsNullOrWhiteSpace(note)
-                ? "Incidental (damage) Â· cash"
-                : $"Incidental (damage) Â· cash Â· {note}";
+                ? "Incidental (damage) · cash"
+                : $"Incidental (damage) · cash · {note}";
 
             booking.Charges.Add(new BookingCharge
             {
@@ -826,8 +826,8 @@ public sealed partial class BookingService
             var amount = decimal.Round(line.Qty * line.Unit, 2, MidpointRounding.AwayFromZero);
             var takenLabel = FormatTakenDateLabel(line.TakenDate);
             var snackLabel = string.IsNullOrWhiteSpace(product)
-                ? $"Snack & beverage Â· {takenLabel} Â· {line.Qty} Ã— {line.Unit:N2}"
-                : $"Snack & beverage Â· {product} Â· {takenLabel} Â· {line.Qty} Ã— {line.Unit:N2}";
+                ? $"Snack & beverage · {takenLabel} · {line.Qty} × {line.Unit:N2}"
+                : $"Snack & beverage · {product} · {takenLabel} · {line.Qty} × {line.Unit:N2}";
 
             booking.Charges.Add(new BookingCharge
             {
@@ -1188,7 +1188,7 @@ public sealed partial class BookingService
     /// <summary>
     /// Restores promo nightly rates after admin edits that reset lines to list price.
     /// Uses sibling campaign rows (same title/kind/window) so every room type on the stay
-    /// gets that campaign's rate â€” not only the room type of booking.SpecialOfferId.
+    /// gets that campaign's rate — not only the room type of booking.SpecialOfferId.
     /// </summary>
     private async Task ReapplyBookingOfferPricesAsync(
         Booking booking,
@@ -1245,7 +1245,7 @@ public sealed partial class BookingService
         }
         else
         {
-            // Cash-only promo flag without a linked offer id â€” apply any active rate offer per type.
+            // Cash-only promo flag without a linked offer id — apply any active rate offer per type.
             var typeIds = booking.Items
                 .Where(line => line.RoomTypeId.HasValue)
                 .Select(line => line.RoomTypeId!.Value)
@@ -1346,7 +1346,7 @@ public sealed partial class BookingService
             booking.Charges.Add(new BookingCharge
             {
                 ChargeType = BookingChargeType.LoyaltyCoupon,
-                Label = $"Loyalty Coupon Â· {line.RoomTypeName} (âˆ’â‚±{unit:0.##} Â· {cadence})",
+                Label = $"Loyalty Coupon · {line.RoomTypeName} (−₱{unit:0.##} · {cadence})",
                 Quantity = qty,
                 Nights = units,
                 UnitAmount = -unit,

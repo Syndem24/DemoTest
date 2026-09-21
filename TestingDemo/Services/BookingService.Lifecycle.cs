@@ -184,7 +184,7 @@ public sealed partial class BookingService
         booking.Status = status;
         booking.UpdatedAtUtc = now;
 
-        // Staff just reviewed this stay â€” clear the bell item so confirm doesn't
+        // Staff just reviewed this stay — clear the bell item so confirm doesn't
         // re-notify the same guest. Only reopen for a new arrival-window alert.
         var reopenNotification = false;
         if (status == BookingStatus.Confirmed
@@ -248,12 +248,12 @@ public sealed partial class BookingService
         if (balanceDue > 0.009m)
         {
             throw new BookingConcurrencyException(
-                $"Guest must be fully paid before assigning rooms. Balance due: â‚±{balanceDue:N2}.");
+                $"Guest must be fully paid before assigning rooms. Balance due: ₱{balanceDue:N2}.");
         }
 
         EnsureRoomAssignmentAllowed(booking);
         await AssignAndOccupyRoomsAsync(booking, assignments, ct);
-        // Assigning rooms is a staff action â€” don't re-ping the notification bell.
+        // Assigning rooms is a staff action — don't re-ping the notification bell.
         booking.IsNotificationCleared = true;
         booking.UpdatedAtUtc = DateTime.UtcNow;
         AuditBooking(booking, "Booking.RoomsAssigned", "Rooms assigned to the stay.");
@@ -314,7 +314,7 @@ public sealed partial class BookingService
             if (booking.Status != BookingStatus.Confirmed)
             {
                 throw new BookingConcurrencyException(
-                    "Rooms are already assigned â€” only confirmed stays can be corrected.");
+                    "Rooms are already assigned — only confirmed stays can be corrected.");
             }
 
             var existingByType = booking.Items

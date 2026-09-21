@@ -74,7 +74,7 @@ public sealed partial class BookingService
         {
             var archivedIds = archived.Select(booking => booking.Id).ToList();
             var reviewedIds = await _db.StayReviews
-                .Where(review => archivedIds.Contains(review.BookingId))
+                .Where(review => review.DeletedAtUtc == null && archivedIds.Contains(review.BookingId))
                 .Select(review => review.BookingId)
                 .ToListAsync(ct);
             var keep = reviewedIds.ToHashSet();
@@ -201,12 +201,12 @@ public sealed partial class BookingService
 
         var lines = new List<string>
         {
-            string.Join(" Â· ", statusParts),
-            $"Stay range: {startLocal:MMM d, yyyy} â€“ {endLocal:MMM d, yyyy} (PH)",
-            $"Total value: â‚±{totalValue:N2}",
+            string.Join(" · ", statusParts),
+            $"Stay range: {startLocal:MMM d, yyyy} – {endLocal:MMM d, yyyy} (PH)",
+            $"Total value: ₱{totalValue:N2}",
             roomTypes.Count > 0
                 ? $"Rooms: {string.Join(", ", roomTypes)}"
-                : "Rooms: â€”",
+                : "Rooms: —",
             "Export log retained for 7 days, then auto-deleted."
         };
 
