@@ -176,6 +176,7 @@ public sealed partial class BookingService
         if (status == BookingStatus.Confirmed
             && assignments is { Count: > 0 })
         {
+            await EnsureFullyPaidForRoomAssignmentAsync(booking, ct);
             EnsureRoomAssignmentAllowed(booking);
             await AssignAndOccupyRoomsAsync(booking, assignments, ct);
         }
@@ -241,15 +242,7 @@ public sealed partial class BookingService
             throw new BookingConcurrencyException("This booking already has rooms assigned.");
         }
 
-        var paid = await _db.PaymentRecords
-            .Where(p => p.BookingId == booking.Id && p.Status == PaymentRecordStatus.Posted)
-            .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
-        var balanceDue = decimal.Round(booking.TotalAmount - paid, 2, MidpointRounding.AwayFromZero);
-        if (balanceDue > 0.009m)
-        {
-            throw new BookingConcurrencyException(
-                $"Guest must be fully paid before assigning rooms. Balance due: ₱{balanceDue:N2}.");
-        }
+        await EnsureFullyPaidForRoomAssignmentAsync(booking, ct);
 
         EnsureRoomAssignmentAllowed(booking);
         await AssignAndOccupyRoomsAsync(booking, assignments, ct);
@@ -261,6 +254,19 @@ public sealed partial class BookingService
         await _db.SaveChangesAsync(ct);
         return MapBooking(booking);
         }, cancellationToken);
+    }
+
+    private async Task EnsureFullyPaidForRoomAssignmentAsync(Booking booking, CancellationToken ct)
+    {
+        var paid = await _db.PaymentRecords
+            .Where(p => p.BookingId == booking.Id && p.Status == PaymentRecordStatus.Posted)
+            .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
+        var balanceDue = decimal.Round(booking.TotalAmount - paid, 2, MidpointRounding.AwayFromZero);
+        if (balanceDue > 0.009m)
+        {
+            throw new BookingConcurrencyException(
+                $"Guest must be fully paid before assigning rooms. Balance due: ₱{balanceDue:N2}.");
+        }
     }
 
     public async Task<BookingDto> UpdateAsync(
@@ -349,7 +355,7 @@ public sealed partial class BookingService
                 checkInAtUtc,
                 checkoutTimeUtc,
                 excludeBookingId: booking.Id,
-                cancellationToken);
+                ct);
 
             foreach (var line in booking.Items)
             {
@@ -438,9 +444,17 @@ public sealed partial class BookingService
             booking.CheckoutWarningSentAtUtc = null;
         }
         booking.CheckoutTimeUtc = checkoutTimeUtc;
+        var paidAfterEdit = await _db.PaymentRecords
+            .Where(p => p.BookingId == booking.Id && p.Status == PaymentRecordStatus.Posted)
+            .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
         if (request.PaymentOption.HasValue
             && request.PaymentOption.Value != booking.PaymentOption)
         {
+            if (paidAfterEdit != 0m)
+            {
+                throw new BookingConcurrencyException(
+                    "Payment option cannot change after a payment has been recorded.");
+            }
             booking.PaymentOption = request.PaymentOption.Value;
             booking.Kind = Classify(booking.PaymentOption);
         }
@@ -456,7 +470,11 @@ public sealed partial class BookingService
             ct);
         ReplaceTimeFees(booking, early, lateHours, extraPersons, typeMeta);
         RecalculateTotals(booking);
-        AuditBooking(booking, "Booking.Updated", "Stay details updated.");
+        var overpaid = decimal.Round(paidAfterEdit - booking.TotalAmount, 2, MidpointRounding.AwayFromZero);
+        var updateSummary = overpaid > 0.009m
+            ? $"Stay details updated. Refund due ₱{overpaid:N2} — record a Refund payment event."
+            : "Stay details updated.";
+        AuditBooking(booking, "Booking.Updated", updateSummary);
 
         await _db.SaveChangesAsync(ct);
         return MapBooking(booking);
@@ -633,7 +651,7 @@ public sealed partial class BookingService
                 booking,
                 booking.CheckInAtUtc,
                 newCheckout,
-                cancellationToken);
+                ct);
             booking.CheckoutTimeUtc = newCheckout;
             booking.CheckoutWarningSentAtUtc = null;
         }
@@ -715,6 +733,16 @@ public sealed partial class BookingService
         if (!booking.Items.SelectMany(i => i.RoomAssignments).Any())
         {
             throw new BookingConcurrencyException("Assign rooms before checking out this guest.");
+        }
+
+        var paidAtCheckout = await _db.PaymentRecords
+            .Where(p => p.BookingId == booking.Id && p.Status == PaymentRecordStatus.Posted)
+            .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
+        var overpaidAtCheckout = decimal.Round(paidAtCheckout - booking.TotalAmount, 2, MidpointRounding.AwayFromZero);
+        if (overpaidAtCheckout > 0.009m)
+        {
+            throw new BookingConcurrencyException(
+                $"Guest is overpaid by ₱{overpaidAtCheckout:N2}. Record a refund of that amount before archiving — archived stays cannot take refunds.");
         }
 
         booking.Status = BookingStatus.CheckedOut;

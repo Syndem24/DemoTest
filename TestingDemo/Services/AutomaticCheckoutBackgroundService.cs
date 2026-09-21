@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using TestingDemo.DTOs;
 using TestingDemo.Hubs;
+using TestingDemo.Models;
 
 namespace TestingDemo.Services;
 
@@ -106,7 +107,7 @@ public sealed class AutomaticCheckoutBackgroundService : BackgroundService
                         booking.Reference,
                         booking.GuestName);
 
-                    await _hubContext.Clients.All.BookingUpdated(ToNotification(booking, "Auto-Checkout Completed: Client duration done"));
+                    await _hubContext.Clients.All.BookingUpdated(ToNotification(booking, booking.Status == BookingStatus.CheckedOut ? "Auto-Checkout Completed: Client duration done" : "No-show: confirmed guest never arrived — booking archived"));
                 }
 
                 if (autoCancelled.Count > 0 || autoCheckedOutBookings.Count > 0)

@@ -428,7 +428,7 @@ public sealed class AdminUsersApiController : ControllerBase
     }
 
     private static bool IsDisabledByLockout(bool lockoutEnabled, DateTimeOffset? lockoutEnd) =>
-        lockoutEnabled && lockoutEnd.HasValue && lockoutEnd.Value.UtcDateTime > DateTime.UtcNow.AddMinutes(1);
+        lockoutEnabled && lockoutEnd.HasValue && lockoutEnd.Value.UtcDateTime > DateTime.UtcNow.AddDays(365);
 
     private static string NormalizeStatus(string? value) =>
         value?.Trim().ToLowerInvariant() switch

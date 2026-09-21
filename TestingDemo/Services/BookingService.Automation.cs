@@ -24,9 +24,30 @@ public sealed partial class BookingService
 
         var autoCheckedOutBookings = new List<BookingDto>();
 
+        var candidateIds = activeConfirmedBookings.Select(b => b.Id).ToList();
+        var paidByBooking = candidateIds.Count == 0
+            ? new Dictionary<int, decimal>()
+            : await _db.PaymentRecords
+                .Where(p => candidateIds.Contains(p.BookingId) && p.Status == PaymentRecordStatus.Posted)
+                .GroupBy(p => p.BookingId)
+                .Select(g => new { g.Key, Paid = g.Sum(p => p.Amount) })
+                .ToDictionaryAsync(x => x.Key, x => x.Paid, cancellationToken);
+
         foreach (var booking in activeConfirmedBookings)
         {
-            booking.Status = BookingStatus.CheckedOut;
+            // Overpaid stays stay in-house until staff record the refund — archived bookings cannot take refunds.
+            if (paidByBooking.TryGetValue(booking.Id, out var paid)
+                && decimal.Round(paid - booking.TotalAmount, 2, MidpointRounding.AwayFromZero) > 0.009m)
+            {
+                continue;
+            }
+
+            var hadRooms = booking.Items.Any(line => line.RoomAssignments.Count > 0);
+            booking.Status = hadRooms ? BookingStatus.CheckedOut : BookingStatus.Cancelled;
+            if (!hadRooms)
+            {
+                booking.IsNotificationCleared = false;
+            }
             booking.IsArchived = true;
             booking.ArchivedAtUtc = DateTime.UtcNow;
             booking.UpdatedAtUtc = DateTime.UtcNow;
@@ -34,8 +55,10 @@ public sealed partial class BookingService
             ReleaseAssignedRooms(booking);
             AuditBooking(
                 booking,
-                "Booking.AutoCheckout",
-                "Automatic checkout after stay end.",
+                hadRooms ? "Booking.AutoCheckout" : "Booking.NoShow",
+                hadRooms
+                    ? "Automatic checkout after stay end."
+                    : "Confirmed guest never checked in — archived as no-show.",
                 actorUserId: "system",
                 actorDisplayName: "System");
             autoCheckedOutBookings.Add(MapBooking(booking));

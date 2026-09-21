@@ -82,6 +82,7 @@ public sealed partial class BookingService : IBookingService
         var strategy = _db.Database.CreateExecutionStrategy();
         return strategy.ExecuteAsync(async () =>
         {
+            _db.ChangeTracker.Clear();
             await using var transaction = await _db.Database.BeginTransactionAsync(
                 IsolationLevel.Serializable,
                 cancellationToken);
@@ -97,6 +98,7 @@ public sealed partial class BookingService : IBookingService
         var strategy = _db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
+            _db.ChangeTracker.Clear();
             await using var transaction = await _db.Database.BeginTransactionAsync(
                 IsolationLevel.Serializable,
                 cancellationToken);

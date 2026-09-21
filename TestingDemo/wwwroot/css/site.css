@@ -8468,10 +8468,6 @@ body.admin-cal-day-open {
   color: rgba(11, 31, 58, 0.42);
 }
 
-.admin-cal-day-body:has(.admin-cal-day-find:not([hidden])) .admin-cal-day-group h3 {
-  top: 56px;
-}
-
 .admin-cal-day-rows {
   display: grid;
 }

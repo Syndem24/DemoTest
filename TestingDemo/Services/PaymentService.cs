@@ -53,99 +53,108 @@ public sealed class PaymentService : IPaymentService
             request.Amount = -Math.Abs(request.Amount);
         }
 
-        var booking = await _db.Bookings
-            .Include(b => b.PaymentRecords)
-            .FirstOrDefaultAsync(b => b.Id == request.BookingId, cancellationToken)
-            ?? throw new KeyNotFoundException("Booking was not found.");
-
-        if (booking.IsArchived)
+        return await ExecuteInSerializableTransactionAsync(async ct =>
         {
-            throw new ArgumentException("Archived bookings cannot take new payments.");
-        }
+            var booking = await _db.Bookings
+                .Include(b => b.PaymentRecords)
+                .FirstOrDefaultAsync(b => b.Id == request.BookingId, ct)
+                ?? throw new KeyNotFoundException("Booking was not found.");
 
-        if (booking.Status != BookingStatus.Confirmed)
-        {
-            throw new ArgumentException(
-                "Confirm the booking first. Payments can only be recorded after confirmation.");
-        }
-
-        if (booking.CashOnlyPromo
-            && request.EventType is not PaymentEventType.Refund and not PaymentEventType.Adjustment
-            && request.Method != PaymentMethod.Cash)
-        {
-            throw new ArgumentException(
-                "This stay used a cash-only promo. Record payment as Cash.");
-        }
-
-        var postedPaid = booking.PaymentRecords
-            .Where(p => p.Status == PaymentRecordStatus.Posted)
-            .Sum(p => p.Amount);
-
-        var amount = decimal.Round(request.Amount, 2, MidpointRounding.AwayFromZero);
-        var stayTotal = booking.TotalAmount;
-        var balanceDue = decimal.Round(stayTotal - postedPaid, 2, MidpointRounding.AwayFromZero);
-        var notes = request.Notes;
-
-        // Payments never exceed the bill: cap to the live balance so a stale
-        // client-side total cannot produce an overpaid booking. Cash overage is
-        // change handled at the desk (recorded in notes), not posted to the bill.
-        if (request.EventType is not PaymentEventType.Refund and not PaymentEventType.Adjustment
-            && amount > 0)
-        {
-            if (balanceDue <= 0m)
+            if (booking.IsArchived)
             {
-                throw new ArgumentException("This booking is already fully paid.");
+                throw new ArgumentException("Archived bookings cannot take new payments.");
             }
 
-            if (amount > balanceDue)
+            if (booking.Status != BookingStatus.Confirmed)
             {
-                var receiptAmount = amount;
-                var excess = decimal.Round(receiptAmount - balanceDue, 2, MidpointRounding.AwayFromZero);
-                amount = balanceDue;
-                var capNote =
-                    $"Received ₱{receiptAmount:N2} · Applied ₱{amount:N2} (excess ₱{excess:N2} not posted)";
-                notes = string.IsNullOrWhiteSpace(notes) ? capNote : $"{notes.Trim()}\n{capNote}";
+                throw new ArgumentException(
+                    "Confirm the booking first. Payments can only be recorded after confirmation.");
             }
-        }
 
-        var balanceAfter = decimal.Round(stayTotal - (postedPaid + amount), 2, MidpointRounding.AwayFromZero);
+            if (booking.CashOnlyPromo
+                && request.EventType is not PaymentEventType.Refund and not PaymentEventType.Adjustment
+                && request.Method != PaymentMethod.Cash)
+            {
+                throw new ArgumentException(
+                    "This stay used a cash-only promo. Record payment as Cash.");
+            }
 
-        // Bank transfer / e-wallet references come from the request.
+            var postedPaid = booking.PaymentRecords
+                .Where(p => p.Status == PaymentRecordStatus.Posted)
+                .Sum(p => p.Amount);
 
-        var now = DateTime.UtcNow;
-        var record = new PaymentRecord
-        {
-            BookingId = booking.Id,
-            ReceiptNumber = CreateReceiptNumber(),
-            EventType = request.EventType,
-            Method = request.Method,
-            Amount = amount,
-            StayTotalAtPosting = stayTotal,
-            BalanceAfter = balanceAfter,
-            PaidAtUtc = now,
-            ReceivedBy = receivedBy,
-            ExternalReference = TrimOrNull(request.ExternalReference, 120),
-            BankTransferReference = TrimOrNull(request.BankTransferReference, 120),
-            Notes = TrimOrNull(notes, 1000),
-            Status = PaymentRecordStatus.Posted
-        };
+            var amount = decimal.Round(request.Amount, 2, MidpointRounding.AwayFromZero);
+            var stayTotal = booking.TotalAmount;
+            var balanceDue = decimal.Round(stayTotal - postedPaid, 2, MidpointRounding.AwayFromZero);
+            if (request.EventType == PaymentEventType.Refund && Math.Abs(amount) > postedPaid)
+            {
+                throw new ArgumentException(
+                    $"Refund cannot exceed the amount paid (₱{postedPaid:N2}).");
+            }
 
-        _db.PaymentRecords.Add(record);
-        booking.UpdatedAtUtc = now;
-        var postedAction = request.EventType == PaymentEventType.Refund
-            ? "Payment.RefundPosted"
-            : "Payment.Posted";
-        _audit.Record(
-            SystemAuditIntent.AdministrativeAction,
-            SystemAuditDomain.Payment,
-            postedAction,
-            "Payment",
-            record.ReceiptNumber,
-            record.ReceiptNumber,
-            summary: $"{postedAction.Replace("Payment.", string.Empty)} {record.ReceiptNumber} on {booking.Reference} · ₱{amount:N2}.");
-        await _db.SaveChangesAsync(cancellationToken);
+            var notes = request.Notes;
 
-        return Map(record, booking);
+            // Payments never exceed the bill: cap to the live balance so a stale
+            // client-side total cannot produce an overpaid booking. Cash overage is
+            // change handled at the desk (recorded in notes), not posted to the bill.
+            if (request.EventType is not PaymentEventType.Refund and not PaymentEventType.Adjustment
+                && amount > 0)
+            {
+                if (balanceDue <= 0m)
+                {
+                    throw new ArgumentException("This booking is already fully paid.");
+                }
+
+                if (amount > balanceDue)
+                {
+                    var receiptAmount = amount;
+                    var excess = decimal.Round(receiptAmount - balanceDue, 2, MidpointRounding.AwayFromZero);
+                    amount = balanceDue;
+                    var capNote =
+                        $"Received ₱{receiptAmount:N2} · Applied ₱{amount:N2} (excess ₱{excess:N2} not posted)";
+                    notes = string.IsNullOrWhiteSpace(notes) ? capNote : $"{notes.Trim()}\n{capNote}";
+                }
+            }
+
+            var balanceAfter = decimal.Round(stayTotal - (postedPaid + amount), 2, MidpointRounding.AwayFromZero);
+
+            // Bank transfer / e-wallet references come from the request.
+
+            var now = DateTime.UtcNow;
+            var record = new PaymentRecord
+            {
+                BookingId = booking.Id,
+                ReceiptNumber = CreateReceiptNumber(),
+                EventType = request.EventType,
+                Method = request.Method,
+                Amount = amount,
+                StayTotalAtPosting = stayTotal,
+                BalanceAfter = balanceAfter,
+                PaidAtUtc = now,
+                ReceivedBy = receivedBy,
+                ExternalReference = TrimOrNull(request.ExternalReference, 120),
+                BankTransferReference = TrimOrNull(request.BankTransferReference, 120),
+                Notes = TrimOrNull(notes, 1000),
+                Status = PaymentRecordStatus.Posted
+            };
+
+            _db.PaymentRecords.Add(record);
+            booking.UpdatedAtUtc = now;
+            var postedAction = request.EventType == PaymentEventType.Refund
+                ? "Payment.RefundPosted"
+                : "Payment.Posted";
+            _audit.Record(
+                SystemAuditIntent.AdministrativeAction,
+                SystemAuditDomain.Payment,
+                postedAction,
+                "Payment",
+                record.ReceiptNumber,
+                record.ReceiptNumber,
+                summary: $"{postedAction.Replace("Payment.", string.Empty)} {record.ReceiptNumber} on {booking.Reference} · ₱{amount:N2}.");
+            await _db.SaveChangesAsync(ct);
+
+            return Map(record, booking);
+        }, cancellationToken);
     }
 
     public async Task<PaymentRecordDto> VoidAsync(
@@ -160,36 +169,39 @@ public sealed class PaymentService : IPaymentService
             throw new ArgumentException("Enter a refund reason (at least 8 characters).");
         }
 
-        var record = await _db.PaymentRecords
-            .Include(p => p.Booking)
-            .FirstOrDefaultAsync(p => p.Id == paymentId, cancellationToken)
-            ?? throw new KeyNotFoundException("Payment was not found.");
-
-        if (record.Status == PaymentRecordStatus.Voided)
+        return await ExecuteInSerializableTransactionAsync(async ct =>
         {
-            throw new InvalidOperationException("Payment is already refunded.");
-        }
+            var record = await _db.PaymentRecords
+                .Include(p => p.Booking)
+                .FirstOrDefaultAsync(p => p.Id == paymentId, ct)
+                ?? throw new KeyNotFoundException("Payment was not found.");
 
-        var now = DateTime.UtcNow;
-        record.Status = PaymentRecordStatus.Voided;
-        record.VoidedAtUtc = now;
-        record.VoidedBy = actor.DisplayName;
-        record.VoidReason = reason.Length > 500 ? reason[..500] : reason;
-        record.Booking.UpdatedAtUtc = now;
-        _audit.Record(
-            SystemAuditIntent.AdministrativeAction,
-            SystemAuditDomain.Payment,
-            "Payment.Refund",
-            "Payment",
-            record.Id.ToString(),
-            record.ReceiptNumber,
-            reason,
-            $"Refunded {record.ReceiptNumber} on {record.Booking.Reference} · ₱{record.Amount:N2}.");
+            if (record.Status == PaymentRecordStatus.Voided)
+            {
+                throw new InvalidOperationException("Payment is already refunded.");
+            }
 
-        await RecalculateBalancesAsync(record.BookingId, cancellationToken);
-        await _db.SaveChangesAsync(cancellationToken);
+            var now = DateTime.UtcNow;
+            record.Status = PaymentRecordStatus.Voided;
+            record.VoidedAtUtc = now;
+            record.VoidedBy = actor.DisplayName;
+            record.VoidReason = reason.Length > 500 ? reason[..500] : reason;
+            record.Booking.UpdatedAtUtc = now;
+            _audit.Record(
+                SystemAuditIntent.AdministrativeAction,
+                SystemAuditDomain.Payment,
+                "Payment.Refund",
+                "Payment",
+                record.Id.ToString(),
+                record.ReceiptNumber,
+                reason,
+                $"Refunded {record.ReceiptNumber} on {record.Booking.Reference} · ₱{record.Amount:N2}.");
 
-        return Map(record, record.Booking);
+            await RecalculateBalancesAsync(record.BookingId, ct);
+            await _db.SaveChangesAsync(ct);
+
+            return Map(record, record.Booking);
+        }, cancellationToken);
     }
 
     public async Task<PaymentRecordDto> VerifyAsync(
@@ -609,6 +621,21 @@ public sealed class PaymentService : IPaymentService
             or PaymentMethod.BankTransfer
             or PaymentMethod.Maya
             or PaymentMethod.Card;
+    }
+
+    private async Task<T> ExecuteInSerializableTransactionAsync<T>(
+        Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken)
+    {
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            _db.ChangeTracker.Clear();
+            await using var transaction = await _db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable, cancellationToken);
+            var result = await action(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return result;
+        });
     }
 
     private static string? TrimOrNull(string? value, int maxLen)

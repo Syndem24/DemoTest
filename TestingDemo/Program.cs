@@ -338,12 +338,12 @@ try
     app.UseRequestLocalization();
     app.UseResponseCompression();
     app.UseRouting();
+    app.UseRateLimiter();
     app.UseSession();
     app.UseAuthentication();
     app.UseAuthorization();
     app.UseMiddleware<MustChangePasswordMiddleware>();
     app.UseStatusCodePagesWithReExecute("/Home/NotFoundPage", "?statusCode={0}");
-    app.UseRateLimiter();
     app.MapStaticAssets();
     app.MapHealthChecks("/health");
     app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions

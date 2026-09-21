@@ -331,7 +331,7 @@
                         <dd data-checkout-confirm-paid>—</dd>
                     </div>
                     <div class="is-balance">
-                        <dt>Balance due</dt>
+                        <dt data-checkout-confirm-balance-label>Balance due</dt>
                         <dd data-checkout-confirm-balance>—</dd>
                     </div>
                 </dl>
@@ -411,7 +411,7 @@
             <p class="admin-payment-add-banner is-error" data-payment-add-banner hidden role="alert"></p>
             <p class="admin-payment-guest-line" data-payment-add-guest>Guest</p>
 
-            <div class="admin-payment-prices">
+            <div class="admin-payment-prices" data-payment-prices>
                 <button type="button" class="admin-payment-prices-toggle" data-payment-prices-toggle
                     aria-expanded="false" aria-controls="paymentPricesPanel">
                     <span>
@@ -445,9 +445,10 @@
                 <div class="admin-payment-cash-panel" data-payment-cash-panel>
                     <p class="admin-payment-panel-title">Cash tender</p>
                     <label>
-                        <span>Amount due (₱) <em>locked</em></span>
+                        <span><span data-payment-cash-due-label>Amount due (₱)</span> <em>locked</em></span>
                         <input type="text" inputmode="decimal" data-payment-cash-due readonly tabindex="-1" />
                     </label>
+                    <div data-payment-cash-tender>
                     <label>
                         <span>Cash from guest (₱)</span>
                         <input type="text" inputmode="decimal" data-payment-cash-tendered placeholder="0.00"
@@ -460,6 +461,7 @@
                     <p class="admin-payment-cash-formula" data-payment-cash-formula>
                         Guest cash − amount due = change
                     </p>
+                    </div>
                 </div>
 
                 <div class="admin-payment-epay-panel" data-payment-epay-panel hidden>
@@ -469,7 +471,7 @@
                         guest’s phone before saving.
                     </p>
                     <label>
-                        <span>Amount paid (₱) <em>locked</em></span>
+                        <span><span data-payment-epay-amount-label>Amount paid (₱)</span> <em>locked</em></span>
                         <input type="text" inputmode="decimal" data-payment-epay-amount readonly tabindex="-1" />
                     </label>
                 </div>

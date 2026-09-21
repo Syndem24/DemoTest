@@ -461,12 +461,12 @@ public class AdminUsersController : Controller
     private static bool IsDisabledByLockout(AdminUserQueryRow user) =>
         user.LockoutEnabled
         && user.LockoutEnd.HasValue
-        && user.LockoutEnd.Value.UtcDateTime > DateTime.UtcNow.AddMinutes(1);
+        && user.LockoutEnd.Value.UtcDateTime > DateTime.UtcNow.AddDays(365);
 
     private static bool IsDisabledByLockout(ApplicationUser user) =>
         user.LockoutEnabled
         && user.LockoutEnd.HasValue
-        && user.LockoutEnd.Value.UtcDateTime > DateTime.UtcNow.AddMinutes(1);
+        && user.LockoutEnd.Value.UtcDateTime > DateTime.UtcNow.AddDays(365);
 
     private IActionResult RedirectToList(string? q, string? sortBy, int page)
     {

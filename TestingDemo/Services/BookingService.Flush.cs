@@ -12,6 +12,8 @@ namespace TestingDemo.Services;
 
 public sealed partial class BookingService
 {
+    private const int MaxFlushBookingsPerRun = 2_000;
+
     public async Task<FlushBookingHistoryResult> FlushHistoryAsync(
         string performedBy,
         FlushDateRange dateRange = default,
@@ -50,7 +52,14 @@ public sealed partial class BookingService
 
         var archived = await query
             .OrderByDescending(booking => booking.ArchivedAtUtc ?? booking.UpdatedAtUtc)
+            .Take(MaxFlushBookingsPerRun + 1)
             .ToListAsync(ct);
+
+        if (archived.Count > MaxFlushBookingsPerRun)
+        {
+            throw new ArgumentException(
+                $"More than {MaxFlushBookingsPerRun:N0} archived stays match. Narrow the date range and export in batches.");
+        }
 
         if (archived.Count == 0)
         {
@@ -68,6 +77,7 @@ public sealed partial class BookingService
 
         var recordCount = archived.Count;
         var keptForReview = 0;
+        var keptForPayments = 0;
         var deletable = archived;
 
         if (clearAfterExport)
@@ -77,14 +87,24 @@ public sealed partial class BookingService
                 .Where(review => review.DeletedAtUtc == null && archivedIds.Contains(review.BookingId))
                 .Select(review => review.BookingId)
                 .ToListAsync(ct);
-            var keep = reviewedIds.ToHashSet();
-            keptForReview = keep.Count;
+            var paidIds = await _db.PaymentRecords
+                .Where(p => archivedIds.Contains(p.BookingId))
+                .Select(p => p.BookingId)
+                .Distinct()
+                .ToListAsync(ct);
+            var keep = reviewedIds.Concat(paidIds).ToHashSet();
+            keptForReview = reviewedIds.Count;
+            keptForPayments = paidIds.Count(id => !reviewedIds.Contains(id));
             deletable = archived.Where(booking => !keep.Contains(booking.Id)).ToList();
         }
 
         var keptNote = keptForReview > 0
             ? $" Kept {keptForReview} stay(s) that have guest reviews — reviews are never flushed."
             : string.Empty;
+        if (keptForPayments > 0)
+        {
+            keptNote += $" Kept {keptForPayments} stay(s) with payment receipts — run the Payments export/flush first.";
+        }
         var clearNote = clearAfterExport ? " then deleted." : " Data was kept (export only).";
         var summary = BuildFlushSummary(archived) + dateRange.DescribeForSummary()
             + (clearAfterExport ? " Cleared after export." : " Export only — records kept.")

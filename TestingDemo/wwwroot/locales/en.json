@@ -466,6 +466,7 @@
     "successTitleBooking": "Booking received",
     "successTitleReservation": "Reservation received",
     "successBody": "Your request has been sent to the hotel for review.",
+    "successHomeCopy": "Your booking is successful. We will contact you shortly to confirm your reservation.",
     "continueInForm": "Continue in the booking form — add rooms to your cart, then submit.",
     "limitReached": "Limit reached",
     "defaultRoomDescription": "Comfortable guest room with essential amenities for your stay.",

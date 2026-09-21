@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { formatMoney } from '../format'
 import { compareValues, useDebouncedValue, usePagination, useSortState } from '../hooks'
 import { notifyMori } from '../moriNotice'
@@ -180,6 +181,41 @@ function groupByRoomType(rooms: RoomItem[]): RoomTypeGroup[] {
   return Array.from(map.values())
 }
 
+function LazyTypeGroup({ groupId, children }: { groupId: number; children: ReactNode }) {
+  const ref = useRef<HTMLElement>(null)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    if (visible) return
+    const el = ref.current
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setVisible(true)
+      return
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '600px 0px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [visible])
+
+  return (
+    <section
+      ref={ref}
+      data-type-group={groupId}
+      className={`rm-type-group${visible ? ' is-lazy-in' : ' is-lazy-pending'}`}
+    >
+      {visible ? children : null}
+    </section>
+  )
+}
+
 export function RoomListPanel({ data, loading, error, canManage = true }: Props) {
   const [search, setSearch] = useState('')
   const [layout, setLayout] = useState<LayoutMode>('grid')
@@ -216,6 +252,14 @@ export function RoomListPanel({ data, loading, error, canManage = true }: Props)
 
   const { page, setPage, totalPages, pageItems } = usePagination(filtered, 12)
   const groups = useMemo(() => groupByRoomType(pageItems), [pageItems])
+  const gridGroups = useMemo(() => groupByRoomType(filtered), [filtered])
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  const scrollToTypeGroup = (typeId: number) => {
+    panelRef.current
+      ?.querySelector(`[data-type-group="${typeId}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   useEffect(() => {
     if (error) notifyMori(error, 'error')
@@ -230,7 +274,7 @@ export function RoomListPanel({ data, loading, error, canManage = true }: Props)
   }
 
   return (
-    <div className="rm-panel">
+    <div className="rm-panel" ref={panelRef}>
       <div className="rm-toolbar-row">
         <Toolbar
           search={search}
@@ -246,9 +290,24 @@ export function RoomListPanel({ data, loading, error, canManage = true }: Props)
         <div className="rm-empty">No rooms match your search.</div>
       ) : layout === 'grid' ? (
         <>
+          {gridGroups.length > 1 ? (
+            <nav className="rm-type-jump" aria-label="Jump to room type">
+              {gridGroups.map((group) => (
+                <button
+                  key={group.roomTypeId}
+                  type="button"
+                  className="rm-type-jump-chip"
+                  onClick={() => scrollToTypeGroup(group.roomTypeId)}
+                >
+                  {group.name}
+                  <span className="rm-type-jump-count">{group.rooms.length}</span>
+                </button>
+              ))}
+            </nav>
+          ) : null}
           <div className="rm-grouped">
-            {groups.map((group) => (
-              <section key={group.roomTypeId} className="rm-type-group">
+            {gridGroups.map((group) => (
+              <LazyTypeGroup key={group.roomTypeId} groupId={group.roomTypeId}>
                 <RoomTypeSeparator
                   name={group.name}
                   count={group.rooms.length}
@@ -259,10 +318,9 @@ export function RoomListPanel({ data, loading, error, canManage = true }: Props)
                     <RoomCard key={room.id} room={room} canManage={canManage} />
                   ))}
                 </div>
-              </section>
+              </LazyTypeGroup>
             ))}
           </div>
-          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
         </>
       ) : (
         <>

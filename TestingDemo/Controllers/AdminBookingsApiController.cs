@@ -211,7 +211,7 @@ public sealed class AdminBookingsApiController : ControllerBase
         {
             await _hub.Clients.All.BookingUpdated(ToNotification(
                 booking,
-                "Auto-Checkout Completed: Client duration done"));
+                booking.Status == BookingStatus.CheckedOut ? "Auto-Checkout Completed: Client duration done" : "No-show: confirmed guest never arrived — booking archived"));
         }
 
         if (autoCancelled.Count > 0 || autoCheckouts.Count > 0)

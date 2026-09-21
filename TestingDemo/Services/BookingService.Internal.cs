@@ -1038,7 +1038,7 @@ public sealed partial class BookingService
 
     private static string CreateReference()
     {
-        return $"MORI-{Guid.NewGuid():N}"[..15].ToUpperInvariant();
+        return $"MORI-{Guid.NewGuid():N}"[..17].ToUpperInvariant();
     }
 
     private static BookingDto MapBooking(Booking booking)

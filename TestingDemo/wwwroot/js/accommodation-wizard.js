@@ -3003,8 +3003,8 @@
     submitBooking();
   });
   document.querySelector('[data-wiz-done]')?.addEventListener('click', () => {
-    closeDrawer();
-    setDrawerStep('summary');
+    const reference = lastConfirm?.payload?.reference || '';
+    window.location.assign(`/?booked=${encodeURIComponent(reference)}`);
   });
   drawer?.addEventListener('click', (event) => {
     const signup = event.target.closest('[data-wiz-signup-pay]');

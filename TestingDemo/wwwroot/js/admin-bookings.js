@@ -135,6 +135,7 @@
   let listAbort = null;
   let listRequestSeq = 0;
   let paymentBookingContext = null;
+  let paymentRefundMode = false;
   let paymentPriceContext = {
     stayTotal: 0,
     amountPaid: 0,
@@ -611,7 +612,7 @@
     }
   }
 
-  async function openAddPaymentModal(booking) {
+  async function openAddPaymentModal(booking, { refund = false } = {}) {
     if (!paymentAddModal || !booking) return;
     if (booking.isArchived) {
       showBookingMessage('Archived bookings cannot take new payments.', true);
@@ -634,8 +635,15 @@
       return;
     }
     fillPaymentSummaryFields(booking, summary);
+    paymentRefundMode = Boolean(refund);
 
-    if (paymentPriceContext.balanceDue <= 0.009) {
+    if (paymentRefundMode) {
+      if (paymentPriceContext.balanceDue >= -0.009) {
+        paymentRefundMode = false;
+        showBookingMessage('Nothing to refund — this booking is not overpaid.', true);
+        return;
+      }
+    } else if (paymentPriceContext.balanceDue <= 0.009) {
       showBookingMessage('This booking is already fully paid.', true);
       await openPaymentViewModal(booking);
       return;
@@ -643,7 +651,9 @@
 
     closePaymentViewModal();
 
-    const defaultAmount = paymentPriceContext.balanceDue;
+    const defaultAmount = paymentRefundMode
+      ? Math.abs(paymentPriceContext.balanceDue)
+      : paymentPriceContext.balanceDue;
     const ref = paymentAddModal.querySelector('[data-payment-add-ref]');
     const guestLine = paymentAddModal.querySelector('[data-payment-add-guest]');
     if (ref) ref.textContent = booking.reference;
@@ -661,21 +671,24 @@
       (c) => String(c.chargeType) === 'Incidental' && Number(c.amount || 0) > 0
     );
     const cashOnlyPromo = Boolean(booking.cashOnlyPromo);
+    const lockCashOnly = cashOnlyPromo && !paymentRefundMode;
     if (methodSelect) {
       methodSelect.value = 'Cash';
       Array.from(methodSelect.options).forEach((opt) => {
-        const lock = cashOnlyPromo && opt.value !== 'Cash';
+        const lock = lockCashOnly && opt.value !== 'Cash';
         opt.disabled = lock;
         opt.hidden = lock;
       });
-      methodSelect.disabled = cashOnlyPromo;
+      methodSelect.disabled = lockCashOnly;
     }
     if (hasIncidental && methodSelect) {
       methodSelect.value = 'Cash';
     }
     const notes = paymentAddModal.querySelector('[data-payment-notes]');
     if (notes) {
-      if (cashOnlyPromo) {
+      if (paymentRefundMode) {
+        notes.value = 'Refund of overpaid balance at checkout.';
+      } else if (cashOnlyPromo) {
         notes.value = booking.specialOfferTitle
           ? `Special offer (${booking.specialOfferTitle}) \u2014 cash on arrival only.`
           : 'Special offer \u2014 cash on arrival only.';
@@ -689,12 +702,15 @@
     updatePaymentPricesUi();
     setPaymentPricesExpanded(false);
     syncPaymentMethodPanels();
+    applyPaymentRefundModeUi();
     paymentAddModal.hidden = false;
   }
 
   function closeAddPaymentModal() {
     closePaymentAddPopup();
     setPaymentAddBanner('');
+    paymentRefundMode = false;
+    applyPaymentRefundModeUi();
     const methodSelect = paymentAddModal?.querySelector('[data-payment-method]');
     if (methodSelect) {
       methodSelect.disabled = false;
@@ -706,9 +722,35 @@
     if (paymentAddModal) paymentAddModal.hidden = true;
   }
 
+  function applyPaymentRefundModeUi() {
+    if (!paymentAddModal) return;
+    const refund = paymentRefundMode;
+    const title = paymentAddModal.querySelector('#addPaymentTitle');
+    const saveBtn = paymentAddModal.querySelector('[data-payment-add-save]');
+    const prices = paymentAddModal.querySelector('[data-payment-prices]');
+    const tender = paymentAddModal.querySelector('[data-payment-cash-tender]');
+    const cashLabel = paymentAddModal.querySelector('[data-payment-cash-due-label]');
+    const epayLabel = paymentAddModal.querySelector('[data-payment-epay-amount-label]');
+    const epayHint = paymentAddModal.querySelector('[data-payment-epay-hint]');
+    if (title) title.textContent = refund ? 'Record refund' : 'Add payment';
+    if (saveBtn) saveBtn.textContent = refund ? 'Save refund' : 'Save payment';
+    if (prices) prices.hidden = refund;
+    if (tender) tender.hidden = refund;
+    if (cashLabel) cashLabel.textContent = refund ? 'Refund amount (₱)' : 'Amount due (₱)';
+    if (epayLabel) epayLabel.textContent = refund ? 'Refund amount (₱)' : 'Amount paid (₱)';
+    if (epayHint && refund) {
+      epayHint.textContent = 'Send the refund to the guest\u2019s e-wallet and confirm it landed before saving.';
+    }
+    paymentAddModal.classList.toggle('is-refund', refund);
+    setPaymentAddBanner(
+      refund ? `Refund ${money(Number(paymentAddModal.querySelector('[data-payment-cash-due]')?.value || 0))} to the guest. Amount is locked to the overpaid balance.` : '',
+      false
+    );
+  }
+
   async function saveRecordedPayment() {
     if (!paymentBookingContext || !paymentAddModal) return;
-    const eventType = 'ArrivalPayment';
+    const eventType = paymentRefundMode ? 'Refund' : 'ArrivalPayment';
     const method = paymentAddModal.querySelector('[data-payment-method]')?.value || 'Cash';
     const saveBtn = paymentAddModal.querySelector('[data-payment-add-save]');
     const cash = isCashPaymentMethod(method);
@@ -784,13 +826,17 @@
       showBookingMessage(
         digitalCapMessage
           ? `Payment saved. ${digitalCapMessage}`
-          : 'Payment saved. Posted records cannot be edited.'
+          : eventType === 'Refund'
+            ? 'Refund saved. The guest can now be archived.'
+            : 'Payment saved. Posted records cannot be edited.'
       );
       await Promise.all([refreshBookings(), refreshOpenBookingDetails(bookingId)]);
-      if (paymentBookingContext) {
-        await openPaymentViewModal(paymentBookingContext);
-      } else if (selectedBooking?.id === bookingId) {
-        await openPaymentViewModal(selectedBooking);
+      if (eventType !== 'Refund') {
+        if (paymentBookingContext) {
+          await openPaymentViewModal(paymentBookingContext);
+        } else if (selectedBooking?.id === bookingId) {
+          await openPaymentViewModal(selectedBooking);
+        }
       }
     } catch (error) {
       showBookingMessage(error instanceof Error ? error.message : 'Unable to record payment.', true);
@@ -1426,14 +1472,6 @@
     if (!pendingCallsPanel?.hidden) return refreshPendingCalls();
     if (!checkoutsPanel?.hidden) return refreshCheckouts();
     return refreshBookings();
-  }
-
-  async function processAutoCheckout() {
-    try {
-      await apiFetch('/api/admin/bookings/process-auto-checkout', { method: 'POST' });
-    } catch {
-      // Background service also processes; poll helper is best-effort.
-    }
   }
 
   function bookingNeedsRooms(booking) {
@@ -5971,7 +6009,7 @@
 
   /**
    * Branded checkout confirm (replaces window.confirm).
-   * @returns {Promise<'checkout'|'payment'|'cancel'>}
+   * @returns {Promise<'checkout'|'payment'|'refund'|'cancel'>}
    */
   function showCheckoutConfirmModal({
     booking,
@@ -5992,44 +6030,59 @@
     const totalEl = detailModal?.querySelector('[data-checkout-confirm-total]');
     const paidEl = detailModal?.querySelector('[data-checkout-confirm-paid]');
     const balanceEl = detailModal?.querySelector('[data-checkout-confirm-balance]');
+    const balanceLabelEl = detailModal?.querySelector('[data-checkout-confirm-balance-label]');
 
     if (!popup || !cancelBtn || !okBtn) {
       return Promise.resolve('cancel');
     }
 
     const unpaid = balanceDue > 0.009;
+    const overpaid = balanceDue < -0.009;
     const roomLabel = rooms.length ? ` (${rooms.join(', ')})` : '';
 
     if (titleEl) {
-      titleEl.textContent = unpaid ? 'Balance still due' : 'Archive guest';
+      titleEl.textContent = overpaid
+        ? 'Refund due before archive'
+        : unpaid
+          ? 'Balance still due'
+          : 'Archive guest';
     }
     if (messageEl) {
-      messageEl.textContent = unpaid
-        ? `${booking.reference} still has an unpaid balance. Review the payment figures below before archiving.`
-        : `Archive ${booking.reference}${roomLabel}?`;
+      messageEl.textContent = overpaid
+        ? `${booking.reference} is overpaid by ${money(Math.abs(balanceDue))}. Record the refund first — archiving is locked until the balance is settled.`
+        : unpaid
+          ? `${booking.reference} still has an unpaid balance. Review the payment figures below before archiving.`
+          : `Archive ${booking.reference}${roomLabel}?`;
     }
 
     if (summaryEl) {
-      summaryEl.hidden = !unpaid;
-      if (unpaid) {
+      summaryEl.hidden = !(unpaid || overpaid);
+      if (unpaid || overpaid) {
         if (refEl) refEl.textContent = booking.reference || '\u2014';
         if (totalEl) totalEl.textContent = money(stayTotal);
         if (paidEl) paidEl.textContent = money(amountPaid);
-        if (balanceEl) balanceEl.textContent = money(balanceDue);
+        if (balanceEl) balanceEl.textContent = money(Math.abs(balanceDue));
       }
+    }
+    if (balanceLabelEl) {
+      balanceLabelEl.textContent = overpaid ? 'Overpaid' : 'Balance due';
     }
 
     if (noteEl) {
-      noteEl.textContent = unpaid
-        ? 'Archiving will free assigned rooms (Available again). Collect the balance first if the guest can still pay.'
-        : 'Assigned rooms will become Available again.';
+      noteEl.textContent = overpaid
+        ? 'Archived bookings cannot take payments or refunds, so post the refund now. Rooms are released once the guest is archived.'
+        : unpaid
+          ? 'Archiving will free assigned rooms (Available again). Collect the balance first if the guest can still pay.'
+          : 'Assigned rooms will become Available again.';
     }
 
     if (payBtn) {
-      payBtn.hidden = !unpaid;
+      payBtn.hidden = !(unpaid || overpaid);
+      payBtn.textContent = overpaid ? 'Record refund' : 'Record payment';
     }
+    okBtn.hidden = overpaid;
     okBtn.textContent = unpaid ? 'Archive anyway' : 'Archive';
-    popup.classList.toggle('is-warning', unpaid);
+    popup.classList.toggle('is-warning', unpaid || overpaid);
 
     return new Promise((resolve) => {
       const finish = (result) => {
@@ -6043,7 +6096,7 @@
       };
       const onCancel = () => finish('cancel');
       const onOk = () => finish('checkout');
-      const onPay = () => finish('payment');
+      const onPay = () => finish(overpaid ? 'refund' : 'payment');
       const onBackdrop = (event) => {
         if (event.target === popup) finish('cancel');
       };
@@ -6058,7 +6111,7 @@
       document.addEventListener('keydown', onKey);
 
       popup.hidden = false;
-      (unpaid ? payBtn : okBtn)?.focus();
+      (unpaid || overpaid ? payBtn : okBtn)?.focus();
     });
   }
 
@@ -6135,6 +6188,11 @@
 
     if (decision === 'payment') {
       await openAddPaymentModal(booking);
+      return;
+    }
+
+    if (decision === 'refund') {
+      await openAddPaymentModal(booking, { refund: true });
       return;
     }
 
@@ -7101,7 +7159,6 @@
   function beginPolling() {
     if (pollTimer) return;
     pollTimer = window.setInterval(async () => {
-      await processAutoCheckout();
       await refreshNotifications();
       await refreshActiveBookingPanel();
       await refreshRoomTypeAvailability();
@@ -7189,17 +7246,12 @@
       }
       if (!scopes.includes('all') && !scopes.includes('bookings')) return;
       window.MoriAdminRealtime.scheduleRefresh('bookings-poll', async () => {
-        await processAutoCheckout();
         await refreshNotifications();
         await refreshActiveBookingPanel();
         await refreshRoomTypeAvailability();
         reservationCalendar?.refetchEvents();
       });
     });
-
-    pollTimer = window.setInterval(() => {
-      void processAutoCheckout();
-    }, 30000);
   }
 
   window.addEventListener('beforeunload', () => {

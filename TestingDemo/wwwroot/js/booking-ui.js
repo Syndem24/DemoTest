@@ -598,10 +598,31 @@
   }
 
   function closeAllModals(restoreFocus = true) {
+    let successLeaving = false;
     allModals.forEach((modal) => {
-      if (modal) modal.hidden = true;
+      if (!modal) return;
+      if (
+        modal === successModal &&
+        !modal.hidden &&
+        !modal.classList.contains('is-leaving') &&
+        !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ) {
+        successLeaving = true;
+        modal.classList.add('is-leaving');
+        setTimeout(() => {
+          modal.classList.remove('is-leaving');
+          modal.hidden = true;
+          if (!allModals.some((m) => m && !m.hidden)) {
+            document.body.classList.remove('guest-modal-open');
+          }
+        }, 220);
+        return;
+      }
+      modal.hidden = true;
     });
-    document.body.classList.remove('guest-modal-open');
+    if (!successLeaving) {
+      document.body.classList.remove('guest-modal-open');
+    }
     if (restoreFocus && lastFocusedElement?.isConnected) {
       lastFocusedElement.focus();
       lastFocusedElement = null;
@@ -6333,6 +6354,32 @@
   document.addEventListener('mori:cookieconsent', (event) => {
     if (!event.detail?.allowsOptionalStorage) clearBookDraft();
   });
+
+  // After a completed booking the wizard redirects to /?booked=<ref> —
+  // show the success popup once, then strip the param so refresh/share stays clean.
+  const bookedParam = new URLSearchParams(window.location.search).get('booked');
+  if (bookedParam !== null && successModal) {
+    const eyebrow = document.getElementById('successEyebrow');
+    const title = document.getElementById('successTitle');
+    const message = document.getElementById('successMessage');
+    if (eyebrow) eyebrow.textContent = tx('booking.booking', null, 'Booking');
+    if (title) title.textContent = tx('booking.successTitleBooking', null, 'Booking received');
+    if (message) {
+      const refSuffix = bookedParam
+        ? ` ${tx('wiz.reference', null, 'Reference')}: ${bookedParam}`
+        : '';
+      message.textContent =
+        tx(
+          'booking.successHomeCopy',
+          null,
+          'Your booking is successful. We will contact you shortly to confirm your reservation.'
+        ) + refSuffix;
+    }
+    openModal(successModal);
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete('booked');
+    history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
+  }
 
   document.addEventListener('mori:langchange', () => {
     syncGuestFlowSummary();

@@ -352,6 +352,28 @@
             </div>
         </div>
     </div>
+
+    <div class="guest-modal" id="successModal" hidden>
+        <button type="button" class="guest-modal-backdrop" data-close-modal aria-label="Close"></button>
+        <section class="guest-modal-dialog guest-modal-dialog-sm guest-success-dialog" role="dialog" aria-modal="true" aria-labelledby="successTitle">
+            <button type="button" class="guest-modal-close" data-close-modal aria-label="Close">&times;</button>
+            <header class="guest-success-head">
+                <span class="guest-success-mark" aria-hidden="true">
+                    <svg viewBox="0 0 52 52" fill="none" focusable="false">
+                        <circle class="guest-success-mark-ring" cx="26" cy="26" r="24" />
+                        <path class="guest-success-mark-check" d="M15.5 27.5l7 7 14.5-15.5" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                </span>
+                <p class="guest-eyebrow" id="successEyebrow" data-i18n="booking.booking">Booking</p>
+                <h2 id="successTitle" data-i18n="booking.successTitleBooking">Booking received</h2>
+            </header>
+            <p class="guest-modal-lede" id="successMessage"></p>
+            <div class="guest-modal-actions">
+                <button type="button" class="guest-btn guest-btn-primary" data-close-modal data-i18n="booking.done">Done</button>
+            </div>
+        </section>
+    </div>
+
     @await RenderSectionAsync("GuestChrome", required: false)
 
     @if (!isAuthPage)

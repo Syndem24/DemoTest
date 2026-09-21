@@ -375,7 +375,10 @@ public sealed partial class BookingService
 
             foreach (var line in requestedItems)
             {
-                var roomType = typesById[line.RoomTypeId];
+                if (!typesById.TryGetValue(line.RoomTypeId, out var roomType))
+                {
+                    throw new BookingAvailabilityException("One of the selected room types is no longer available.");
+                }
                 var price = roomType.PricePerNight;
                 if (offersByType.TryGetValue(line.RoomTypeId, out var typeOffer)
                     && typeOffer.PromoPricePerNight is decimal promo)
