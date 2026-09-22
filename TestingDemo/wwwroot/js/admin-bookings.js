@@ -52,6 +52,7 @@
   const calendarDayArrivingList = calendarDayModal?.querySelector('[data-calendar-day-arriving-list]');
   const calendarDayArrivingHeadingCount = calendarDayModal?.querySelector('[data-calendar-day-arriving-heading-count]');
   const calendarDayInCount = calendarDayModal?.querySelector('[data-calendar-day-in-count]');
+  const calendarDayHint = calendarDayModal?.querySelector('[data-calendar-day-hint]');
   const calendarDayGroupBtns = calendarDayModal?.querySelectorAll('[data-calendar-day-group]');
   const paymentViewModal = document.querySelector('[data-payment-view-modal]');
   const paymentAddModal = document.querySelector('[data-payment-add-modal]');
@@ -1597,8 +1598,10 @@
     const needsRooms = bookingNeedsRooms(booking);
     const occupying = isGuestOccupying(booking);
     const statusPill = bookingStatusPill(booking);
+    const overpaidBy = Number(booking.paidTotal || 0) - Number(booking.totalAmount || 0);
+    const overpaid = !booking.isArchived && overpaidBy > 0.009;
     row.dataset.bookingId = String(booking.id);
-    row.className = `is-${status.toLowerCase()}${needsRooms ? ' is-needs-rooms' : ''}${occupying ? ' is-occupying' : ''}`;
+    row.className = `is-${status.toLowerCase()}${needsRooms ? ' is-needs-rooms' : ''}${occupying ? ' is-occupying' : ''}${overpaid ? ' is-overpaid' : ''}`;
 
     const roomLabel = formatBookingRooms(booking);
 
@@ -1659,6 +1662,13 @@
       flag.title = canAssignRoomsToday(booking)
         ? 'Confirmed \u2014 finish payment if needed, then assign room numbers'
         : arrivalAssignMessage(booking);
+      statusCell.append(flag);
+    }
+    if (overpaid) {
+      const flag = document.createElement('span');
+      flag.className = 'admin-booking-status is-overpaid';
+      flag.textContent = `Overpaid ${money(overpaidBy)} \u2014 refund needed`;
+      flag.title = 'Posted payments exceed the stay total. Record a refund before archiving.';
       statusCell.append(flag);
     }
 
@@ -6844,6 +6854,15 @@
 
     calendarDayLastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     calendarDayModal.hidden = false;
+    if (calendarDayHint) {
+      let hintDismissed = false;
+      try {
+        hintDismissed = localStorage.getItem('mori.hint.dayFilters') === '1';
+      } catch {
+        hintDismissed = false;
+      }
+      calendarDayHint.hidden = hintDismissed;
+    }
     document.body.classList.add('admin-cal-day-open');
     calendarDayModal.querySelector('.admin-cal-day-close')?.focus();
   }
@@ -6953,6 +6972,14 @@
   });
   calendarDayModal?.querySelectorAll('[data-calendar-day-close]').forEach((button) => {
     button.addEventListener('click', closeCalendarDayModal);
+  });
+  calendarDayModal?.querySelector('[data-calendar-day-hint-dismiss]')?.addEventListener('click', () => {
+    try {
+      localStorage.setItem('mori.hint.dayFilters', '1');
+    } catch {
+      // Storage blocked — just hide the hint for this view.
+    }
+    if (calendarDayHint) calendarDayHint.hidden = true;
   });
   calendarDayFilter?.addEventListener('input', applyCalendarGuestFilter);
   calendarDayGroupBtns?.forEach((button) => {

@@ -12,6 +12,10 @@ namespace TestingDemo.Services;
 
 public sealed partial class BookingService
 {
+    // Sole owner of stay-end transitions (the old browser-side trigger was removed so
+    // staff tabs can't race this). Confirmed stays that ended archive as CheckedOut if
+    // rooms were assigned, Cancelled (no-show) if they weren't — no-show must not
+    // report as a completed stay.
     public async Task<IReadOnlyList<BookingDto>> AutoCheckoutExpiredBookingsAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;

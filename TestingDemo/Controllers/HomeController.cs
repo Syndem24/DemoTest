@@ -2,9 +2,11 @@ using System.Diagnostics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using TestingDemo.Data;
 using TestingDemo.Models;
 using TestingDemo.Services;
+using TestingDemo.Services.Chat;
 using TestingDemo.ViewModels;
 
 namespace TestingDemo.Controllers;
@@ -18,6 +20,9 @@ public class HomeController : Controller
     private readonly IStaffEmailSender _email;
     private readonly HotelBookingDbContext _db;
     private readonly ISystemAuditRecorder _audit;
+    private readonly ChatProviderUsageTracker _chatUsage;
+    private readonly EmailSendTelemetry _emailTelemetry;
+    private readonly IEnumerable<IChatLlmProvider> _chatProviders;
 
     public HomeController(
         ILogger<HomeController> logger,
@@ -26,7 +31,10 @@ public class HomeController : Controller
         IGoogleAuthSettings googleAuth,
         IStaffEmailSender email,
         HotelBookingDbContext db,
-        ISystemAuditRecorder audit)
+        ISystemAuditRecorder audit,
+        ChatProviderUsageTracker chatUsage,
+        EmailSendTelemetry emailTelemetry,
+        IEnumerable<IChatLlmProvider> providers)
     {
         _logger = logger;
         _userManager = userManager;
@@ -35,6 +43,9 @@ public class HomeController : Controller
         _email = email;
         _db = db;
         _audit = audit;
+        _chatUsage = chatUsage;
+        _emailTelemetry = emailTelemetry;
+        _chatProviders = providers;
     }
 
     public IActionResult Index()
@@ -246,6 +257,75 @@ public class HomeController : Controller
         return RedirectToAction(nameof(Privacy));
     }
 
+    [HttpPost]
+    [Authorize(Policy = "AdminManagerOnly")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CheckProvider([FromQuery] ChatProviderKind kind, CancellationToken cancellationToken)
+    {
+        if (kind is not (ChatProviderKind.Gemini or ChatProviderKind.Groq))
+            return BadRequest(new { message = "Unknown provider." });
+
+        var provider = _chatProviders.FirstOrDefault(p => p.Kind == kind);
+        if (provider is null || !await provider.IsConfiguredAsync(cancellationToken))
+        {
+            return Json(new { ok = false, state = "not_configured", message = "No API key saved." });
+        }
+
+        var request = new ChatCompletionRequest
+        {
+            SystemInstruction = "Reply with the single word OK.",
+            HotelContext = string.Empty,
+            History = Array.Empty<ChatTurn>(),
+            UserMessage = "ping",
+            MaxOutputTokens = 8,
+            Temperature = 0
+        };
+
+        string state;
+        object payload;
+        try
+        {
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            linkedCts.CancelAfter(TimeSpan.FromSeconds(12));
+            var result = await provider.CompleteAsync(request, linkedCts.Token);
+            if (result.Succeeded && !string.IsNullOrWhiteSpace(result.Text))
+            {
+                _chatUsage.RecordHealthSuccess(kind);
+                state = "ok";
+                payload = new { ok = true, state, message = "Responding normally.", checkedAtUtc = DateTime.UtcNow };
+            }
+            else if (result.QuotaExhausted)
+            {
+                _chatUsage.RecordFailure(kind, "quota");
+                state = "quota";
+                payload = new { ok = false, state, message = "Quota exhausted — provider is cooling down." };
+            }
+            else
+            {
+                _chatUsage.RecordFailure(kind, result.ErrorKind ?? "error");
+                state = "error";
+                payload = new { ok = false, state, message = $"Provider returned an error ({result.ErrorKind ?? "unknown"})." };
+            }
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _chatUsage.RecordFailure(kind, ex.GetType().Name);
+            state = "unreachable";
+            payload = new { ok = false, state, message = "Could not reach the provider (timeout or network)." };
+        }
+
+        _audit.Record(
+            SystemAuditIntent.AdministrativeAction,
+            SystemAuditDomain.Configuration,
+            "Integration.ProviderCheck",
+            "Provider",
+            kind.ToString(),
+            kind.ToString(),
+            summary: $"{kind} health check: {state}.");
+        await _db.SaveChangesAsync(cancellationToken);
+        return Json(payload);
+    }
+
     [AllowAnonymous]
     [Route("Home/NotFoundPage")]
     [Route("NotFound")]
@@ -284,7 +364,7 @@ public class HomeController : Controller
 
     private async Task<IntegrationSettingsViewModel> BuildIntegrationModelAsync(CancellationToken cancellationToken)
     {
-        return new IntegrationSettingsViewModel
+        var model = new IntegrationSettingsViewModel
         {
             SenderEmail = await _vault.GetAsync(SecureSettingKeys.EmailSender, cancellationToken),
             SmtpPasswordConfigured = await _vault.HasValueAsync(SecureSettingKeys.EmailPassword, cancellationToken),
@@ -296,6 +376,32 @@ public class HomeController : Controller
             GoogleClientId = await _vault.GetAsync(SecureSettingKeys.GoogleClientId, cancellationToken),
             GoogleClientSecretConfigured = await _vault.HasValueAsync(SecureSettingKeys.GoogleClientSecret, cancellationToken)
         };
+        await FillIntegrationTelemetryAsync(model, cancellationToken);
+        return model;
+    }
+
+    private async Task FillIntegrationTelemetryAsync(
+        IntegrationSettingsViewModel model,
+        CancellationToken cancellationToken)
+    {
+        var gemini = _chatUsage.GetHealth(ChatProviderKind.Gemini);
+        var groq = _chatUsage.GetHealth(ChatProviderKind.Groq);
+        model.GeminiLastOkUtc = gemini.LastSuccessUtc;
+        model.GeminiLastErrorUtc = gemini.LastErrorUtc;
+        model.GeminiLastError = gemini.LastError;
+        model.GroqLastOkUtc = groq.LastSuccessUtc;
+        model.GroqLastErrorUtc = groq.LastErrorUtc;
+        model.GroqLastError = groq.LastError;
+        model.SmtpLastOkUtc = _emailTelemetry.LastSuccessUtc;
+        model.SmtpLastErrorUtc = _emailTelemetry.LastErrorUtc;
+        model.SmtpLastError = _emailTelemetry.LastError;
+        model.GoogleLastSignInUtc = await _db.SystemAuditLogs
+            .AsNoTracking()
+            .Where(row => row.Domain == SystemAuditDomain.Account
+                && (row.Action == "Auth.GoogleStaffSignIn" || row.Action == "Auth.GoogleStaffConfirm"))
+            .OrderByDescending(row => row.AtUtc)
+            .Select(row => (DateTime?)row.AtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     private async Task<IntegrationSettingsViewModel> MergeIntegrationDisplayAsync(
@@ -315,6 +421,7 @@ public class HomeController : Controller
         model.GeminiKeyName ??= await _vault.GetAsync(SecureSettingKeys.GeminiKeyName, cancellationToken);
         model.GroqKeyName ??= await _vault.GetAsync(SecureSettingKeys.GroqKeyName, cancellationToken);
         model.GoogleClientId ??= await _vault.GetAsync(SecureSettingKeys.GoogleClientId, cancellationToken);
+        await FillIntegrationTelemetryAsync(model, cancellationToken);
         return model;
     }
 }

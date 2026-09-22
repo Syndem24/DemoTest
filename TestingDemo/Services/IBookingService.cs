@@ -109,6 +109,14 @@ public interface IBookingService
 
     Task<IReadOnlyList<BookingHistoryFlushLogDto>> GetHistoryFlushLogsAsync(
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Read-only preview of what <see cref="FlushHistoryAsync"/> would export/clear
+    /// for the same date range — same filters and keep-rules, no transaction.
+    /// </summary>
+    Task<FlushPreviewDto> PreviewHistoryFlushAsync(
+        FlushDateRange dateRange = default,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class BookingAvailabilityException : Exception

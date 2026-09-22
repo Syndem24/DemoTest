@@ -50,6 +50,8 @@ public sealed partial class BookingService
                 (booking.ArchivedAtUtc ?? booking.UpdatedAtUtc) < toUtc);
         }
 
+        // Cap the batch (+1 row acts as an overflow probe): the PDF is built in
+        // memory and a huge clear would also be unrecoverable once committed.
         var archived = await query
             .OrderByDescending(booking => booking.ArchivedAtUtc ?? booking.UpdatedAtUtc)
             .Take(MaxFlushBookingsPerRun + 1)
@@ -82,6 +84,10 @@ public sealed partial class BookingService
 
         if (clearAfterExport)
         {
+            // Never delete a stay that still holds reviewed or financial history:
+            // a deleted booking would orphan its review row's meaning, and deleting
+            // one with payment receipts would erase the audit trail for real money —
+            // those stays must go through the Payments flush first.
             var archivedIds = archived.Select(booking => booking.Id).ToList();
             var reviewedIds = await _db.StayReviews
                 .Where(review => review.DeletedAtUtc == null && archivedIds.Contains(review.BookingId))
@@ -143,6 +149,60 @@ public sealed partial class BookingService
             fileName,
             MapHistoryFlushLog(log));
         }, cancellationToken);
+    }
+
+    public async Task<FlushPreviewDto> PreviewHistoryFlushAsync(
+        FlushDateRange dateRange = default,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _db.Bookings
+            .AsNoTracking()
+            .Where(booking => booking.IsArchived);
+
+        if (dateRange.FromUtcInclusive.HasValue)
+        {
+            var fromUtc = dateRange.FromUtcInclusive.Value;
+            query = query.Where(booking =>
+                (booking.ArchivedAtUtc ?? booking.UpdatedAtUtc) >= fromUtc);
+        }
+
+        if (dateRange.ToUtcExclusive.HasValue)
+        {
+            var toUtc = dateRange.ToUtcExclusive.Value;
+            query = query.Where(booking =>
+                (booking.ArchivedAtUtc ?? booking.UpdatedAtUtc) < toUtc);
+        }
+
+        var matched = await query.CountAsync(cancellationToken);
+        var archivedIds = await query.Select(booking => booking.Id).ToListAsync(cancellationToken);
+
+        var reviewedIds = await _db.StayReviews
+            .Where(review => review.DeletedAtUtc == null && archivedIds.Contains(review.BookingId))
+            .Select(review => review.BookingId)
+            .ToListAsync(cancellationToken);
+        var paidIds = await _db.PaymentRecords
+            .Where(p => archivedIds.Contains(p.BookingId))
+            .Select(p => p.BookingId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var keep = reviewedIds.Concat(paidIds).ToHashSet();
+        var keptForReviews = reviewedIds.Count(keep.Contains);
+        var keptForPayments = paidIds.Count(id => keep.Contains(id) && !reviewedIds.Contains(id));
+
+        var sampleReferences = await query
+            .Where(booking => !keep.Contains(booking.Id))
+            .OrderByDescending(booking => booking.ArchivedAtUtc ?? booking.UpdatedAtUtc)
+            .Select(booking => booking.Reference)
+            .Take(5)
+            .ToListAsync(cancellationToken);
+
+        return new FlushPreviewDto(
+            matched,
+            matched - keep.Count,
+            keptForReviews,
+            keptForPayments,
+            sampleReferences);
     }
 
     public async Task<IReadOnlyList<BookingHistoryFlushLogDto>> GetHistoryFlushLogsAsync(

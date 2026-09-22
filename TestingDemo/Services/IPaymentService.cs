@@ -50,4 +50,12 @@ public interface IPaymentService
 
     Task<IReadOnlyList<PaymentFlushLogDto>> GetPaymentFlushLogsAsync(
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Read-only preview of what <see cref="FlushPaymentsAsync"/> would export/clear
+    /// for the same date range.
+    /// </summary>
+    Task<PaymentFlushPreviewDto> PreviewPaymentsFlushAsync(
+        FlushDateRange dateRange = default,
+        CancellationToken cancellationToken = default);
 }

@@ -215,6 +215,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             var result = await provider.CompleteAsync(request, cancellationToken);
             if (result.QuotaExhausted)
             {
+                _usage.RecordFailure(kind, "quota");
                 _usage.MarkForceFallback(
                     kind,
                     "quota",
@@ -225,6 +226,7 @@ public sealed class ChatOrchestrator : IChatOrchestrator
 
             if (!result.Succeeded || string.IsNullOrWhiteSpace(result.Text))
             {
+                _usage.RecordFailure(kind, result.ErrorKind ?? "empty");
                 _logger.LogInformation(
                     "{Provider} reply miss ({Kind}).",
                     kind,

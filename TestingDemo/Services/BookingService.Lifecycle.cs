@@ -256,6 +256,8 @@ public sealed partial class BookingService
         }, cancellationToken);
     }
 
+    // Hard gate: physical rooms are only handed to a fully paid stay. Without this a
+    // deposit-only guest could occupy a room and leave the balance uncollectible.
     private async Task EnsureFullyPaidForRoomAssignmentAsync(Booking booking, CancellationToken ct)
     {
         var paid = await _db.PaymentRecords
@@ -444,6 +446,9 @@ public sealed partial class BookingService
             booking.CheckoutWarningSentAtUtc = null;
         }
         booking.CheckoutTimeUtc = checkoutTimeUtc;
+        // Read the paid total before mutating: the payment-option lock and the
+        // overpaid check below both depend on it. Changing Full↔Half after money is
+        // posted would retroactively change what "due at booking" meant.
         var paidAfterEdit = await _db.PaymentRecords
             .Where(p => p.BookingId == booking.Id && p.Status == PaymentRecordStatus.Posted)
             .SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
@@ -470,6 +475,9 @@ public sealed partial class BookingService
             ct);
         ReplaceTimeFees(booking, early, lateHours, extraPersons, typeMeta);
         RecalculateTotals(booking);
+        // If this edit lowered the total below what was already paid, the audit row
+        // must tell staff to post a Refund event — otherwise the overpayment is
+        // invisible and the booking can't be archived cleanly later.
         var overpaid = decimal.Round(paidAfterEdit - booking.TotalAmount, 2, MidpointRounding.AwayFromZero);
         var updateSummary = overpaid > 0.009m
             ? $"Stay details updated. Refund due ₱{overpaid:N2} — record a Refund payment event."

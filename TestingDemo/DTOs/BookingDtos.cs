@@ -172,7 +172,8 @@ public sealed record BookingDto(
     bool ExceedsAvailableInventory = false,
     int AdultCount = 0,
     int ChildCount = 0,
-    IReadOnlyList<BookingGuestRoomDto>? GuestRooms = null);
+    IReadOnlyList<BookingGuestRoomDto>? GuestRooms = null,
+    decimal PaidTotal = 0m);
 
 public sealed record CreateBookingResponse(
     string Reference,
@@ -307,3 +308,10 @@ public sealed record DaytimeBookingFlowDto(
     int EndHour,
     IReadOnlyList<BookingDto> Arrivals,
     IReadOnlyList<BookingDto> Checkouts);
+
+public sealed record FlushPreviewDto(
+    int Matched,
+    int WillDelete,
+    int KeptForReviews,
+    int KeptForPayments,
+    IReadOnlyList<string> SampleReferences);

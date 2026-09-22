@@ -80,6 +80,8 @@
     "backGuest": "← Back to hotel site",
     "or": "or",
     "continueWithGoogle": "Continue with Google",
+    "googleHint": "New here? Guests sign in with Google — it creates your account.",
+    "signingIn": "Signing you in…",
     "changeTitle": "Change password",
     "changeLede": "Set a new password before using admin tools. Temporary passwords cannot be reused.",
     "currentPassword": "Current password",
@@ -241,6 +243,8 @@
     "noInclusions": "No listed inclusions"
   },
   "booking": {
+    "resumeStay": "Continue your stay search — {in} → {out}",
+    "resumeGo": "Resume",
     "guestsTitle": "Guests",
     "guestsRule": "Each room holds up to 2 guests included. Each room may add one extra guest (3 total) for ₱200 / night. Children under 12 must stay with an adult.",
     "addRoom": "Add room",

@@ -1965,6 +1965,50 @@ a:hover {
   color: rgba(11, 31, 58, 0.68);
 }
 
+.admin-integration-health {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  color: rgba(11, 31, 58, 0.6);
+}
+
+.admin-integration-health .is-ok {
+  color: var(--teal);
+  font-weight: 700;
+}
+
+.admin-integration-health .is-err {
+  color: #b45309;
+  font-weight: 700;
+}
+
+.admin-integration-health .is-idle {
+  color: rgba(11, 31, 58, 0.6);
+}
+
+.admin-integration-check {
+  margin-left: 0.5rem;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--teal);
+  background: transparent;
+  border: 1px solid var(--teal-soft);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.admin-integration-check:hover {
+  background: var(--teal-soft);
+}
+
+.admin-integration-check:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .admin-integration-actions .btn {
   min-height: 2.75rem;
   cursor: pointer;
@@ -7512,6 +7556,17 @@ body.is-exporting {
   font-weight: 800;
 }
 
+.admin-booking-status.is-overpaid {
+  background: color-mix(in srgb, #d97706 16%, var(--white));
+  color: #92400e;
+  border: 1px solid color-mix(in srgb, #d97706 55%, var(--navy));
+  font-weight: 800;
+}
+
+.admin-bookings-table tbody tr.is-overpaid {
+  background: color-mix(in srgb, #d97706 6%, var(--white));
+}
+
 .admin-booking-status.is-special-offer {
   background: color-mix(in srgb, var(--teal) 16%, var(--white));
   color: var(--navy);
@@ -8130,6 +8185,32 @@ body.admin-cal-day-open {
   font-size: 0.78rem;
   font-weight: 600;
   color: rgba(241, 245, 249, 0.86);
+}
+
+.admin-cal-day-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: rgba(241, 245, 249, 0.6);
+}
+
+.admin-cal-day-hint[hidden] {
+  display: none;
+}
+
+.admin-cal-day-hint button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: #2dd4bf;
+  cursor: pointer;
+}
+
+.admin-cal-day-hint button:hover {
+  text-decoration: underline;
 }
 
 .admin-cal-day-stat {
@@ -13271,6 +13352,12 @@ body.hotel-photo-zoom-open {
   line-height: 1.5;
 }
 
+.admin-payment-refund-note {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: rgba(11, 31, 58, 0.6);
+}
+
 .admin-payment-refund-reason {
   display: grid;
   gap: 0.35rem;
@@ -13458,6 +13545,14 @@ body.hotel-photo-zoom-open {
 .admin-flush-confirm-dialog p {
   margin: 0 0 24px;
   color: rgba(11, 31, 58, 0.72);
+  line-height: 1.5;
+}
+
+.admin-flush-preview {
+  margin-top: 0.5rem;
+  margin-bottom: 24px;
+  font-size: 0.8rem;
+  color: rgba(11, 31, 58, 0.6);
   line-height: 1.5;
 }
 

@@ -129,9 +129,62 @@ public sealed class ChatProviderUsageTracker
             snapshot.LastProvider = kind.ToString();
             snapshot.LastCallUtc = DateTime.UtcNow;
             snapshot.UniqueIpsToday = ips.Take(500).ToArray();
+            var health = snapshot.Health.TryGetValue(kind.ToString(), out var h)
+                ? h
+                : new ProviderHealthData();
+            health.LastSuccessUtc = DateTime.UtcNow;
+            snapshot.Health[kind.ToString()] = health;
             SaveFileUnlocked(snapshot);
             return ToPublicSnapshot(snapshot);
         }
+    }
+
+    /// <summary>Record a successful admin "Check now" probe — health only, no usage counters.</summary>
+    public void RecordHealthSuccess(ChatProviderKind kind)
+    {
+        lock (_fileGate)
+        {
+            var snapshot = LoadFileUnlocked();
+            var health = snapshot.Health.TryGetValue(kind.ToString(), out var h)
+                ? h
+                : new ProviderHealthData();
+            health.LastSuccessUtc = DateTime.UtcNow;
+            snapshot.Health[kind.ToString()] = health;
+            SaveFileUnlocked(snapshot);
+        }
+    }
+
+    /// <summary>Record a failed provider call (quota, error, empty reply) for the health display.</summary>
+    public void RecordFailure(ChatProviderKind kind, string message)
+    {
+        lock (_fileGate)
+        {
+            var snapshot = LoadFileUnlocked();
+            var health = snapshot.Health.TryGetValue(kind.ToString(), out var h)
+                ? h
+                : new ProviderHealthData();
+            health.LastErrorUtc = DateTime.UtcNow;
+            var trimmed = (message ?? string.Empty).Trim();
+            health.LastError = trimmed.Length > 200 ? trimmed[..200] : trimmed;
+            snapshot.Health[kind.ToString()] = health;
+            SaveFileUnlocked(snapshot);
+        }
+    }
+
+    public ProviderHealthSnapshot GetHealth(ChatProviderKind kind)
+    {
+        ProviderHealthData? health;
+        lock (_fileGate)
+        {
+            var data = LoadFileUnlocked();
+            data.Health.TryGetValue(kind.ToString(), out health);
+        }
+
+        return new ProviderHealthSnapshot(
+            health?.LastSuccessUtc,
+            health?.LastErrorUtc,
+            health?.LastError,
+            GetForceFallbackInfo(kind)?.UntilUtc);
     }
 
     public ChatApiConsumptionSnapshot GetApiConsumptionSnapshot()
@@ -218,6 +271,7 @@ public sealed class ChatProviderUsageTracker
             }
 
             data.UniqueIpsToday ??= Array.Empty<string>();
+            data.Health ??= new Dictionary<string, ProviderHealthData>();
             return data;
         }
         catch
@@ -253,8 +307,22 @@ public sealed class ChatProviderUsageTracker
         public string[] UniqueIpsToday { get; set; } = Array.Empty<string>();
         public string? LastProvider { get; set; }
         public DateTime? LastCallUtc { get; set; }
+        public Dictionary<string, ProviderHealthData> Health { get; set; } = new();
+    }
+
+    public sealed class ProviderHealthData
+    {
+        public DateTime? LastSuccessUtc { get; set; }
+        public DateTime? LastErrorUtc { get; set; }
+        public string? LastError { get; set; }
     }
 }
+
+public sealed record ProviderHealthSnapshot(
+    DateTime? LastSuccessUtc,
+    DateTime? LastErrorUtc,
+    string? LastError,
+    DateTime? ForceFallbackUntilUtc);
 
 public sealed record ChatApiConsumptionSnapshot(
     string DayUtc,

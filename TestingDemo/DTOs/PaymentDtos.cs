@@ -61,3 +61,7 @@ public sealed record PagedPaymentsDto(
     int Total,
     decimal TotalCollected,
     decimal TotalRefunded);
+
+public sealed record PaymentFlushPreviewDto(
+    int Matched,
+    IReadOnlyList<string> SampleReceipts);

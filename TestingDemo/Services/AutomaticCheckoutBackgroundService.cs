@@ -5,6 +5,9 @@ using TestingDemo.Models;
 
 namespace TestingDemo.Services;
 
+// Sole runner for stay-lifecycle automation (warnings, pending expiry, auto
+// checkout / no-show). Runs here — not in a browser tab — so it fires even when
+// no staff page is open and can't be double-triggered by two open admin tabs.
 public sealed class AutomaticCheckoutBackgroundService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;

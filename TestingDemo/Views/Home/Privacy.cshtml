@@ -1,4 +1,5 @@
 @model TestingDemo.ViewModels.IntegrationSettingsViewModel
+@using TestingDemo.Services
 @{
     ViewData["Title"] = "Integration";
     var senderSet = !string.IsNullOrWhiteSpace(Model.SenderEmail);
@@ -6,6 +7,20 @@
     var emailStatus = emailReady ? "Ready to send" : (senderSet || Model.SmtpPasswordConfigured ? "Incomplete" : "Not set");
     var emailStatusClass = emailReady ? "is-on" : (senderSet || Model.SmtpPasswordConfigured ? "is-warn" : "is-off");
     var googleReady = Model.GoogleClientSecretConfigured && !string.IsNullOrWhiteSpace(Model.GoogleClientId);
+}
+
+@functions {
+    private static string IntegrationRel(DateTime? utc)
+    {
+        if (utc is null) return string.Empty;
+        var value = DateTime.SpecifyKind(utc.Value, DateTimeKind.Utc);
+        var span = DateTime.UtcNow - value;
+        if (span < TimeSpan.Zero) span = TimeSpan.Zero;
+        if (span.TotalMinutes < 1) return "just now";
+        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes} min ago";
+        if (span.TotalHours < 48) return $"{(int)span.TotalHours} h ago";
+        return PhilippinesTime.ToManila(value).ToString("MMM d, yyyy h:mm tt");
+    }
 }
 
 <section class="admin-account-settings admin-integration">
@@ -41,6 +56,20 @@
                 </header>
 
                 <div class="admin-settings-fields is-single admin-integration-fields">
+                    <p class="admin-integration-health">
+                        @if (Model.SmtpLastOkUtc != null)
+                        {
+                            <span class="is-ok">Last OK @IntegrationRel(Model.SmtpLastOkUtc)</span>
+                        }
+                        @if (Model.SmtpLastErrorUtc != null)
+                        {
+                            <span class="is-err" title="@Model.SmtpLastError">Last error @IntegrationRel(Model.SmtpLastErrorUtc)</span>
+                        }
+                        @if (Model.SmtpLastOkUtc == null && Model.SmtpLastErrorUtc == null)
+                        {
+                            <span class="is-idle">Not used yet this session</span>
+                        }
+                    </p>
                     <div class="admin-settings-field">
                         <label asp-for="SenderEmail" class="form-label"></label>
                         <input asp-for="SenderEmail"
@@ -143,6 +172,22 @@
                 <div class="admin-settings-fields is-single admin-integration-fields">
                     <fieldset class="admin-integration-provider">
                         <legend>Gemini <span class="admin-integration-provider-tag">Primary</span></legend>
+                        <p class="admin-integration-health">
+                            @if (Model.GeminiLastOkUtc != null)
+                            {
+                                <span class="is-ok">Last OK @IntegrationRel(Model.GeminiLastOkUtc)</span>
+                            }
+                            @if (Model.GeminiLastErrorUtc != null)
+                            {
+                                <span class="is-err" title="@Model.GeminiLastError">Last error @IntegrationRel(Model.GeminiLastErrorUtc)</span>
+                            }
+                            @if (Model.GeminiLastOkUtc == null && Model.GeminiLastErrorUtc == null)
+                            {
+                                <span class="is-idle">Not used yet this session</span>
+                            }
+                            <button type="button" class="admin-integration-check" data-provider-check="Gemini">Check now</button>
+                            <span class="admin-integration-check-result" data-provider-check-result="Gemini" role="status" aria-live="polite"></span>
+                        </p>
                         <div class="admin-settings-field">
                             <div class="admin-integration-label-row">
                                 <label asp-for="GeminiApiKey" class="form-label"></label>
@@ -178,6 +223,22 @@
 
                     <fieldset class="admin-integration-provider">
                         <legend>Groq <span class="admin-integration-provider-tag">Backup</span></legend>
+                        <p class="admin-integration-health">
+                            @if (Model.GroqLastOkUtc != null)
+                            {
+                                <span class="is-ok">Last OK @IntegrationRel(Model.GroqLastOkUtc)</span>
+                            }
+                            @if (Model.GroqLastErrorUtc != null)
+                            {
+                                <span class="is-err" title="@Model.GroqLastError">Last error @IntegrationRel(Model.GroqLastErrorUtc)</span>
+                            }
+                            @if (Model.GroqLastOkUtc == null && Model.GroqLastErrorUtc == null)
+                            {
+                                <span class="is-idle">Not used yet this session</span>
+                            }
+                            <button type="button" class="admin-integration-check" data-provider-check="Groq">Check now</button>
+                            <span class="admin-integration-check-result" data-provider-check-result="Groq" role="status" aria-live="polite"></span>
+                        </p>
                         <div class="admin-settings-field">
                             <div class="admin-integration-label-row">
                                 <label asp-for="GroqApiKey" class="form-label"></label>
@@ -229,6 +290,16 @@
                 </header>
 
                 <div class="admin-settings-fields is-single admin-integration-fields">
+                    <p class="admin-integration-health">
+                        @if (Model.GoogleLastSignInUtc != null)
+                        {
+                            <span class="is-ok">Last sign-in @IntegrationRel(Model.GoogleLastSignInUtc)</span>
+                        }
+                        else
+                        {
+                            <span class="is-idle">No sign-in recorded yet</span>
+                        }
+                    </p>
                     <div class="admin-settings-field">
                         <label class="admin-settings-check admin-integration-switch">
                             <input asp-for="GoogleLoginEnabled" aria-describedby="google-enabled-hint" />
@@ -378,6 +449,46 @@
                 });
                 current.addEventListener('input', function () { current.setCustomValidity(''); });
             }
+
+            // On-demand provider health probe ("Check now").
+            var antiForgery = document.querySelector('#adminAntiForgery input[name="__RequestVerificationToken"]');
+            document.querySelectorAll('[data-provider-check]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var kind = btn.getAttribute('data-provider-check');
+                    var result = document.querySelector('[data-provider-check-result="' + kind + '"]');
+                    btn.disabled = true;
+                    btn.textContent = 'Checking…';
+                    fetch('@Url.Action("CheckProvider", "Home")?kind=' + encodeURIComponent(kind), {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'RequestVerificationToken': antiForgery ? antiForgery.value : '' }
+                    })
+                        .then(function (res) { return res.json(); })
+                        .then(function (data) {
+                            if (!result) return;
+                            if (data && data.ok) {
+                                result.className = 'admin-integration-check-result is-ok';
+                                result.textContent = 'OK: Responding normally · just now';
+                            } else if (data && data.state === 'not_configured') {
+                                result.className = 'admin-integration-check-result is-idle';
+                                result.textContent = data.message || 'No API key saved.';
+                            } else {
+                                result.className = 'admin-integration-check-result is-err';
+                                result.textContent = 'Error: ' + ((data && data.message) || 'Check failed — try again.');
+                            }
+                        })
+                        .catch(function () {
+                            if (result) {
+                                result.className = 'admin-integration-check-result is-err';
+                                result.textContent = 'Check failed — try again.';
+                            }
+                        })
+                        .finally(function () {
+                            btn.disabled = false;
+                            btn.textContent = 'Check again';
+                        });
+                });
+            });
         })();
     </script>
 }

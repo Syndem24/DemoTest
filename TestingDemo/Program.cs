@@ -267,6 +267,7 @@ try
     builder.Services.AddScoped<IAdminManagerSeed, AdminManagerSeed>();
     builder.Services.AddSingleton<IGoogleVerificationTokenService, GoogleVerificationTokenService>();
     builder.Services.AddScoped<ISecureConfigStore, SecureConfigStore>();
+    builder.Services.AddSingleton<EmailSendTelemetry>();
     builder.Services.AddScoped<IStaffEmailSender, SmtpStaffEmailSender>();
     builder.Services.AddScoped<IStaffOnboardingEmailSender, SmtpStaffEmailSender>();
     builder.Services.AddScoped<IPasswordResetCodeService, PasswordResetCodeService>();

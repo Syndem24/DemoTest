@@ -75,6 +75,10 @@ public sealed partial class BookingService : IBookingService
             actorDisplayName: actorDisplayName);
     }
 
+    // All booking mutations run serializable so two concurrent requests can't both
+    // read "room still free / not fully paid" and then write conflicting states —
+    // the second commit fails and EF retries it. ChangeTracker.Clear() is required
+    // because a retry would otherwise re-save entities already marked Modified.
     private Task ExecuteInSerializableTransactionAsync(
         Func<CancellationToken, Task> action,
         CancellationToken cancellationToken)
@@ -91,7 +95,7 @@ public sealed partial class BookingService : IBookingService
         });
     }
 
-    private async Task<T> ExecuteInSerializableTransactionAsync<T>(
+    private async Task<T> ExecuteInSerializableTransactionAsync<T>( // see note on the void overload
         Func<CancellationToken, Task<T>> action,
         CancellationToken cancellationToken)
     {

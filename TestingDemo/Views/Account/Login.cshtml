@@ -5,6 +5,15 @@
 }
 @model TestingDemo.ViewModels.LoginViewModel
 
+@if ((!ViewData.ModelState.IsValid && ViewData.ModelState.ErrorCount > 0) || TempData.Peek("Error") is string)
+{
+    <script>
+        // Sign-in failed and we're back on this page: drop the "Signing you in…"
+        // handoff label so the page loader shows its normal welcome instead.
+        document.documentElement.removeAttribute('data-surface-label');
+    </script>
+}
+
 <section class="guest-auth-login" aria-labelledby="guestAuthTitle">
     <div class="guest-auth-login-bg" aria-hidden="true">
         <img src="~/Images/Lounge/Lounge1.jpg"
@@ -41,6 +50,11 @@
                   asp-action="Login"
                   method="post"
                   class="guest-auth-card-form"
+                  data-surface-exit
+                  data-loader-text="Signing you in…"
+                  data-i18n="auth.signingIn"
+                  data-i18n-attr="data-loader-text"
+                  data-i18n-attr-only
                   novalidate>
                 @Html.AntiForgeryToken()
                 <input type="hidden" asp-for="ReturnUrl" />
@@ -132,7 +146,12 @@
                 <form asp-controller="Account"
                       asp-action="ExternalLogin"
                       method="post"
-                      class="guest-auth-google-form">
+                      class="guest-auth-google-form"
+                      data-surface-exit
+                      data-loader-text="Signing you in…"
+                      data-i18n="auth.signingIn"
+                      data-i18n-attr="data-loader-text"
+                      data-i18n-attr-only>
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
                     <input type="hidden" name="rememberMe" value="true" />
@@ -145,6 +164,7 @@
                         </svg>
                         <span data-i18n="auth.continueWithGoogle">Continue with Google</span>
                     </button>
+                    <p class="guest-auth-hint guest-auth-google-hint" data-i18n="auth.googleHint">New here? Guests sign in with Google — it creates your account, no password needed.</p>
                 </form>
             }
 

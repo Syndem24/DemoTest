@@ -48,24 +48,28 @@ public class AccountController : Controller
         _auditQuery = auditQuery;
         _googleAuth = googleAuth;
     }
-
+    /*Controller/AccountController.Login*/
+    // Handles Internal secure user login, authentication checks, password-change requirements, account lockout, and post-login redirection.
     [HttpGet]
     [AllowAnonymous]
     public async Task<IActionResult> Login(string? returnUrl = null)
     {
-        if (User.Identity?.IsAuthenticated == true)
+        if (User.Identity?.IsAuthenticated == true)     // ----- STEP 1: CHECK IF USER IS ALREADY AUTHENTICATED -----
         {
-            var current = await _userManager.GetUserAsync(User);
-            if (current?.MustChangePassword == true)
+            var current = await _userManager.GetUserAsync(User);    
+            if (current?.MustChangePassword == true)    // ----- STEP 2: CHECK IF PASSWORD CHANGE IS REQUIRED -----
                 return RedirectToAction(nameof(ChangePassword));
 
-            return await RedirectAfterSignInAsync(current, returnUrl);
+            return await RedirectAfterSignInAsync(current, returnUrl);      // ----- STEP 3: REDIRECT ALREADY LOGGED-IN USER -----
         }
 
-        ViewBag.GoogleLoginEnabled = await _googleAuth.IsLoginButtonVisibleAsync();
-        return View(new LoginViewModel { ReturnUrl = returnUrl });
-    }
+        ViewBag.GoogleLoginEnabled = await _googleAuth.IsLoginButtonVisibleAsync();   // ----- STEP 4: CHECK IF GOOGLE LOGIN IS AVAILABLE -----
 
+        return View(new LoginViewModel { ReturnUrl = returnUrl });       // ----- STEP 5: DISPLAY LOGIN FORM -----
+    }
+    
+    /*Controller/AccountController.Login.Post*/
+    // Validates credentials, handles guest/password requirements, lockout protection, and redirects authenticated users.
     [HttpPost]
     [AllowAnonymous]
     [ValidateAntiForgeryToken]
@@ -182,6 +186,11 @@ public class AccountController : Controller
         var normalizedGoogle = _userManager.NormalizeEmail(email);
         var loginInfo = new UserLoginInfo(info.LoginProvider, info.ProviderKey, info.ProviderDisplayName ?? "Google");
 
+        // Branch order matters: (1) staff who verified a Gmail can recover/sign in
+        // even if that Google login was never linked as an external login; (2) a
+        // Google login already linked to an account signs in directly; (3) a Google
+        // email matching an existing account gets linked instead of duplicated;
+        // (4) anything else is a brand-new guest → consent page before creation.
         var staffByRecovery = await _db.Users
             .FirstOrDefaultAsync(u =>
                 u.NormalizedGoogleEmail == normalizedGoogle

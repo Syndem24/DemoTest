@@ -113,7 +113,7 @@
                     hidden></ul>
             </div>
             <fieldset class="admin-audit-chips">
-                <legend>Area</legend>
+                <legend title="Which part of the system was touched: Booking, Payment, Account, Review, etc.">Area</legend>
                 <a class="admin-audit-chip @(Model.Domain is null ? "is-active" : null)" href="@Url.Action("Index", new { q = Model.Search })">All areas</a>
                 <a class="admin-audit-chip @(Model.Domain == SystemAuditDomain.Payment ? "is-active" : null)" href="@Url.Action("Index", new { q = Model.Search, domain = SystemAuditDomain.Payment })">Payments</a>
                 <a class="admin-audit-chip @(Model.Domain == SystemAuditDomain.Account ? "is-active" : null)" href="@Url.Action("Index", new { q = Model.Search, domain = SystemAuditDomain.Account })">Accounts</a>
@@ -307,7 +307,7 @@
                         <span class="admin-retention-step-num" aria-hidden="true">3</span>
                         <div>
                             <h2>Export</h2>
-                            <p>You'll be asked to <strong>Just export</strong> (keep records) or <strong>Export and clear</strong> (delete the exported rows). Download and check the PDF before clearing.</p>
+                            <p>You'll be asked to <strong>Just export</strong> (keep records) or <strong>Export and clear</strong> (delete the exported rows). Download and check the PDF before clearing. "Flush" means export and clear.</p>
                         </div>
                     </div>
                     <div class="admin-retention-actions">
@@ -328,12 +328,13 @@
     <section class="admin-flush-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="flushConfirmTitle">
         <h2 id="flushConfirmTitle">How do you want to export?</h2>
         <p id="flushConfirmBody">Choose carefully. Clearing cannot be undone for the selected export types in that date range.</p>
+        <div class="admin-flush-preview" data-flush-preview aria-live="polite"></div>
         <div class="admin-flush-confirm-actions admin-flush-confirm-actions--choice">
             <button type="button" class="admin-flush-ghost" data-flush-confirm-cancel>Cancel</button>
             <button type="button" class="admin-flush-btn-safe" id="adminFlushExportOnly" data-flush-mode="export">
                 Just export
             </button>
-            <button type="button" class="admin-flush-btn-danger" id="adminFlushExportClear" data-flush-mode="clear">
+            <button type="button" class="admin-flush-btn-danger" id="adminFlushExportClear" data-flush-mode="clear" title="Flush = export the rows to a PDF, then delete them from the system.">
                 Export and clear
             </button>
         </div>
@@ -547,6 +548,50 @@
                 if (overlay) overlay.hidden = true;
             };
 
+            const previewEl = overlay?.querySelector('[data-flush-preview]');
+            const loadFlushPreview = async (checked, fromDate, toDate) => {
+                if (!previewEl) return;
+                previewEl.textContent = 'Loading preview…';
+                try {
+                    const params = new URLSearchParams();
+                    checked.forEach((input) => params.append('kinds', input.value));
+                    params.set('fromDate', fromDate);
+                    params.set('toDate', toDate);
+                    const response = await fetch(
+                        `@Url.Action("Preview", "AdminFlushLogs")?${params.toString()}`,
+                        { credentials: 'same-origin' });
+                    if (!response.ok) throw new Error('preview failed');
+                    const data = await response.json();
+                    const parts = [];
+                    if (data.history) {
+                        const h = data.history;
+                        const kept = (h.keptForReviews || 0) + (h.keptForPayments || 0);
+                        let text = `Export and clear will delete ${h.willDelete} booking rows`;
+                        if (kept > 0) {
+                            text += ` (${kept} kept: ${h.keptForReviews} with reviews, ${h.keptForPayments} with payment receipts)`;
+                        }
+                        text += '.';
+                        if (h.sampleReferences?.length) {
+                            text += ` e.g. ${h.sampleReferences.join(', ')}`;
+                        }
+                        parts.push(text);
+                    }
+                    if (data.payments) {
+                        const p = data.payments;
+                        let text = `${parts.length ? '…and ' : 'Export and clear will delete '}${p.matched} payment rows.`;
+                        if (p.sampleReceipts?.length) {
+                            text += ` e.g. ${p.sampleReceipts.join(', ')}`;
+                        }
+                        parts.push(text);
+                    }
+                    const coversSelection = checked.some((input) => input.value !== 'StaffAudit');
+                    previewEl.textContent = parts.join(' ')
+                        || (coversSelection ? 'Nothing matches that selection.' : '');
+                } catch {
+                    previewEl.textContent = 'Preview unavailable — the export itself is unaffected.';
+                }
+            };
+
             form?.addEventListener('submit', (event) => {
                 const checked = [...form.querySelectorAll('input[name="kinds"]:checked')];
                 if (checked.length === 0) {
@@ -584,6 +629,7 @@
                     }
                     if (overlay) overlay.hidden = false;
                     document.getElementById('adminFlushExportOnly')?.focus();
+                    loadFlushPreview(checked, fromDate, toDate);
                     return;
                 }
 

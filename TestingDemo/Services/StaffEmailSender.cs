@@ -19,23 +19,46 @@ public interface IStaffEmailSender
     Task SendTestAsync(string toEmail, CancellationToken cancellationToken = default);
 }
 
+/// <summary>In-memory last-send telemetry for the Integration settings page.</summary>
+public sealed class EmailSendTelemetry
+{
+    public DateTime? LastSuccessUtc { get; private set; }
+    public DateTime? LastErrorUtc { get; private set; }
+    public string? LastError { get; private set; }
+
+    public void RecordSuccess()
+    {
+        LastSuccessUtc = DateTime.UtcNow;
+    }
+
+    public void RecordFailure(string message)
+    {
+        LastErrorUtc = DateTime.UtcNow;
+        var trimmed = (message ?? string.Empty).Trim();
+        LastError = trimmed.Length > 200 ? trimmed[..200] : trimmed;
+    }
+}
+
 public sealed class SmtpStaffEmailSender : IStaffEmailSender, IStaffOnboardingEmailSender
 {
     private readonly ISecureConfigStore _vault;
     private readonly IConfiguration _configuration;
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<SmtpStaffEmailSender> _logger;
+    private readonly EmailSendTelemetry _telemetry;
 
     public SmtpStaffEmailSender(
         ISecureConfigStore vault,
         IConfiguration configuration,
         IWebHostEnvironment environment,
-        ILogger<SmtpStaffEmailSender> logger)
+        ILogger<SmtpStaffEmailSender> logger,
+        EmailSendTelemetry telemetry)
     {
         _vault = vault;
         _configuration = configuration;
         _environment = environment;
         _logger = logger;
+        _telemetry = telemetry;
     }
 
     public async Task<bool> IsConfiguredAsync(CancellationToken cancellationToken = default)
@@ -178,8 +201,17 @@ public sealed class SmtpStaffEmailSender : IStaffEmailSender, IStaffOnboardingEm
             Credentials = new NetworkCredential(sender, password)
         };
 
-        await client.SendMailAsync(message, cancellationToken);
-        _logger.LogInformation("Staff email sent to a configured recipient.");
+        try
+        {
+            await client.SendMailAsync(message, cancellationToken);
+            _telemetry.RecordSuccess();
+            _logger.LogInformation("Staff email sent to a configured recipient.");
+        }
+        catch (Exception ex)
+        {
+            _telemetry.RecordFailure(ex.Message);
+            throw;
+        }
     }
 
     private string GetPublicBaseUrl()

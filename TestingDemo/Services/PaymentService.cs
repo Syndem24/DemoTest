@@ -28,6 +28,10 @@ public sealed class PaymentService : IPaymentService
         _audit = audit;
     }
 
+    // PaymentRecord is an append-only ledger: corrections are voids or negative
+    // Refund events, never deletes — so every posted amount stays auditable.
+    // Serializable tx prevents two simultaneous postings from both seeing the
+    // same "balance due" and over-collecting.
     public async Task<PaymentRecordDto> RecordAsync(
         RecordPaymentRequest request,
         CancellationToken cancellationToken = default)
@@ -157,6 +161,9 @@ public sealed class PaymentService : IPaymentService
         }, cancellationToken);
     }
 
+    // Payments-page "Refund" = void the whole receipt (full reversal — there is no
+    // partial amount). The row is kept with VoidReason so the ledger still balances
+    // and the reason is preserved for audit.
     public async Task<PaymentRecordDto> VoidAsync(
         int paymentId,
         VoidPaymentRequest request,
@@ -204,6 +211,9 @@ public sealed class PaymentService : IPaymentService
         }, cancellationToken);
     }
 
+    // Manual verification exists only for digital payments (e-wallet/bank): the
+    // hotel must confirm the money actually arrived on their e-wallet. Cash is
+    // trusted the moment the desk takes it, so it skips verification entirely.
     public async Task<PaymentRecordDto> VerifyAsync(
         int paymentId,
         CancellationToken cancellationToken = default)
@@ -498,6 +508,37 @@ public sealed class PaymentService : IPaymentService
             flushed.pdfBytes,
             flushed.fileName,
             MapFlushLog(flushed.log));
+    }
+
+    public async Task<PaymentFlushPreviewDto> PreviewPaymentsFlushAsync(
+        FlushDateRange dateRange = default,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _db.PaymentRecords
+            .AsNoTracking()
+            .AsQueryable();
+
+        if (dateRange.FromUtcInclusive.HasValue)
+        {
+            var fromUtc = dateRange.FromUtcInclusive.Value;
+            query = query.Where(p => p.PaidAtUtc >= fromUtc);
+        }
+
+        if (dateRange.ToUtcExclusive.HasValue)
+        {
+            var toUtc = dateRange.ToUtcExclusive.Value;
+            query = query.Where(p => p.PaidAtUtc < toUtc);
+        }
+
+        var matched = await query.CountAsync(cancellationToken);
+        var sampleReceipts = await query
+            .OrderBy(p => p.PaidAtUtc)
+            .ThenBy(p => p.Id)
+            .Select(p => p.ReceiptNumber)
+            .Take(5)
+            .ToListAsync(cancellationToken);
+
+        return new PaymentFlushPreviewDto(matched, sampleReceipts);
     }
 
     public async Task<IReadOnlyList<PaymentFlushLogDto>> GetPaymentFlushLogsAsync(

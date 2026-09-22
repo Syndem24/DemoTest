@@ -102,7 +102,7 @@ TABLES = [
      "One room-type line on a stay (qty x nightly rate). Rates are locked at booking time; promo/regular never repriced afterwards.",
      [
         ("Id", "int", "PK, identity", ""),
-        ("BookingId", "int", "FK → Booking, CASCADE", "Owning stay"),
+        ("BookingId", "int", "FK → Booking, CASCADE", "Owning stay — unique (BookingId,RoomTypeId): one line per type"),
         ("RoomTypeId", "int", "FK → RoomType, SET NULL", "Nullable — keeps RoomTypeName if type deleted"),
         ("RoomTypeName", "nvarchar(100)", "", "Name snapshot at booking time"),
         ("Quantity", "int", "", "Rooms of this type"),
@@ -112,7 +112,7 @@ TABLES = [
      "Joins one physical Room to a BookingItem — reception assigns door numbers.",
      [
         ("Id", "int", "PK, identity", ""),
-        ("BookingItemId", "int", "FK → BookingItem, CASCADE", ""),
+        ("BookingItemId", "int", "FK → BookingItem, CASCADE", "Unique (BookingItemId,RoomId) — a room can appear only once per line"),
         ("RoomId", "int", "FK → Room, NO ACTION", ""),
      ]),
     ("BookingCharge", "Weak entity",
@@ -131,7 +131,7 @@ TABLES = [
      [
         ("Id", "int", "PK, identity", ""),
         ("BookingId", "int", "FK → Booking, CASCADE", "Owning stay"),
-        ("ReceiptNumber", "nvarchar(40)", "", "Issued receipt no."),
+        ("ReceiptNumber", "nvarchar(40)", "unique idx", "Issued receipt no."),
         ("EventType", "nvarchar(30)", "", "Deposit | ArrivalPayment | BalanceSettlement | Refund | Adjustment"),
         ("Method", "nvarchar(30)", "", "Cash | EWallet | Other (+ legacy Card/BankTransfer/Maya)"),
         ("Amount", "decimal(18,2)", "", "Positive payment; negative = refund/adjustment"),
@@ -169,7 +169,7 @@ TABLES = [
         ("Id", "int", "PK, identity", ""),
         ("RoomTypeId", "int", "FK → RoomType, CASCADE", "Discounted category"),
         ("Kind", "nvarchar(40)", "", "LimitedTime | StayLongerSaveMore | GoogleLoyalty (+ legacy kinds)"),
-        ("Title / Description", "nvarchar(160) / nvarchar(1000)", "", "Campaign name + copy"),
+        ("Title / Description", "nvarchar(160) / nvarchar(1000)", "required / NULL", "Campaign name + copy"),
         ("RegularPricePerNight", "decimal(18,2)", "", "'Was' price shown crossed out"),
         ("PromoPricePerNight", "decimal(18,2)", "NULL", "Promo rate (null for informational kinds)"),
         ("MinNights", "int", "NULL", "StayLongerSaveMore threshold (>= 2)"),
@@ -181,7 +181,8 @@ TABLES = [
         ("CreatedAtUtc / UpdatedAtUtc", "datetime2", "", ""),
      ]),
     ("StayReview", "Weak entity (1:0..1 of Booking)",
-     "One verified post-checkout review per booking — unique index on BookingId enforces the cap.",
+     "One verified post-checkout review per booking — unique index on BookingId enforces the cap. "
+     "Staff can hide (IsPublished) or soft-delete (DeletedAtUtc/By/Reason/Note) without losing the row.",
      [
         ("Id", "int", "PK, identity", ""),
         ("BookingId", "int", "FK → Booking, CASCADE, unique", "Reviewed stay"),
@@ -193,6 +194,8 @@ TABLES = [
         ("IsPublished", "bit", "", "Visible on guest site"),
         ("HotelReply / HotelReplyAtUtc / HotelReplyBy", "nvarchar(1000) / datetime2 / nvarchar(120)", "NULL", "Staff reply"),
         ("HasHotelReply", "bit", "computed (persisted)", "Derived flag for fast reply filtering"),
+        ("DeletedAtUtc / DeletedBy", "datetime2 / nvarchar(120)", "NULL", "Soft-delete stamp — row kept, hidden from public"),
+        ("DeletedReason / DeletedNote", "nvarchar(200) / nvarchar(500)", "NULL", "Why removed (e.g. Spam) + staff detail"),
         ("CreatedAtUtc / UpdatedAtUtc", "datetime2", "", ""),
      ]),
     ("SecureSetting", "Strong entity (config vault)",
@@ -211,7 +214,7 @@ TABLES = [
         ("Intent / Domain / Action", "nvarchar(40/40/80)", "", "AdministrativeAction|ConfigurationChange|FileModification; Payment|Account|Booking|..."),
         ("ActorUserId / ActorDisplayName", "nvarchar(450) / nvarchar(120)", "", "Who did it"),
         ("TargetType / TargetId / TargetLabel", "nvarchar(40/80/200)", "", "What was touched (e.g. TargetType='AccountUser')"),
-        ("Reason / Summary", "nvarchar(500)", "NULL / required", "Why + human summary"),
+        ("Reason / Summary", "nvarchar(500) / nvarchar(1000)", "NULL / required", "Why + human summary"),
      ]),
     ("SystemFlushLog", "Strong entity (log)",
      "Audit trail for export-then-delete operations (booking history, payments, staff audit) — what was flushed, when, by whom, into which file.",
@@ -257,6 +260,8 @@ RELATIONSHIPS = [
      "Reset codes reference accounts by id string."),
     ("PaymentRecord", "ReceivedBy / VerifiedBy / VoidedBy", "AccountUser", "—", "no FK",
      "Staff names stored as snapshot strings, deliberately not FKs."),
+    ("StayReview", "DeletedBy", "AccountUser", "—", "no FK",
+     "Staff name snapshot for soft-delete — same pattern as payment audit strings."),
 ]
 
 # Legend tables

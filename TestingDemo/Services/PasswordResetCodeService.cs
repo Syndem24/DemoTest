@@ -30,6 +30,9 @@ public interface IPasswordResetCodeService
         CancellationToken cancellationToken = default);
 }
 
+// OTP codes (not reset links) so a forwarded or leaked email carries no usable
+// token — the code only works typed into an open session. Codes are stored hashed,
+// expire in 15 minutes, and burn after 3 wrong guesses to block brute force.
 public sealed class PasswordResetCodeService : IPasswordResetCodeService
 {
     public const int CodeLength = 6;

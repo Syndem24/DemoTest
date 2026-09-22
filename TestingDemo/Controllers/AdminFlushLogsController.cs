@@ -15,15 +15,21 @@ public sealed class AdminFlushLogsController : Controller
     private readonly ISystemFlushService _flushService;
     private readonly ISystemAuditQuery _auditQuery;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IBookingService _bookingService;
+    private readonly IPaymentService _paymentService;
 
     public AdminFlushLogsController(
         ISystemFlushService flushService,
         ISystemAuditQuery auditQuery,
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        IBookingService bookingService,
+        IPaymentService paymentService)
     {
         _flushService = flushService;
         _auditQuery = auditQuery;
         _userManager = userManager;
+        _bookingService = bookingService;
+        _paymentService = paymentService;
     }
 
     [HttpGet]
@@ -48,6 +54,53 @@ public sealed class AdminFlushLogsController : Controller
     {
         var items = await _auditQuery.SuggestAsync(q, domain, 8, cancellationToken);
         return Json(items);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Preview(
+        [FromQuery] List<SystemFlushKind>? kinds,
+        [FromQuery] DateOnly? fromDate,
+        [FromQuery] DateOnly? toDate,
+        CancellationToken cancellationToken)
+    {
+        FlushDateRange dateRange;
+        try
+        {
+            dateRange = FlushDateRange.FromManilaDates(fromDate, toDate);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
+        var selected = kinds ?? new List<SystemFlushKind>();
+        object? history = null;
+        object? payments = null;
+
+        if (selected.Contains(SystemFlushKind.BookingHistory))
+        {
+            var preview = await _bookingService.PreviewHistoryFlushAsync(dateRange, cancellationToken);
+            history = new
+            {
+                matched = preview.Matched,
+                willDelete = preview.WillDelete,
+                keptForReviews = preview.KeptForReviews,
+                keptForPayments = preview.KeptForPayments,
+                sampleReferences = preview.SampleReferences
+            };
+        }
+
+        if (selected.Contains(SystemFlushKind.Payments))
+        {
+            var preview = await _paymentService.PreviewPaymentsFlushAsync(dateRange, cancellationToken);
+            payments = new
+            {
+                matched = preview.Matched,
+                sampleReceipts = preview.SampleReceipts
+            };
+        }
+
+        return Json(new { history, payments });
     }
 
     [HttpPost]

@@ -6362,6 +6362,13 @@
   color: rgba(11, 31, 58, 0.68);
 }
 
+.guest-auth-google-hint {
+  margin-top: 0.15rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: rgba(11, 31, 58, 0.55);
+}
+
 /* Password group with eye toggle */
 .guest-password-group {
   position: relative;
@@ -13793,3 +13800,42 @@ html.guest-cookies-on {
 }
 
 
+
+.guest-resume-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: fit-content;
+  margin: 1rem auto;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--teal-soft);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--navy);
+  box-shadow: 0 6px 18px rgba(11, 31, 58, 0.08);
+  font-size: 0.85rem;
+}
+
+.guest-resume-chip[hidden] {
+  display: none;
+}
+
+.guest-resume-chip-go {
+  color: var(--teal);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.guest-resume-chip-go:hover {
+  text-decoration: underline;
+}
+
+.guest-resume-chip-x {
+  padding: 0 0 0 0.25rem;
+  border: 0;
+  background: none;
+  color: var(--navy);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}

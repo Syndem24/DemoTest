@@ -6381,6 +6381,48 @@
     history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
   }
 
+  // Resume-stay chip: if the accommodations wizard left a recent draft, offer to jump back in.
+  const resumeChip = document.querySelector('[data-resume-stay]');
+  if (resumeChip) {
+    const allowsStorage = typeof window.moriAllowsOptionalStorage === 'function'
+      ? window.moriAllowsOptionalStorage()
+      : window.moriCookieConsent === 'all';
+    let draft = null;
+    if (allowsStorage) {
+      try {
+        draft = JSON.parse(sessionStorage.getItem('mori.wizStayDraft') || 'null');
+      } catch {
+        draft = null;
+      }
+    }
+    const draftFresh = draft && draft.v === 1
+      && Number(draft.savedAt)
+      && Date.now() - Number(draft.savedAt) <= 24 * 60 * 60 * 1000;
+    const inDate = draft?.checkIn ? isoToLocalDate(String(draft.checkIn).slice(0, 10)) : null;
+    const outDate = draft?.checkOut ? isoToLocalDate(String(draft.checkOut).slice(0, 10)) : null;
+    if (draftFresh && inDate && outDate) {
+      const inLabel = formatStayChipDate(inDate);
+      const outLabel = formatStayChipDate(outDate);
+      const text = resumeChip.querySelector('[data-resume-stay-text]');
+      if (text) {
+        text.textContent = tx(
+          'booking.resumeStay',
+          { in: inLabel, out: outLabel },
+          `Continue your stay search \u2014 ${inLabel} \u2192 ${outLabel}`
+        );
+      }
+      resumeChip.hidden = false;
+    }
+    resumeChip.querySelector('[data-resume-stay-dismiss]')?.addEventListener('click', () => {
+      try {
+        sessionStorage.removeItem('mori.wizStayDraft');
+      } catch {
+        /* private mode */
+      }
+      resumeChip.hidden = true;
+    });
+  }
+
   document.addEventListener('mori:langchange', () => {
     syncGuestFlowSummary();
     if (guestsModal && !guestsModal.hidden) {

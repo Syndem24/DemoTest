@@ -97,6 +97,13 @@ public sealed partial class BookingService
                     .ToList();
             }
 
+            var paidByBooking = await _db.PaymentRecords.AsNoTracking()
+                .Where(p => pageBookingIds.Contains(p.BookingId) && p.Status == PaymentRecordStatus.Posted)
+                .GroupBy(p => p.BookingId)
+                .Select(g => new { g.Key, Paid = g.Sum(p => p.Amount) })
+                .ToDictionaryAsync(x => x.Key, x => x.Paid, cancellationToken);
+            mapped = mapped.Select(dto => dto with { PaidTotal = paidByBooking.GetValueOrDefault(dto.Id) }).ToList();
+
             return new PagedBookingsDto(mapped, page, pageSize, total);
         }
         catch (SqlException ex) when (cancellationToken.IsCancellationRequested

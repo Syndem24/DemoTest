@@ -64,6 +64,18 @@ public sealed class IntegrationSettingsViewModel
     [DataType(DataType.Password)]
     [Display(Name = "Current password")]
     public string CurrentPassword { get; set; } = string.Empty;
+
+    // Display-only integration health (last send/call per provider).
+    public DateTime? GeminiLastOkUtc { get; set; }
+    public DateTime? GeminiLastErrorUtc { get; set; }
+    public string? GeminiLastError { get; set; }
+    public DateTime? GroqLastOkUtc { get; set; }
+    public DateTime? GroqLastErrorUtc { get; set; }
+    public string? GroqLastError { get; set; }
+    public DateTime? SmtpLastOkUtc { get; set; }
+    public DateTime? SmtpLastErrorUtc { get; set; }
+    public string? SmtpLastError { get; set; }
+    public DateTime? GoogleLastSignInUtc { get; set; }
 }
 
 public sealed class ForgotPasswordViewModel
