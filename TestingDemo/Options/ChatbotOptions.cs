@@ -15,13 +15,14 @@ public sealed class ChatbotOptions
 
     public string AssistantName { get; set; } = "Mori Assistant";
 
-    public string GeminiModel { get; set; } = "gemini-2.0-flash";
+    public string GeminiModel { get; set; } = "gemini-3.5-flash";
 
     public string GroqModel { get; set; } = "openai/gpt-oss-20b";
 
     public int MaxInputChars { get; set; } = 500;
 
-    public int MaxOutputTokens { get; set; } = 320;
+    /// <summary>Reasoning models count "thought" tokens against this — keep headroom.</summary>
+    public int MaxOutputTokens { get; set; } = 640;
 
     public double Temperature { get; set; } = 0.3;
 

@@ -49,7 +49,7 @@ public sealed class GeminiChatProvider : IChatLlmProvider
             return new ChatCompletionResult { NotConfigured = true, ErrorKind = "not_configured" };
         }
 
-        var model = string.IsNullOrWhiteSpace(_options.GeminiModel) ? "gemini-2.0-flash" : _options.GeminiModel.Trim();
+        var model = string.IsNullOrWhiteSpace(_options.GeminiModel) ? "gemini-3.5-flash" : _options.GeminiModel.Trim();
         var url =
             $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(model)}:generateContent";
 
@@ -77,7 +77,11 @@ public sealed class GeminiChatProvider : IChatLlmProvider
             generationConfig = new
             {
                 temperature = request.Temperature,
-                maxOutputTokens = request.MaxOutputTokens
+                maxOutputTokens = request.MaxOutputTokens,
+                // Gemini 3.x is a thinking model — thought tokens count against
+                // maxOutputTokens, so a bare budget can starve the visible reply.
+                // "low" keeps guest chat fast while still reasoning a little.
+                thinkingConfig = new { thinkingLevel = "low" }
             }
         };
 
@@ -109,11 +113,25 @@ public sealed class GeminiChatProvider : IChatLlmProvider
             }
 
             using var doc = JsonDocument.Parse(body);
+            var truncated = string.Equals(
+                ExtractGeminiFinishReason(doc.RootElement),
+                "MAX_TOKENS",
+                StringComparison.OrdinalIgnoreCase);
             var text = ExtractGeminiText(doc.RootElement);
             if (string.IsNullOrWhiteSpace(text))
-                return new ChatCompletionResult { ErrorKind = "empty" };
+                return new ChatCompletionResult
+                {
+                    ErrorKind = truncated ? "truncated" : "empty",
+                    Truncated = truncated
+                };
 
-            return new ChatCompletionResult { Succeeded = true, Text = text.Trim() };
+            return new ChatCompletionResult
+            {
+                Succeeded = !truncated,
+                Truncated = truncated,
+                Text = text.Trim(),
+                ErrorKind = truncated ? "truncated" : null
+            };
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -157,6 +175,13 @@ public sealed class GeminiChatProvider : IChatLlmProvider
         || body.Contains("quota", StringComparison.OrdinalIgnoreCase)
         || body.Contains("rate limit", StringComparison.OrdinalIgnoreCase);
 
+    private static string? ExtractGeminiFinishReason(JsonElement root)
+    {
+        if (!root.TryGetProperty("candidates", out var candidates) || candidates.GetArrayLength() == 0)
+            return null;
+        return candidates[0].TryGetProperty("finishReason", out var fr) ? fr.GetString() : null;
+    }
+
     private static string? ExtractGeminiText(JsonElement root)
     {
         if (!root.TryGetProperty("candidates", out var candidates) || candidates.GetArrayLength() == 0)
@@ -166,9 +191,19 @@ public sealed class GeminiChatProvider : IChatLlmProvider
             || !content.TryGetProperty("parts", out var parts)
             || parts.GetArrayLength() == 0)
             return null;
-        if (parts[0].TryGetProperty("text", out var text))
-            return text.GetString();
-        return null;
+
+        // Thinking models return thought parts (marked "thought": true) before the answer.
+        var sb = new StringBuilder();
+        foreach (var part in parts.EnumerateArray())
+        {
+            if (part.TryGetProperty("thought", out var thought) && thought.GetBoolean())
+                continue;
+            if (part.TryGetProperty("text", out var text))
+                sb.Append(text.GetString());
+        }
+
+        var answer = sb.ToString().Trim();
+        return string.IsNullOrEmpty(answer) ? null : answer;
     }
 }
 
@@ -240,13 +275,28 @@ public sealed class GroqChatProvider : IChatLlmProvider
 
         messages.Add(new { role = "user", content = request.UserMessage });
 
-        var payload = new
-        {
-            model,
-            temperature = request.Temperature,
-            max_tokens = request.MaxOutputTokens,
-            messages
-        };
+        // Reasoning models (gpt-oss, qwen3) burn max_tokens on hidden reasoning —
+        // pin effort low so guest chat stays fast and the answer budget isn't starved.
+        var isReasoningModel =
+            model.StartsWith("openai/gpt-oss", StringComparison.OrdinalIgnoreCase)
+            || model.StartsWith("qwen/", StringComparison.OrdinalIgnoreCase);
+
+        object payload = isReasoningModel
+            ? new
+            {
+                model,
+                temperature = request.Temperature,
+                max_tokens = request.MaxOutputTokens,
+                reasoning_effort = "low",
+                messages
+            }
+            : new
+            {
+                model,
+                temperature = request.Temperature,
+                max_tokens = request.MaxOutputTokens,
+                messages
+            };
 
         try
         {
@@ -282,11 +332,28 @@ public sealed class GroqChatProvider : IChatLlmProvider
             if (!doc.RootElement.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
                 return new ChatCompletionResult { ErrorKind = "empty" };
 
-            var content = choices[0].GetProperty("message").GetProperty("content").GetString();
+            var choice = choices[0];
+            var truncated = choice.TryGetProperty("finish_reason", out var fr)
+                && string.Equals(fr.GetString(), "length", StringComparison.OrdinalIgnoreCase);
+            string? content = null;
+            if (choice.TryGetProperty("message", out var message)
+                && message.TryGetProperty("content", out var c)
+                && c.ValueKind == JsonValueKind.String)
+                content = c.GetString();
             if (string.IsNullOrWhiteSpace(content))
-                return new ChatCompletionResult { ErrorKind = "empty" };
+                return new ChatCompletionResult
+                {
+                    ErrorKind = truncated ? "truncated" : "empty",
+                    Truncated = truncated
+                };
 
-            return new ChatCompletionResult { Succeeded = true, Text = content.Trim() };
+            return new ChatCompletionResult
+            {
+                Succeeded = !truncated,
+                Truncated = truncated,
+                Text = content.Trim(),
+                ErrorKind = truncated ? "truncated" : null
+            };
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

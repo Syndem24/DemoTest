@@ -9,7 +9,7 @@
     {
         days = Model.Last7Days.Select(d => new { d.Label, d.Revenue, d.Arrivals, d.OccupiedRooms }),
         status = Model.StatusMix.Select(s => new { s.Label, s.Count }),
-        channels = Model.ChannelMix.Select(s => new { s.Label, s.Count })
+        stayMix = Model.StayMix.Select(s => new { s.Label, s.Count })
     });
 }
 
@@ -23,7 +23,7 @@
             <p class="admin-flush-eyebrow">@Model.RoleName operations</p>
             <h1 id="dashTitle">Business dashboard</h1>
             <p class="admin-flush-lede">
-                Occupancy, cash, channel mix, and front-desk load for Mori International Hotel.
+                Occupancy, cash, stay mix, offers, and front-desk load for Mori International Hotel.
                 Drag a report frame by its header, or resize from the corner. Your layout is saved to your staff account.
             </p>
         </div>
@@ -134,6 +134,24 @@
                 <div class="dash-chart-wrap dash-chart-wrap--pie">
                     <canvas id="dashStatusChart" aria-label="Booking status mix"></canvas>
                 </div>
+                @{
+                    var stayBookings = Model.StayMix.FirstOrDefault(s => s.Label == "Bookings")?.Count ?? 0;
+                    var stayReservations = Model.StayMix.FirstOrDefault(s => s.Label == "Reservations")?.Count ?? 0;
+                    var stayTotal = stayBookings + stayReservations;
+                    var bookingPct = stayTotal > 0 ? Math.Round(100m * stayBookings / stayTotal, 2) : 0m;
+                    var reservationPct = stayTotal > 0 ? 100m - bookingPct : 0m;
+                }
+                <div class="dash-staymix" data-dash-staymix>
+                    <div class="dash-staymix-bar" role="img"
+                         aria-label="Open stays: @stayBookings bookings, @stayReservations reservations">
+                        <span class="dash-staymix-seg is-booking" data-staymix-booking style="width:@bookingPct.ToString("0.##", CultureInfo.InvariantCulture)%"></span>
+                        <span class="dash-staymix-seg is-reservation" data-staymix-reservation style="width:@reservationPct.ToString("0.##", CultureInfo.InvariantCulture)%"></span>
+                    </div>
+                    <div class="dash-staymix-legend">
+                        <span><i class="dash-staymix-dot is-booking" aria-hidden="true"></i>Bookings <strong data-staymix-booking-n>@stayBookings</strong></span>
+                        <span><i class="dash-staymix-dot is-reservation" aria-hidden="true"></i>Reservations <strong data-staymix-reservation-n>@stayReservations</strong></span>
+                    </div>
+                </div>
             </article>
         </div>
 
@@ -161,25 +179,20 @@
             </article>
         </div>
 
-        <div class="grid-stack-item" gs-id="channels" gs-x="6" gs-y="9" gs-w="6" gs-h="3" gs-min-w="3" gs-min-h="2">
+        <div class="grid-stack-item" gs-id="channels" gs-x="6" gs-y="9" gs-w="6" gs-h="4" gs-min-w="3" gs-min-h="3">
             <article class="grid-stack-item-content dash-widget">
                 <header class="dash-widget-handle">
-                    <h2>Open-stay channels</h2>
+                    <h2>Special offers</h2>
+                    <a href="/AdminSpecialOffers">All offers</a>
                 </header>
-                @if (Model.ChannelMix.Count == 0)
-                {
-                    <p class="dash-widget-empty">No pending or confirmed stays to split by channel.</p>
-                }
-                else
-                {
-                    <div class="dash-chart-wrap dash-chart-wrap--pie">
-                        <canvas id="dashChannelChart" aria-label="Open stay channel mix"></canvas>
-                    </div>
-                }
+                <ul class="dash-offers" data-dash-widget="offers"
+                    data-dash-can-manage="@(Model.IsAdminManager ? "true" : "false")">
+                    <li class="dash-offer-empty">Loading offers…</li>
+                </ul>
             </article>
         </div>
 
-        <div class="grid-stack-item" gs-id="attention" gs-x="0" gs-y="13" gs-w="12" gs-h="3" gs-min-w="4" gs-min-h="2">
+        <div class="grid-stack-item" gs-id="attention" gs-x="0" gs-y="14" gs-w="12" gs-h="3" gs-min-w="4" gs-min-h="2">
             <article class="grid-stack-item-content dash-widget">
                 <header class="dash-widget-handle">
                     <h2>Front desk attention</h2>
@@ -195,9 +208,120 @@
                         @foreach (var item in Model.Attention)
                         {
                             <li>
-                                <a href="@item.Href">
+                                <a href="@item.Href" data-dash-open-booking="@item.BookingId">
                                     <strong>@item.Title</strong>
                                     <span>@item.Detail</span>
+                                </a>
+                                @if (item.Action == "review")
+                                {
+                                    <div class="dash-attention-actions">
+                                        <button type="button" data-dash-attention-act="confirm" data-dash-booking-id="@item.BookingId">Confirm</button>
+                                        <button type="button" class="is-danger" data-dash-attention-act="reject" data-dash-booking-id="@item.BookingId">Reject</button>
+                                    </div>
+                                }
+                                else if (item.Action == "arrival")
+                                {
+                                    <div class="dash-attention-actions">
+                                        <button type="button" data-dash-attention-act="done" data-dash-booking-id="@item.BookingId">Done</button>
+                                    </div>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+            </article>
+        </div>
+        <div class="grid-stack-item" gs-id="room-types" gs-x="0" gs-y="18" gs-w="6" gs-h="4" gs-min-w="3" gs-min-h="2">
+            <article class="grid-stack-item-content dash-widget">
+                <header class="dash-widget-handle">
+                    <h2>Room availability</h2>
+                    <a href="/Rooms?view=types">Open rooms</a>
+                </header>
+                @if (Model.RoomTypes.Count == 0)
+                {
+                    <p class="dash-widget-empty">No room types configured yet.</p>
+                }
+                else
+                {
+                    <ul class="dash-roomtypes" data-dash-widget="room-types" data-dash-can-manage="@(Model.IsAdminManager ? "true" : "false")">
+                        @foreach (var t in Model.RoomTypes)
+                        {
+                            var typeOpen = t.AvailableCount > 0;
+                            <li>
+                                <div class="dash-roomtype-head">
+                                    <div class="dash-roomtype-info">
+                                        <strong>@t.Name</strong>
+                                        <span>@t.AvailableCount / @t.RoomCount open@(t.OccupiedCount > 0 ? $" · {t.OccupiedCount} occupied" : "")</span>
+                                    </div>
+                                    @if (Model.IsAdminManager)
+                                    {
+                                        var occupiedRooms = t.Rooms
+                                            .Where(r => r.Status == "Occupied")
+                                            .Select(r => r.RoomNumber)
+                                            .ToList();
+                                        var closeBlocked = typeOpen && occupiedRooms.Count > 0;
+                                        <button type="button"
+                                                class="dash-roomtype-switch @(typeOpen ? "is-on" : "")"
+                                                role="switch" aria-checked="@(typeOpen ? "true" : "false")"
+                                                aria-label="@t.Name — guest booking availability"
+                                                @(closeBlocked ? "disabled" : "")
+                                                title="@(closeBlocked ? $"Cannot close — room(s) {string.Join(", ", occupiedRooms)} still have guests inside. Check them out first." : (typeOpen ? "Stop new bookings for this room type" : "Reopen this room type for bookings"))"
+                                                data-dash-roomtype-id="@t.RoomTypeId"
+                                                data-dash-roomtype-name="@t.Name">
+                                            <span class="dash-roomtype-track" aria-hidden="true"><span class="dash-roomtype-thumb"></span></span>
+                                            <span class="dash-roomtype-state">@(typeOpen ? "Open" : "Closed")</span>
+                                        </button>
+                                    }
+                                </div>
+                                <div class="dash-roomtype-rooms">
+                                    @{
+                                        var roomGroups = new[]
+                                        {
+                                            (Label: "Open", Css: "is-available", Rooms: t.Rooms.Where(r => r.Status == "Available").ToList()),
+                                            (Label: "Occupied", Css: "is-occupied", Rooms: t.Rooms.Where(r => r.Status == "Occupied").ToList()),
+                                            (Label: "Maintaining", Css: "is-cleaning", Rooms: t.Rooms.Where(r => r.Status == "Cleaning" || r.Status == "Unavailable").ToList()),
+                                        };
+                                    }
+                                    @foreach (var group in roomGroups.Where(g => g.Rooms.Count > 0))
+                                    {
+                                        <div class="dash-roomtype-group">
+                                            <em>@group.Label</em>
+                                            <div class="dash-roomchips">
+                                                @foreach (var room in group.Rooms)
+                                                {
+                                                    <span class="dash-roomchip @group.Css">@room.RoomNumber</span>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                }
+            </article>
+        </div>
+        <div class="grid-stack-item" gs-id="reviews" gs-x="6" gs-y="18" gs-w="6" gs-h="4" gs-min-w="3" gs-min-h="2">
+            <article class="grid-stack-item-content dash-widget">
+                <header class="dash-widget-handle">
+                    <h2>Guest reviews</h2>
+                    <a href="/AdminReviews?replyState=pending">
+                        <span data-dash-widget="reviews-count">@Model.PendingReviewCount</span> to reply
+                    </a>
+                </header>
+                @if (Model.PendingReviews.Count == 0)
+                {
+                    <p class="dash-widget-empty">Every guest review has a hotel reply.</p>
+                }
+                else
+                {
+                    <ul class="dash-reviews" data-dash-widget="reviews">
+                        @foreach (var review in Model.PendingReviews)
+                        {
+                            <li>
+                                <a href="@review.Href" data-dash-open-review="@review.ReviewId">
+                                    <strong>@review.Title</strong>
+                                    <span>@review.Detail</span>
                                 </a>
                             </li>
                         }
@@ -207,6 +331,62 @@
         </div>
     </div>
 </section>
+
+<div class="admin-reviews-modal dash-detail-modal" data-dash-detail-modal hidden>
+    <button type="button" class="admin-reviews-modal-backdrop" data-dash-detail-close aria-label="Close details"></button>
+    <section class="admin-reviews-modal-card" role="dialog" aria-modal="true" aria-labelledby="dashDetailTitle">
+        <header class="admin-reviews-modal-head">
+            <div class="dash-detail-head-main">
+                <div class="dash-detail-meta">
+                    <span class="dash-detail-kicker" data-dash-detail-kicker>Details</span>
+                    <span class="dash-detail-ref" data-dash-detail-ref></span>
+                </div>
+                <h2 id="dashDetailTitle" data-dash-detail-title>Details</h2>
+            </div>
+            <button type="button" class="admin-reviews-modal-close" data-dash-detail-close aria-label="Close details">×</button>
+        </header>
+        <div class="admin-reviews-modal-body" data-dash-detail-body>
+            <p class="admin-reviews-empty">Loading…</p>
+        </div>
+        <footer class="dash-detail-actions" data-dash-detail-actions></footer>
+    </section>
+</div>
+
+<div class="admin-reviews-modal dash-offer-modal" data-dash-offer-modal hidden>
+    <button type="button" class="admin-reviews-modal-backdrop" data-dash-offer-close aria-label="Close offer activation"></button>
+    <section class="admin-reviews-modal-card" role="dialog" aria-modal="true" aria-labelledby="dashOfferTitle">
+        <header class="admin-reviews-modal-head">
+            <div class="dash-detail-head-main">
+                <div class="dash-detail-meta">
+                    <span class="dash-detail-kicker">Special offer</span>
+                </div>
+                <h2 id="dashOfferTitle">Activate offer</h2>
+            </div>
+            <button type="button" class="admin-reviews-modal-close" data-dash-offer-close aria-label="Close offer activation">×</button>
+        </header>
+        <div class="admin-reviews-modal-body">
+            <p class="dash-offer-lede" data-dash-offer-lede>Choose a new start and end (Manila time). Previous dates are cleared.</p>
+            <div class="dash-offer-fields">
+                <label class="dash-offer-field">
+                    <span>Starts</span>
+                    <input type="datetime-local" class="form-control" data-dash-offer-start />
+                </label>
+                <label class="dash-offer-field">
+                    <span>Ends</span>
+                    <input type="datetime-local" class="form-control" data-dash-offer-end />
+                </label>
+            </div>
+            <p class="dash-offer-error" data-dash-offer-error role="alert" hidden></p>
+        </div>
+        <footer class="dash-detail-actions">
+            <div class="dash-attention-actions">
+                <a class="dash-detail-manage" data-dash-offer-edit href="/AdminSpecialOffers">Edit full details →</a>
+                <button type="button" class="is-quiet" data-dash-offer-close>Cancel</button>
+                <button type="button" data-dash-offer-activate>Activate offer</button>
+            </div>
+        </footer>
+    </section>
+</div>
 
 <div class="admin-report-modal" data-dash-report-modal hidden>
     <div class="admin-report-modal-card" role="dialog" aria-modal="true" aria-labelledby="dashReportTitle">

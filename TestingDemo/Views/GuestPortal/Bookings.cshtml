@@ -41,8 +41,17 @@
 
         <details class="guest-portal-bookings-block" open>
             <summary class="guest-portal-bookings-block-head">
-                <span class="guest-portal-bookings-block-title" data-i18n="bookingsPortal.active">Active bookings</span>
-                <svg class="guest-portal-bookings-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.4 8.6 12 13.2l4.6-4.6 1.4 1.4-6 6-6-6z"/></svg>
+                <span class="guest-portal-bookings-block-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false"><path d="M5 6.5h14a1.5 1.5 0 0 1 1.5 1.5v11a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19V8A1.5 1.5 0 0 1 5 6.5zM8 3.5v3M16 3.5v3M3.5 10.5h17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="m9 15 2.2 2.2L15.4 13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <span class="guest-portal-bookings-block-copy">
+                    <span class="guest-portal-bookings-block-title" data-i18n="bookingsPortal.active">Active bookings</span>
+                    <small class="guest-portal-bookings-block-lede" data-i18n="bookingsPortal.activeLede">Upcoming stays and in-progress visits.</small>
+                </span>
+                <span class="guest-portal-bookings-block-count" data-block-count hidden></span>
+                <span class="guest-portal-bookings-chevron-wrap" aria-hidden="true">
+                    <svg class="guest-portal-bookings-chevron" viewBox="0 0 24 24" width="16" height="16" focusable="false"><path fill="currentColor" d="M7.4 8.6 12 13.2l4.6-4.6 1.4 1.4-6 6-6-6z"/></svg>
+                </span>
             </summary>
             <div class="guest-portal-bookings-list" data-guest-active-bookings>
                 <p class="guest-portal-bookings-empty" data-i18n="bookingsPortal.loading">Loading…</p>
@@ -51,8 +60,17 @@
 
         <details class="guest-portal-bookings-block">
             <summary class="guest-portal-bookings-block-head">
-                <span class="guest-portal-bookings-block-title" data-i18n="bookingsPortal.history">Booking history</span>
-                <svg class="guest-portal-bookings-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.4 8.6 12 13.2l4.6-4.6 1.4 1.4-6 6-6-6z"/></svg>
+                <span class="guest-portal-bookings-block-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 7.5V12l3 2.2M4.9 5.5 3.5 4M19.1 5.5 20.5 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                </span>
+                <span class="guest-portal-bookings-block-copy">
+                    <span class="guest-portal-bookings-block-title" data-i18n="bookingsPortal.history">Booking history</span>
+                    <small class="guest-portal-bookings-block-lede" data-i18n="bookingsPortal.historyLede">Past stays, receipts, and cancelled bookings.</small>
+                </span>
+                <span class="guest-portal-bookings-block-count" data-block-count hidden></span>
+                <span class="guest-portal-bookings-chevron-wrap" aria-hidden="true">
+                    <svg class="guest-portal-bookings-chevron" viewBox="0 0 24 24" width="16" height="16" focusable="false"><path fill="currentColor" d="M7.4 8.6 12 13.2l4.6-4.6 1.4 1.4-6 6-6-6z"/></svg>
+                </span>
             </summary>
             <div class="guest-portal-bookings-list" data-guest-booking-history>
                 <p class="guest-portal-bookings-empty" data-i18n="bookingsPortal.loading">Loading…</p>
@@ -62,13 +80,19 @@
         <div class="guest-portal-bookings-reviews">
             <p class="guest-reviews-portal-message" data-review-message role="status" hidden></p>
 
-            <details class="guest-portal-bookings-block">
+            <details class="guest-portal-bookings-block guest-portal-bookings-block--accent">
                 <summary class="guest-portal-bookings-block-head">
-                    <span class="guest-portal-bookings-block-title">
-                        <span data-i18n="reviews.ready">Ready to review</span>
+                    <span class="guest-portal-bookings-block-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false"><path d="m12 4 2.3 4.7 5.2.75-3.75 3.65.9 5.15L12 15.65 7.35 18.25l.9-5.15L4.5 9.45l5.2-.75z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M18.5 4v3M17 5.5h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                    </span>
+                    <span class="guest-portal-bookings-block-copy">
+                        <span class="guest-portal-bookings-block-title" data-i18n="reviews.ready">Ready to review</span>
                         <small class="guest-portal-bookings-block-lede" data-i18n="reviews.readyLede">Verified stays waiting for your rating.</small>
                     </span>
-                    <svg class="guest-portal-bookings-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.4 8.6 12 13.2l4.6-4.6 1.4 1.4-6 6-6-6z"/></svg>
+                    <span class="guest-portal-bookings-block-count" data-block-count hidden></span>
+                    <span class="guest-portal-bookings-chevron-wrap" aria-hidden="true">
+                        <svg class="guest-portal-bookings-chevron" viewBox="0 0 24 24" width="16" height="16" focusable="false"><path fill="currentColor" d="M7.4 8.6 12 13.2l4.6-4.6 1.4 1.4-6 6-6-6z"/></svg>
+                    </span>
                 </summary>
                 <div class="guest-reviews-portal-list" data-review-eligible>
                     <p class="guest-reviews-empty" data-i18n="reviews.loading">Loading…</p>
@@ -77,11 +101,17 @@
 
             <details class="guest-portal-bookings-block">
                 <summary class="guest-portal-bookings-block-head">
-                    <span class="guest-portal-bookings-block-title">
-                        <span data-i18n="reviews.yours">Your reviews</span>
+                    <span class="guest-portal-bookings-block-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false"><path d="M5 5h14a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 19 17H9l-4.5 4v-4.5A1.5 1.5 0 0 1 3.5 15v-8.5A1.5 1.5 0 0 1 5 5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m12 8.2 1 2 2.2.32-1.6 1.56.38 2.2L12 13.3l-1.98.98.38-2.2-1.6-1.56 2.2-.32z" fill="currentColor"/></svg>
+                    </span>
+                    <span class="guest-portal-bookings-block-copy">
+                        <span class="guest-portal-bookings-block-title" data-i18n="reviews.yours">Your reviews</span>
                         <small class="guest-portal-bookings-block-lede" data-i18n="reviews.yoursLede">What you’ve shared with future guests.</small>
                     </span>
-                    <svg class="guest-portal-bookings-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.4 8.6 12 13.2l4.6-4.6 1.4 1.4-6 6-6-6z"/></svg>
+                    <span class="guest-portal-bookings-block-count" data-block-count hidden></span>
+                    <span class="guest-portal-bookings-chevron-wrap" aria-hidden="true">
+                        <svg class="guest-portal-bookings-chevron" viewBox="0 0 24 24" width="16" height="16" focusable="false"><path fill="currentColor" d="M7.4 8.6 12 13.2l4.6-4.6 1.4 1.4-6 6-6-6z"/></svg>
+                    </span>
                 </summary>
                 <div class="guest-reviews-portal-list" data-review-mine>
                     <p class="guest-reviews-empty" data-i18n="reviews.loading">Loading…</p>

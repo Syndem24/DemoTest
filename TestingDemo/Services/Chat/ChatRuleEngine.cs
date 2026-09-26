@@ -18,6 +18,13 @@ public interface IChatRuleEngine
     string BuildUnclearInputReply();
     /// <summary>Warm multi-part answer when Gemini/Groq both miss a complex guest message.</summary>
     string BuildComplexAiMissReply();
+    /// <summary>True when the message is a bare greeting / opener with no hotel topic attached.</summary>
+    bool IsConversationalOpener(string matchText, string? originalText);
+    /// <summary>True when the message is awkwardly phrased — word-salad with no request signal, or a
+    /// malformed question (e.g. "how much is you?"). topicLabel is the guessed subject, if any.</summary>
+    bool LooksAwkwardlyPhrased(string matchText, out string? topicLabel);
+    /// <summary>Clarifying reply that honestly names the guessed topic ("if you're asking about…").</summary>
+    string BuildAmbiguousTopicReply(string? topicLabel);
     bool TryLanguageSwitchReply(string original, string matchText, string replyLanguage, out string reply);
     string? TryNativeCebuanoReply(string englishReply);
 }
@@ -61,7 +68,7 @@ public sealed class ChatRuleEngine : IChatRuleEngine
         if (haystack.Length == 0)
             return null;
 
-        if (IsConversationalOpener(english, original) && !LooksLikeHotelFaq(haystack))
+        if (LooksLikeOpener(english, original) && !LooksLikeHotelFaq(haystack))
             return BuildInviteReply();
 
         if (LooksUnclear(english, original))
@@ -395,6 +402,148 @@ public sealed class ChatRuleEngine : IChatRuleEngine
     public string BuildUnclearInputReply() =>
         "I want to make sure I help you well — could you share a little more? For example rooms, rates, check-in, location, or how to book. I’m right here with you.";
 
+    public bool IsConversationalOpener(string matchText, string? originalText)
+    {
+        var english = Normalize(matchText ?? string.Empty);
+        var original = Normalize(originalText ?? string.Empty);
+        var haystack = string.IsNullOrEmpty(original) || original == english
+            ? english
+            : english + "\n" + original;
+        return LooksLikeOpener(english, original) && !LooksLikeHotelFaq(haystack);
+    }
+
+    /* Strong request signals — question words, request verbs, politeness, time/availability
+       hints, and a few Bisaya/Cebuano equivalents. Matched on whole tokens, not substrings. */
+    private static readonly HashSet<string> IntentWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "what", "whats", "how", "hows", "where", "wheres", "when", "whens", "which", "who", "why",
+        "much", "many", "there",
+        "want", "wants", "need", "needs", "book", "booking", "reserve", "show", "tell", "give",
+        "get", "got", "have", "has", "had", "looking", "look", "like", "love", "help", "assist",
+        "ask", "asking", "check", "checking", "pay", "paying", "leave", "order",
+        "tonight", "today", "tomorrow", "weekend", "weekday", "available", "availability",
+        "free", "open", "left", "vacant", "stay", "staying", "sleep", "near", "around",
+        "please", "pls", "plz",
+        "hi", "hello", "hey", "yo", "good", "morning", "afternoon", "evening", "thanks", "thank", "po",
+        "unsa", "pila", "tagpila", "asa", "kanus", "kanusa", "naa", "naay", "pwede", "puede",
+        "mahimo", "gusto", "palihug", "salamat", "bayad", "buntag", "hapon", "gabii", "ugma", "adlaw"
+    };
+
+    /* Copulas and modals ("is", "are", "can", "will"…) are intentionally absent from
+       IntentWords — they appear in almost any sentence, so a lone "is" can't prove the
+       message is a real request ("nothing is roomtype?" must still flag as awkward). */
+
+    /* Keyword clusters → the friendly label used in "…if you're asking about {label}…". */
+    private static readonly (string Label, string[] Keywords)[] AmbiguousTopics =
+    {
+        ("our rooms", new[] { "room", "rooms", "suite", "bed", "accommodation", "twin", "queen", "double" }),
+        ("booking", new[] { "book", "booking", "reserve", "reservation" }),
+        ("our rates", new[] { "price", "rate", "cost", "much", "peso", "php", "fee", "charge" }),
+        ("check-in or check-out", new[] { "check-in", "check in", "checkin", "check-out", "check out", "checkout" }),
+        ("our offers", new[] { "offer", "offers", "promo", "discount", "deal" }),
+        ("our location", new[] { "location", "address", "where", "map", "direction", "mandaue", "cebu" }),
+        ("Wi-Fi", new[] { "wifi", "wi-fi", "internet" }),
+        ("guest reviews", new[] { "review", "reviews", "rating", "feedback" }),
+        ("payment", new[] { "pay", "payment", "gcash", "maya", "cash", "card", "bank", "ewallet", "e-wallet" }),
+        ("the front desk", new[] { "phone", "contact", "call", "front desk", "reception" }),
+        ("breakfast or inclusions", new[] { "breakfast", "inclusion", "inclusions", "amenit" })
+    };
+
+    /* A malformed question: asks about a thing (how much / what / which) but the object
+       is a person — "how much is you?", "what is you check in" — i.e. broken English that
+       a keyword rule shouldn't answer confidently. Natural starters like "do you have
+       rooms" or "can you help" are exempt. */
+    private static readonly Regex ThingQuestion = new(
+        @"\b(how much|how many|what|which|whose)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly Regex PersonIsObject = new(
+        @"\b(is|are|was|were|for|to|about|with)\s+(you|u|me|i|he|she|it|we|they)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static bool HasNaturalStarter(string text) =>
+        text.StartsWith("do you", StringComparison.Ordinal)
+        || text.StartsWith("does", StringComparison.Ordinal)
+        || text.StartsWith("are you", StringComparison.Ordinal)
+        || text.StartsWith("is there", StringComparison.Ordinal)
+        || text.StartsWith("is it", StringComparison.Ordinal)
+        || text.StartsWith("can you", StringComparison.Ordinal)
+        || text.StartsWith("could you", StringComparison.Ordinal)
+        || text.StartsWith("may i", StringComparison.Ordinal)
+        || text.StartsWith("please", StringComparison.Ordinal)
+        || text.StartsWith("how are you", StringComparison.Ordinal)
+        || text.StartsWith("who are you", StringComparison.Ordinal)
+        || text.StartsWith("what are you", StringComparison.Ordinal)
+        || text.StartsWith("what can you", StringComparison.Ordinal)
+        || text.StartsWith("what do you", StringComparison.Ordinal)
+        || text.StartsWith("how can you", StringComparison.Ordinal);
+
+    public bool LooksAwkwardlyPhrased(string matchText, out string? topicLabel)
+    {
+        topicLabel = null;
+        var text = Normalize(matchText ?? string.Empty);
+        if (text.Length == 0)
+            return false;
+        // CJK has no word spacing — the topic rules handle those messages.
+        if (text.Any(c => c >= '〰'))
+            return false;
+        // Digits (dates, guest counts, nights) mean a concrete request.
+        if (text.Any(char.IsDigit))
+            return false;
+
+        var tokens = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length < 3)
+            return false;
+
+        var hasIntent = tokens.Any(t =>
+            IntentWords.Contains(t.Trim('.', ',', '?', '!', ';', ':', '"', '\'', '(', ')')));
+        var malformed =
+            !HasNaturalStarter(text)
+            && ThingQuestion.IsMatch(text)
+            && PersonIsObject.IsMatch(text);
+
+        // Well-formed request (has a strong question/request signal and no broken
+        // pattern) — let the keyword rules or the AI answer it normally. A lone copula
+        // or modal ("is", "can") is not enough on its own.
+        if (!malformed && hasIntent)
+            return false;
+
+        // Awkward: either no request signal at all, or a malformed question.
+        foreach (var (label, keywords) in AmbiguousTopics)
+        {
+            if (MatchesAny(text, keywords))
+            {
+                topicLabel = label;
+                break;
+            }
+        }
+
+        return true;
+    }
+
+    public string BuildAmbiguousTopicReply(string? topicLabel)
+    {
+        var followUp = topicLabel switch
+        {
+            "our rooms" or "our rates" => "Tell me your dates or how many guests, and I’ll point you to the right room.",
+            "check-in or check-out" => "Were you asking about our check-in or check-out times?",
+            "our offers" => "Would you like to hear about our current special offers?",
+            "our location" => "Were you asking where to find us?",
+            "Wi-Fi" => "Did you want to know about our guest Wi-Fi?",
+            "guest reviews" => "Would you like to browse guest reviews or leave one?",
+            "payment" => "Were you asking how payment works at our front desk?",
+            "booking" => "Were you looking to book a room with us?",
+            "the front desk" => "Would you like our front desk contact details?",
+            "breakfast or inclusions" => "Were you asking what’s included with a room?",
+            _ => "For example: rooms, rates, check-in times, our location, or how to book."
+        };
+        return
+            "I didn’t quite catch what you’re trying to say — if you can clarify, I’m glad to help you. "
+            + (topicLabel is null
+                ? followUp
+                : $"Were you asking about {topicLabel}? " + followUp);
+    }
+
     private static string BuildInviteReply() =>
         "Of course — I’m glad you reached out. Ask me anything about rooms, rates, offers, check-in, finding us, or booking online. "
         + "For your own reservation details, sign in to Booking history or call our front desk — I’ll still guide you to the right place.";
@@ -604,7 +753,7 @@ public sealed class ChatRuleEngine : IChatRuleEngine
             .ToList();
     }
 
-    private static bool IsConversationalOpener(string english, string original)
+    private static bool LooksLikeOpener(string english, string original)
     {
         foreach (var probe in new[] { english, original })
         {

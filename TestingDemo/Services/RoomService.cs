@@ -451,6 +451,68 @@ public class RoomService : IRoomService
         return room.ToDto();
     }
 
+    public async Task<RoomTypeAvailabilityResult?> SetRoomTypeGuestReadyAsync(
+        int roomTypeId,
+        bool open,
+        CancellationToken cancellationToken = default)
+    {
+        var rooms = await _db.Rooms
+            .Include(r => r.RoomType)
+            .Where(r => r.RoomTypeId == roomTypeId)
+            .ToListAsync(cancellationToken);
+        if (rooms.Count == 0)
+        {
+            return null;
+        }
+
+        rooms = rooms.OrderBy(r => r.RoomNumber, StringComparer.OrdinalIgnoreCase).ToList();
+
+        var blocked = rooms
+            .Where(r => r.Status == RoomStatus.Occupied)
+            .Select(r => r.RoomNumber)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        // A guest inside blocks the whole close — staff must check out first.
+        // Reopening is safe: occupied rooms simply stay occupied.
+        if (!open && blocked.Count > 0)
+        {
+            return new RoomTypeAvailabilityResult(
+                roomTypeId,
+                rooms[0].RoomType?.Name ?? "Room type",
+                0,
+                blocked);
+        }
+
+        var changed = 0;
+        var target = open ? RoomStatus.Available : RoomStatus.Cleaning;
+        foreach (var room in rooms)
+        {
+            if (room.Status == RoomStatus.Occupied)
+            {
+                continue;
+            }
+
+            if (room.Status != target)
+            {
+                room.Status = target;
+                changed++;
+            }
+        }
+
+        if (changed > 0)
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+            await _guestCatalog.NotifyChangedAsync("rooms", cancellationToken);
+        }
+
+        return new RoomTypeAvailabilityResult(
+            roomTypeId,
+            rooms[0].RoomType?.Name ?? "Room type",
+            changed,
+            open ? Array.Empty<string>() : blocked);
+    }
+
     public async Task<int> DeleteRoomTypeAsync(
         int roomTypeId,
         CancellationToken cancellationToken = default)

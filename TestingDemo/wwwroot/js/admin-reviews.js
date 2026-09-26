@@ -31,6 +31,15 @@
     q: '',
     loading: false,
   };
+
+  // Deep link from the dashboard widget: /AdminReviews?replyState=pending
+  {
+    const urlReplyState = new URLSearchParams(window.location.search).get('replyState');
+    if (urlReplyState === 'pending' || urlReplyState === 'replied') {
+      store.replyState = urlReplyState;
+      if (replyStateSelect) replyStateSelect.value = urlReplyState;
+    }
+  }
   let reqSeq = 0;
   let listAbort = null;
   let detailAbort = null;

@@ -418,11 +418,22 @@
     });
   }
 
+  function setBlockCount(container, count) {
+    const badge = container
+      ?.closest('details')
+      ?.querySelector('[data-block-count]');
+    if (!badge) return;
+    badge.textContent = String(count ?? 0);
+    badge.hidden = false;
+  }
+
   function renderLists() {
     const active = allBookings.filter(isActiveBooking);
     const history = allBookings.filter((b) => !isActiveBooking(b));
     renderActiveList(activeEl, active);
     renderHistoryTable(historyEl, history);
+    setBlockCount(activeEl, active.length);
+    setBlockCount(historyEl, history.length);
   }
 
   async function loadBookings() {

@@ -133,8 +133,19 @@
     var type = kind === 'error' || kind === 'info' ? kind : 'success';
     var host = ensureStack();
 
+    // Same message already visible — don't stack duplicates.
+    var texts = host.querySelectorAll('.mori-notice-text');
+    for (var i = 0; i < texts.length; i++) {
+      if (texts[i].textContent === text) return;
+    }
+
+    // Cap at 3 visible — remove synchronously so this loop cannot spin forever
+    // (dismiss() only marks is-leaving and removes the node 300ms later).
     while (host.children.length >= 3) {
-      host.firstElementChild && dismiss(host.firstElementChild);
+      var oldest = host.firstElementChild;
+      if (!oldest) break;
+      clearTimers(oldest);
+      oldest.remove();
     }
 
     var item = document.createElement('div');

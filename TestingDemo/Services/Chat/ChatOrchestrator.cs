@@ -33,6 +33,8 @@ public sealed class ChatOrchestrator : IChatOrchestrator
         + "Read the guest’s full message carefully. If they ask several things at once, answer each part in a natural flowing reply. "
         + "Use only public hotel facts from HOTEL_CONTEXT. Do not invent prices, room numbers, confirmation codes, bookings, payments, or policies. "
         + "You cannot look up personal reservations; gently guide them to sign in for Booking history or call the front desk. "
+        + "When the guest greets you or opens with small talk, greet them back naturally in one short line — vary your wording, never recite the same welcome — then gently ask how you can help. "
+        + "When a message is garbled, badly constructed, or unclear, say honestly that you did not quite catch it, name the topic they may mean if any (rooms, rates, check-in…), and invite them to clarify — use phrasing like \"if you can clarify, I'm glad to help you\" — never pretend you understood. "
         + "Prefer short warm paragraphs (2–5 sentences). End with a helpful next step when useful. "
         + "Always reply in the guest’s language (see language hint).";
 
@@ -146,6 +148,34 @@ public sealed class ChatOrchestrator : IChatOrchestrator
             return Finish(http, history, trimmed, complexMiss, "complex-miss", usedAiFallback: false);
         }
 
+        // Greetings and garbled-but-topical messages: let the AI evaluate the guest first
+        // (varied warm greeting / honest clarification), with canned replies as fallback.
+        var awkward = _rules.LooksAwkwardlyPhrased(prepared.MatchText, out var ambiguousTopic);
+        var isOpener = !awkward
+            && _rules.IsConversationalOpener(prepared.MatchText, prepared.OriginalText);
+
+        if ((isOpener || awkward) && _options.UseGeminiFallback)
+        {
+            var entryAi = await TryAiReplyAsync(
+                http,
+                history,
+                trimmed,
+                prepared.LanguageHint,
+                preferDeepAnswer: false,
+                cancellationToken);
+            if (entryAi is not null)
+                return entryAi;
+        }
+
+        if (awkward)
+        {
+            var clarify = await LocalizeReplyAsync(
+                _rules.BuildAmbiguousTopicReply(ambiguousTopic),
+                prepared.ReplyLanguage,
+                cancellationToken);
+            return Finish(http, history, trimmed, clarify, "ambiguous", usedAiFallback: false);
+        }
+
         var ruleReply = await _rules.TryRuleBasedReplyAsync(
             prepared.MatchText,
             prepared.OriginalText,
@@ -188,11 +218,16 @@ public sealed class ChatOrchestrator : IChatOrchestrator
 
         var hotelContext = await _context.BuildAsync(cancellationToken);
         var maxTokens = preferDeepAnswer
-            ? Math.Clamp(Math.Max(_options.MaxOutputTokens, 480), 64, 800)
-            : Math.Clamp(_options.MaxOutputTokens, 64, 800);
+            ? Math.Clamp(Math.Max(_options.MaxOutputTokens, 1200), 128, 2048)
+            : Math.Clamp(_options.MaxOutputTokens, 128, 2048);
+        var manilaNow = PhilippinesTime.NowManila();
         var request = new ChatCompletionRequest
         {
-            SystemInstruction = SystemInstruction,
+            // Include live Manila time so time-of-day greetings match the guest's actual
+            // afternoon/evening instead of the model guessing "good morning".
+            SystemInstruction = SystemInstruction
+                + $" Local time at the hotel right now (Asia/Manila): {manilaNow:dddd, MMM d, h:mm tt}. "
+                + "If you greet with a time of day, match it — \"good morning\" only before 12:00, \"good afternoon\" from 12:00 to 17:59, \"good evening\" from 18:00 onward.",
             HotelContext = hotelContext,
             History = history,
             UserMessage = preferDeepAnswer
@@ -213,6 +248,23 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                 continue;
 
             var result = await provider.CompleteAsync(request, cancellationToken);
+            if (result.Truncated)
+            {
+                // Thinking + answer didn't fit the budget — retry once with real headroom.
+                result = await provider.CompleteAsync(
+                    new ChatCompletionRequest
+                    {
+                        SystemInstruction = request.SystemInstruction,
+                        HotelContext = request.HotelContext,
+                        History = request.History,
+                        UserMessage = request.UserMessage,
+                        LanguageHint = request.LanguageHint,
+                        MaxOutputTokens = Math.Clamp(request.MaxOutputTokens * 2, 512, 4096),
+                        Temperature = request.Temperature
+                    },
+                    cancellationToken);
+            }
+
             if (result.QuotaExhausted)
             {
                 _usage.RecordFailure(kind, "quota");
@@ -224,7 +276,9 @@ public sealed class ChatOrchestrator : IChatOrchestrator
                 continue;
             }
 
-            if (!result.Succeeded || string.IsNullOrWhiteSpace(result.Text))
+            // A still-truncated reply keeps its text — a slightly short answer is better
+            // than dropping to the canned fallback.
+            if (string.IsNullOrWhiteSpace(result.Text) || (!result.Succeeded && !result.Truncated))
             {
                 _usage.RecordFailure(kind, result.ErrorKind ?? "empty");
                 _logger.LogInformation(

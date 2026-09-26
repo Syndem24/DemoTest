@@ -61,7 +61,7 @@
                         {
                             <span class="is-ok">Last OK @IntegrationRel(Model.SmtpLastOkUtc)</span>
                         }
-                        @if (Model.SmtpLastErrorUtc != null)
+                        @if (Model.SmtpLastErrorUtc != null && Model.SmtpLastErrorUtc > Model.SmtpLastOkUtc)
                         {
                             <span class="is-err" title="@Model.SmtpLastError">Last error @IntegrationRel(Model.SmtpLastErrorUtc)</span>
                         }
@@ -177,7 +177,7 @@
                             {
                                 <span class="is-ok">Last OK @IntegrationRel(Model.GeminiLastOkUtc)</span>
                             }
-                            @if (Model.GeminiLastErrorUtc != null)
+                            @if (Model.GeminiLastErrorUtc != null && Model.GeminiLastErrorUtc > Model.GeminiLastOkUtc)
                             {
                                 <span class="is-err" title="@Model.GeminiLastError">Last error @IntegrationRel(Model.GeminiLastErrorUtc)</span>
                             }
@@ -228,7 +228,7 @@
                             {
                                 <span class="is-ok">Last OK @IntegrationRel(Model.GroqLastOkUtc)</span>
                             }
-                            @if (Model.GroqLastErrorUtc != null)
+                            @if (Model.GroqLastErrorUtc != null && Model.GroqLastErrorUtc > Model.GroqLastOkUtc)
                             {
                                 <span class="is-err" title="@Model.GroqLastError">Last error @IntegrationRel(Model.GroqLastErrorUtc)</span>
                             }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { setRoomTypeOpen } from '../api'
 import { formatMoney } from '../format'
 import { compareValues, useDebouncedValue, usePagination, useSortState } from '../hooks'
 import { notifyMori } from '../moriNotice'
@@ -39,8 +40,30 @@ function SortButton({
 
 export function RoomTypesPanel({ data, loading, error, canManage = true }: Props) {
   const [search, setSearch] = useState('')
+  const [togglingId, setTogglingId] = useState<number | null>(null)
   const debouncedSearch = useDebouncedValue(search)
   const { sortKey, sortDir, toggleSort } = useSortState<TypeSortKey>('name')
+
+  const toggleType = async (item: RoomTypeSummary) => {
+    const opening = item.availableCount === 0
+    setTogglingId(item.roomTypeId)
+    try {
+      const result = await setRoomTypeOpen(item.roomTypeId, opening)
+      notifyMori(
+        opening
+          ? `${result.typeName} is open — ${result.changedCount} room(s) bookable again.`
+          : `${result.typeName} is closed — no longer bookable online.`,
+        'success',
+      )
+      window.dispatchEvent(
+        new CustomEvent('mori:admin-refresh', { detail: { scopes: ['rooms'] } }),
+      )
+    } catch (err) {
+      notifyMori(err instanceof Error ? err.message : 'Could not update the room type.', 'error')
+    } finally {
+      setTogglingId(null)
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase()
@@ -135,6 +158,7 @@ export function RoomTypesPanel({ data, loading, error, canManage = true }: Props
                     />
                   </th>
                   <th>Inclusions</th>
+                  {canManage ? <th>Booking</th> : null}
                   {canManage ? <th className="rm-col-actions">Actions</th> : null}
                 </tr>
               </thead>
@@ -165,13 +189,45 @@ export function RoomTypesPanel({ data, loading, error, canManage = true }: Props
                     </td>
                     <td>{item.roomCount}</td>
                     <td>
-                      <span className="rm-pill">{item.availableCount} available</span>
+                      <span className="rm-pill">
+                        {item.availableCount} / {item.roomCount} open
+                      </span>
                     </td>
                     <td>
                       <div className="rm-clamp">
                         {item.inclusions.length ? item.inclusions.join(', ') : '—'}
                       </div>
                     </td>
+                    {canManage ? (
+                    <td>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={item.availableCount > 0}
+                        aria-label={`${item.name} — guest booking availability`}
+                        className={`rm-switch ${item.availableCount > 0 ? 'is-on' : ''}`}
+                        disabled={
+                          togglingId === item.roomTypeId ||
+                          (item.availableCount > 0 && item.occupiedCount > 0)
+                        }
+                        title={
+                          item.availableCount > 0 && item.occupiedCount > 0
+                            ? `Cannot close — ${item.occupiedCount} room(s) still have guests inside. Check them out first.`
+                            : item.availableCount > 0
+                              ? 'Stop new bookings for this room type'
+                              : 'Reopen this room type for bookings'
+                        }
+                        onClick={() => void toggleType(item)}
+                      >
+                        <span className="rm-switch-track" aria-hidden="true">
+                          <span className="rm-switch-thumb" />
+                        </span>
+                        <span className="rm-switch-label">
+                          {item.availableCount > 0 ? 'Open' : 'Closed'}
+                        </span>
+                      </button>
+                    </td>
+                    ) : null}
                     {canManage ? (
                     <td className="rm-col-actions">
                       <div className="rm-actions">

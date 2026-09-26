@@ -29,6 +29,8 @@ public sealed class ChatCompletionResult
     public bool Succeeded { get; init; }
     public bool NotConfigured { get; init; }
     public bool QuotaExhausted { get; init; }
+    /// <summary>The model hit the token cap (MAX_TOKENS / length) — Text may hold a partial reply.</summary>
+    public bool Truncated { get; init; }
     public string? Text { get; init; }
     public string? ErrorKind { get; init; }
 }

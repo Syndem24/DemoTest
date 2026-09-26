@@ -11,9 +11,37 @@ public sealed record DashboardDayPoint(string Label, decimal Revenue, int Arriva
 
 public sealed record DashboardStatusSlice(string Label, int Count);
 
-public sealed record DashboardAttentionItem(string Title, string Detail, string Href);
+/// <summary>
+/// One front-desk attention row. Action "review" = pending stay awaiting a confirm/reject
+/// call; "arrival" = confirmed guest landing today, dismissible with a mark-read.
+/// </summary>
+public sealed record DashboardAttentionItem(
+    string Title,
+    string Detail,
+    string Href,
+    int BookingId,
+    string Action);
 
 public sealed record DashboardSignal(string Title, string Detail, string Level);
+
+/// <summary>One physical room shown as a chip in the room-availability breakdown.</summary>
+public sealed record DashboardRoomCell(string RoomNumber, string Status);
+
+/// <summary>Per-room-type availability row for the dashboard switch list.</summary>
+public sealed record DashboardRoomTypeRow(
+    int RoomTypeId,
+    string Name,
+    int RoomCount,
+    int AvailableCount,
+    int OccupiedCount,
+    IReadOnlyList<DashboardRoomCell> Rooms);
+
+/// <summary>One pending guest review row — published but not yet answered by the hotel.</summary>
+public sealed record DashboardReviewItem(
+    int ReviewId,
+    string Title,
+    string Detail,
+    string Href);
 
 public sealed record DashboardSnapshot(
     string RoleName,
@@ -41,9 +69,12 @@ public sealed record DashboardSnapshot(
     int ActiveOffers,
     IReadOnlyList<DashboardDayPoint> Last7Days,
     IReadOnlyList<DashboardStatusSlice> StatusMix,
-    IReadOnlyList<DashboardStatusSlice> ChannelMix,
+    IReadOnlyList<DashboardStatusSlice> StayMix,
     IReadOnlyList<DashboardSignal> Signals,
-    IReadOnlyList<DashboardAttentionItem> Attention);
+    IReadOnlyList<DashboardAttentionItem> Attention,
+    IReadOnlyList<DashboardRoomTypeRow> RoomTypes,
+    IReadOnlyList<DashboardReviewItem> PendingReviews,
+    int PendingReviewCount);
 
 /// <summary>One printable line for the bookings/reservations report tables.</summary>
 public sealed record DashboardReportBookingRow(
@@ -162,21 +193,53 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
         var monthStartUtc = PhilippinesTime.ToUtc(monthStartManila);
         var weekStartUtc = todayStart.AddDays(-6);
 
-        var rooms = await _db.Rooms.AsNoTracking()
-            .Select(r => r.Status)
+        var roomFlat = await _db.Rooms.AsNoTracking()
+            .Select(r => new { r.RoomTypeId, TypeName = r.RoomType.Name, r.RoomNumber, r.Status })
             .ToListAsync(cancellationToken);
-        var roomsTotal = rooms.Count;
-        var roomsAvailable = rooms.Count(s => s == RoomStatus.Available);
-        var roomsOccupied = rooms.Count(s => s == RoomStatus.Occupied);
-        var roomsCleaning = rooms.Count(s => s == RoomStatus.Cleaning);
-        var roomsUnavailable = rooms.Count(s => s == RoomStatus.Unavailable);
+        var roomsTotal = roomFlat.Count;
+        var roomsAvailable = roomFlat.Count(s => s.Status == RoomStatus.Available);
+        var roomsOccupied = roomFlat.Count(s => s.Status == RoomStatus.Occupied);
+        var roomsCleaning = roomFlat.Count(s => s.Status == RoomStatus.Cleaning);
+        var roomsUnavailable = roomFlat.Count(s => s.Status == RoomStatus.Unavailable);
         var occupancy = roomsTotal == 0 ? 0 : Math.Round(100m * roomsOccupied / roomsTotal, 1);
+
+        var roomTypeRows = roomFlat
+            .GroupBy(r => new { r.RoomTypeId, r.TypeName })
+            .OrderBy(g => g.Key.TypeName, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new DashboardRoomTypeRow(
+                g.Key.RoomTypeId,
+                g.Key.TypeName,
+                g.Count(),
+                g.Count(r => r.Status == RoomStatus.Available),
+                g.Count(r => r.Status == RoomStatus.Occupied),
+                g.OrderBy(r => r.RoomNumber, StringComparer.OrdinalIgnoreCase)
+                    .Select(r => new DashboardRoomCell(r.RoomNumber, r.Status.ToString()))
+                    .ToList()))
+            .ToList();
+
+        var pendingReviewRows = await _db.StayReviews.AsNoTracking()
+            .Where(r => r.DeletedAtUtc == null && !r.HasHotelReply)
+            .OrderByDescending(r => r.CreatedAtUtc)
+            .Select(r => new
+            {
+                r.Id,
+                r.DisplayName,
+                r.OverallRating,
+                r.Comment,
+                r.CreatedAtUtc,
+                r.Booking.Reference
+            })
+            .Take(6)
+            .ToListAsync(cancellationToken);
+        var pendingReviewCount = await _db.StayReviews.AsNoTracking()
+            .CountAsync(r => r.DeletedAtUtc == null && !r.HasHotelReply, cancellationToken);
 
         var liveRows = await _db.Bookings.AsNoTracking()
             .Where(b => !b.IsArchived)
             .Select(b => new LiveBookingRow(
                 b.Id,
                 b.Status,
+                b.Kind,
                 b.CheckInAtUtc,
                 b.CheckoutTimeUtc,
                 b.TotalAmount,
@@ -274,12 +337,13 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
         var averageStay = openCount == 0 ? 0 : Math.Round(pipeline / openCount, 2);
         var bookedShare = openCount == 0 ? 0 : Math.Round(100m * confirmed / openCount, 1);
 
-        var channelMix = liveRows
+        var stayMix = liveRows
             .Where(b => b.Status == BookingStatus.Pending || b.Status == BookingStatus.Confirmed)
-            .GroupBy(b => b.Channel)
-            .Select(g => new { Channel = g.Key, Count = g.Count() })
-            .OrderByDescending(r => r.Count)
-            .Select(r => new DashboardStatusSlice(ChannelLabel(r.Channel), r.Count))
+            .GroupBy(b => b.Kind)
+            .OrderByDescending(g => g.Count())
+            .Select(g => new DashboardStatusSlice(
+                g.Key == BookingKind.Reservation ? "Reservations" : "Bookings",
+                g.Count()))
             .ToList();
 
         // One campaign can span several room types — count offers, not rows.
@@ -308,24 +372,32 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
             pipeline,
             activeOffers);
 
+        // Pending stays always need a decision — list them regardless of how far
+        // out check-in is, nearest first; same-day confirmed arrivals follow.
         var attentionItems = liveRows
             .Where(b =>
-                (b.Status == BookingStatus.Pending && b.CheckInAtUtc < tomorrowStart.AddHours(12))
+                b.Status == BookingStatus.Pending
                 || (b.Status == BookingStatus.Confirmed
                     && b.CheckInAtUtc >= todayStart
                     && b.CheckInAtUtc < tomorrowStart))
-            .OrderBy(b => b.CheckInAtUtc)
+            .OrderBy(b => b.Status == BookingStatus.Pending ? 0 : 1)
+            .ThenBy(b => b.CheckInAtUtc)
             .Take(8)
             .Select(row =>
             {
-                var when = PhilippinesTime.ToManila(row.CheckInAtUtc).ToString("h:mm tt");
+                var whenManila = PhilippinesTime.ToManila(row.CheckInAtUtc);
+                var when = row.CheckInAtUtc < tomorrowStart
+                    ? whenManila.ToString("h:mm tt")
+                    : whenManila.ToString("MMM d · h:mm tt");
                 var title = row.Status == BookingStatus.Pending
                     ? $"Call · {row.GuestName}"
                     : $"Arrival · {row.GuestName}";
                 return new DashboardAttentionItem(
                     title,
                     $"{row.Reference} · {when}",
-                    "/AdminBookings");
+                    $"/AdminBookings?booking={row.Id}",
+                    row.Id,
+                    row.Status == BookingStatus.Pending ? "review" : "arrival");
             })
             .ToList();
 
@@ -361,9 +433,30 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
                 new DashboardStatusSlice("Cancelled", cancelled),
                 new DashboardStatusSlice("Rejected", rejected)
             ],
-            channelMix,
+            stayMix,
             signals,
-            attentionItems);
+            attentionItems,
+            roomTypeRows,
+            pendingReviewRows
+                .Select(r => new DashboardReviewItem(
+                    r.Id,
+                    $"★{r.OverallRating} · {r.DisplayName}",
+                    $"{r.Reference} · {Snippet(r.Comment)}",
+                    "/AdminReviews?replyState=pending"))
+                .ToList(),
+            pendingReviewCount);
+    }
+
+    /// <summary>Short one-line preview for dashboard widgets.</summary>
+    private static string Snippet(string? text, int max = 60)
+    {
+        var clean = (text ?? string.Empty).Trim();
+        if (clean.Length == 0)
+        {
+            return "No written comment";
+        }
+
+        return clean.Length <= max ? clean : clean[..max].TrimEnd() + "…";
     }
 
     /// <summary>
@@ -645,18 +738,6 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
                 g => g.Sum(i => i.Assigned > 0 ? i.Assigned : i.Quantity));
     }
 
-    private static string ChannelLabel(BookingChannel channel) => channel switch
-    {
-        BookingChannel.Online => "Online",
-        BookingChannel.WalkIn => "Walk-in",
-        BookingChannel.FrontDeskExtension => "Front desk",
-        BookingChannel.Agoda => "Agoda",
-        BookingChannel.Expedia => "Expedia",
-        BookingChannel.RedDoorz => "RedDoorz",
-        BookingChannel.OtherThirdParty => "Other OTA",
-        _ => channel.ToString()
-    };
-
     private static IReadOnlyList<DashboardSignal> BuildSignals(
         bool isAdminManager,
         ChatApiConsumptionSnapshot chatApi,
@@ -815,6 +896,7 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
     private sealed record LiveBookingRow(
         int Id,
         BookingStatus Status,
+        BookingKind Kind,
         DateTime CheckInAtUtc,
         DateTime CheckoutTimeUtc,
         decimal TotalAmount,

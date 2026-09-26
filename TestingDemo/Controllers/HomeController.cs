@@ -277,7 +277,7 @@ public class HomeController : Controller
             HotelContext = string.Empty,
             History = Array.Empty<ChatTurn>(),
             UserMessage = "ping",
-            MaxOutputTokens = 8,
+            MaxOutputTokens = 128,
             Temperature = 0
         };
 
@@ -286,8 +286,15 @@ public class HomeController : Controller
         try
         {
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            linkedCts.CancelAfter(TimeSpan.FromSeconds(12));
+            linkedCts.CancelAfter(TimeSpan.FromSeconds(20));
             var result = await provider.CompleteAsync(request, linkedCts.Token);
+            // 5xx / timeouts are usually a transient provider hiccup — retry once
+            // before alarming the admin with a hard failure.
+            if (IsTransient(result))
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(900), linkedCts.Token);
+                result = await provider.CompleteAsync(request, linkedCts.Token);
+            }
             if (result.Succeeded && !string.IsNullOrWhiteSpace(result.Text))
             {
                 _chatUsage.RecordHealthSuccess(kind);
@@ -304,7 +311,9 @@ public class HomeController : Controller
             {
                 _chatUsage.RecordFailure(kind, result.ErrorKind ?? "error");
                 state = "error";
-                payload = new { ok = false, state, message = $"Provider returned an error ({result.ErrorKind ?? "unknown"})." };
+                payload = result.ErrorKind is "http_503" or "http_502" or "http_504" or "timeout"
+                    ? new { ok = false, state, message = $"Provider temporarily unavailable ({result.ErrorKind}) — try again shortly." }
+                    : new { ok = false, state, message = $"Provider returned an error ({result.ErrorKind ?? "unknown"})." };
             }
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
@@ -361,6 +370,13 @@ public class HomeController : Controller
         Response.StatusCode = 500;
         return View("NotFound", StatusErrorPageModel.ForStatus(500));
     }
+
+    /// <summary>Provider errors worth one retry before declaring the health check failed.</summary>
+    private static bool IsTransient(ChatCompletionResult result) =>
+        !result.Succeeded
+        && !result.QuotaExhausted
+        && !result.NotConfigured
+        && result.ErrorKind is "http_500" or "http_502" or "http_503" or "http_504" or "timeout" or "exception";
 
     private async Task<IntegrationSettingsViewModel> BuildIntegrationModelAsync(CancellationToken cancellationToken)
     {

@@ -18,4 +18,21 @@ public interface IRoomService
     /// Occupied rooms cannot be toggled.
     /// </summary>
     Task<RoomDto?> SetGuestReadyAsync(int id, bool open, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Opens or closes every physical room of a type for guest booking in one call.
+    /// Occupied rooms keep their state and are reported in <see cref="RoomTypeAvailabilityResult.BlockedRoomNumbers"/>.
+    /// Returns null when the room type does not exist.
+    /// </summary>
+    Task<RoomTypeAvailabilityResult?> SetRoomTypeGuestReadyAsync(
+        int roomTypeId,
+        bool open,
+        CancellationToken cancellationToken = default);
 }
+
+/// <summary>Outcome of a bulk open/close on a room type.</summary>
+public sealed record RoomTypeAvailabilityResult(
+    int RoomTypeId,
+    string TypeName,
+    int ChangedCount,
+    IReadOnlyList<string> BlockedRoomNumbers);

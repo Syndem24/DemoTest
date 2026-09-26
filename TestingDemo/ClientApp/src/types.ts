@@ -14,6 +14,7 @@ export type RoomTypeSummary = {
   bedCount: number
   roomCount: number
   availableCount: number
+  occupiedCount: number
   inclusions: string[]
   images: string[]
 }

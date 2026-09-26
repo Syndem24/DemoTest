@@ -45,6 +45,7 @@ public class RoomIndexViewModel
                     BedCount = representative.BedCount,
                     RoomCount = g.Rooms.Count,
                     AvailableCount = g.Rooms.Count(r => r.Status == RoomStatus.Available),
+                    OccupiedCount = g.Rooms.Count(r => r.Status == RoomStatus.Occupied),
                     Inclusions = InclusionCatalog.OrderForGuestDisplay(representative.Inclusions),
                     Images = representative.Images.ToList()
                 };
@@ -76,6 +77,7 @@ public class RoomTypeSummaryViewModel
     public int BedCount { get; set; }
     public int RoomCount { get; set; }
     public int AvailableCount { get; set; }
+    public int OccupiedCount { get; set; }
     public List<string> Inclusions { get; set; } = new();
     public List<string> Images { get; set; } = new();
 }

@@ -13963,11 +13963,15 @@ body.hotel-photo-zoom-open {
 .dash-attention {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 2px 2px 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
   gap: 0.55rem;
-  overflow: visible;
+  align-content: start;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .dash-attention a {
@@ -13994,14 +13998,749 @@ body.hotel-photo-zoom-open {
   color: rgba(11, 31, 58, 0.65);
 }
 
+.dash-attention li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dash-attention-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.dash-attention-actions button {
+  flex: 1;
+  padding: 0.32rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid rgba(26, 166, 166, 0.5);
+  background: var(--teal);
+  color: var(--white);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease,
+    background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.dash-attention-actions button:hover:not(:disabled) {
+  box-shadow: 0 4px 10px rgba(26, 166, 166, 0.3);
+  transform: translateY(-1px);
+}
+
+.dash-attention-actions button.is-danger {
+  background: transparent;
+  color: rgba(11, 31, 58, 0.6);
+  border-color: rgba(11, 31, 58, 0.2);
+}
+
+.dash-attention-actions button.is-danger:hover:not(:disabled) {
+  background: rgba(180, 60, 60, 0.08);
+  border-color: rgba(180, 60, 60, 0.45);
+  color: #8a2a2a;
+  box-shadow: none;
+}
+
+.dash-attention-actions button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.dash-attention-actions button.is-error {
+  background: rgba(180, 60, 60, 0.08);
+  border-color: rgba(180, 60, 60, 0.5);
+  color: #8a2a2a;
+}
+
+.dash-attention li.is-done a {
+  opacity: 0.45;
+}
+
+.dash-attention li.is-done .dash-attention-actions {
+  display: none;
+}
+
+/* Dashboard detail modal — booking/review peek without leaving the page */
+.dash-detail-modal .admin-reviews-modal-card {
+  width: min(34rem, 100%);
+}
+
+.dash-detail-modal .admin-reviews-modal-body {
+  overflow-y: auto;
+  padding-bottom: 1rem;
+}
+
+.dash-detail-head-main {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.dash-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.dash-detail-kicker {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+
+.dash-detail-ref {
+  font-size: 0.74rem;
+  font-weight: 650;
+  color: rgba(11, 31, 58, 0.55);
+  letter-spacing: 0.04em;
+}
+
+.dash-detail-modal .admin-reviews-modal-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+
+.dash-detail-modal .admin-booking-detail-summary {
+  margin-bottom: 0.35rem;
+}
+
+.dash-detail-section {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.dash-detail-section-title {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(11, 31, 58, 0.55);
+  padding-bottom: 0.3rem;
+  border-bottom: 1px dashed var(--navy-line);
+}
+
+.dash-detail-modal .admin-booking-detail-grid {
+  gap: 0.55rem 0.9rem;
+}
+
+.dash-detail-modal .admin-booking-detail-field-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.dash-field-ico {
+  display: inline-flex;
+  width: 0.95rem;
+  height: 0.95rem;
+  color: var(--teal);
+  flex: none;
+}
+
+.dash-field-ico svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.dash-stars {
+  display: inline-flex;
+  gap: 0.12rem;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.dash-stars.is-lg {
+  font-size: 1.3rem;
+}
+
+.dash-star {
+  color: rgba(11, 31, 58, 0.16);
+}
+
+.dash-star.is-on {
+  color: var(--teal);
+}
+
+.dash-detail-overall {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+}
+
+/* .admin-booking-balance-due targets all descendant spans — restore star glyphs. */
+.dash-detail-overall .dash-star {
+  color: rgba(11, 31, 58, 0.16);
+  font-size: inherit;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.dash-detail-overall .dash-star.is-on {
+  color: var(--teal);
+}
+
+.dash-rating-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.dash-rating-tile {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--navy-line);
+  border-radius: 10px;
+  background: var(--navy-soft);
+}
+
+.dash-rating-tile-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(11, 31, 58, 0.55);
+}
+
+.dash-detail-reply-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(11, 31, 58, 0.55);
+}
+
+.dash-detail-actions {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.7rem 1rem 0.9rem;
+  border-top: 1px solid var(--navy-line);
+}
+
+.dash-detail-actions .dash-attention-actions {
+  justify-content: flex-end;
+}
+
+.dash-detail-reply-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 4.5rem;
+  border: 1px solid var(--navy-line);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  color: var(--navy);
+  background: var(--white);
+}
+
+.dash-detail-reply-input:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
+.dash-detail-comment {
+  margin: 0.75rem 0 0;
+  padding: 0.6rem 0.75rem;
+  border-left: 3px solid var(--teal);
+  background: var(--navy-soft);
+  border-radius: 0 8px 8px 0;
+  white-space: pre-wrap;
+}
+
+.dash-detail-reply {
+  margin: 0.55rem 0 0;
+  padding: 0.55rem 0.75rem;
+  border: 1px dashed var(--navy-line);
+  border-radius: 8px;
+  color: var(--navy);
+  opacity: 0.85;
+  white-space: pre-wrap;
+}
+
+.dash-detail-manage {
+  justify-self: start;
+  font-size: 0.85rem;
+  color: var(--teal);
+  text-decoration: none;
+}
+
+.dash-detail-manage:hover {
+  text-decoration: underline;
+}
+
+.dash-attention-actions button.is-quiet {
+  background: transparent;
+  border-color: var(--navy-line);
+  color: var(--navy);
+}
+
+/* Stay mix & offers widget — kind split bar + per-campaign activate/deactivate */
+.dash-staymix {
+  display: grid;
+  gap: 0.45rem;
+  margin-bottom: 0.55rem;
+}
+
+.dash-staymix-bar {
+  display: flex;
+  height: 0.7rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--navy-soft);
+  border: 1px solid var(--navy-line);
+}
+
+.dash-staymix-seg {
+  display: block;
+  transition: width 300ms ease;
+}
+
+.dash-staymix-seg.is-booking {
+  background: var(--teal);
+}
+
+.dash-staymix-seg.is-reservation {
+  background: var(--navy);
+}
+
+.dash-staymix-legend {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: rgba(11, 31, 58, 0.66);
+}
+
+.dash-staymix-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.dash-staymix-legend strong {
+  color: var(--navy);
+  font-weight: 700;
+}
+
+.dash-staymix-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.dash-staymix-dot.is-booking {
+  background: var(--teal);
+}
+
+.dash-staymix-dot.is-reservation {
+  background: var(--navy);
+}
+
+.dash-offers {
+  list-style: none;
+  margin: 0;
+  padding: 0 2px 2px 0;
+  display: grid;
+  gap: 0.45rem;
+  align-content: start;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.dash-offer {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--navy-line);
+  border-radius: 10px;
+  background: var(--white);
+}
+
+.dash-offer-info {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.dash-offer-info strong {
+  font-size: 0.86rem;
+  color: var(--navy);
+}
+
+.dash-offer-info span {
+  font-size: 0.76rem;
+  color: rgba(11, 31, 58, 0.6);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-offer-pill {
+  flex: none;
+  padding: 0.16rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.dash-offer-pill.is-live {
+  background: color-mix(in srgb, var(--teal) 16%, white);
+  color: color-mix(in srgb, var(--teal) 70%, var(--navy));
+}
+
+.dash-offer-pill.is-scheduled {
+  background: var(--navy-soft);
+  color: var(--navy);
+}
+
+.dash-offer-pill.is-off {
+  background: rgba(11, 31, 58, 0.08);
+  color: rgba(11, 31, 58, 0.55);
+}
+
+.dash-offer button {
+  flex: none;
+  border: 1px solid var(--teal);
+  background: var(--teal);
+  color: var(--white);
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.dash-offer button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(26, 166, 166, 0.35);
+}
+
+.dash-offer button.is-quiet {
+  background: transparent;
+  color: var(--navy);
+  border-color: var(--navy-line);
+}
+
+.dash-offer button.is-quiet:hover:not(:disabled) {
+  box-shadow: none;
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.dash-offer button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.dash-offer-empty {
+  font-size: 0.84rem;
+  color: rgba(11, 31, 58, 0.6);
+  padding: 0.5rem 0.2rem;
+}
+
+/* Offer activation modal — same flow as the special-offers page reactivate */
+.dash-offer-modal .admin-reviews-modal-card {
+  width: min(38rem, calc(100vw - 2rem));
+}
+
+.dash-offer-modal .admin-reviews-modal-body {
+  overflow-x: hidden;
+}
+
+.dash-offer-lede {
+  margin: 0 0 0.8rem;
+  font-size: 0.86rem;
+  color: rgba(11, 31, 58, 0.68);
+}
+
+.dash-offer-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.dash-offer-field {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.dash-offer-field input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.dash-offer-modal .dash-attention-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.dash-offer-modal .dash-detail-manage {
+  margin-right: auto;
+  align-self: center;
+}
+
+.dash-offer-field > span {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(11, 31, 58, 0.55);
+}
+
+.dash-offer-error {
+  margin: 0.65rem 0 0;
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  background: rgba(180, 60, 60, 0.07);
+  border: 1px solid rgba(180, 60, 60, 0.3);
+  color: #8a2a2a;
+}
+
+@media (max-width: 520px) {
+  .dash-offer-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Room availability widget — per-type counts + bulk open/close switch */
+.dash-roomtypes {
+  list-style: none;
+  margin: 0;
+  padding: 0 2px 2px 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.55rem;
+  align-content: start;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.dash-roomtypes li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--teal) 8%, var(--white));
+}
+
+.dash-roomtype-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.dash-roomtype-rooms {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  border-top: 1px dashed rgba(11, 31, 58, 0.14);
+  padding-top: 0.45rem;
+}
+
+.dash-roomtype-group {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.dash-roomtype-group em {
+  flex: 0 0 4.6rem;
+  font-style: normal;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(11, 31, 58, 0.5);
+}
+
+.dash-roomchips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+}
+
+.dash-roomchip {
+  padding: 0.1rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: var(--teal);
+  color: var(--white);
+}
+
+.dash-roomchip.is-occupied {
+  background: rgba(11, 31, 58, 0.92);
+}
+
+.dash-roomchip.is-cleaning {
+  background: transparent;
+  color: rgba(11, 31, 58, 0.6);
+  border: 1px dashed rgba(11, 31, 58, 0.3);
+}
+
+.dash-roomtype-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.dash-roomtype-info strong {
+  font-size: 0.92rem;
+}
+
+.dash-roomtype-info span {
+  font-size: 0.8rem;
+  color: rgba(11, 31, 58, 0.65);
+}
+
+.dash-roomtype-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+  padding: 0.28rem 0.6rem 0.28rem 0.32rem;
+  border-radius: 999px;
+  border: 1px solid rgba(11, 31, 58, 0.18);
+  background: rgba(11, 31, 58, 0.05);
+  color: var(--navy);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.dash-roomtype-track {
+  position: relative;
+  width: 2rem;
+  height: 1.12rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(11, 31, 58, 0.28);
+  transition: background-color 0.18s ease;
+}
+
+.dash-roomtype-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(1.12rem - 4px);
+  height: calc(1.12rem - 4px);
+  border-radius: 50%;
+  background: var(--white);
+  box-shadow: 0 1px 3px rgba(11, 31, 58, 0.35);
+  transition: transform 0.18s ease;
+}
+
+.dash-roomtype-switch.is-on {
+  border-color: var(--teal);
+  background: color-mix(in srgb, var(--teal) 14%, var(--white));
+}
+
+.dash-roomtype-switch.is-on .dash-roomtype-track {
+  background: var(--teal);
+}
+
+.dash-roomtype-switch.is-on .dash-roomtype-thumb {
+  transform: translateX(0.88rem);
+}
+
+.dash-roomtype-state {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.dash-roomtype-switch:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.dash-roomtype-switch:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 2px;
+}
+
+/* Guest reviews widget — unreplied queue, same card pattern as attention list */
+.dash-reviews {
+  list-style: none;
+  margin: 0;
+  padding: 0 2px 2px 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.55rem;
+  align-content: start;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.dash-reviews a {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--teal) 8%, var(--white));
+  color: var(--navy);
+  text-decoration: none;
+}
+
+.dash-reviews a:hover {
+  background: color-mix(in srgb, var(--teal) 16%, var(--white));
+}
+
+.dash-reviews strong {
+  font-size: 0.92rem;
+}
+
+.dash-reviews span {
+  font-size: 0.8rem;
+  color: rgba(11, 31, 58, 0.65);
+}
+
 .dash-signals {
   list-style: none;
   margin: 0;
-  padding: 0 0 0.15rem;
+  padding: 0 2px 0.15rem 0;
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
-  overflow: visible;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .dash-signal {
@@ -14227,6 +14966,33 @@ body.hotel-photo-zoom-open {
   outline-offset: 2px;
 }
 
+.admin-dash-page--neumo .dash-roomtypes li,
+.admin-dash-page--neumo .dash-reviews a {
+  background: rgba(26, 166, 166, 0.06);
+  border: 1px solid rgba(11, 31, 58, 0.08);
+  box-shadow: none;
+}
+
+.admin-dash-page--neumo .dash-reviews a:hover {
+  background: rgba(26, 166, 166, 0.12);
+  border-color: rgba(26, 166, 166, 0.22);
+  box-shadow: none;
+}
+
+.admin-dash-page--neumo .dash-reviews a:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.admin-dash-page--neumo .dash-attention-actions button {
+  box-shadow: none;
+}
+
+.admin-dash-page--neumo .dash-attention-actions button:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 2px;
+}
+
 .admin-dash-page--neumo .dash-widget-empty {
   padding: 0.5rem 0;
   border: none;
@@ -14251,7 +15017,8 @@ body.hotel-photo-zoom-open {
 @media (prefers-reduced-motion: reduce) {
   .admin-dash-page--neumo .dash-widget,
   .admin-dash-page--neumo .admin-dash-toolbar .btn-outline-secondary,
-  .admin-dash-page--neumo .dash-attention a {
+  .admin-dash-page--neumo .dash-attention a,
+  .admin-dash-page--neumo .dash-attention-actions button {
     transition: border-color 0.01ms, box-shadow 0.01ms, background-color 0.01ms;
   }
 }

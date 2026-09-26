@@ -75,6 +75,46 @@ public class RoomsApiController : ControllerBase
         return Ok(payload);
     }
 
+    /// <summary>
+    /// Bulk open/close for a whole room type (all physical rooms). Occupied rooms
+    /// are skipped and returned in <c>blockedRooms</c> so staff get the stop warning.
+    /// </summary>
+    [HttpPost("types/{roomTypeId:int}/open")]
+    [Authorize(Roles = AppRoles.AdminManager)]
+    [ValidateAntiForgeryToken]
+    public async Task<ActionResult<object>> SetRoomTypeOpen(
+        int roomTypeId,
+        [FromBody] SetRoomTypeOpenRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _roomService.SetRoomTypeGuestReadyAsync(
+            roomTypeId,
+            request.Open,
+            cancellationToken);
+        if (result is null)
+        {
+            return NotFound(new { message = "Room type was not found." });
+        }
+
+        if (!request.Open && result.BlockedRoomNumbers.Count > 0)
+        {
+            return Conflict(new
+            {
+                message = $"Cannot close {result.TypeName} — room(s) " +
+                    $"{string.Join(", ", result.BlockedRoomNumbers)} still have guests inside. " +
+                    "Check them out first.",
+                result.BlockedRoomNumbers
+            });
+        }
+
+        return Ok(new
+        {
+            result.TypeName,
+            result.ChangedCount,
+            BlockedRooms = result.BlockedRoomNumbers
+        });
+    }
+
     [HttpGet("{id:int}/current-stay")]
     public async Task<ActionResult<BookingDto>> GetCurrentStay(
         int id,
@@ -121,4 +161,9 @@ public class RoomsApiController : ControllerBase
             return Conflict(new { message = ex.Message });
         }
     }
+}
+
+public sealed class SetRoomTypeOpenRequest
+{
+    public bool Open { get; set; }
 }

@@ -12534,21 +12534,43 @@ body.guest-review-modal-open {
 }
 
 .guest-portal-bookings-block {
-  border-bottom: 1px solid color-mix(in srgb, var(--navy) 14%, white);
-  padding-bottom: 0.55rem;
+  background: var(--white);
+  border: 1px solid color-mix(in srgb, var(--navy) 12%, white);
+  border-radius: 16px;
+  box-shadow: 0 2px 10px rgba(11, 31, 58, 0.05);
+  overflow: hidden;
+  transition: border-color 220ms ease, box-shadow 220ms ease;
+}
+
+.guest-portal-bookings-block:hover {
+  border-color: color-mix(in srgb, var(--teal) 30%, white);
+  box-shadow: 0 6px 20px rgba(11, 31, 58, 0.08);
+}
+
+.guest-portal-bookings-block[open] {
+  border-color: color-mix(in srgb, var(--teal) 24%, white);
+}
+
+.guest-portal-bookings-block--accent {
+  border-color: color-mix(in srgb, var(--teal) 34%, white);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--teal) 6%, white), var(--white) 55%);
 }
 
 summary.guest-portal-bookings-block-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+  gap: 0.85rem;
   margin: 0;
-  padding: 0.75rem 0.15rem;
+  padding: 0.95rem 1.05rem;
   cursor: pointer;
   list-style: none;
   user-select: none;
-  transition: color 200ms ease;
+  transition: background 200ms ease;
+}
+
+summary.guest-portal-bookings-block-head:hover {
+  background: color-mix(in srgb, var(--teal) 5%, white);
 }
 
 summary.guest-portal-bookings-block-head::-webkit-details-marker {
@@ -12557,8 +12579,40 @@ summary.guest-portal-bookings-block-head::-webkit-details-marker {
 
 summary.guest-portal-bookings-block-head:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--teal) 70%, white);
-  outline-offset: 2px;
-  border-radius: 4px;
+  outline-offset: -2px;
+  border-radius: 16px;
+}
+
+.guest-portal-bookings-block-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 12px;
+  color: var(--teal);
+  background: color-mix(in srgb, var(--teal) 12%, white);
+  border: 1px solid color-mix(in srgb, var(--teal) 18%, white);
+  transition: background 220ms ease, color 220ms ease;
+}
+
+.guest-portal-bookings-block-icon svg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.guest-portal-bookings-block[open] > summary .guest-portal-bookings-block-icon {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: var(--white);
+}
+
+.guest-portal-bookings-block-copy {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+  flex: 1;
 }
 
 .guest-portal-bookings-block-title {
@@ -12566,22 +12620,58 @@ summary.guest-portal-bookings-block-head:focus-visible {
   align-items: baseline;
   gap: 0.6rem;
   min-width: 0;
-  font-family: var(--guest-display);
-  font-size: var(--guest-h2);
-  font-weight: 600;
+  font-family: var(--guest-font);
+  font-size: clamp(1.02rem, 1.3vw, 1.15rem);
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--navy);
 }
 
 .guest-portal-bookings-block-lede {
   font-family: var(--guest-font);
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   font-weight: 400;
-  color: color-mix(in srgb, var(--navy) 60%, white);
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--navy) 62%, white);
+}
+
+.guest-portal-bookings-block-count {
+  flex: none;
+  min-width: 1.7rem;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--navy) 8%, white);
+  color: var(--navy);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.guest-portal-bookings-block--accent .guest-portal-bookings-block-count {
+  background: var(--teal);
+  color: var(--white);
+}
+
+.guest-portal-bookings-chevron-wrap {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--navy) 14%, white);
+  color: color-mix(in srgb, var(--navy) 55%, white);
+  transition: background 200ms ease, color 200ms ease;
+}
+
+summary.guest-portal-bookings-block-head:hover .guest-portal-bookings-chevron-wrap {
+  background: color-mix(in srgb, var(--teal) 10%, white);
+  color: var(--teal);
 }
 
 .guest-portal-bookings-chevron {
   flex: none;
-  color: color-mix(in srgb, var(--navy) 55%, white);
   transition: transform 200ms ease;
 }
 
@@ -12589,9 +12679,37 @@ summary.guest-portal-bookings-block-head:focus-visible {
   transform: rotate(180deg);
 }
 
+@keyframes guestPortalBlockReveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .guest-portal-bookings-block > .guest-portal-bookings-list,
 .guest-portal-bookings-block > .guest-reviews-portal-list {
-  margin: 0.35rem 0 0.85rem;
+  margin: 0;
+  padding: 0 1.05rem 1.05rem;
+  animation: guestPortalBlockReveal 240ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guest-portal-bookings-block > .guest-portal-bookings-list,
+  .guest-portal-bookings-block > .guest-reviews-portal-list {
+    animation: none;
+  }
+
+  .guest-portal-bookings-block,
+  summary.guest-portal-bookings-block-head,
+  .guest-portal-bookings-block-icon,
+  .guest-portal-bookings-chevron-wrap,
+  .guest-portal-bookings-chevron {
+    transition: none;
+  }
 }
 
 .guest-portal-bookings-empty {
@@ -12638,10 +12756,10 @@ summary.guest-portal-bookings-block-head:focus-visible {
 
 .guest-portal-booking-reference strong {
   color: var(--navy);
-  font-family: var(--guest-display);
-  font-size: 0.95rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-family: var(--guest-font);
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
 }
 
 .guest-portal-booking-dates {
@@ -12705,10 +12823,10 @@ summary.guest-portal-bookings-block-head:focus-visible {
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.55rem 0.1rem;
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: 0.75rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   color: color-mix(in srgb, var(--navy) 60%, white);
   cursor: pointer;
   list-style: none;

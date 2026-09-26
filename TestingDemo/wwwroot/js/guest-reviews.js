@@ -228,8 +228,18 @@
     modal.querySelector('[data-star-field="overall"] [aria-checked="true"]')?.focus();
   }
 
+  function setBlockCount(container, count) {
+    const badge = container
+      ?.closest('details')
+      ?.querySelector('[data-block-count]');
+    if (!badge) return;
+    badge.textContent = String(count ?? 0);
+    badge.hidden = false;
+  }
+
   function renderEligible(items) {
     if (!eligibleEl) return;
+    setBlockCount(eligibleEl, items?.length || 0);
     if (!items?.length) {
       eligibleEl.innerHTML = `
         <div class="guest-reviews-empty-card">
@@ -271,6 +281,7 @@
 
   function renderMine(items) {
     if (!mineEl) return;
+    setBlockCount(mineEl, items?.length || 0);
     if (!items?.length) {
       mineEl.innerHTML = `
         <div class="guest-reviews-empty-card is-soft">
