@@ -79,6 +79,16 @@ public class Booking
     /// <summary>When true, payments must be Cash (walk-in LimitedTime promo).</summary>
     public bool CashOnlyPromo { get; set; }
 
+    /// <summary>JSON array of field labels the guest last changed online (e.g. ["Check-in","Rooms"]).</summary>
+    public string? GuestEditedFieldsJson { get; set; }
+    /// <summary>When the guest last edited the booking through the guest portal.</summary>
+    public DateTime? LastGuestEditAtUtc { get; set; }
+    /// <summary>
+    /// False after a guest self-service edit until staff opens the booking details —
+    /// powers the "N changes" badge on the admin bookings table.
+    /// </summary>
+    public bool GuestEditsSeenByStaff { get; set; } = true;
+
     /// <summary>Total adults across the stay (receptionist / guest head count).</summary>
     public int AdultCount { get; set; }
     /// <summary>Total children under 12 across the stay.</summary>

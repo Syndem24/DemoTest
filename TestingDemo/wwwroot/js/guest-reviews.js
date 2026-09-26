@@ -361,6 +361,10 @@
     }
     const id = Number(reviewIdInput?.value || 0);
     if (submitBtn) submitBtn.disabled = true;
+    window.GuestNotice?.busy?.(true, {
+      title: t('reviews.submitting'),
+      detail: t('reviews.submittingDetail'),
+    });
     try {
       if (id > 0) {
         await apiFetch(`/api/guest/reviews/${id}`, {
@@ -377,8 +381,13 @@
       }
       closeModal();
       await loadPortal();
-      if (typeof window.showMoriNotice === 'function') {
-        window.showMoriNotice(t('reviews.saved'), 'success');
+      const savedText = t('reviews.saved');
+      if (window.GuestNotice?.show) {
+        window.GuestNotice.show(id > 0 ? t('reviews.updated') : t('reviews.thankYou'), {
+          title: savedText,
+        });
+      } else if (typeof window.showMoriNotice === 'function') {
+        window.showMoriNotice(savedText, 'success');
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : t('reviews.unableSave');
@@ -396,8 +405,13 @@
           return;
         }
       }
-      showMessage(message, true);
+      if (window.GuestNotice?.show) {
+        window.GuestNotice.show(message, { title: t('reviews.unableSave'), isError: true });
+      } else {
+        showMessage(message, true);
+      }
     } finally {
+      window.GuestNotice?.busy?.(false);
       if (submitBtn) submitBtn.disabled = false;
     }
   });

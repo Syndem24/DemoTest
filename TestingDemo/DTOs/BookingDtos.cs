@@ -173,7 +173,13 @@ public sealed record BookingDto(
     int AdultCount = 0,
     int ChildCount = 0,
     IReadOnlyList<BookingGuestRoomDto>? GuestRooms = null,
-    decimal PaidTotal = 0m);
+    decimal PaidTotal = 0m,
+    IReadOnlyList<BookingGuestPaymentDto>? GuestPayments = null,
+    /// <summary>Field labels the guest changed since staff last opened the details.</summary>
+    IReadOnlyList<string>? GuestEditedFields = null,
+    DateTime? LastGuestEditAtUtc = null,
+    /// <summary>True when unseen guest edits exist — shows the count badge on the row.</summary>
+    bool GuestEditsPending = false);
 
 public sealed record CreateBookingResponse(
     string Reference,
@@ -244,6 +250,15 @@ public sealed class BookingGuestRoomRequest
 }
 
 public sealed record BookingGuestRoomDto(int Adults, int Children, bool ExtraPerson = false);
+
+public sealed record BookingGuestPaymentDto(
+    int Id,
+    PaymentEventType EventType,
+    PaymentMethod Method,
+    decimal Amount,
+    DateTime PaidAtUtc,
+    PaymentRecordStatus Status,
+    string ReceiptNumber);
 
 public sealed record ReservationCalendarEventDto(
     int Id,

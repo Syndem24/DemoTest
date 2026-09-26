@@ -1,0 +1,318 @@
+@{
+    Layout = "~/Views/Shared/_CustomerLayout.cshtml";
+    ViewData["Title"] = "My bookings";
+    ViewData["I18nTitle"] = "bookingsPortal.title";
+    ViewData["GuestImmersive"] = true;
+    ViewData["GuestFullBleed"] = true;
+}
+
+<div class="guest-portal-reviews-page" data-guest-reviews>
+    @Html.AntiForgeryToken()
+
+    <section class="guest-portal-reviews-hero" aria-labelledby="guestPortalBookingsTitle">
+        <div class="guest-portal-reviews-hero-media" aria-hidden="true">
+            <img src="~/Images/Hallways/Hallway3.jpg"
+                 asp-append-version="true"
+                 alt=""
+                 decoding="async"
+                 fetchpriority="high" />
+        </div>
+        <div class="guest-portal-reviews-hero-fade" aria-hidden="true"></div>
+        <div class="guest-portal-reviews-hero-glow" aria-hidden="true"></div>
+        <div class="guest-portal-reviews-hero-inner">
+            <nav class="guest-portal-reviews-crumb" aria-label="Breadcrumb">
+                <a asp-controller="Booking" asp-action="Index" data-i18n="bookingsPortal.crumbHome">Home</a>
+                <span aria-hidden="true">›</span>
+                <span aria-current="page" data-i18n="bookingsPortal.crumbHere">My bookings</span>
+            </nav>
+            <p class="guest-portal-reviews-chip">
+                <span class="guest-portal-reviews-chip-dot" aria-hidden="true"></span>
+                <span data-i18n="bookingsPortal.eyebrow">Guest account</span>
+            </p>
+            <h1 id="guestPortalBookingsTitle" data-i18n="bookingsPortal.title">My bookings</h1>
+            <p class="guest-portal-reviews-hero-lede" data-i18n="bookingsPortal.lede">
+                Manage your stays, view your cart history, and review completed visits.
+            </p>
+        </div>
+    </section>
+
+    <div class="guest-portal-reviews-body guest-portal-bookings-body" data-guest-bookings>
+        <p class="guest-portal-booking-message" data-guest-booking-message role="status" hidden></p>
+
+        <details class="guest-portal-bookings-block" open>
+            <summary class="guest-portal-bookings-block-head">
+                <span class="guest-portal-bookings-block-title" data-i18n="bookingsPortal.active">Active bookings</span>
+                <svg class="guest-portal-bookings-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.4 8.6 12 13.2l4.6-4.6 1.4 1.4-6 6-6-6z"/></svg>
+            </summary>
+            <div class="guest-portal-bookings-list" data-guest-active-bookings>
+                <p class="guest-portal-bookings-empty" data-i18n="bookingsPortal.loading">Loading…</p>
+            </div>
+        </details>
+
+        <details class="guest-portal-bookings-block">
+            <summary class="guest-portal-bookings-block-head">
+                <span class="guest-portal-bookings-block-title" data-i18n="bookingsPortal.history">Booking history</span>
+                <svg class="guest-portal-bookings-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.4 8.6 12 13.2l4.6-4.6 1.4 1.4-6 6-6-6z"/></svg>
+            </summary>
+            <div class="guest-portal-bookings-list" data-guest-booking-history>
+                <p class="guest-portal-bookings-empty" data-i18n="bookingsPortal.loading">Loading…</p>
+            </div>
+        </details>
+
+        <div class="guest-portal-bookings-reviews">
+            <p class="guest-reviews-portal-message" data-review-message role="status" hidden></p>
+
+            <details class="guest-portal-bookings-block">
+                <summary class="guest-portal-bookings-block-head">
+                    <span class="guest-portal-bookings-block-title">
+                        <span data-i18n="reviews.ready">Ready to review</span>
+                        <small class="guest-portal-bookings-block-lede" data-i18n="reviews.readyLede">Verified stays waiting for your rating.</small>
+                    </span>
+                    <svg class="guest-portal-bookings-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.4 8.6 12 13.2l4.6-4.6 1.4 1.4-6 6-6-6z"/></svg>
+                </summary>
+                <div class="guest-reviews-portal-list" data-review-eligible>
+                    <p class="guest-reviews-empty" data-i18n="reviews.loading">Loading…</p>
+                </div>
+            </details>
+
+            <details class="guest-portal-bookings-block">
+                <summary class="guest-portal-bookings-block-head">
+                    <span class="guest-portal-bookings-block-title">
+                        <span data-i18n="reviews.yours">Your reviews</span>
+                        <small class="guest-portal-bookings-block-lede" data-i18n="reviews.yoursLede">What you’ve shared with future guests.</small>
+                    </span>
+                    <svg class="guest-portal-bookings-chevron" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M7.4 8.6 12 13.2l4.6-4.6 1.4 1.4-6 6-6-6z"/></svg>
+                </summary>
+                <div class="guest-reviews-portal-list" data-review-mine>
+                    <p class="guest-reviews-empty" data-i18n="reviews.loading">Loading…</p>
+                </div>
+            </details>
+        </div>
+
+        <div class="guest-portal-booking-edit" data-guest-booking-edit hidden>
+            <button type="button"
+                    class="guest-portal-booking-edit-backdrop"
+                    data-guest-booking-edit-close
+                    aria-label="Close"
+                    data-i18n="bookingsPortal.cancel"
+                    data-i18n-attr="aria-label"
+                    data-i18n-attr-only></button>
+            <div class="guest-portal-booking-edit-card" role="dialog" aria-modal="true" aria-labelledby="bookingEditTitle">
+                <header class="guest-portal-booking-edit-header">
+                    <h3 id="bookingEditTitle" data-i18n="bookingsPortal.edit">Edit booking</h3>
+                    <button type="button"
+                            class="guest-portal-booking-edit-x"
+                            data-guest-booking-edit-close
+                            aria-label="Close"
+                            data-i18n="bookingsPortal.cancel"
+                            data-i18n-attr="aria-label"
+                            data-i18n-attr-only>
+                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path d="M6.4 6.4a1 1 0 0 1 1.4 0L12 10.6l4.2-4.2a1 1 0 1 1 1.4 1.4L13.4 12l4.2 4.2a1 1 0 0 1-1.4 1.4L12 13.4l-4.2 4.2a1 1 0 0 1-1.4-1.4L10.6 12 6.4 7.8a1 1 0 0 1 0-1.4z"/>
+                        </svg>
+                    </button>
+                </header>
+
+                <form class="guest-portal-booking-edit-form" data-guest-booking-edit-form id="guestBookingEditForm">
+                    <input type="hidden" data-guest-booking-edit-id />
+                    <input type="hidden" data-guest-booking-edit-email />
+
+                    <div class="guest-portal-booking-edit-grid">
+                        <label class="guest-portal-booking-edit-field">
+                            <span data-i18n="bookingsPortal.guestName">Guest name</span>
+                            <input type="text" data-guest-booking-edit-name required maxlength="120" />
+                        </label>
+
+                        <label class="guest-portal-booking-edit-field">
+                            <span data-i18n="bookingsPortal.guestPhone">Guest phone</span>
+                            <input type="tel" data-guest-booking-edit-phone required maxlength="40" />
+                        </label>
+
+                        <label class="guest-portal-booking-edit-field">
+                            <span data-i18n="bookingsPortal.checkIn">Check-in</span>
+                            <input type="date" data-guest-booking-edit-checkin required />
+                        </label>
+
+                        <label class="guest-portal-booking-edit-field">
+                            <span data-i18n="bookingsPortal.checkOut">Check-out</span>
+                            <input type="date" data-guest-booking-edit-checkout required />
+                        </label>
+                    </div>
+
+                    <div class="guest-portal-booking-edit-rooms">
+                        <div class="guest-portal-booking-edit-rooms-head">
+                            <h4 data-i18n="bookingsPortal.guestsRooms">Guests &amp; rooms</h4>
+                            <button type="button"
+                                    class="guest-btn guest-btn-ghost guest-portal-booking-edit-add-room"
+                                    data-guest-booking-edit-add-room
+                                    data-i18n="bookingsPortal.addRoom">+ Add a room</button>
+                        </div>
+                        <div class="guest-portal-booking-edit-room-list" data-guest-booking-edit-rooms></div>
+                        <p class="guest-portal-booking-edit-rooms-locked"
+                           data-guest-booking-edit-rooms-locked
+                           data-i18n="bookingsPortal.roomsLocked"
+                           hidden>Rooms are already assigned by the front desk — contact the receptionist to change rooms.</p>
+                        <p class="guest-portal-booking-edit-party" data-guest-booking-edit-party></p>
+                    </div>
+
+                    <p class="guest-portal-booking-edit-error" data-guest-booking-edit-error role="alert" hidden></p>
+                </form>
+
+                <footer class="guest-portal-booking-edit-actions">
+                    <button type="button" class="guest-btn guest-btn-ghost" data-guest-booking-edit-close data-i18n="bookingsPortal.cancel">Cancel</button>
+                    <button type="submit" form="guestBookingEditForm" class="guest-btn guest-btn-primary" data-guest-booking-edit-save data-i18n="bookingsPortal.save">Save changes</button>
+                </footer>
+            </div>
+        </div>
+
+        <div class="guest-portal-booking-loading" data-guest-booking-loading hidden>
+            <div class="guest-portal-booking-loading-card" role="status" aria-live="assertive" aria-atomic="true" tabindex="-1">
+                <div class="guest-portal-booking-loading-spinner" aria-hidden="true"></div>
+                <strong data-guest-booking-loading-title data-i18n="bookingsPortal.savingTitle">Saving your changes…</strong>
+                <p data-guest-booking-loading-detail data-i18n="bookingsPortal.savingDetail">Updating the booking — please wait.</p>
+                <span class="guest-portal-booking-loading-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            </div>
+        </div>
+
+        <div class="guest-portal-booking-popup" data-guest-booking-popup hidden>
+            <div class="guest-portal-booking-popup-card"
+                 role="alertdialog"
+                 aria-modal="true"
+                 aria-labelledby="guestBookingPopupTitle"
+                 aria-describedby="guestBookingPopupMessage">
+                <h3 id="guestBookingPopupTitle" data-guest-booking-popup-title data-i18n="bookingsPortal.notice">Notice</h3>
+                <p id="guestBookingPopupMessage" data-guest-booking-popup-text></p>
+                <button type="button" class="guest-btn guest-btn-primary" data-guest-booking-popup-ok data-i18n="bookingsPortal.ok">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="guest-review-modal" data-review-modal hidden>
+        <button type="button"
+                class="guest-review-modal-backdrop"
+                data-review-close
+                aria-label="Close"
+                data-i18n="reviews.close"
+                data-i18n-attr="aria-label"
+                data-i18n-attr-only></button>
+        <div class="guest-review-modal-card" role="dialog" aria-modal="true" aria-labelledby="reviewModalTitle">
+            <header class="guest-review-modal-header">
+                <div class="guest-review-modal-visual" aria-hidden="true">
+                    <img src="~/Images/ReceptionArea/Reception1.jpg" asp-append-version="true" alt="" decoding="async" />
+                </div>
+                <div class="guest-review-modal-head-copy">
+                    <p class="guest-eyebrow" data-i18n="reviews.verified">Verified stay</p>
+                    <h3 id="reviewModalTitle" data-review-modal-title data-i18n="reviews.write">Write a review</h3>
+                    <p class="guest-review-modal-lede" data-i18n="reviews.writeLede">Share what future guests should know about staff, comfort, and facilities.</p>
+                </div>
+                <button type="button"
+                        class="guest-review-modal-x"
+                        data-review-close
+                        aria-label="Close"
+                        data-i18n="reviews.close"
+                        data-i18n-attr="aria-label">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M6.4 6.4a1 1 0 0 1 1.4 0L12 10.6l4.2-4.2a1 1 0 1 1 1.4 1.4L13.4 12l4.2 4.2a1 1 0 0 1-1.4 1.4L12 13.4l-4.2 4.2a1 1 0 0 1-1.4-1.4L10.6 12 6.4 7.8a1 1 0 0 1 0-1.4z"/>
+                    </svg>
+                </button>
+            </header>
+
+            <form data-review-form id="guestReviewForm">
+                <input type="hidden" data-review-booking-id />
+                <input type="hidden" data-review-id />
+
+                <section class="guest-review-modal-panel guest-review-rating-panel"
+                         aria-label="Ratings"
+                         data-i18n="reviews.ratingsAria"
+                         data-i18n-attr="aria-label">
+                    <p class="guest-review-rating-hint" data-i18n="reviews.tapStars">Tap the stars to rate each part of your stay.</p>
+                    <div class="guest-review-rating-grid">
+                        <div class="guest-star-field"
+                             data-star-field="staff"
+                             role="radiogroup"
+                             aria-labelledby="reviewStaffLabel"
+                             aria-required="true">
+                            <div class="guest-star-field-copy">
+                                <span id="reviewStaffLabel"><span data-i18n="reviews.staff">Staff / service</span> <em>*</em></span>
+                                <span class="guest-star-value" data-star-label aria-live="polite"></span>
+                            </div>
+                            <input type="hidden" data-review-staff value="" />
+                            <div class="guest-star-row" data-star-row></div>
+                        </div>
+                        <div class="guest-star-field"
+                             data-star-field="comfort"
+                             role="radiogroup"
+                             aria-labelledby="reviewComfortLabel"
+                             aria-required="true">
+                            <div class="guest-star-field-copy">
+                                <span id="reviewComfortLabel"><span data-i18n="reviews.comfort">Comfort</span> <em>*</em></span>
+                                <span class="guest-star-value" data-star-label aria-live="polite"></span>
+                            </div>
+                            <input type="hidden" data-review-comfort value="" />
+                            <div class="guest-star-row" data-star-row></div>
+                        </div>
+                        <div class="guest-star-field"
+                             data-star-field="facilities"
+                             role="radiogroup"
+                             aria-labelledby="reviewFacilitiesLabel"
+                             aria-required="true">
+                            <div class="guest-star-field-copy">
+                                <span id="reviewFacilitiesLabel"><span data-i18n="reviews.facilities">Facilities</span> <em>*</em></span>
+                                <span class="guest-star-value" data-star-label aria-live="polite"></span>
+                            </div>
+                            <input type="hidden" data-review-facilities value="" />
+                            <div class="guest-star-row" data-star-row></div>
+                        </div>
+                        <div class="guest-star-field"
+                             data-star-field="overall"
+                             role="radiogroup"
+                             aria-labelledby="reviewOverallLabel"
+                             aria-required="true">
+                            <div class="guest-star-field-copy">
+                                <span id="reviewOverallLabel"><span data-i18n="reviews.overall">Overall stay</span> <em>*</em></span>
+                                <span class="guest-star-value" data-star-label aria-live="polite"></span>
+                            </div>
+                            <input type="hidden" data-review-overall value="" />
+                            <div class="guest-star-row" data-star-row></div>
+                        </div>
+                    </div>
+                </section>
+
+                <fieldset class="guest-review-field guest-review-modal-panel guest-review-tags-panel">
+                    <legend data-i18n="reviews.stoodOut">What stood out? (optional)</legend>
+                    <div class="guest-review-tags-pick" data-review-tags>
+                        <label class="guest-review-tag-chip"><input type="checkbox" value="FriendlyStaff" /> <span data-i18n="reviews.tagFriendly">Friendly staff</span></label>
+                        <label class="guest-review-tag-chip"><input type="checkbox" value="CleanRooms" /> <span data-i18n="reviews.tagClean">Clean rooms</span></label>
+                        <label class="guest-review-tag-chip"><input type="checkbox" value="QuietStay" /> <span data-i18n="reviews.tagQuiet">Quiet stay</span></label>
+                        <label class="guest-review-tag-chip"><input type="checkbox" value="GreatValue" /> <span data-i18n="reviews.tagValue">Great value</span></label>
+                        <label class="guest-review-tag-chip"><input type="checkbox" value="ComfortableBed" /> <span data-i18n="reviews.tagBed">Comfortable bed</span></label>
+                        <label class="guest-review-tag-chip"><input type="checkbox" value="NiceBathroom" /> <span data-i18n="reviews.tagBath">Nice bathroom</span></label>
+                        <label class="guest-review-tag-chip"><input type="checkbox" value="SlowCheckIn" /> <span data-i18n="reviews.tagSlow">Slow check-in</span></label>
+                        <label class="guest-review-tag-chip"><input type="checkbox" value="WifiIssues" /> <span data-i18n="reviews.tagWifi">Wi‑Fi issues</span></label>
+                    </div>
+                </fieldset>
+
+                <label class="guest-review-field guest-review-field-grow guest-review-modal-panel">
+                    <span data-i18n="reviews.commentLabel">Anything else to share? (optional)</span>
+                    <textarea data-review-comment
+                              maxlength="2000"
+                              rows="5"
+                              placeholder="What future guests should know…"
+                              data-i18n="reviews.commentPh"
+                              data-i18n-attr="placeholder"
+                              data-i18n-attr-only></textarea>
+                </label>
+            </form>
+
+            <footer class="guest-review-modal-actions">
+                <button type="button" class="guest-btn guest-btn-ghost" data-review-close data-i18n="reviews.cancel">Cancel</button>
+                <button type="submit" form="guestReviewForm" class="guest-btn guest-btn-primary" data-review-submit data-i18n="reviews.submit">Submit review</button>
+            </footer>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/guest-portal-bookings.js" asp-append-version="true"></script>
+    <script src="~/js/guest-reviews.js" asp-append-version="true"></script>
+}

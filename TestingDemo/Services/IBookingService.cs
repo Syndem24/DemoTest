@@ -59,6 +59,11 @@ public interface IBookingService
     Task<IReadOnlyList<BookingDto>> GetArrivingSoonAsync(
         int windowMinutes = 20,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<BookingDto>> GetGuestBookingsAsync(
+        string? email,
+        string? googleEmail,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BookingDto>> GetPendingCallsSoonAsync(
         int windowMinutes = 20,
         CancellationToken cancellationToken = default);
@@ -82,10 +87,15 @@ public interface IBookingService
         int id,
         IReadOnlyList<ConfirmRoomAssignmentRequest> assignments,
         CancellationToken cancellationToken = default);
+    /// <param name="editedByGuest">Stamp GuestEditedFields/LastGuestEditAtUtc and raise the staff unseen-edit badge.</param>
     Task<BookingDto> UpdateAsync(
         int id,
         UpdateBookingRequest request,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool editedByGuest = false);
+
+    /// <summary>Clears the staff unseen guest-edit flag when the booking details are opened.</summary>
+    Task<bool> MarkGuestEditsSeenAsync(int id, CancellationToken cancellationToken = default);
     Task<BookingDto> UpdateChargesAsync(
         int id,
         UpdateBookingChargesRequest request,

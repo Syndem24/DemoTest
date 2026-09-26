@@ -160,6 +160,17 @@ public sealed class AdminBookingsApiController : ControllerBase
         return Ok(booking);
     }
 
+    /// <summary>Clears the "guest changed N details" badge once staff opens the booking.</summary>
+    [HttpPost("{id:int}/seen-guest-edits")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> MarkGuestEditsSeen(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        var exists = await _bookingService.MarkGuestEditsSeenAsync(id, cancellationToken);
+        return exists ? NoContent() : NotFound();
+    }
+
     [HttpPost("notifications/read-all")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> MarkAllRead(CancellationToken cancellationToken)

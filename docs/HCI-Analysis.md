@@ -51,13 +51,13 @@ offers, reviews, and the entry point into the booking wizard.
 | Understand the task | met | "Book a stay" is the dominant path; CTAs funnel into the wizard. |
 | Reduce memory load | met | Prices, occupancy, inclusions shown on cards — nothing to remember between pages. |
 | Consistency | met | Navy/teal/white system, shared card and modal patterns across pages. |
-| Remind / refresh | partially met | Offer expiry badges remind; but no "you were looking at X dates" recall for returning visitors. |
+| Remind / refresh | met | Offer expiry badges remind; a "Continue your stay search — dates" chip recalls the guest's unfinished wizard draft (consent-gated, 24h). |
 | Prevent errors / reversal | met | All state-changing actions sit behind the booking wizard's validation, not the landing page. |
 | Naturalness | met | Scroll-based browsing matches how hotel sites conventionally work. |
 
 ### Gaps
-- No "recently viewed dates" or resume-booking prompt — a returning guest starts cold.
 - The page is content-heavy; on slow connections the hero + galleries cost real load time.
+- Resume recall is same-tab only (`sessionStorage`) — a guest returning in a new tab starts cold.
 
 ---
 
@@ -110,10 +110,10 @@ a consent page → password setup), Forgot Password via 6-digit email code.
 |---|---|---|
 | Safety | met | Identity lockout on failed attempts, generic "invalid login" errors (no account enumeration), OTP codes not links, consent required before guest creation. |
 | Utility | met | Covers all three roles plus Google registration and password reset in one place. |
-| Effectiveness | met | Role-based redirect after sign-in; staff with `MustChangePassword` get forced to the change screen. |
+| Effectiveness | met | Role-based redirect after sign-in; staff with `MustChangePassword` get forced to the change screen; a "Signing you in…" loader confirms the action worked. |
 | Efficiency | met | One combined credential field — no mode switching; Google path is one click. |
-| Usability | met | Subtle "New here?" hint under the Google button guides first-time guests without a banner. |
-| Appeal | partially met | Clean and on-brand but deliberately minimal — functional, not delightful. |
+| Usability | met | Subtle "New here?" hint under the Google button guides first-time guests without a banner; failed login never shows a misleading "Signing you in…" label. |
+| Appeal | met | Branded transition loader (logo, ring, progress bar) bridges sign-in → landing page with no blank flash. |
 
 ### Principles Check
 
@@ -161,12 +161,12 @@ assign-rooms/cancel actions, refund prompts, and realtime SignalR updates.
 | Consistency | met | Same modal/toast/confirmation vocabulary as payments and rooms pages. |
 | Remind / refresh | met | Amber glow on overdue arrivals is a persistent visual reminder; notification bell + SignalR push re-alerts on state changes. |
 | Prevent errors / reversal | met | Destructive actions need confirmation; refund requires a ≥8-char reason; fully-paid gate blocks premature room assignment; audit log records every action. |
-| Naturalness | partially met | Calendar metaphors are natural, but filter-as-toggle-stats inside a modal is a learned interaction — not discoverable on first use. |
+| Naturalness | met | Calendar metaphors are natural, and the toggle-stats pattern is now taught by a dismissible in-modal hint ("Tap a count above to filter this list"). |
 
 ### Gaps
-- No onboarding hints/tour for new staff — discoverability relies on exploration.
-- "Overpaid — refund needed" state isn't a dedicated badge; it lives in the edit flow and attention glow only.
-- No keyboard shortcuts for high-frequency actions (confirm, assign) — power-user efficiency left on the table.
+- No onboarding hints beyond the day-modal filter hint — other power features (refund prompts, assign flow) still rely on exploration.
+- ~~"Overpaid — refund needed" state isn't a dedicated badge~~ — **fixed**: active rows now show an amber `Overpaid ₱X — refund needed` flag.
+- No keyboard shortcuts for high-frequency actions (confirm, assign) — power-user efficiency left on the table (deferred: global key handlers risk hijacking input focus).
 
 ---
 
@@ -201,7 +201,7 @@ and export/flush to PDF.
 | Naturalness | met | Receipt list reads like a physical receipt book — natural for desk staff. |
 
 ### Gaps
-- No partial refunds at this surface (full void only) — correct by design, but staff must learn the booking-editor refund path for partials; worth a hint in the modal.
+- ~~Staff must learn the booking-editor refund path for partials~~ — **fixed**: the refund modal now carries a one-line note pointing to partial refunds in the booking editor.
 - No bulk verify for a stack of e-wallet receipts — one-at-a-time only.
 
 ---
@@ -256,7 +256,7 @@ export-and-clear.
 | Utility | met | The retention/compliance toolkit — who did what, plus archival exports. |
 | Effectiveness | met | Filters (domain, intent, date, search) make 2,000+ audit rows navigable; export warns before clearing. |
 | Efficiency | met | Indexed queries (~35ms warm); paged results; summary cards for pending counts. |
-| Usability | partially met | Powerful but jargon-heavy ("flush", "intent", "domain") — assumes the admin learned the vocabulary elsewhere. |
+| Usability | met | Jargon is now glossed in place — tooltips on Flush / Area / Intent labels and a helper line "'Flush' means export and clear." |
 | Appeal | partially met | Functional; least polished page by design. |
 
 ### Principles Check
@@ -269,11 +269,11 @@ export-and-clear.
 | Consistency | met | Same filter/table/modal vocabulary as other admin pages. |
 | Remind / refresh | met | Flush-log expiry (7-day retention) is surfaced in summaries. |
 | Prevent errors / reversal | met | Export-before-clear + keep-rules + caps are layered error prevention on the most destructive action in the system. |
-| Naturalness | partially met | "Flush" is system-speak; a domain vocabulary a non-technical admin wouldn't guess. |
+| Naturalness | met | Tooltips translate system-speak ("Flush = export then delete", "Area = which part of the system") at the point of confusion. |
 
 ### Gaps
-- Terminology ("flush", "intent", "domain") has no inline glossary.
-- No preview of *which* records a clear will remove before confirming.
+- ~~Terminology has no inline glossary~~ — **fixed** via tooltips + helper copy.
+- ~~No preview of which records a clear will remove~~ — **fixed**: the confirm dialog fetches a live preview ("will delete N rows, M kept: reviews/payments, e.g. references") before the admin chooses.
 
 ---
 
@@ -300,14 +300,14 @@ special-offer CRUD, and the Integration vault (SMTP/Gemini/Groq/Google keys).
 |---|---|---|
 | Know your user | met | Admin-centric controls, receptionist gets read-only offers and shared review moderation. |
 | Understand the task | met | Each page is a single coherent task. |
-| Reduce memory load | partially met | User list shows disabled state + date; Integration hides key values — but no "last tested" or status summary on integrations. |
+| Reduce memory load | met | User list shows disabled state + date; Integration now shows per-service "Last OK / Last error" telemetry and a "Check now" probe for Gemini/Groq — status is on the page, not in the admin's head. |
 | Consistency | met | Same shells, modals, confirms. |
 | Remind / refresh | partially met | Disabled users show their disabled-since date; few other recall aids. |
 | Prevent errors / reversal | met | Self-protection, disable-before-delete, SMTP-only test action, hidden credentials — strong guardrails. |
 | Naturalness | partially met | Integration page is key-value oriented; a "connections" mental model would be more natural for admins. |
 
 ### Gaps
-- Integration page shows no health/status per service — admin can't tell if Gemini is down without trying the chatbot.
+- ~~Integration page shows no health/status per service~~ — **fixed**: passive "Last OK / Last error" lines (SMTP, Gemini, Groq, Google sign-in) plus an on-demand "Check now" probe for the AI providers that costs a single 8-token call, not a page-load ping.
 - Offers list lacks a guest-preview of how the promo renders.
 
 ---
@@ -329,12 +329,13 @@ shells), Prevent errors (confirmation, guards, caps everywhere), Reduce memory
 load (snapshots, aggregated calendar, visible state), Know your user (clear
 guest-vs-staff separation).
 
-**Weakly covered principles:**
-- *Remind users / refresh memory* — present on key flows (amber arrivals,
-  unverified badges) but thin elsewhere: no resume-booking, no "last changed"
-  context, no staff onboarding hints.
-- *Naturalness* — mostly strong, but system jargon ("flush", "intent", toggle-
-  stats-as-filters) creates learned-vocabulary pockets on the admin side.
+**Weakly covered principles (after the 2026-09 improvements):**
+- *Remind users / refresh memory* — much stronger now: resume-stay chip on the
+  homepage, overpaid badge on rows, integration health lines. Still thin on
+  "last changed" context and staff onboarding beyond the day-modal hint.
+- *Naturalness* — mostly resolved: day-modal filters teach themselves via a
+  hint, and Data Management jargon now has tooltips. Remaining pocket: the
+  Integration page is still key-value oriented.
 
 ## How the pages work together
 
@@ -353,28 +354,33 @@ tolerates jargon. No reorder needed.
 
 ## What a complete HCI story still needs
 
-- **Onboarding/discoverability layer** for staff (first-run hints on the
-  bookings calendar filters, payment verify, flush flow).
+- **Onboarding/discoverability** — the day-modal hint proves the pattern;
+  extend it to the payments verify flow and the flush wizard.
 - **Recovery affordances** — undo/status history where actions are reversible
   (room status, offer activation).
-- **Jargon glossary** or inline tooltips on the Data Management page.
-- **Preview-before-destructive** — show the affected record set before a clear
-  or delete executes.
+- **Keyboard efficiency** — row-level shortcuts on the bookings list (deferred:
+  global key handlers risk hijacking input focus; needs scoped `:focus-within`
+  handling if implemented).
 
 ---
 
-# Improvement Suggestions (prioritized)
+# Improvement Suggestions — status after the 2026-09 pass
 
-| # | Suggestion | Principle served | Effort |
+| # | Suggestion | Status | Notes |
 |---|---|---|---|
-| 1 | Add a small inline hint/tour on the bookings day-modal ("stats are filters — click to filter the list") | Naturalness, Understand the task | Small |
-| 2 | Show a preview list (first N references) inside the export-and-clear confirm dialog | Prevent errors | Small |
-| 3 | Add a "resume" prompt on the homepage when a guest left an unfinished wizard session | Remind/refresh | Medium |
-| 4 | Surface "overpaid — refund needed" as its own badge on booking rows | Remind/refresh, Safety | Small |
-| 5 | One-line jargon tooltip on Data Management labels ("flush = export then delete") | Naturalness | Small |
-| 6 | Keyboard shortcut (e.g. `A` = assign) on the bookings row for power users | Efficiency | Medium |
-| 7 | Show a connectivity/status dot per service on the Integration page | Reduce memory load | Medium |
-| 8 | Partial-refund hint inside the payments refund modal ("for partial refunds, use the booking editor") | Understand the task | Small |
+| 1 | Day-modal "stats are filters" hint | **Implemented** | Dismissible hint; remembered in `localStorage` |
+| 2 | Preview affected records before export-and-clear | **Implemented** | Read-only `GET /AdminFlushLogs/Preview`; counts + kept-breakdown + sample references inside the existing confirm dialog |
+| 3 | Resume-stay prompt on homepage | **Implemented** | Reads the wizard's existing 24h `sessionStorage` draft; consent-gated; dismiss clears it |
+| 4 | "Overpaid — refund needed" badge | **Implemented** | `BookingDto.PaidTotal` (one grouped query per page); amber flag beside needs-rooms; same 0.009 threshold as the archive modal |
+| 5 | Jargon tooltips on Data Management | **Implemented** | `title` hints on Flush / Area / Intent + helper copy |
+| 6 | Keyboard shortcuts on bookings rows | **Deferred** | Highest regression risk — must be scoped to a focused row and suppressed inside inputs/modals |
+| 7 | Per-service health on Integration | **Implemented (redesigned)** | Live probing rejected — Google OAuth has no cheap probe and per-load pings burn quota. Shipped as passive "Last OK / Last error" telemetry + an on-demand "Check now" probe for Gemini/Groq (admin-triggered, one tiny call, audit-logged) |
+| 8 | Partial-refund hint in refund modal | **Implemented** | One-line note pointing to the booking editor |
+
+**Also shipped during the same pass:** a "Signing you in…" transition loader on
+login (both password and Google forms) that hands off to the destination's
+arrival loader — strengthening feedback (Effectiveness) and Appeal on the
+auth boundary.
 
 *Prepared from a code-level audit of the live system — every "met" is backed by
 implementation evidence (ARIA markup, transaction code, role attributes), not

@@ -274,7 +274,8 @@ public sealed partial class BookingService
     public async Task<BookingDto> UpdateAsync(
         int id,
         UpdateBookingRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool editedByGuest = false)
     {
         var checkInAtUtc = PhilippinesTime.ToUtc(request.CheckInAtUtc);
         var checkoutTimeUtc = PhilippinesTime.ToUtc(request.CheckoutTimeUtc);
@@ -312,6 +313,12 @@ public sealed partial class BookingService
             throw new BookingConcurrencyException(
                 "Only pending or confirmed bookings can be edited.");
         }
+
+        // Guest self-service edits feed the staff "N details changed" badge — diff
+        // the request against the stored values before anything mutates.
+        var guestChangedFields = editedByGuest
+            ? DiffGuestEditedFields(booking, request, requestedItems, checkInAtUtc, checkoutTimeUtc)
+            : null;
 
         var hasAssignments = booking.Items.Any(line => line.RoomAssignments.Count > 0);
         ValidateDates(checkInAtUtc, checkoutTimeUtc, allowPastCheckIn: true);
@@ -484,9 +491,86 @@ public sealed partial class BookingService
             : "Stay details updated.";
         AuditBooking(booking, "Booking.Updated", updateSummary);
 
+        if (guestChangedFields is { Count: > 0 })
+        {
+            var known = ParseGuestEditedFields(booking);
+            var merged = known
+                .Concat(guestChangedFields)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            booking.GuestEditedFieldsJson = System.Text.Json.JsonSerializer.Serialize(merged);
+            booking.LastGuestEditAtUtc = DateTime.UtcNow;
+            booking.GuestEditsSeenByStaff = false;
+        }
+
         await _db.SaveChangesAsync(ct);
         return MapBooking(booking);
         }, cancellationToken);
+    }
+
+    public async Task<bool> MarkGuestEditsSeenAsync(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        var rows = await _db.Bookings
+            .Where(b => b.Id == id && !b.GuestEditsSeenByStaff)
+            .ExecuteUpdateAsync(
+                update => update.SetProperty(b => b.GuestEditsSeenByStaff, true),
+                cancellationToken);
+        var exists = rows > 0 || await _db.Bookings.AnyAsync(b => b.Id == id, cancellationToken);
+        return exists;
+    }
+
+    /// <summary>
+    /// Field labels a guest-portal edit changed — drives the staff "N details changed" tag.
+    /// </summary>
+    private static List<string> DiffGuestEditedFields(
+        Booking booking,
+        UpdateBookingRequest request,
+        IReadOnlyList<CreateBookingItemRequest> requestedItems,
+        DateTime checkInAtUtc,
+        DateTime checkoutTimeUtc)
+    {
+        var changed = new List<string>();
+        if (!string.Equals(request.GuestName.Trim(), booking.GuestName.Trim(), StringComparison.OrdinalIgnoreCase))
+            changed.Add("Guest name");
+        if (!string.Equals(request.GuestPhone.Trim(), booking.GuestPhone.Trim(), StringComparison.Ordinal))
+            changed.Add("Guest phone");
+        if (!string.Equals(
+                (request.GuestEmail ?? string.Empty).Trim(),
+                booking.GuestEmail.Trim(),
+                StringComparison.OrdinalIgnoreCase))
+            changed.Add("Guest email");
+        if (booking.CheckInAtUtc != checkInAtUtc)
+            changed.Add("Check-in");
+        if (booking.CheckoutTimeUtc != checkoutTimeUtc)
+            changed.Add("Check-out");
+
+        var existingByType = booking.Items
+            .Where(line => line.RoomTypeId.HasValue)
+            .GroupBy(line => line.RoomTypeId!.Value)
+            .ToDictionary(g => g.Key, g => g.Sum(line => line.Quantity));
+        var requestedByType = requestedItems
+            .GroupBy(line => line.RoomTypeId)
+            .ToDictionary(g => g.Key, g => g.Sum(line => line.Quantity));
+        var roomsChanged = existingByType.Count != requestedByType.Count
+            || existingByType.Any(kv => !requestedByType.TryGetValue(kv.Key, out var qty) || qty != kv.Value);
+        if (roomsChanged)
+            changed.Add("Rooms");
+
+        if (request.GuestRooms is { Count: > 0 })
+        {
+            var requestedParty = request.GuestRooms
+                .Select(r => (r.Adults, r.Children, r.ExtraPerson || r.Adults + r.Children > 2))
+                .ToList();
+            var existingParty = ParseGuestParty(booking)
+                .Select(r => (r.Adults, r.Children, r.ExtraPerson))
+                .ToList();
+            if (!requestedParty.SequenceEqual(existingParty))
+                changed.Add("Head count");
+        }
+
+        return changed;
     }
 
     private static void ApplyGuestPartyFromRequest(Booking booking, UpdateBookingRequest request)

@@ -1688,6 +1688,24 @@
       viewButton.title =
         'Guest is past the expected check-in by over an hour and still has no room — open to assign.';
     }
+    const guestEditedFields = Array.isArray(booking.guestEditedFields)
+      ? booking.guestEditedFields
+      : [];
+    if (guestEditedFields.length > 0) {
+      const editBadge = document.createElement('span');
+      const pending = Boolean(booking.guestEditsPending);
+      editBadge.className =
+        'admin-payment-view-badge admin-guest-edit-badge' + (pending ? '' : ' is-seen');
+      editBadge.dataset.bookingId = String(booking.id);
+      editBadge.textContent = String(guestEditedFields.length);
+      editBadge.setAttribute('aria-hidden', 'true');
+      viewButton.appendChild(editBadge);
+      viewButton.title = pending
+        ? `Guest changed ${guestEditedFields.length} detail${
+            guestEditedFields.length === 1 ? '' : 's'
+          }: ${guestEditedFields.join(', ')} — open to review.`
+        : `Guest edited: ${guestEditedFields.join(', ')} — already reviewed.`;
+    }
     viewButton.addEventListener('click', () => openBookingDetails(booking.id, booking));
     actionCell.append(viewButton);
 
@@ -1709,12 +1727,21 @@
   }
 
   /** Field row for guest details \u2014 plain label/value blocks (never dl/dt/dd). */
-  function detailField(label, value) {
+  function detailField(label, value, changed = false) {
     const wrapper = document.createElement('div');
-    wrapper.className = 'admin-booking-detail-field';
+    wrapper.className = changed
+      ? 'admin-booking-detail-field is-guest-changed'
+      : 'admin-booking-detail-field';
     const term = document.createElement('span');
     term.className = 'admin-booking-detail-field-label';
     term.textContent = label;
+    if (changed) {
+      const tag = document.createElement('span');
+      tag.className = 'admin-booking-detail-field-change-tag';
+      tag.textContent = 'Changed';
+      tag.title = 'The guest edited this detail — review before continuing.';
+      term.append(tag);
+    }
     const detail = document.createElement('div');
     detail.className = 'admin-booking-detail-field-value';
     if (value != null && typeof value === 'object' && value.nodeType) {
@@ -2301,17 +2328,23 @@
         : `${checkInLabel} \u2192 ${checkOutLabel}`;
     const roomSummary = formatBookingRooms(booking) || '\u2014';
 
+    const drawerGuestEdits = Array.isArray(booking.guestEditedFields)
+      ? booking.guestEditedFields
+      : [];
+    const guestEditsPending = Boolean(booking.guestEditsPending) && drawerGuestEdits.length > 0;
+    const changed = (name) => guestEditsPending && drawerGuestEdits.includes(name);
+
     const fields = document.createElement('div');
     fields.className = 'admin-booking-detail-grid admin-booking-guest-details-grid';
     fields.append(
-      detailField('Guest', booking.guestName || '\u2014'),
-      detailField('Phone', booking.guestPhone || '\u2014'),
-      detailField('Email', booking.guestEmail || '\u2014'),
-      detailField('Check-in', checkInLabel),
-      detailField('Check-out', checkOutLabel),
-      detailField('Stay', staySummary),
-      detailField('Nights', String(nights)),
-      detailField('Rooms', roomSummary),
+      detailField('Guest', booking.guestName || '\u2014', changed('Guest name')),
+      detailField('Phone', booking.guestPhone || '\u2014', changed('Guest phone')),
+      detailField('Email', booking.guestEmail || '\u2014', changed('Guest email')),
+      detailField('Check-in', checkInLabel, changed('Check-in')),
+      detailField('Check-out', checkOutLabel, changed('Check-out')),
+      detailField('Stay', staySummary, changed('Check-in') || changed('Check-out')),
+      detailField('Nights', String(nights), changed('Check-in') || changed('Check-out')),
+      detailField('Rooms', roomSummary, changed('Rooms')),
       detailField(
         'Guest head count',
         (() => {
@@ -2330,7 +2363,8 @@
             return `${adults + children} (${adults} adult${adults === 1 ? '' : 's'}, ${children} child${children === 1 ? '' : 'ren'})`;
           }
           return 'Not recorded';
-        })()
+        })(),
+        changed('Head count') || changed('Rooms')
       ),
       detailField('Request type', displayEnum(booking.kind) || '\u2014'),
       detailField('Payment option', displayEnum(booking.paymentOption) || '\u2014'),
@@ -2350,7 +2384,7 @@
           return 'None';
         })()
       ),
-      detailField('Stay total', money(stayTotal)),
+      detailField('Stay total', money(stayTotal), guestEditsPending),
       detailField('Reference', booking.reference || '\u2014'),
       detailField('Submitted', formatDateTime(booking.createdAtUtc) || formatDate(booking.createdAtUtc) || '\u2014')
     );
@@ -2383,12 +2417,15 @@
     guestToggle.className = 'admin-booking-guest-details-toggle';
     const guestDetailsOpenByDefault = !(onFeesStage || extrasStage);
     guestToggle.setAttribute('aria-expanded', guestDetailsOpenByDefault ? 'true' : 'false');
+    const guestEditTagHtml = guestEditsPending
+      ? `<span class="admin-guest-edit-tag" title="Changed by guest: ${escapeHtml(drawerGuestEdits.join(', '))}">${drawerGuestEdits.length}</span>`
+      : '';
     const guestPreview = [booking.guestName, booking.guestPhone, booking.guestEmail]
       .map((part) => String(part || '').trim())
       .filter(Boolean)
       .join(' \u00B7 ');
     guestToggle.innerHTML =
-      `<span class="admin-booking-guest-details-toggle-label"><span class="admin-booking-guest-details-toggle-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-4 0-7 2-7 4.5V20h14v-1.5C19 16 16 14 12 14z" fill="currentColor"/></svg></span><span class="admin-booking-guest-details-toggle-text"><strong>Guest details</strong><small class="admin-booking-guest-details-preview">${escapeHtml(guestPreview || 'No contact on file')}</small></span></span><span class="admin-booking-guest-details-chevron" aria-hidden="true">\u25BE</span>`;
+      `<span class="admin-booking-guest-details-toggle-label"><span class="admin-booking-guest-details-toggle-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-4 0-7 2-7 4.5V20h14v-1.5C19 16 16 14 12 14z" fill="currentColor"/></svg></span><span class="admin-booking-guest-details-toggle-text"><strong>Guest details</strong>${guestEditTagHtml}<small class="admin-booking-guest-details-preview">${escapeHtml(guestPreview || 'No contact on file')}</small></span></span><span class="admin-booking-guest-details-chevron" aria-hidden="true">\u25BE</span>`;
     const guestBody = document.createElement('div');
     guestBody.className = 'admin-booking-guest-details-body';
     guestBody.append(fields);
@@ -5912,6 +5949,18 @@
       const [booking, paymentSummary] = await Promise.all([bookingPromise, paymentPromise]);
       if (requestSeq !== openBookingDetails._seq) return;
       await renderBookingDetails(booking, { paymentSummary });
+
+      // Staff has now seen the guest's edits — clear the count badge.
+      if (booking?.guestEditsPending) {
+        booking.guestEditsPending = false;
+        void apiFetch(`/api/admin/bookings/${bookingId}/seen-guest-edits`, { method: 'POST' })
+          .then(() => {
+            document
+              .querySelectorAll(`.admin-guest-edit-badge[data-booking-id="${bookingId}"]`)
+              .forEach((el) => el.classList.add('is-seen'));
+          })
+          .catch(() => {});
+      }
 
       if (options.markRead) {
         void refreshNotifications();

@@ -1106,7 +1106,26 @@ public sealed partial class BookingService
             ChildCount: booking.AdultCount > 0 || booking.ChildCount > 0
                 ? booking.ChildCount
                 : guestRooms.Sum(r => r.Children),
-            GuestRooms: guestRooms);
+            GuestRooms: guestRooms,
+            GuestEditedFields: ParseGuestEditedFields(booking),
+            LastGuestEditAtUtc: booking.LastGuestEditAtUtc,
+            GuestEditsPending: !booking.GuestEditsSeenByStaff
+                && ParseGuestEditedFields(booking).Count > 0);
+    }
+
+    private static IReadOnlyList<string> ParseGuestEditedFields(Booking booking)
+    {
+        if (string.IsNullOrWhiteSpace(booking.GuestEditedFieldsJson)) return Array.Empty<string>();
+        try
+        {
+            var fields = System.Text.Json.JsonSerializer
+                .Deserialize<List<string>>(booking.GuestEditedFieldsJson);
+            return fields ?? new List<string>();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return Array.Empty<string>();
+        }
     }
 
     private static IReadOnlyList<BookingGuestRoomDto> ParseGuestParty(Booking booking)

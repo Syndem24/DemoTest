@@ -391,6 +391,93 @@ public sealed partial class BookingService
             .Count(assignment => assignment.RoomId > 0);
     }
 
+    public async Task<IReadOnlyList<BookingDto>> GetGuestBookingsAsync(
+        string? email,
+        string? googleEmail,
+        CancellationToken cancellationToken = default)
+    {
+        var emails = GuestBookingEmailSet.Build(email, googleEmail);
+        if (emails.Count == 0)
+        {
+            return Array.Empty<BookingDto>();
+        }
+
+        var active = await _db.Bookings
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(booking => booking.Items)
+                .ThenInclude(line => line.RoomType)
+            .Include(booking => booking.Items)
+                .ThenInclude(line => line.RoomAssignments)
+                    .ThenInclude(assignment => assignment.Room)
+            .Include(booking => booking.Charges)
+            .Include(booking => booking.SpecialOffer)
+            .Where(booking => !booking.IsArchived)
+            .OrderByDescending(booking => booking.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        var archived = await _db.Bookings
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(booking => booking.Items)
+                .ThenInclude(line => line.RoomType)
+            .Include(booking => booking.Items)
+                .ThenInclude(line => line.RoomAssignments)
+                    .ThenInclude(assignment => assignment.Room)
+            .Include(booking => booking.Charges)
+            .Include(booking => booking.SpecialOffer)
+            .Where(booking => booking.IsArchived)
+            .OrderByDescending(booking => booking.CreatedAtUtc)
+            .Take(50)
+            .ToListAsync(cancellationToken);
+
+        var matched = active
+            .Concat(archived)
+            .Where(booking => GuestBookingEmailSet.Matches(booking.GuestEmail, emails))
+            .OrderByDescending(booking => booking.CreatedAtUtc)
+            .ThenByDescending(booking => booking.Id)
+            .ToList();
+
+        if (matched.Count == 0)
+        {
+            return Array.Empty<BookingDto>();
+        }
+
+        var mapped = matched.Select(MapBooking).ToList();
+        var bookingIds = matched.Select(booking => booking.Id).ToList();
+        var paidByBooking = await _db.PaymentRecords.AsNoTracking()
+            .Where(p => bookingIds.Contains(p.BookingId) && p.Status == PaymentRecordStatus.Posted)
+            .GroupBy(p => p.BookingId)
+            .Select(g => new { g.Key, Paid = g.Sum(p => p.Amount) })
+            .ToDictionaryAsync(x => x.Key, x => x.Paid, cancellationToken);
+
+        var paymentsByBooking = await _db.PaymentRecords.AsNoTracking()
+            .Where(p => bookingIds.Contains(p.BookingId))
+            .OrderByDescending(p => p.PaidAtUtc)
+            .ToListAsync(cancellationToken);
+
+        var paymentsGrouped = paymentsByBooking
+            .GroupBy(p => p.BookingId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(p => new BookingGuestPaymentDto(
+                    p.Id,
+                    p.EventType,
+                    p.Method,
+                    p.Amount,
+                    p.PaidAtUtc,
+                    p.Status,
+                    p.ReceiptNumber)).ToList());
+
+        return mapped
+            .Select(dto => dto with
+            {
+                PaidTotal = paidByBooking.GetValueOrDefault(dto.Id),
+                GuestPayments = paymentsGrouped.GetValueOrDefault(dto.Id)
+            })
+            .ToList();
+    }
+
     public async Task<IReadOnlyList<BookingNotificationDto>> GetRecentNotificationsAsync(
         int limit,
         CancellationToken cancellationToken = default)
