@@ -45,9 +45,90 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<DashboardSignal> Signals,
     IReadOnlyList<DashboardAttentionItem> Attention);
 
+/// <summary>One printable line for the bookings/reservations report tables.</summary>
+public sealed record DashboardReportBookingRow(
+    string Reference,
+    string GuestName,
+    string Kind,
+    string Status,
+    DateTime CheckInAtUtc,
+    DateTime CheckoutTimeUtc,
+    string Rooms,
+    decimal TotalAmount,
+    decimal PaidTotal);
+
+/// <summary>One printable payment-ledger line.</summary>
+public sealed record DashboardReportPaymentRow(
+    string ReceiptNumber,
+    string BookingReference,
+    string EventType,
+    string Method,
+    decimal Amount,
+    string Status,
+    DateTime PaidAtUtc,
+    string ReceivedBy);
+
+/// <summary>Per-door status line.</summary>
+public sealed record DashboardReportRoomRow(
+    string RoomNumber,
+    string RoomTypeName,
+    string Status);
+
+/// <summary>Per-type inventory rollup.</summary>
+public sealed record DashboardReportRoomTypeRow(
+    string Name,
+    int Total,
+    int Available,
+    int Occupied,
+    int Cleaning,
+    int Unavailable,
+    decimal PricePerNight);
+
+/// <summary>One column of the per-date availability grid: a room type and its door count.</summary>
+public sealed record DashboardReportRoomTypeColumn(string Name, int Total);
+
+/// <summary>
+/// One Manila date in the availability grid. <see cref="BookedByType"/> is aligned
+/// with the report's <c>RoomTypeColumns</c> order. Occupied = rooms held by
+/// pending/confirmed stays that night; Available = sellable doors minus holds;
+/// Cleaning/Unavailable are current housekeeping flags applied flat across dates.
+/// </summary>
+public sealed record DashboardReportAvailabilityRow(
+    string DateLabel,
+    IReadOnlyList<int> BookedByType,
+    int Occupied,
+    int Available,
+    int Cleaning,
+    int Unavailable,
+    decimal OccupancyPercent);
+
+/// <summary>Full printable operations report — tables first, chart data last.</summary>
+public sealed record DashboardReportDto(
+    string HotelName,
+    DateTime GeneratedAtUtc,
+    string GeneratedBy,
+    string RangeLabel,
+    int BookingCount,
+    int ReservationCount,
+    int PaymentRecordCount,
+    int RoomCount,
+    decimal RevenuePostedTotal,
+    IReadOnlyList<DashboardReportBookingRow> Bookings,
+    IReadOnlyList<DashboardReportBookingRow> Reservations,
+    IReadOnlyList<DashboardReportPaymentRow> Payments,
+    IReadOnlyList<DashboardReportRoomTypeRow> RoomTypes,
+    IReadOnlyList<DashboardReportRoomRow> Rooms,
+    IReadOnlyList<DashboardReportRoomTypeColumn> RoomTypeColumns,
+    IReadOnlyList<DashboardReportAvailabilityRow> AvailabilityByDate,
+    bool AvailabilityTruncated,
+    IReadOnlyList<DashboardDayPoint> Trend,
+    IReadOnlyList<DashboardStatusSlice> BookingStatusMix,
+    IReadOnlyList<DashboardStatusSlice> RoomStatusMix);
+
 public interface IDashboardAnalyticsService
 {
     Task<DashboardSnapshot> GetSnapshotAsync(bool isAdminManager, string roleName, CancellationToken cancellationToken = default);
+    Task<DashboardReportDto> GetReportAsync(string generatedBy, DateOnly fromDate, DateOnly toDate, CancellationToken cancellationToken = default);
 }
 
 public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
@@ -283,6 +364,264 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
             channelMix,
             signals,
             attentionItems);
+    }
+
+    /// <summary>
+    /// Printable operations report — raw tables (bookings, reservations, payment
+    /// ledger, room status) first, chart aggregates last so the printed document
+    /// ends on the graphs page.
+    /// </summary>
+    public async Task<DashboardReportDto> GetReportAsync(
+        string generatedBy,
+        DateOnly fromDate,
+        DateOnly toDate,
+        CancellationToken cancellationToken = default)
+    {
+        var range = FlushDateRange.FromManilaDates(fromDate, toDate);
+        var fromUtc = range.FromUtcInclusive!.Value;
+        var toUtc = range.ToUtcExclusive!.Value;
+        var rangeLabel = string.Concat(
+            fromDate.ToString("dd MMM yyyy"), " – ", toDate.ToString("dd MMM yyyy"), " (Manila)");
+        var nowUtc = DateTime.UtcNow;
+
+        var bookingRows = await _db.Bookings.AsNoTracking()
+            .Where(b => !b.IsArchived
+                && b.CheckInAtUtc < toUtc
+                && b.CheckoutTimeUtc > fromUtc)
+            .OrderBy(b => b.CheckInAtUtc)
+            .Select(b => new
+            {
+                b.Id,
+                b.Reference,
+                b.GuestName,
+                b.Kind,
+                b.Status,
+                b.CheckInAtUtc,
+                b.CheckoutTimeUtc,
+                b.TotalAmount,
+                Items = b.Items.Select(i => new { i.RoomTypeName, i.Quantity }).ToList(),
+            })
+            .ToListAsync(cancellationToken);
+
+        var paidByBooking = await _db.PaymentRecords.AsNoTracking()
+            .Where(p => p.Status == PaymentRecordStatus.Posted)
+            .GroupBy(p => p.BookingId)
+            .Select(g => new { g.Key, Paid = g.Sum(p => p.Amount) })
+            .ToDictionaryAsync(x => x.Key, x => x.Paid, cancellationToken);
+
+        var allRows = bookingRows
+            .Select(b => new DashboardReportBookingRow(
+                b.Reference,
+                b.GuestName,
+                b.Kind == BookingKind.Reservation ? "Reservation" : "Booking",
+                b.Status.ToString(),
+                b.CheckInAtUtc,
+                b.CheckoutTimeUtc,
+                string.Join(" · ", b.Items
+                    .GroupBy(i => i.RoomTypeName)
+                    .Select(g => $"{g.Sum(i => i.Quantity)}× {g.Key}")),
+                b.TotalAmount,
+                paidByBooking.GetValueOrDefault(b.Id)))
+            .ToList();
+
+        var bookings = allRows.Where(r => r.Kind == "Booking").ToList();
+        var reservations = allRows.Where(r => r.Kind == "Reservation").ToList();
+
+        var payments = await _db.PaymentRecords.AsNoTracking()
+            .Where(p => p.PaidAtUtc >= fromUtc && p.PaidAtUtc < toUtc)
+            .OrderByDescending(p => p.PaidAtUtc)
+            .Take(500)
+            .Select(p => new DashboardReportPaymentRow(
+                p.ReceiptNumber,
+                p.Booking.Reference,
+                p.EventType.ToString(),
+                p.Method.ToString(),
+                p.Amount,
+                p.Status.ToString(),
+                p.PaidAtUtc,
+                p.ReceivedBy))
+            .ToListAsync(cancellationToken);
+
+        var roomRows = await _db.Rooms.AsNoTracking()
+            .Include(r => r.RoomType)
+            .OrderBy(r => r.RoomType.Name)
+            .ThenBy(r => r.RoomNumber)
+            .Select(r => new DashboardReportRoomRow(
+                r.RoomNumber,
+                r.RoomType.Name,
+                r.Status.ToString()))
+            .ToListAsync(cancellationToken);
+
+        var roomTypePrices = await _db.RoomTypes.AsNoTracking()
+            .Select(rt => new { rt.Name, rt.PricePerNight })
+            .ToDictionaryAsync(rt => rt.Name, rt => rt.PricePerNight, cancellationToken);
+
+        var roomTypes = roomRows
+            .GroupBy(r => r.RoomTypeName)
+            .Select(g => new DashboardReportRoomTypeRow(
+                g.Key,
+                g.Count(),
+                g.Count(r => r.Status == nameof(RoomStatus.Available)),
+                g.Count(r => r.Status == nameof(RoomStatus.Occupied)),
+                g.Count(r => r.Status == nameof(RoomStatus.Cleaning)),
+                g.Count(r => r.Status == nameof(RoomStatus.Unavailable)),
+                roomTypePrices.GetValueOrDefault(g.Key)))
+            .OrderBy(r => r.Name)
+            .ToList();
+
+        var periodPayments = await _db.PaymentRecords.AsNoTracking()
+            .Where(p => p.Status == PaymentRecordStatus.Posted
+                && p.PaidAtUtc >= fromUtc
+                && p.PaidAtUtc < toUtc)
+            .Select(p => new { p.Amount, p.PaidAtUtc })
+            .ToListAsync(cancellationToken);
+
+        var confirmedIds = bookingRows
+            .Where(b => b.Status == BookingStatus.Confirmed || b.Status == BookingStatus.CheckedOut)
+            .Select(b => b.Id)
+            .ToList();
+        var roomsByBooking = await LoadRoomCountsByBookingAsync(confirmedIds, cancellationToken);
+
+        // One chart bucket per Manila day up to ~5 weeks, then weekly buckets.
+        var spanDays = toDate.DayNumber - fromDate.DayNumber + 1;
+        var bucketDays = spanDays <= 40 ? 1 : 7;
+        var trend = new List<DashboardDayPoint>((spanDays + bucketDays - 1) / bucketDays);
+        for (var offset = 0; offset < spanDays; offset += bucketDays)
+        {
+            var bucketFrom = fromDate.AddDays(offset);
+            var bucketTo = fromDate.AddDays(Math.Min(offset + bucketDays, spanDays));
+            var bucketFromUtc = PhilippinesTime.ToUtc(
+                DateTime.SpecifyKind(bucketFrom.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified));
+            var bucketToUtc = PhilippinesTime.ToUtc(
+                DateTime.SpecifyKind(bucketTo.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified));
+            var label = bucketDays == 1
+                ? bucketFrom.ToString("dd MMM")
+                : string.Concat(bucketFrom.ToString("dd MMM"), " – ", bucketTo.AddDays(-1).ToString("dd MMM"));
+            var revenue = periodPayments
+                .Where(p => p.PaidAtUtc >= bucketFromUtc && p.PaidAtUtc < bucketToUtc && p.Amount > 0)
+                .Sum(p => p.Amount);
+            var arrivals = bookingRows.Count(b =>
+                (b.Status == BookingStatus.Pending || b.Status == BookingStatus.Confirmed)
+                && b.CheckInAtUtc >= bucketFromUtc
+                && b.CheckInAtUtc < bucketToUtc);
+            var occupied = bookingRows
+                .Where(b =>
+                    (b.Status == BookingStatus.Confirmed || b.Status == BookingStatus.CheckedOut)
+                    && b.CheckInAtUtc < bucketToUtc
+                    && b.CheckoutTimeUtc > bucketFromUtc)
+                .Sum(b => roomsByBooking.GetValueOrDefault(b.Id, 0));
+            trend.Add(new DashboardDayPoint(label, revenue, arrivals, occupied));
+        }
+
+        var statusMix = new[]
+        {
+            new DashboardStatusSlice("Pending", bookingRows.Count(b => b.Status == BookingStatus.Pending)),
+            new DashboardStatusSlice("Confirmed", bookingRows.Count(b => b.Status == BookingStatus.Confirmed)),
+            new DashboardStatusSlice("Checked out", bookingRows.Count(b => b.Status == BookingStatus.CheckedOut)),
+            new DashboardStatusSlice("Cancelled", bookingRows.Count(b => b.Status == BookingStatus.Cancelled)),
+            new DashboardStatusSlice("Rejected", bookingRows.Count(b => b.Status == BookingStatus.Rejected)),
+        };
+
+        var roomStatusMix = new[]
+        {
+            new DashboardStatusSlice("Available", roomRows.Count(r => r.Status == nameof(RoomStatus.Available))),
+            new DashboardStatusSlice("Occupied", roomRows.Count(r => r.Status == nameof(RoomStatus.Occupied))),
+            new DashboardStatusSlice("Cleaning", roomRows.Count(r => r.Status == nameof(RoomStatus.Cleaning))),
+            new DashboardStatusSlice("Unavailable", roomRows.Count(r => r.Status == nameof(RoomStatus.Unavailable))),
+        };
+
+        var revenuePostedTotal = periodPayments.Where(p => p.Amount > 0).Sum(p => p.Amount);
+
+        /* ---- per-date room availability / status grid -------------------- */
+        /* Mirrors the live inventory rule: Pending + Confirmed stays deduct
+           rooms; Cleaning/Unavailable doors subtract from sellable capacity. */
+        var roomTypeColumns = roomRows
+            .GroupBy(r => r.RoomTypeName)
+            .Select(g => new DashboardReportRoomTypeColumn(g.Key, g.Count()))
+            .OrderBy(c => c.Name)
+            .ToList();
+
+        var cleaningDoors = roomRows.Count(r => r.Status == nameof(RoomStatus.Cleaning));
+        var unavailableDoors = roomRows.Count(r => r.Status == nameof(RoomStatus.Unavailable));
+
+        var overlappingLines = await _db.BookingItems.AsNoTracking()
+            .Where(line =>
+                line.RoomTypeId != null
+                && !line.Booking.IsArchived
+                && (line.Booking.Status == BookingStatus.Pending
+                    || line.Booking.Status == BookingStatus.Confirmed)
+                && line.Booking.CheckInAtUtc < toUtc
+                && line.Booking.CheckoutTimeUtc > fromUtc)
+            .Select(line => new
+            {
+                TypeName = line.RoomType!.Name,
+                line.Quantity,
+                line.Booking.CheckInAtUtc,
+                line.Booking.CheckoutTimeUtc
+            })
+            .ToListAsync(cancellationToken);
+
+        var totalCapacity = roomTypeColumns.Sum(c => c.Total);
+        var totalMaintenance = cleaningDoors + unavailableDoors;
+        const int MaxAvailabilityDays = 93;
+        var availabilityDays = Math.Min(spanDays, MaxAvailabilityDays);
+        var availabilityByDate = new List<DashboardReportAvailabilityRow>(availabilityDays);
+
+        for (var d = 0; d < availabilityDays; d++)
+        {
+            var manilaDate = fromDate.AddDays(d);
+            var dayStartUtc = PhilippinesTime.ToUtc(
+                DateTime.SpecifyKind(manilaDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified));
+            var dayEndUtc = dayStartUtc.AddDays(1);
+
+            var bookedByType = new int[roomTypeColumns.Count];
+            for (var t = 0; t < roomTypeColumns.Count; t++)
+            {
+                bookedByType[t] = overlappingLines
+                    .Where(l => l.TypeName == roomTypeColumns[t].Name
+                        && l.CheckInAtUtc < dayEndUtc
+                        && l.CheckoutTimeUtc > dayStartUtc)
+                    .Sum(l => l.Quantity);
+            }
+
+            var occupied = bookedByType.Sum();
+            var sellable = totalCapacity - totalMaintenance;
+            var available = Math.Max(0, sellable - occupied);
+            var occupancyPct = sellable <= 0
+                ? 0
+                : Math.Round(100m * occupied / sellable, 1);
+
+            availabilityByDate.Add(new DashboardReportAvailabilityRow(
+                manilaDate.ToString("ddd dd MMM"),
+                bookedByType,
+                occupied,
+                available,
+                cleaningDoors,
+                unavailableDoors,
+                occupancyPct));
+        }
+
+        return new DashboardReportDto(
+            "Mori International Hotel",
+            nowUtc,
+            generatedBy,
+            rangeLabel,
+            bookings.Count,
+            reservations.Count,
+            payments.Count,
+            roomRows.Count,
+            revenuePostedTotal,
+            bookings,
+            reservations,
+            payments,
+            roomTypes,
+            roomRows,
+            roomTypeColumns,
+            availabilityByDate,
+            spanDays > MaxAvailabilityDays,
+            trend,
+            statusMix,
+            roomStatusMix);
     }
 
     private async Task<Dictionary<int, int>> LoadRoomCountsByBookingAsync(

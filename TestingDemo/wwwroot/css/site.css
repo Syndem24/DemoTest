@@ -5442,7 +5442,7 @@ a:hover {
 .admin-export-loading {
   position: fixed;
   inset: 0;
-  z-index: 5200;
+  z-index: 5600;
   display: grid;
   place-items: center;
   padding: clamp(1rem, 4vw, 2rem);
@@ -15146,4 +15146,510 @@ html.mori-surface-arrival .guest-page-loader .guest-page-loader-bar-fill {
   @keyframes guest-loader-fade {
     to { opacity: 0; }
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Operations report — preview modal + print-identical document        */
+/* ------------------------------------------------------------------ */
+
+.admin-report-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 5400;
+  display: grid;
+  place-items: center;
+  padding: clamp(0.75rem, 3vw, 2rem);
+  background: color-mix(in srgb, var(--navy) 55%, transparent);
+}
+
+.admin-report-modal[hidden] {
+  display: none !important;
+}
+
+.admin-report-modal-card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  width: min(64rem, 100%);
+  max-height: 92vh;
+  border-radius: 16px;
+  background: var(--white);
+  border: 1px solid var(--navy-line);
+  box-shadow: 0 24px 60px color-mix(in srgb, var(--navy) 30%, transparent);
+  overflow: hidden;
+}
+
+.admin-report-modal-card {
+  position: relative;
+}
+
+.admin-report-x {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.8rem;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border: 1px solid var(--navy-line);
+  border-radius: 50%;
+  background: var(--white);
+  color: color-mix(in srgb, var(--navy) 70%, white);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.admin-report-x:hover {
+  background: color-mix(in srgb, var(--teal) 12%, var(--white));
+  border-color: var(--teal);
+  color: var(--navy);
+}
+
+.admin-report-x:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.admin-report-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.9rem 3.4rem 0.9rem 1.2rem;
+  border-bottom: 1px solid var(--navy-line);
+  background: color-mix(in srgb, var(--navy) 3%, var(--white));
+}
+
+.admin-report-title {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.admin-report-head-logo {
+  width: 2.4rem;
+  height: 2.4rem;
+  object-fit: contain;
+}
+
+.admin-report-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.admin-report-btn svg {
+  flex: none;
+}
+
+.admin-report-modal-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+.admin-report-modal-head p {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  color: color-mix(in srgb, var(--navy) 65%, white);
+}
+
+.admin-report-modal-actions {
+  display: inline-flex;
+  align-items: end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.admin-report-date {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.admin-report-date span {
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: color-mix(in srgb, var(--navy) 65%, white);
+}
+
+.admin-report-date input {
+  padding: 0.42rem 0.6rem;
+  border: 1px solid var(--navy-line);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--navy);
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.admin-report-date input:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
+.admin-report-placeholder {
+  margin: 3rem auto;
+  max-width: 26rem;
+  text-align: center;
+  color: color-mix(in srgb, var(--navy) 60%, white);
+  font-size: 0.9rem;
+}
+
+.admin-report-placeholder.is-error {
+  color: #b3261e;
+  font-weight: 600;
+}
+
+.admin-report-modal-body {
+  overflow: auto;
+  padding: 1.4rem;
+  background: color-mix(in srgb, var(--navy) 6%, var(--white));
+}
+
+/* The printable document — same markup styles preview and print.
+   Each .admin-report-sheet is one printed page; preview shows them as
+   stacked paper sheets so boundaries are visible before printing. */
+.admin-report-doc {
+  width: min(100%, 52rem);
+  margin: 0 auto;
+  color: var(--navy);
+  font-size: 0.82rem;
+}
+
+.admin-report-sheet {
+  position: relative;
+  padding: 0 2.2rem 2.6rem;
+  margin-bottom: 1.2rem;
+  background: var(--white);
+  border: 1px solid var(--navy-line);
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--navy) 14%, transparent);
+}
+
+.admin-report-sheet-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 -2.2rem 1.1rem;
+  padding: 0.5rem 2.2rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--navy) 12%, white);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--navy) 55%, white);
+}
+
+.admin-report-sheet-brand img {
+  width: 1.1rem;
+  height: 1.1rem;
+  object-fit: contain;
+}
+
+.admin-report-sheet-brand em {
+  margin-left: auto;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: color-mix(in srgb, var(--navy) 40%, white);
+}
+
+.admin-report-sheet-foot {
+  position: absolute;
+  left: 2.2rem;
+  right: 2.2rem;
+  bottom: 0.55rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.35rem;
+  border-top: 1px solid color-mix(in srgb, var(--navy) 12%, white);
+  font-size: 0.62rem;
+  color: color-mix(in srgb, var(--navy) 50%, white);
+}
+
+.admin-report-sheet-num {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.admin-report-cont {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--navy) 55%, white);
+}
+
+.admin-report-head {
+  padding-bottom: 1rem;
+  border-bottom: 2px solid var(--navy);
+  margin-bottom: 1.2rem;
+}
+
+.admin-report-masthead {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.admin-report-logo {
+  width: 3.2rem;
+  height: 3.2rem;
+  object-fit: contain;
+}
+
+.admin-report-ref {
+  margin: 0.25rem 0 0;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+
+.admin-report-hotel {
+  margin: 0 0 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+
+.admin-report-head h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.admin-report-meta {
+  margin: 0.3rem 0 0;
+  font-size: 0.74rem;
+  color: color-mix(in srgb, var(--navy) 65%, white);
+}
+
+.admin-report-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-report-kpis li {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 7rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--navy-line);
+  border-radius: 8px;
+}
+
+.admin-report-kpis span {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: color-mix(in srgb, var(--navy) 60%, white);
+}
+
+.admin-report-kpis strong {
+  font-size: 0.98rem;
+  font-weight: 800;
+}
+
+.admin-report-sheet h2 {
+  margin: 0 0 0.15rem;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.admin-report-head + h2,
+.admin-report-sheet h2:first-child {
+  margin-top: 0;
+}
+
+.admin-report-note {
+  margin: 0 0 0.6rem;
+  font-size: 0.72rem;
+  color: color-mix(in srgb, var(--navy) 60%, white);
+}
+
+.admin-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.74rem;
+}
+
+.admin-report-table th {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 2px solid var(--navy);
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: color-mix(in srgb, var(--navy) 70%, white);
+  white-space: nowrap;
+}
+
+.admin-report-table td {
+  padding: 0.32rem 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--navy) 10%, white);
+  vertical-align: top;
+}
+
+.admin-report-table td.num,
+.admin-report-table th.num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.admin-report-empty {
+  padding: 0.8rem 0.5rem !important;
+  color: color-mix(in srgb, var(--navy) 55%, white);
+  font-style: italic;
+}
+
+.admin-report-chart {
+  margin-top: 1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid color-mix(in srgb, var(--navy) 14%, white);
+}
+
+.admin-report-chart h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.admin-report-bar-row {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr 5.5rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.18rem 0;
+  font-size: 0.72rem;
+}
+
+.admin-report-bar-label {
+  font-weight: 600;
+  color: color-mix(in srgb, var(--navy) 80%, white);
+}
+
+.admin-report-bar-track {
+  height: 0.85rem;
+  background: color-mix(in srgb, var(--teal) 12%, white);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.admin-report-bar-track i {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  background: var(--teal);
+}
+
+.admin-report-bar-value {
+  text-align: right;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+body.admin-report-modal-open {
+  overflow: hidden;
+}
+
+/* Print: hide the app chrome, render only the report document. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .admin-report-doc,
+  .admin-report-doc * {
+    visibility: visible;
+  }
+
+  .admin-report-modal {
+    position: static;
+    padding: 0;
+    background: none;
+    display: block;
+  }
+
+  .admin-report-modal-card {
+    display: block;
+    max-height: none;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .admin-report-modal-head {
+    display: none;
+  }
+
+  .admin-report-modal-body {
+    overflow: visible;
+    padding: 0;
+    background: none;
+  }
+
+  .admin-report-doc {
+    width: 100%;
+    margin: 0;
+    font-size: 9pt;
+  }
+
+  .admin-report-sheet {
+    padding: 0 0 1.6rem;
+    margin: 0;
+    border: 0;
+    box-shadow: none;
+    break-after: page;
+  }
+
+  .admin-report-sheet:last-child {
+    break-after: auto;
+  }
+
+  .admin-report-sheet-brand {
+    margin: 0 0 0.9rem;
+    padding: 0.3rem 0;
+  }
+
+  .admin-report-sheet-foot {
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+
+  .admin-report-table thead {
+    display: table-header-group;
+  }
+
+  .admin-report-table tr {
+    break-inside: avoid;
+  }
+
+  .admin-report-chart {
+    break-inside: avoid;
+  }
+
+  .admin-report-bar-track i {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}
+
+@page {
+  margin: 12mm;
 }
