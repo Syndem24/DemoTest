@@ -1633,6 +1633,66 @@ a:hover {
   align-items: start;
 }
 
+/* Integration accordion rows — closed by default, essentials stay visible */
+.admin-integration-acc {
+  grid-column: 1 / -1;
+}
+
+summary.admin-integration-acc-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+  border-radius: 10px;
+}
+
+summary.admin-integration-acc-head::-webkit-details-marker {
+  display: none;
+}
+
+summary.admin-integration-acc-head:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--teal) 70%, white);
+  outline-offset: 2px;
+}
+
+.admin-integration-acc-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.admin-integration-acc-activity {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--navy) 58%, white);
+  white-space: nowrap;
+}
+
+.admin-integration-acc-chevron {
+  width: 1.35rem;
+  height: 1.35rem;
+  color: color-mix(in srgb, var(--navy) 55%, white);
+  transition: transform 200ms ease;
+}
+
+.admin-integration-acc[open] .admin-integration-acc-chevron {
+  transform: rotate(180deg);
+}
+
+.admin-integration-acc-body {
+  border-top: 1px dashed var(--navy-line);
+  padding-top: 1rem;
+}
+
+.admin-integration-acc-body .admin-integration-card-foot {
+  padding-top: 0.9rem;
+}
+
 .admin-integration-card-copy h2 {
   margin: 0 0 0.2rem;
   font-size: 1.05rem;
@@ -2036,6 +2096,22 @@ a:hover {
   .admin-integration-status {
     grid-column: 2;
     justify-self: start;
+  }
+
+  summary.admin-integration-acc-head {
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: 0.4rem;
+  }
+
+  .admin-integration-acc-meta {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    padding-left: calc(1.35rem + 0.75rem);
+  }
+
+  .admin-integration-acc-activity {
+    order: 3;
+    width: 100%;
   }
 
   .admin-integration-confirm-controls {
@@ -5794,10 +5870,11 @@ body.is-exporting {
   width: min(96vw, 52rem);
 }
 
-[data-payment-detail-modal] .admin-payment-detail-dialog > header.admin-payment-detail-head {
+[data-payment-detail-modal] .admin-payment-detail-dialog > header.admin-payment-detail-head,
+[data-payment-qr-modal] .admin-payment-modal-dialog > header.admin-payment-detail-head {
   align-items: flex-start;
-  gap: 16px;
-  padding: 20px 16px 20px 24px;
+  gap: 12px;
+  padding: 0.8rem 0.9rem 0.85rem 1.15rem;
   border-bottom: 0;
   color: var(--white);
   background:
@@ -5820,7 +5897,8 @@ body.is-exporting {
   color: #2dd4bf;
 }
 
-[data-payment-detail-modal] .admin-payment-detail-head h2 {
+[data-payment-detail-modal] .admin-payment-detail-head h2,
+[data-payment-qr-modal] .admin-payment-detail-head h2 {
   margin: 0;
   max-width: none;
   overflow: hidden;
@@ -6030,13 +6108,26 @@ body.is-exporting {
 }
 
 @media (max-width: 768px) {
-  [data-payment-detail-modal] .admin-payment-detail-dialog > header.admin-payment-detail-head {
+  [data-payment-detail-modal] .admin-payment-detail-dialog > header.admin-payment-detail-head,
+  [data-payment-qr-modal] .admin-payment-modal-dialog > header.admin-payment-detail-head {
     padding: 16px 12px 16px 16px;
   }
 
-  [data-payment-detail-modal] .admin-payment-detail-head h2 {
+  [data-payment-detail-modal] .admin-payment-detail-head h2,
+  [data-payment-qr-modal] .admin-payment-detail-head h2 {
     white-space: normal;
   }
+}
+
+[data-payment-qr-modal] .admin-payment-detail-stats .is-status.is-paid {
+  border-color: rgba(45, 212, 191, 0.45);
+  background: rgba(26, 166, 166, 0.24);
+  color: #5eead4;
+}
+
+[data-payment-qr-modal] .admin-payment-detail-stats .is-status.is-closed {
+  border-color: rgba(255, 255, 255, 0.22);
+  color: rgba(241, 245, 249, 0.78);
 }
 
 .admin-payment-guest-line {
@@ -6155,6 +6246,537 @@ body.is-exporting {
   font-size: 0.72rem;
 }
 
+.admin-payment-qr-btn.is-blocked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.admin-payment-qr-stage[hidden],
+.admin-payment-qr-custom[hidden],
+.admin-payment-qr-quicks button[hidden] {
+  display: none;
+}
+
+.admin-payment-qr-collect {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  margin-bottom: 0.55rem;
+  border: 1px dashed var(--navy-line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--teal-soft) 30%, var(--white));
+}
+
+.admin-payment-qr-collect > span {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--navy) 62%, white);
+}
+
+.admin-payment-qr-collect > strong {
+  color: var(--navy);
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-payment-qr-quicks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.admin-payment-qr-quicks button {
+  display: grid;
+  gap: 0.12rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--navy-line);
+  border-radius: 10px;
+  background: var(--white);
+  color: var(--navy);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 200ms ease, background 200ms ease, box-shadow 200ms ease;
+}
+
+.admin-payment-qr-quicks button > span {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--navy) 60%, white);
+}
+
+.admin-payment-qr-quicks button > strong {
+  font-size: 0.95rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-payment-qr-quicks button:hover:not(.is-active) {
+  border-color: color-mix(in srgb, var(--navy) 32%, white);
+}
+
+.admin-payment-qr-quicks button.is-active {
+  border-color: var(--teal);
+  background: color-mix(in srgb, var(--teal-soft) 35%, var(--white));
+  box-shadow: inset 0 0 0 1px var(--teal);
+}
+
+.admin-payment-qr-quicks button.is-active > span {
+  color: var(--teal);
+}
+
+.admin-payment-qr-quicks button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--teal) 70%, white);
+  outline-offset: 1px;
+}
+
+.admin-payment-qr-custom {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.admin-payment-qr-stage {
+  display: grid;
+  justify-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.25rem 0.15rem;
+  text-align: center;
+}
+
+.admin-payment-qr-expiry {
+  margin: 0;
+  padding: 0.28rem 0.8rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--navy) 7%, white);
+  color: color-mix(in srgb, var(--navy) 75%, white);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.admin-payment-qr-card {
+  width: min(100%, 25rem);
+  border: 1px solid var(--navy-line);
+  border-radius: 14px;
+  background: var(--white);
+  padding: 0.65rem 0.85rem 0.75rem;
+  display: grid;
+  justify-items: stretch;
+  gap: 0.4rem;
+  box-shadow: 0 8px 24px rgba(11, 31, 58, 0.08);
+}
+
+.admin-payment-qr-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-payment-qr-merchant {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--navy) 72%, white);
+}
+
+.admin-payment-qr-brand {
+  flex: none;
+  padding: 0.14rem 0.5rem;
+  border: 1px solid var(--navy-line);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--navy);
+  background: var(--white);
+}
+
+.admin-payment-qr-brand em {
+  font-style: normal;
+  color: var(--teal);
+}
+
+.admin-payment-qr-scanline {
+  margin: 0;
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
+  background: var(--navy);
+  color: var(--white);
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-payment-qr-frame {
+  display: grid;
+  place-items: center;
+  padding: 0.6rem;
+  border: 2px solid color-mix(in srgb, var(--navy) 16%, white);
+  border-radius: 12px;
+  background: var(--white);
+}
+
+.admin-payment-qr-img {
+  display: block;
+  width: clamp(128px, 22vh, 158px);
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  background: var(--white);
+}
+
+.admin-payment-qr-wallets {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+  overflow: hidden;
+}
+
+.admin-payment-qr-wallets span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.26rem;
+  padding: 0.14rem 0.4rem;
+  white-space: nowrap;
+  border: 1px solid var(--navy-line);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--navy);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+
+.admin-payment-qr-wallets b {
+  display: inline-grid;
+  place-items: center;
+  width: 0.95rem;
+  height: 0.95rem;
+  border-radius: 4px;
+  flex: none;
+  color: var(--white);
+  font-size: 0.56rem;
+  font-weight: 800;
+  font-style: normal;
+  line-height: 1;
+}
+
+.admin-payment-qr-wallets .w-gcash { color: #007dfe; }
+.admin-payment-qr-wallets .w-gcash b { background: #007dfe; }
+.admin-payment-qr-wallets .w-maya { color: #0c8a52; }
+.admin-payment-qr-wallets .w-maya b { background: #00b067; }
+.admin-payment-qr-wallets .w-bpi { color: #c2102b; }
+.admin-payment-qr-wallets .w-bpi b { background: #c2102b; }
+.admin-payment-qr-wallets .w-bdo { color: #004ea8; }
+.admin-payment-qr-wallets .w-bdo b { background: #004ea8; }
+.admin-payment-qr-wallets .w-ub { color: #d96e00; }
+.admin-payment-qr-wallets .w-ub b { background: #f68b1f; }
+
+.admin-payment-qr-amountbox {
+  display: grid;
+  justify-items: center;
+  gap: 0.05rem;
+  padding-top: 0.4rem;
+  border-top: 1px dashed var(--navy-line);
+}
+
+.admin-payment-qr-paylabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--navy) 58%, white);
+}
+
+.admin-payment-qr-amount {
+  margin: 0;
+  color: var(--navy);
+  font-size: 1.3rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.admin-payment-qr-ref {
+  margin: 0;
+  color: color-mix(in srgb, var(--navy) 55%, white);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  word-break: break-all;
+}
+
+.admin-payment-qr-secure {
+  display: inline-flex;
+  align-items: center;
+  justify-self: center;
+  gap: 0.3rem;
+  margin: 0.1rem 0 0;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--navy-line);
+  color: color-mix(in srgb, var(--navy) 52%, white);
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+
+.admin-payment-qr-secure svg {
+  width: 0.8rem;
+  height: 0.8rem;
+  color: var(--teal);
+}
+
+[data-payment-qr-modal] .admin-booking-detail-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+[data-payment-qr-modal] .admin-booking-detail-actions svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: none;
+}
+
+.admin-payment-qr-success {
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  padding: 1.15rem 0.5rem 0.4rem;
+  text-align: center;
+}
+
+.admin-payment-qr-success[hidden] {
+  display: none;
+}
+
+.admin-payment-qr-success-ring {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+
+.admin-payment-qr-success-ring svg {
+  width: 86px;
+  height: 86px;
+  display: block;
+  overflow: visible;
+}
+
+.admin-payment-qr-success-ring .qr-success-circle {
+  fill: var(--teal);
+}
+
+.admin-payment-qr-success-ring .qr-success-check {
+  fill: none;
+  stroke: var(--white);
+  stroke-width: 5.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.admin-payment-qr-success-ring::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--teal) 55%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.admin-payment-qr-success.is-anim .admin-payment-qr-success-ring svg {
+  animation: qr-success-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.admin-payment-qr-success.is-anim .qr-success-check {
+  stroke-dasharray: 42;
+  stroke-dashoffset: 42;
+  animation: qr-success-draw 360ms 300ms ease-out forwards;
+}
+
+.admin-payment-qr-success.is-anim .admin-payment-qr-success-ring::after {
+  animation: qr-success-halo 720ms 120ms ease-out forwards;
+}
+
+.admin-payment-qr-success.is-anim .admin-payment-qr-success-title,
+.admin-payment-qr-success.is-anim .admin-payment-qr-success-amount,
+.admin-payment-qr-success.is-anim .admin-payment-qr-success-note {
+  animation: qr-success-rise 340ms 480ms ease-out backwards;
+}
+
+.admin-payment-qr-success.is-anim .admin-payment-qr-success-amount {
+  animation-delay: 540ms;
+}
+
+.admin-payment-qr-success.is-anim .admin-payment-qr-success-note {
+  animation-delay: 600ms;
+}
+
+.admin-payment-qr-success-title {
+  margin: 0.55rem 0 0;
+  color: var(--navy);
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.admin-payment-qr-success-amount {
+  margin: 0;
+  color: var(--teal);
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.admin-payment-qr-success-note {
+  margin: 0;
+  color: color-mix(in srgb, var(--navy) 62%, white);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+@keyframes qr-success-pop {
+  from { transform: scale(0.55); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes qr-success-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes qr-success-halo {
+  0% { transform: scale(0.8); opacity: 0.75; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+
+@keyframes qr-success-rise {
+  from { transform: translateY(6px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.admin-payment-qr-loading {
+  display: grid;
+  justify-items: center;
+  gap: 0.45rem;
+  padding: 1.2rem 0.5rem 0.8rem;
+  text-align: center;
+}
+
+.admin-payment-qr-loading[hidden] {
+  display: none;
+}
+
+.admin-payment-qr-loading-frame {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 150px;
+  aspect-ratio: 1;
+  border: 2px solid color-mix(in srgb, var(--navy) 14%, white);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--teal-soft) 28%, var(--white));
+  overflow: hidden;
+}
+
+.admin-payment-qr-loading-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    color-mix(in srgb, var(--teal) 18%, transparent) 50%,
+    transparent 70%
+  );
+  transform: translateX(-100%);
+  animation: qr-loading-shimmer 1.4s ease-in-out infinite;
+}
+
+.admin-payment-qr-loading-frame svg {
+  width: 3.2rem;
+  height: 3.2rem;
+  color: color-mix(in srgb, var(--navy) 40%, white);
+  animation: qr-loading-breathe 1.4s ease-in-out infinite;
+}
+
+.admin-payment-qr-loading-title {
+  margin: 0.4rem 0 0;
+  color: var(--navy);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.admin-payment-qr-loading-sub {
+  margin: 0;
+  color: color-mix(in srgb, var(--navy) 58%, white);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+@keyframes qr-loading-shimmer {
+  to { transform: translateX(100%); }
+}
+
+@keyframes qr-loading-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-payment-qr-success.is-anim .admin-payment-qr-success-ring svg,
+  .admin-payment-qr-success.is-anim .qr-success-check,
+  .admin-payment-qr-success.is-anim .admin-payment-qr-success-ring::after,
+  .admin-payment-qr-success.is-anim .admin-payment-qr-success-title,
+  .admin-payment-qr-success.is-anim .admin-payment-qr-success-amount,
+  .admin-payment-qr-success.is-anim .admin-payment-qr-success-note,
+  .admin-payment-qr-loading-frame::after,
+  .admin-payment-qr-loading-frame svg {
+    animation: none;
+  }
+}
+
+.admin-payment-qr-pill {
+  display: inline-block;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.admin-payment-qr-pill.is-waiting {
+  background: color-mix(in srgb, var(--teal-soft) 55%, var(--white));
+  color: var(--navy);
+}
+
+.admin-payment-qr-pill.is-paid {
+  background: var(--teal);
+  color: var(--white);
+}
+
+.admin-payment-qr-pill.is-failed,
+.admin-payment-qr-pill.is-closed {
+  background: color-mix(in srgb, var(--navy-soft) 55%, var(--white));
+  color: var(--navy);
+}
+
 .admin-payment-panel-title {
   margin: 0 0 0.15rem;
   color: var(--teal);
@@ -6184,8 +6806,7 @@ body.is-exporting {
   min-width: 28rem;
 }
 
-.admin-payment-cash-panel,
-.admin-payment-epay-panel {
+.admin-payment-cash-panel {
   display: grid;
   gap: 0.65rem;
   padding: 0.75rem;
@@ -8700,22 +9321,29 @@ body.admin-cal-day-open {
 }
 
 [data-booking-modal] .admin-booking-modal-dialog > header.admin-booking-detail-header {
-  padding: 0.7rem 1rem 0.65rem;
+  padding: 0.6rem 0.9rem 0.65rem 1.15rem;
   align-items: center;
   gap: 0.75rem;
   min-height: 0;
+  color: var(--white);
   background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--navy) 5%, var(--white)) 0%,
-      color-mix(in srgb, var(--teal-soft) 35%, var(--white)) 100%
-    );
-  border-bottom: 1px solid color-mix(in srgb, var(--navy) 12%, var(--white));
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--white) 70%, transparent);
+    linear-gradient(180deg, rgba(45, 212, 191, 0.16), transparent 42%),
+    linear-gradient(135deg, #061122 0%, var(--navy) 58%, #0f3d48 100%);
+  border-bottom: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 [data-booking-modal] .admin-booking-detail-header-main {
-  gap: 0.28rem;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem 0.9rem;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+[data-booking-modal] .admin-booking-detail-header-row {
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
 }
 
 [data-booking-modal] .admin-booking-detail-meta {
@@ -8728,13 +9356,13 @@ body.admin-cal-day-open {
 [data-booking-modal] .admin-booking-detail-kicker {
   display: inline-flex;
   align-items: center;
-  padding: 0.12rem 0.45rem;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--navy) 14%, var(--white));
-  background: var(--white);
-  color: color-mix(in srgb, var(--navy) 72%, white);
-  font-size: 0.62rem;
-  font-weight: 800;
+  padding: 0;
+  border-radius: 0;
+  border: 0;
+  background: none;
+  color: #2dd4bf;
+  font-size: 0.7rem;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -8742,10 +9370,11 @@ body.admin-cal-day-open {
 [data-booking-modal] .admin-booking-detail-header-main .admin-booking-reference {
   display: inline-flex;
   align-items: center;
-  padding: 0.14rem 0.5rem;
+  padding: 0.22rem 0.6rem;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--navy) 88%, var(--teal));
-  color: var(--white);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(241, 245, 249, 0.92);
   font-size: 0.72rem;
   font-weight: 750;
   letter-spacing: 0.02em;
@@ -8760,12 +9389,13 @@ body.admin-cal-day-open {
 
 [data-booking-modal] .admin-booking-detail-header-main h2,
 [data-booking-modal] .admin-booking-detail-header-row h2 {
-  max-width: min(30%, 14rem);
-  font-size: clamp(1.05rem, 1.4vw, 1.22rem);
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  line-height: 1.2;
-  color: var(--navy);
+  max-width: min(34%, 15rem);
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(1.15rem, 1.9vw, 1.4rem);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.15;
+  color: var(--white);
 }
 
 [data-booking-modal] .admin-booking-modal-close {
@@ -8774,10 +9404,10 @@ body.admin-cal-day-open {
   width: 2.5rem;
   height: 2.5rem;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--navy) 16%, var(--white));
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 0.65rem;
-  background: var(--white);
-  color: var(--navy);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--white);
   font-size: 1.35rem;
   line-height: 1;
   cursor: pointer;
@@ -8786,13 +9416,13 @@ body.admin-cal-day-open {
 
 [data-booking-modal] .admin-booking-modal-close:hover,
 [data-booking-modal] .admin-booking-modal-close:focus-visible {
-  border-color: var(--teal);
-  color: var(--teal);
-  background: color-mix(in srgb, var(--teal-soft) 55%, var(--white));
+  border-color: rgba(255, 255, 255, 0.32);
+  color: var(--white);
+  background: rgba(255, 255, 255, 0.16);
 }
 
 [data-booking-modal] .admin-booking-modal-close:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--teal) 45%, transparent);
+  outline: 3px solid rgba(45, 212, 191, 0.4);
   outline-offset: 2px;
 }
 
@@ -8812,11 +9442,11 @@ body.admin-cal-day-open {
   height: 3px;
   left: 5%;
   right: 5%;
-  background: color-mix(in srgb, var(--navy) 12%, var(--white));
+  background: rgba(255, 255, 255, 0.16);
 }
 
 [data-booking-modal] .admin-booking-flow-path-fill {
-  background: linear-gradient(90deg, var(--teal), color-mix(in srgb, var(--teal) 70%, var(--navy)));
+  background: linear-gradient(90deg, #2dd4bf, var(--teal));
 }
 
 [data-booking-modal] .admin-booking-flow-path-ticks {
@@ -8827,15 +9457,15 @@ body.admin-cal-day-open {
   gap: 0.22rem;
   font-size: 0.7rem;
   line-height: 1.15;
-  color: color-mix(in srgb, var(--navy) 58%, white);
+  color: rgba(241, 245, 249, 0.55);
 }
 
 [data-booking-modal] .admin-booking-flow-path-tick.is-done {
-  color: color-mix(in srgb, var(--navy) 78%, var(--teal));
+  color: #7ee7d8;
 }
 
 [data-booking-modal] .admin-booking-flow-path-tick.is-current {
-  color: var(--navy);
+  color: var(--white);
   font-weight: 800;
 }
 
@@ -8843,21 +9473,22 @@ body.admin-cal-day-open {
   width: 1.5rem;
   height: 1.5rem;
   font-size: 0.62rem;
-  border: 2px solid color-mix(in srgb, var(--navy) 18%, var(--white));
-  background: var(--white);
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(241, 245, 249, 0.7);
 }
 
 [data-booking-modal] .admin-booking-flow-path-tick.is-done .admin-booking-flow-path-dot {
-  border-color: var(--teal);
-  background: color-mix(in srgb, var(--teal) 18%, var(--white));
-  color: color-mix(in srgb, var(--navy) 70%, var(--teal));
+  border-color: #2dd4bf;
+  background: rgba(26, 166, 166, 0.35);
+  color: #99f6e4;
 }
 
 [data-booking-modal] .admin-booking-flow-path-tick.is-current .admin-booking-flow-path-dot {
   border-color: var(--teal);
   background: var(--teal);
   color: var(--white);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 28%, transparent);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.3);
 }
 
 [data-booking-modal] .admin-booking-flow-path-dot svg {
@@ -8869,9 +9500,9 @@ body.admin-cal-day-open {
   margin: 0;
   padding: 0.28rem 0.55rem;
   border-radius: 0.45rem;
-  background: color-mix(in srgb, var(--teal-soft) 70%, var(--white));
-  border: 1px solid color-mix(in srgb, var(--teal) 28%, var(--white));
-  color: var(--navy);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  color: #d7f6f1;
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.3;
@@ -8958,10 +9589,24 @@ body.admin-cal-day-open {
     border-radius: 14px;
   }
 
+  [data-booking-modal] .admin-booking-modal-dialog > header.admin-booking-detail-header {
+    padding: 0.7rem 0.85rem 0.75rem 1rem;
+    align-items: flex-start;
+  }
+
+  [data-booking-modal] .admin-booking-detail-header-main {
+    flex-wrap: wrap;
+  }
+
+  [data-booking-modal] .admin-booking-detail-header-row {
+    flex-basis: 100%;
+    flex-wrap: wrap;
+  }
+
   [data-booking-modal] .admin-booking-detail-header-main h2,
   [data-booking-modal] .admin-booking-detail-header-row h2 {
     max-width: 100%;
-    font-size: 1.12rem;
+    font-size: 1.3rem;
   }
 
   [data-booking-modal] .admin-booking-flow-path {

@@ -290,6 +290,13 @@ try
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
         client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "*/*");
     });
+    builder.Services.AddHttpClient("xendit", client =>
+    {
+        client.BaseAddress = new Uri("https://api.xendit.co/");
+        client.Timeout = TimeSpan.FromSeconds(12);
+    });
+    builder.Services.AddSingleton<XenditTelemetry>();
+    builder.Services.AddScoped<IXenditQrPaymentService, XenditQrPaymentService>();
     builder.Services.AddSingleton<ChatProviderUsageTracker>();
     builder.Services.AddScoped<IChatGuardrails, ChatGuardrails>();
     builder.Services.AddScoped<IChatPublicContextBuilder, ChatPublicContextBuilder>();

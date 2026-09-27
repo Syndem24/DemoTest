@@ -22,6 +22,7 @@ public class HomeController : Controller
     private readonly ISystemAuditRecorder _audit;
     private readonly ChatProviderUsageTracker _chatUsage;
     private readonly EmailSendTelemetry _emailTelemetry;
+    private readonly XenditTelemetry _xenditTelemetry;
     private readonly IEnumerable<IChatLlmProvider> _chatProviders;
 
     public HomeController(
@@ -34,6 +35,7 @@ public class HomeController : Controller
         ISystemAuditRecorder audit,
         ChatProviderUsageTracker chatUsage,
         EmailSendTelemetry emailTelemetry,
+        XenditTelemetry xenditTelemetry,
         IEnumerable<IChatLlmProvider> providers)
     {
         _logger = logger;
@@ -45,6 +47,7 @@ public class HomeController : Controller
         _audit = audit;
         _chatUsage = chatUsage;
         _emailTelemetry = emailTelemetry;
+        _xenditTelemetry = xenditTelemetry;
         _chatProviders = providers;
     }
 
@@ -134,6 +137,45 @@ public class HomeController : Controller
         {
             await _vault.SetAsync(SecureSettingKeys.GroqApiKey, model.GroqApiKey.Trim(), cancellationToken);
             changedKeys.Add("GroqApiKey");
+        }
+
+        if (!string.IsNullOrWhiteSpace(model.XenditKeyName))
+        {
+            await _vault.SetAsync(SecureSettingKeys.XenditKeyName, model.XenditKeyName.Trim(), cancellationToken);
+            changedKeys.Add("XenditKeyName");
+        }
+
+        var nextXenditKey = model.XenditSecretKey?.Trim();
+        if (!string.IsNullOrWhiteSpace(nextXenditKey)
+            && !nextXenditKey.StartsWith("xnd_development_", StringComparison.Ordinal)
+            && !nextXenditKey.StartsWith("xnd_production_", StringComparison.Ordinal))
+        {
+            ModelState.AddModelError(
+                nameof(model.XenditSecretKey),
+                "Secret key should start with xnd_development_ or xnd_production_ — copy it from Xendit → Settings → Developers → API Keys.");
+            return View(await MergeIntegrationDisplayAsync(model, cancellationToken));
+        }
+
+        if (model.ClearXenditSecretKey)
+        {
+            await _vault.RemoveAsync(SecureSettingKeys.XenditSecretKey, cancellationToken);
+            changedKeys.Add("XenditSecretKey");
+        }
+        else if (!string.IsNullOrWhiteSpace(nextXenditKey))
+        {
+            await _vault.SetAsync(SecureSettingKeys.XenditSecretKey, nextXenditKey, cancellationToken);
+            changedKeys.Add("XenditSecretKey");
+        }
+
+        if (model.ClearXenditWebhookToken)
+        {
+            await _vault.RemoveAsync(SecureSettingKeys.XenditWebhookToken, cancellationToken);
+            changedKeys.Add("XenditWebhookToken");
+        }
+        else if (!string.IsNullOrWhiteSpace(model.XenditWebhookToken))
+        {
+            await _vault.SetAsync(SecureSettingKeys.XenditWebhookToken, model.XenditWebhookToken.Trim(), cancellationToken);
+            changedKeys.Add("XenditWebhookToken");
         }
 
         var googleChanged = false;
@@ -388,6 +430,11 @@ public class HomeController : Controller
             GeminiKeyName = await _vault.GetAsync(SecureSettingKeys.GeminiKeyName, cancellationToken),
             GroqConfigured = await _vault.HasValueAsync(SecureSettingKeys.GroqApiKey, cancellationToken),
             GroqKeyName = await _vault.GetAsync(SecureSettingKeys.GroqKeyName, cancellationToken),
+            XenditKeyName = await _vault.GetAsync(SecureSettingKeys.XenditKeyName, cancellationToken),
+            XenditSecretConfigured = await _vault.HasValueAsync(SecureSettingKeys.XenditSecretKey, cancellationToken),
+            XenditWebhookTokenConfigured = await _vault.HasValueAsync(SecureSettingKeys.XenditWebhookToken, cancellationToken),
+            XenditIsTestMode = (await _vault.GetAsync(SecureSettingKeys.XenditSecretKey, cancellationToken) ?? string.Empty)
+                .StartsWith("xnd_development_", StringComparison.Ordinal),
             GoogleLoginEnabled = await _googleAuth.IsEnabledAsync(cancellationToken),
             GoogleClientId = await _vault.GetAsync(SecureSettingKeys.GoogleClientId, cancellationToken),
             GoogleClientSecretConfigured = await _vault.HasValueAsync(SecureSettingKeys.GoogleClientSecret, cancellationToken)
@@ -411,6 +458,10 @@ public class HomeController : Controller
         model.SmtpLastOkUtc = _emailTelemetry.LastSuccessUtc;
         model.SmtpLastErrorUtc = _emailTelemetry.LastErrorUtc;
         model.SmtpLastError = _emailTelemetry.LastError;
+        model.XenditLastOkUtc = _xenditTelemetry.LastSuccessUtc;
+        model.XenditLastErrorUtc = _xenditTelemetry.LastErrorUtc;
+        model.XenditLastError = _xenditTelemetry.LastError;
+        model.XenditLastWebhookUtc = _xenditTelemetry.LastWebhookUtc;
         model.GoogleLastSignInUtc = await _db.SystemAuditLogs
             .AsNoTracking()
             .Where(row => row.Domain == SystemAuditDomain.Account
@@ -427,6 +478,8 @@ public class HomeController : Controller
         model.SmtpPassword = null;
         model.GeminiApiKey = null;
         model.GroqApiKey = null;
+        model.XenditSecretKey = null;
+        model.XenditWebhookToken = null;
         model.GoogleClientSecret = null;
         model.CurrentPassword = string.Empty;
         model.SmtpPasswordConfigured = await _vault.HasValueAsync(SecureSettingKeys.EmailPassword, cancellationToken);
@@ -436,6 +489,11 @@ public class HomeController : Controller
         model.SenderEmail ??= await _vault.GetAsync(SecureSettingKeys.EmailSender, cancellationToken);
         model.GeminiKeyName ??= await _vault.GetAsync(SecureSettingKeys.GeminiKeyName, cancellationToken);
         model.GroqKeyName ??= await _vault.GetAsync(SecureSettingKeys.GroqKeyName, cancellationToken);
+        model.XenditSecretConfigured = await _vault.HasValueAsync(SecureSettingKeys.XenditSecretKey, cancellationToken);
+        model.XenditWebhookTokenConfigured = await _vault.HasValueAsync(SecureSettingKeys.XenditWebhookToken, cancellationToken);
+        model.XenditKeyName ??= await _vault.GetAsync(SecureSettingKeys.XenditKeyName, cancellationToken);
+        model.XenditIsTestMode = (await _vault.GetAsync(SecureSettingKeys.XenditSecretKey, cancellationToken) ?? string.Empty)
+            .StartsWith("xnd_development_", StringComparison.Ordinal);
         model.GoogleClientId ??= await _vault.GetAsync(SecureSettingKeys.GoogleClientId, cancellationToken);
         await FillIntegrationTelemetryAsync(model, cancellationToken);
         return model;

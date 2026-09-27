@@ -44,6 +44,28 @@ public sealed class IntegrationSettingsViewModel
     [StringLength(80)]
     public string? GroqKeyName { get; set; }
 
+    [Display(Name = "Xendit nickname")]
+    [StringLength(80)]
+    public string? XenditKeyName { get; set; }
+
+    [DataType(DataType.Password)]
+    [Display(Name = "Xendit secret API key")]
+    public string? XenditSecretKey { get; set; }
+
+    public bool XenditSecretConfigured { get; set; }
+
+    [Display(Name = "Clear Xendit secret key")]
+    public bool ClearXenditSecretKey { get; set; }
+
+    [DataType(DataType.Password)]
+    [Display(Name = "Xendit webhook verification token")]
+    public string? XenditWebhookToken { get; set; }
+
+    public bool XenditWebhookTokenConfigured { get; set; }
+
+    [Display(Name = "Clear Xendit webhook token")]
+    public bool ClearXenditWebhookToken { get; set; }
+
     [Display(Name = "Show Continue with Google on login")]
     public bool GoogleLoginEnabled { get; set; }
 
@@ -76,6 +98,11 @@ public sealed class IntegrationSettingsViewModel
     public DateTime? SmtpLastErrorUtc { get; set; }
     public string? SmtpLastError { get; set; }
     public DateTime? GoogleLastSignInUtc { get; set; }
+    public bool XenditIsTestMode { get; set; }
+    public DateTime? XenditLastOkUtc { get; set; }
+    public DateTime? XenditLastErrorUtc { get; set; }
+    public string? XenditLastError { get; set; }
+    public DateTime? XenditLastWebhookUtc { get; set; }
 }
 
 public sealed class ForgotPasswordViewModel

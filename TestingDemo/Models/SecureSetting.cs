@@ -19,4 +19,7 @@ public static class SecureSettingKeys
     public const string GoogleClientId = "Authentication.Google.ClientId";
     public const string GoogleClientSecret = "Authentication.Google.ClientSecret";
     public const string GoogleLoginEnabled = "Authentication.Google.LoginEnabled";
+    public const string XenditKeyName = "Xendit.KeyName";
+    public const string XenditSecretKey = "Xendit.SecretKey";
+    public const string XenditWebhookToken = "Xendit.WebhookToken";
 }

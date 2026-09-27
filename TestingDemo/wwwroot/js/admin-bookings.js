@@ -59,6 +59,8 @@
   const paymentViewList = paymentViewModal?.querySelector('[data-payment-view-list]');
   const paymentViewSummary = paymentViewModal?.querySelector('[data-payment-view-summary]');
   const paymentViewAddBtn = paymentViewModal?.querySelector('[data-payment-view-add]');
+  const paymentViewQrBtn = paymentViewModal?.querySelector('[data-payment-view-qr]');
+  const paymentQrModal = document.querySelector('[data-payment-qr-modal]');
   const arrivalsPanel = bookingsRoot.querySelector('[data-arrivals-panel]');
   const arrivalsList = bookingsRoot.querySelector('[data-arrivals-list]');
   const pendingCallsPanel = bookingsRoot.querySelector('[data-pending-calls-panel]');
@@ -137,6 +139,10 @@
   let listRequestSeq = 0;
   let paymentBookingContext = null;
   let paymentRefundMode = false;
+  let qrIntent = null;
+  let qrPollTimer = null;
+  let qrPollCount = 0;
+  let qrQuickMode = 'balance';
   let paymentPriceContext = {
     stayTotal: 0,
     amountPaid: 0,
@@ -351,14 +357,6 @@
     }
   }
 
-  function isCashPaymentMethod(method) {
-    return method === 'Cash';
-  }
-
-  function isDigitalPaymentMethod(method) {
-    return method === 'EWallet' || method === 'BankTransfer' || method === 'GCash' || method === 'Maya';
-  }
-
   function formatPaymentEvent(value) {
     const map = {
       Deposit: 'Deposit',
@@ -451,18 +449,8 @@
 
   function syncPaymentMethodPanels() {
     if (!paymentAddModal) return;
-    const method = paymentAddModal.querySelector('[data-payment-method]')?.value || 'Cash';
-    const cash = isCashPaymentMethod(method);
-    const digital = isDigitalPaymentMethod(method);
     const cashPanel = paymentAddModal.querySelector('[data-payment-cash-panel]');
-    const epayPanel = paymentAddModal.querySelector('[data-payment-epay-panel]');
-    const hint = paymentAddModal.querySelector('[data-payment-epay-hint]');
-    if (cashPanel) cashPanel.hidden = !cash;
-    if (epayPanel) epayPanel.hidden = !digital;
-    if (hint) {
-      hint.textContent =
-        'Guest pays via hotel InstaPay QR (e-wallet). Verify the receipt on the guest\u2019s phone before saving.';
-    }
+    if (cashPanel) cashPanel.hidden = false;
     updateCashChangeUi();
   }
 
@@ -488,9 +476,7 @@
     const value = Number(paymentPriceContext[key] || 0);
     if (!(value >= 0)) return;
     const cashDue = paymentAddModal?.querySelector('[data-payment-cash-due]');
-    const epayAmount = paymentAddModal?.querySelector('[data-payment-epay-amount]');
     if (cashDue) cashDue.value = value.toFixed(2);
-    if (epayAmount) epayAmount.value = value.toFixed(2);
     updateCashChangeUi();
   }
 
@@ -585,6 +571,18 @@
     if (paymentViewAddBtn) {
       paymentViewAddBtn.hidden = !canAdd;
     }
+    if (paymentViewQrBtn) {
+      const qrEnabled = summary?.qrPaymentsEnabled !== false;
+      const pendingId = Number(summary?.pendingQrIntentId || 0);
+      paymentViewQrBtn.hidden = !canAdd;
+      paymentViewQrBtn.disabled = !qrEnabled;
+      paymentViewQrBtn.classList.toggle('is-blocked', !qrEnabled);
+      paymentViewQrBtn.title = qrEnabled
+        ? ''
+        : 'Connect Xendit on the Integrations page first';
+      paymentViewQrBtn.textContent = pendingId > 0 ? 'Show QRPh' : 'Generate QRPh';
+      paymentViewQrBtn.dataset.qrPendingId = pendingId > 0 ? String(pendingId) : '';
+    }
     paymentViewModal.hidden = false;
   }
 
@@ -610,6 +608,364 @@
     const id = paymentBookingContext?.id || selectedBooking?.id;
     if (id) {
       refreshOpenBookingDetails(id);
+    }
+  }
+
+  function qrEls() {
+    return {
+      picker: paymentQrModal?.querySelector('[data-qr-picker]'),
+      stage: paymentQrModal?.querySelector('[data-qr-stage]'),
+      image: paymentQrModal?.querySelector('[data-qr-image]'),
+      amount: paymentQrModal?.querySelector('[data-qr-amount]'),
+      reference: paymentQrModal?.querySelector('[data-qr-reference]'),
+      expiry: paymentQrModal?.querySelector('[data-qr-expiry]'),
+      status: paymentQrModal?.querySelector('[data-qr-status]'),
+      message: paymentQrModal?.querySelector('[data-qr-message]'),
+      customAmount: paymentQrModal?.querySelector('[data-qr-custom-amount]'),
+      customWrap: paymentQrModal?.querySelector('[data-qr-custom-wrap]'),
+      collect: paymentQrModal?.querySelector('[data-qr-collect]'),
+      success: paymentQrModal?.querySelector('[data-qr-success]'),
+      successAmount: paymentQrModal?.querySelector('[data-qr-success-amount]'),
+      successNote: paymentQrModal?.querySelector('[data-qr-success-note]'),
+      card: paymentQrModal?.querySelector('[data-qr-card]'),
+      loading: paymentQrModal?.querySelector('[data-qr-loading]'),
+      state: paymentQrModal?.querySelector('[data-payment-qr-state]'),
+      amountChip: paymentQrModal?.querySelector('[data-payment-qr-amount-chip]'),
+      testmode: paymentQrModal?.querySelector('[data-payment-qr-testmode]'),
+      balance: paymentQrModal?.querySelector('[data-qr-price-balance]'),
+      half: paymentQrModal?.querySelector('[data-qr-price-half]'),
+      quicks: paymentQrModal
+        ? Array.from(paymentQrModal.querySelectorAll('[data-qr-quick]'))
+        : [],
+      generate: paymentQrModal?.querySelector('[data-qr-generate]'),
+      generateLabel: paymentQrModal?.querySelector('[data-qr-generate-label]'),
+      cancel: paymentQrModal?.querySelector('[data-qr-cancel]'),
+      simulate: paymentQrModal?.querySelector('[data-qr-simulate]'),
+    };
+  }
+
+  function showQrMessage(message, isError = true) {
+    const { message: box } = qrEls();
+    if (!box) return;
+    box.hidden = !message;
+    box.textContent = message || '';
+    box.classList.toggle('is-error', isError);
+  }
+
+  function qrBalanceDue() {
+    return Number(paymentPriceContext.balanceDue || 0);
+  }
+
+  function qrSelectedAmount() {
+    const due = qrBalanceDue();
+    if (qrQuickMode === 'half') {
+      return Math.floor(due * 50) / 100;
+    }
+    if (qrQuickMode === 'custom') {
+      const { customAmount } = qrEls();
+      return Number(String(customAmount?.value || '').trim()) || 0;
+    }
+    return due;
+  }
+
+  function updateQrCollect() {
+    const { collect, generate, amountChip } = qrEls();
+    const amount = qrSelectedAmount();
+    if (collect) collect.textContent = money(amount);
+    if (amountChip) amountChip.textContent = amount > 0 ? money(amount) : '—';
+    if (generate && !generate.hidden && !generate.disabled) {
+      const label = qrEls().generateLabel || generate;
+      label.textContent = amount > 0
+        ? `Generate QR · ${money(amount)}`
+        : 'Generate QR';
+    }
+  }
+
+  function setQrQuick(mode) {
+    qrQuickMode = mode;
+    const { quicks, customWrap, customAmount } = qrEls();
+    (quicks || []).forEach((button) => {
+      button.classList.toggle('is-active', button.dataset.qrQuick === mode);
+    });
+    if (customWrap) customWrap.hidden = mode !== 'custom';
+    if (mode !== 'custom' && customAmount) customAmount.value = '';
+    showQrMessage('');
+    updateQrCollect();
+    if (mode === 'custom' && customAmount) customAmount.focus();
+  }
+
+  function setQrLoading(on) {
+    const { loading, picker } = qrEls();
+    if (loading) loading.hidden = !on;
+    if (picker && on) picker.hidden = true;
+  }
+
+  function stopQrPolling() {
+    if (!qrPollTimer) return;
+    window.clearInterval(qrPollTimer);
+    qrPollTimer = null;
+  }
+
+  function renderQrExpiry() {
+    const { expiry } = qrEls();
+    if (!expiry || !qrIntent?.expiresAtUtc) {
+      if (expiry) expiry.hidden = true;
+      return;
+    }
+    const end = parseUtc(qrIntent.expiresAtUtc);
+    if (!end) {
+      expiry.hidden = true;
+      return;
+    }
+    const leftMs = end.getTime() - Date.now();
+    expiry.hidden = false;
+    if (leftMs <= 0) {
+      expiry.textContent = 'This QR has expired.';
+      return;
+    }
+    const mins = Math.floor(leftMs / 60000);
+    const secs = Math.floor((leftMs % 60000) / 1000);
+    expiry.textContent =
+      `Complete payment by ${formatTime(qrIntent.expiresAtUtc)} Manila · ${mins}:${String(secs).padStart(2, '0')} left`;
+  }
+
+  function setQrStatus(text, cssClass) {
+    const { status, state } = qrEls();
+    if (status) {
+      status.innerHTML = '';
+      const pill = document.createElement('span');
+      pill.className = `admin-payment-qr-pill ${cssClass}`;
+      pill.textContent = text;
+      status.appendChild(pill);
+    }
+    if (state) {
+      state.textContent = text || 'Choose amount';
+      state.classList.toggle('is-paid', cssClass === 'is-paid');
+      state.classList.toggle('is-closed', cssClass === 'is-failed' || cssClass === 'is-closed');
+    }
+  }
+
+  function applyQrIntent(intent) {
+    if (!intent || !paymentQrModal || paymentQrModal.hidden) return;
+    const wasPaid = qrIntent?.status === 'Paid';
+    qrIntent = intent;
+    const { picker, stage, image, amount, reference, generate, cancel, simulate,
+      amountChip, testmode, success, successAmount, successNote, card, expiry, loading } = qrEls();
+    const status = String(intent.status || '');
+    const pending = status === 'Pending';
+    const paid = status === 'Paid';
+
+    if (loading) loading.hidden = true;
+    if (picker) picker.hidden = !pending || Boolean(intent.qrImageDataUrl);
+    if (stage) stage.hidden = !intent.qrImageDataUrl && pending ? true : false;
+    if (image && intent.qrImageDataUrl) image.src = intent.qrImageDataUrl;
+    if (amount) amount.textContent = money(intent.amount);
+    if (amountChip) amountChip.textContent = money(intent.amount);
+    if (testmode) testmode.hidden = !intent.isTestMode;
+    if (reference) reference.textContent = intent.referenceId;
+    if (card) card.hidden = paid;
+    if (expiry && !pending) expiry.hidden = true;
+    if (success) {
+      success.hidden = !paid;
+      if (paid && !wasPaid) {
+        success.classList.remove('is-anim');
+        void success.offsetWidth;
+        success.classList.add('is-anim');
+      }
+    }
+    if (successAmount) successAmount.textContent = money(intent.amount);
+    if (successNote) {
+      successNote.textContent = intent.receiptNumber
+        ? `Posted to the guest ledger · receipt ${intent.receiptNumber}`
+        : 'Posting to the guest ledger…';
+    }
+    renderQrExpiry();
+
+    if (pending) {
+      setQrStatus('Waiting for payment', 'is-waiting');
+    } else if (status === 'Paid') {
+      setQrStatus(
+        `Paid${intent.receiptNumber ? ` · receipt ${intent.receiptNumber}` : ''}`,
+        'is-paid');
+    } else if (status === 'Failed') {
+      setQrStatus(`Failed${intent.failureCode ? ` · ${intent.failureCode}` : ''}`, 'is-failed');
+    } else {
+      setQrStatus(status || 'Closed', 'is-closed');
+    }
+
+    if (generate) generate.hidden = true;
+    if (cancel) cancel.hidden = !pending;
+    if (simulate) simulate.hidden = !(pending && intent.isTestMode);
+
+    if (!pending) {
+      stopQrPolling();
+      if (status === 'Paid') {
+        if (typeof window.showMoriNotice === 'function') {
+          window.showMoriNotice('QRPh payment received and posted.', 'success');
+        }
+        if (paymentBookingContext) void openPaymentViewModal(paymentBookingContext);
+      }
+    }
+  }
+
+  async function pollQrIntent() {
+    if (!qrIntent || !paymentQrModal || paymentQrModal.hidden) {
+      stopQrPolling();
+      return;
+    }
+    qrPollCount += 1;
+    const reconcile = qrPollCount > 7 && qrPollCount % 3 === 0;
+    try {
+      const fresh = await apiFetch(
+        `/api/admin/payments/qr/${qrIntent.id}${reconcile ? '?reconcile=true' : ''}`);
+      applyQrIntent(fresh);
+    } catch {
+      // Transient poll failures are fine — the next tick retries.
+    }
+  }
+
+  function startQrPolling() {
+    stopQrPolling();
+    qrPollCount = 0;
+    if (qrIntent?.status === 'Pending') {
+      qrPollTimer = window.setInterval(() => { void pollQrIntent(); }, 3000);
+    }
+  }
+
+  async function openPaymentQrModal(booking, intentId = 0) {
+    if (!paymentQrModal || !booking) return;
+    stopQrPolling();
+    qrIntent = null;
+    const ref = paymentQrModal.querySelector('[data-payment-qr-ref]');
+    const guest = paymentQrModal.querySelector('[data-payment-qr-guest]');
+    if (ref) ref.textContent = booking.reference;
+    if (guest) guest.textContent = booking.guestName || 'Guest';
+    const { picker, stage, balance, half, customAmount, generate, cancel, simulate, testmode, success, card, loading } = qrEls();
+    const due = qrBalanceDue();
+    const halfDue = Math.floor(due * 50) / 100;
+    if (balance) balance.textContent = money(due);
+    if (half) half.textContent = money(halfDue);
+    if (customAmount) customAmount.value = '';
+    setQrQuick(due >= 2 ? 'balance' : 'custom');
+    const { quicks } = qrEls();
+    (quicks || []).forEach((button) => {
+      if (button.dataset.qrQuick === 'half') button.hidden = halfDue < 1;
+    });
+    showQrMessage('');
+    if (stage) stage.hidden = true;
+    if (success) {
+      success.hidden = true;
+      success.classList.remove('is-anim');
+    }
+    if (card) card.hidden = false;
+    if (loading) loading.hidden = true;
+    if (picker) picker.hidden = false;
+    if (generate) {
+      generate.hidden = false;
+      generate.disabled = false;
+      updateQrCollect();
+    }
+    if (cancel) cancel.hidden = true;
+    if (simulate) simulate.hidden = true;
+    if (testmode) testmode.hidden = true;
+    setQrStatus('', 'is-waiting');
+    paymentQrModal.hidden = false;
+
+    if (intentId > 0) {
+      if (picker) picker.hidden = true;
+      if (loading) loading.hidden = false;
+      try {
+        const intent = await apiFetch(`/api/admin/payments/qr/${intentId}`);
+        applyQrIntent(intent);
+        startQrPolling();
+      } catch (error) {
+        if (loading) loading.hidden = true;
+        if (picker) picker.hidden = false;
+        showQrMessage(error instanceof Error ? error.message : 'Unable to load the QR payment.');
+      }
+    }
+  }
+
+  function closePaymentQrModal() {
+    stopQrPolling();
+    qrIntent = null;
+    if (paymentQrModal) paymentQrModal.hidden = true;
+    if (paymentBookingContext && paymentViewModal && !paymentViewModal.hidden) {
+      void openPaymentViewModal(paymentBookingContext);
+    }
+  }
+
+  async function generateQrPayment() {
+    if (!paymentBookingContext) return;
+    const { generate } = qrEls();
+    const amount = qrSelectedAmount();
+    if (!(amount >= 1)) {
+      showQrMessage('Enter an amount of at least ₱1.00.');
+      return;
+    }
+    if (amount > 50000) {
+      showQrMessage('QRPh accepts at most ₱50,000.00.');
+      return;
+    }
+    if (amount > qrBalanceDue()) {
+      showQrMessage('Amount cannot exceed the balance due.');
+      return;
+    }
+    if (generate) {
+      generate.disabled = true;
+      (qrEls().generateLabel || generate).textContent = 'Generating…';
+    }
+    showQrMessage('');
+    setQrLoading(true);
+    try {
+      const intent = await apiFetch('/api/admin/payments/qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: paymentBookingContext.id, amount }),
+      });
+      applyQrIntent(intent);
+      startQrPolling();
+    } catch (error) {
+      setQrLoading(false);
+      const { picker } = qrEls();
+      if (picker) picker.hidden = false;
+      showQrMessage(error instanceof Error ? error.message : 'Unable to create the QR payment.');
+      if (generate) {
+        generate.disabled = false;
+        updateQrCollect();
+      }
+    }
+  }
+
+  async function cancelQrPayment() {
+    if (!qrIntent) return;
+    const { cancel } = qrEls();
+    if (cancel) cancel.disabled = true;
+    try {
+      const intent = await apiFetch(`/api/admin/payments/qr/${qrIntent.id}/cancel`, {
+        method: 'POST',
+      });
+      applyQrIntent(intent);
+    } catch (error) {
+      showQrMessage(error instanceof Error ? error.message : 'Unable to cancel the QR payment.');
+    } finally {
+      if (cancel) cancel.disabled = false;
+    }
+  }
+
+  async function simulateQrPayment() {
+    if (!qrIntent) return;
+    const { simulate } = qrEls();
+    if (simulate) simulate.disabled = true;
+    try {
+      const intent = await apiFetch(`/api/admin/payments/qr/${qrIntent.id}/simulate`, {
+        method: 'POST',
+      });
+      applyQrIntent(intent);
+    } catch (error) {
+      showQrMessage(error instanceof Error ? error.message : 'Unable to simulate the payment.');
+    } finally {
+      if (simulate) simulate.disabled = false;
     }
   }
 
@@ -661,30 +1017,14 @@
     if (guestLine) guestLine.textContent = booking.guestName || 'Guest';
 
     const cashDue = paymentAddModal.querySelector('[data-payment-cash-due]');
-    const epayAmount = paymentAddModal.querySelector('[data-payment-epay-amount]');
     const tendered = paymentAddModal.querySelector('[data-payment-cash-tendered]');
     if (cashDue) cashDue.value = defaultAmount.toFixed(2);
-    if (epayAmount) epayAmount.value = defaultAmount.toFixed(2);
     if (tendered) tendered.value = '';
 
-    const methodSelect = paymentAddModal.querySelector('[data-payment-method]');
     const hasIncidental = (booking.charges || []).some(
       (c) => String(c.chargeType) === 'Incidental' && Number(c.amount || 0) > 0
     );
     const cashOnlyPromo = Boolean(booking.cashOnlyPromo);
-    const lockCashOnly = cashOnlyPromo && !paymentRefundMode;
-    if (methodSelect) {
-      methodSelect.value = 'Cash';
-      Array.from(methodSelect.options).forEach((opt) => {
-        const lock = lockCashOnly && opt.value !== 'Cash';
-        opt.disabled = lock;
-        opt.hidden = lock;
-      });
-      methodSelect.disabled = lockCashOnly;
-    }
-    if (hasIncidental && methodSelect) {
-      methodSelect.value = 'Cash';
-    }
     const notes = paymentAddModal.querySelector('[data-payment-notes]');
     if (notes) {
       if (paymentRefundMode) {
@@ -712,14 +1052,6 @@
     setPaymentAddBanner('');
     paymentRefundMode = false;
     applyPaymentRefundModeUi();
-    const methodSelect = paymentAddModal?.querySelector('[data-payment-method]');
-    if (methodSelect) {
-      methodSelect.disabled = false;
-      Array.from(methodSelect.options).forEach((opt) => {
-        opt.disabled = false;
-        opt.hidden = false;
-      });
-    }
     if (paymentAddModal) paymentAddModal.hidden = true;
   }
 
@@ -731,17 +1063,11 @@
     const prices = paymentAddModal.querySelector('[data-payment-prices]');
     const tender = paymentAddModal.querySelector('[data-payment-cash-tender]');
     const cashLabel = paymentAddModal.querySelector('[data-payment-cash-due-label]');
-    const epayLabel = paymentAddModal.querySelector('[data-payment-epay-amount-label]');
-    const epayHint = paymentAddModal.querySelector('[data-payment-epay-hint]');
-    if (title) title.textContent = refund ? 'Record refund' : 'Add payment';
-    if (saveBtn) saveBtn.textContent = refund ? 'Save refund' : 'Save payment';
+    if (title) title.textContent = refund ? 'Record refund' : 'Pay cash';
+    if (saveBtn) saveBtn.textContent = refund ? 'Save refund' : 'Pay cash';
     if (prices) prices.hidden = refund;
     if (tender) tender.hidden = refund;
     if (cashLabel) cashLabel.textContent = refund ? 'Refund amount (₱)' : 'Amount due (₱)';
-    if (epayLabel) epayLabel.textContent = refund ? 'Refund amount (₱)' : 'Amount paid (₱)';
-    if (epayHint && refund) {
-      epayHint.textContent = 'Send the refund to the guest\u2019s e-wallet and confirm it landed before saving.';
-    }
     paymentAddModal.classList.toggle('is-refund', refund);
     setPaymentAddBanner(
       refund ? `Refund ${money(Number(paymentAddModal.querySelector('[data-payment-cash-due]')?.value || 0))} to the guest. Amount is locked to the overpaid balance.` : '',
@@ -752,23 +1078,18 @@
   async function saveRecordedPayment() {
     if (!paymentBookingContext || !paymentAddModal) return;
     const eventType = paymentRefundMode ? 'Refund' : 'ArrivalPayment';
-    const method = paymentAddModal.querySelector('[data-payment-method]')?.value || 'Cash';
+    const method = 'Cash';
     const saveBtn = paymentAddModal.querySelector('[data-payment-add-save]');
-    const cash = isCashPaymentMethod(method);
 
-    let amount = cash
-      ? Number(paymentAddModal.querySelector('[data-payment-cash-due]')?.value || 0)
-      : Number(paymentAddModal.querySelector('[data-payment-epay-amount]')?.value || 0);
-
+    const amount = Number(paymentAddModal.querySelector('[data-payment-cash-due]')?.value || 0);
     let notes = (paymentAddModal.querySelector('[data-payment-notes]')?.value || '').trim();
-    let digitalCapMessage = '';
 
     if (!(amount > 0) && eventType !== 'Refund') {
       showPaymentAddPopup('Select an amount from Price details.', 'Missing amount');
       return;
     }
 
-    if (cash && eventType !== 'Refund') {
+    if (eventType !== 'Refund') {
       const tendered = Number(paymentAddModal.querySelector('[data-payment-cash-tendered]')?.value || 0);
       if (!(tendered > 0)) {
         showBookingMessage('Enter cash received from the guest.', true);
@@ -781,30 +1102,6 @@
       const change = Math.round((tendered - amount) * 100) / 100;
       const cashNote = `Cash tendered ${money(tendered)} \u00B7 Change ${money(change)}`;
       notes = notes ? `${notes}\n${cashNote}` : cashNote;
-    } else if (!cash) {
-      // E-wallet (InstaPay QR) \u2014 post only balance due; note excess on the receipt.
-      const balanceDue = Math.max(0, Number(paymentPriceContext.balanceDue) || 0);
-      if (eventType !== 'Refund' && amount > balanceDue + 0.009) {
-        if (!(balanceDue > 0.009)) {
-          showPaymentAddPopup('This booking is already fully paid.', 'Already paid');
-          return;
-        }
-        const receiptAmount = Math.round(amount * 100) / 100;
-        const applied = Math.round(balanceDue * 100) / 100;
-        const excess = Math.round((receiptAmount - applied) * 100) / 100;
-        amount = applied;
-        const epayAmount = paymentAddModal.querySelector('[data-payment-epay-amount]');
-        if (epayAmount) epayAmount.value = applied.toFixed(2);
-        const capNote =
-          `Receipt/transfer ${money(receiptAmount)} \u00B7 Applied ${money(applied)} (excess ${money(excess)} not posted)`;
-        if (!/Receipt\/transfer .* \u00B7 Applied /i.test(notes)) {
-          notes = notes ? `${notes}\n${capNote}` : capNote;
-        }
-        const notesField = paymentAddModal.querySelector('[data-payment-notes]');
-        if (notesField) notesField.value = notes;
-        digitalCapMessage =
-          `Posted ${money(applied)} of ${money(receiptAmount)} receipt (excess ${money(excess)} not posted).`;
-      }
     }
 
     if (saveBtn) saveBtn.disabled = true;
@@ -825,11 +1122,9 @@
       const bookingId = paymentBookingContext.id;
       closeAddPaymentModal();
       showBookingMessage(
-        digitalCapMessage
-          ? `Payment saved. ${digitalCapMessage}`
-          : eventType === 'Refund'
-            ? 'Refund saved. The guest can now be archived.'
-            : 'Payment saved. Posted records cannot be edited.'
+        eventType === 'Refund'
+          ? 'Refund saved. The guest can now be archived.'
+          : 'Payment saved. Posted records cannot be edited.'
       );
       await Promise.all([refreshBookings(), refreshOpenBookingDetails(bookingId)]);
       if (eventType !== 'Refund') {
@@ -4317,7 +4612,7 @@
         detailActions.append(
           actionFlowButton({
             step: 2,
-            label: 'Record payment',
+            label: 'Payments',
             icon: FLOW_STEP_ICONS.pay,
             className: 'admin-booking-confirm',
             onClick: () => openPaymentViewModal(booking),
@@ -4382,10 +4677,10 @@
             detailActions.append(
               actionFlowButton({
                 step: 2,
-                label: 'Record payment',
+                label: 'Payments',
                 icon: FLOW_STEP_ICONS.pay,
                 className: 'admin-booking-confirm is-emphasized',
-                onClick: () => openAddPaymentModal(booking),
+                onClick: () => openPaymentViewModal(booking),
               })
             );
           } else {
@@ -4507,7 +4802,7 @@
       const payButton = document.createElement('button');
       payButton.type = 'button';
       payButton.className = 'admin-booking-confirm';
-      payButton.textContent = 'Record payment';
+      payButton.textContent = 'Pay cash';
       payButton.addEventListener('click', () => openAddPaymentModal(booking));
       detailBody.append(blocked);
       detailActions.append(backEarly, payButton);
@@ -6137,7 +6432,7 @@
 
     if (payBtn) {
       payBtn.hidden = !(unpaid || overpaid);
-      payBtn.textContent = overpaid ? 'Record refund' : 'Record payment';
+      payBtn.textContent = overpaid ? 'Record refund' : 'Pay cash';
     }
     okBtn.hidden = overpaid;
     okBtn.textContent = unpaid ? 'Archive anyway' : 'Archive';
@@ -7110,6 +7405,27 @@
   paymentViewAddBtn?.addEventListener('click', () => {
     if (paymentBookingContext) openAddPaymentModal(paymentBookingContext);
   });
+  paymentViewQrBtn?.addEventListener('click', () => {
+    if (!paymentBookingContext) return;
+    const pendingId = Number(paymentViewQrBtn.dataset.qrPendingId || 0);
+    void openPaymentQrModal(paymentBookingContext, pendingId);
+  });
+  paymentQrModal?.querySelectorAll('[data-payment-qr-close]').forEach((button) => {
+    button.addEventListener('click', closePaymentQrModal);
+  });
+  paymentQrModal?.querySelector('[data-qr-generate]')?.addEventListener('click', generateQrPayment);
+  paymentQrModal?.querySelector('[data-qr-cancel]')?.addEventListener('click', cancelQrPayment);
+  paymentQrModal?.querySelector('[data-qr-simulate]')?.addEventListener('click', simulateQrPayment);
+  paymentQrModal?.querySelector('[data-qr-custom-amount]')?.addEventListener('input', (event) => {
+    const input = event.target;
+    if (input instanceof HTMLInputElement) {
+      input.value = input.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
+    }
+    updateQrCollect();
+  });
+  paymentQrModal?.querySelectorAll('[data-qr-quick]').forEach((button) => {
+    button.addEventListener('click', () => setQrQuick(button.dataset.qrQuick || 'balance'));
+  });
   paymentAddModal?.querySelectorAll('[data-payment-add-close]').forEach((button) => {
     button.addEventListener('click', closeAddPaymentModal);
   });
@@ -7117,7 +7433,6 @@
     closePaymentAddPopup();
   });
   paymentAddModal?.querySelector('[data-payment-add-save]')?.addEventListener('click', saveRecordedPayment);
-  paymentAddModal?.querySelector('[data-payment-method]')?.addEventListener('change', syncPaymentMethodPanels);
   paymentAddModal?.querySelector('[data-payment-cash-tendered]')?.addEventListener('input', (event) => {
     const input = event.target;
     if (input instanceof HTMLInputElement) {
@@ -7152,6 +7467,10 @@
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     if (isPhotoZoomOpen()) return;
+    if (paymentQrModal && !paymentQrModal.hidden) {
+      closePaymentQrModal();
+      return;
+    }
     if (paymentAddModal && !paymentAddModal.hidden) {
       closeAddPaymentModal();
       return;
@@ -7275,9 +7594,19 @@
         paymentViewModal &&
         !paymentViewModal.hidden &&
         paymentBookingContext &&
-        Number(paymentBookingContext.id) === Number(bookingId)
+        Number(paymentBookingContext.id) === Number(bookingId) &&
+        !(paymentQrModal && !paymentQrModal.hidden)
       ) {
         await openPaymentViewModal(paymentBookingContext);
+      }
+      if (
+        paymentQrModal &&
+        !paymentQrModal.hidden &&
+        qrIntent &&
+        qrIntent.status === 'Pending' &&
+        Number(qrIntent.bookingId) === Number(bookingId)
+      ) {
+        await pollQrIntent();
       }
       reservationCalendar?.refetchEvents();
       await refreshRoomTypeAvailability();

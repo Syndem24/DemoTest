@@ -15,15 +15,18 @@ namespace TestingDemo.Controllers;
 public sealed class AdminPaymentsApiController : ControllerBase
 {
     private readonly IPaymentService _paymentService;
+    private readonly IXenditQrPaymentService _qrPayments;
     private readonly IHubContext<BookingNotificationsHub, IBookingNotificationsClient> _hub;
     private readonly UserManager<ApplicationUser> _userManager;
 
     public AdminPaymentsApiController(
         IPaymentService paymentService,
+        IXenditQrPaymentService qrPayments,
         IHubContext<BookingNotificationsHub, IBookingNotificationsClient> hub,
         UserManager<ApplicationUser> userManager)
     {
         _paymentService = paymentService;
+        _qrPayments = qrPayments;
         _hub = hub;
         _userManager = userManager;
     }
@@ -70,7 +73,16 @@ public sealed class AdminPaymentsApiController : ControllerBase
         CancellationToken cancellationToken)
     {
         var summary = await _paymentService.GetBookingSummaryAsync(bookingId, cancellationToken);
-        return summary == null ? NotFound() : Ok(summary);
+        if (summary == null)
+        {
+            return NotFound();
+        }
+
+        // QR availability is filled here (not inside PaymentService) to keep the
+        // payment ledger free of a dependency on the Xendit service.
+        var enabled = await _qrPayments.IsConfiguredAsync(cancellationToken);
+        var pendingId = await _qrPayments.GetPendingIntentIdAsync(bookingId, cancellationToken);
+        return Ok(summary with { QrPaymentsEnabled = enabled, PendingQrIntentId = pendingId });
     }
 
     [HttpPost]
@@ -152,6 +164,95 @@ public sealed class AdminPaymentsApiController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return Conflict(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("qr")]
+    [ValidateAntiForgeryToken]
+    public async Task<ActionResult<QrPaymentIntentDto>> CreateQrPayment(
+        [FromBody] CreateQrPaymentRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var user = await _userManager.GetUserAsync(User);
+            var createdBy = StaffDisplayName.FromUser(user, User);
+            return Ok(await _qrPayments.CreateAsync(
+                request.BookingId, request.Amount, createdBy, cancellationToken));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = "Booking was not found." });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        catch (XenditApiException ex)
+        {
+            return StatusCode(502, new { message = ex.Message });
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return StatusCode(502, new { message = "Xendit did not respond. Try again." });
+        }
+    }
+
+    [HttpGet("qr/{id:int}")]
+    public async Task<ActionResult<QrPaymentIntentDto>> GetQrPayment(
+        int id,
+        [FromQuery] bool reconcile,
+        CancellationToken cancellationToken)
+    {
+        var intent = await _qrPayments.GetAsync(id, reconcile, cancellationToken);
+        return intent == null ? NotFound() : Ok(intent);
+    }
+
+    [HttpPost("qr/{id:int}/cancel")]
+    [ValidateAntiForgeryToken]
+    public async Task<ActionResult<QrPaymentIntentDto>> CancelQrPayment(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _qrPayments.CancelAsync(id, cancellationToken));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = "QR payment was not found." });
+        }
+    }
+
+    [HttpPost("qr/{id:int}/simulate")]
+    [ValidateAntiForgeryToken]
+    public async Task<ActionResult<QrPaymentIntentDto>> SimulateQrPayment(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _qrPayments.SimulateAsync(id, cancellationToken));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = "QR payment was not found." });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+        catch (XenditApiException ex)
+        {
+            return StatusCode(502, new { message = ex.Message });
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return StatusCode(502, new { message = "Xendit did not respond. Try again." });
         }
     }
 

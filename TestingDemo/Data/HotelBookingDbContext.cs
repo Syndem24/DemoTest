@@ -30,6 +30,7 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<SystemFlushLog> SystemFlushLogs => Set<SystemFlushLog>();
     public DbSet<SystemAuditLog> SystemAuditLogs => Set<SystemAuditLog>();
     public DbSet<PaymentRecord> PaymentRecords => Set<PaymentRecord>();
+    public DbSet<QrPaymentIntent> QrPaymentIntents => Set<QrPaymentIntent>();
     public DbSet<SpecialOffer> SpecialOffers => Set<SpecialOffer>();
     public DbSet<SecureSetting> SecureSettings => Set<SecureSetting>();
     public DbSet<PasswordResetCode> PasswordResetCodes => Set<PasswordResetCode>();
@@ -309,6 +310,35 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
                 .WithMany(b => b.PaymentRecords)
                 .HasForeignKey(e => e.BookingId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<QrPaymentIntent>(entity =>
+        {
+            entity.ToTable("QrPaymentIntent");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ReferenceId).HasMaxLength(64).IsRequired();
+            entity.HasIndex(e => e.ReferenceId).IsUnique();
+            entity.Property(e => e.XenditPaymentRequestId).HasMaxLength(64).IsRequired();
+            entity.HasIndex(e => e.XenditPaymentRequestId).IsUnique();
+            entity.Property(e => e.XenditPaymentId).HasMaxLength(64);
+            entity.HasIndex(e => e.XenditPaymentId)
+                .IsUnique()
+                .HasFilter("[XenditPaymentId] IS NOT NULL");
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(e => e.QrString).IsRequired();
+            entity.Property(e => e.CreatedBy).HasMaxLength(120).IsRequired();
+            entity.Property(e => e.FailureCode).HasMaxLength(80);
+            entity.HasIndex(e => e.BookingId);
+            entity.HasOne(e => e.Booking)
+                .WithMany()
+                .HasForeignKey(e => e.BookingId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.PaymentRecord)
+                .WithMany()
+                .HasForeignKey(e => e.PaymentRecordId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<StayReview>(entity =>

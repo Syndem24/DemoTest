@@ -393,7 +393,130 @@
         </div>
         <footer class="admin-booking-detail-actions">
             <button type="button" data-payment-view-close>Close</button>
-            <button type="button" class="admin-booking-confirm" data-payment-view-add hidden>Record payment</button>
+            <button type="button" class="admin-booking-confirm admin-payment-qr-btn" data-payment-view-qr hidden>Generate QRPh</button>
+            <button type="button" class="admin-booking-confirm" data-payment-view-add hidden>Pay cash</button>
+        </footer>
+    </section>
+</div>
+
+<div class="admin-booking-modal" data-payment-qr-modal hidden>
+    <button type="button" class="admin-booking-modal-backdrop" data-payment-qr-close
+        aria-label="Close QRPh payment"></button>
+    <section class="admin-booking-modal-dialog admin-payment-modal-dialog" role="dialog" aria-modal="true"
+        aria-labelledby="qrPaymentTitle">
+        <header class="admin-payment-detail-head admin-payment-qr-head">
+            <div class="admin-payment-detail-head-copy">
+                <p class="admin-payment-detail-kicker">QRPh walk-in payment</p>
+                <h2 id="qrPaymentTitle" data-payment-qr-guest>QRPh payment</h2>
+                <div class="admin-payment-detail-stats">
+                    <span class="is-receipt" data-payment-qr-ref></span>
+                    <span class="is-amount" data-payment-qr-amount-chip></span>
+                    <span class="is-status" data-payment-qr-state>Choose amount</span>
+                    <span class="is-verified" data-payment-qr-testmode hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            <path d="m9 12 2 2 4-4" />
+                        </svg>
+                        Test mode
+                    </span>
+                </div>
+            </div>
+            <button type="button" class="admin-payment-detail-close" data-payment-qr-close
+                aria-label="Close">&times;</button>
+        </header>
+        <div class="admin-booking-detail-body admin-payment-modal-body">
+            <p class="admin-booking-message is-error" data-qr-message hidden role="alert"></p>
+            <div class="admin-payment-qr-pick" data-qr-picker>
+                <div class="admin-payment-qr-collect" aria-live="polite">
+                    <span>Collecting</span>
+                    <strong data-qr-collect>₱0.00</strong>
+                </div>
+                <div class="admin-payment-qr-quicks" role="group" aria-label="Amount to collect">
+                    <button type="button" data-qr-quick="balance" class="is-active">
+                        <span>Exact balance</span>
+                        <strong data-qr-price-balance>₱0.00</strong>
+                    </button>
+                    <button type="button" data-qr-quick="half">
+                        <span>50% deposit</span>
+                        <strong data-qr-price-half>₱0.00</strong>
+                    </button>
+                    <button type="button" data-qr-quick="custom">
+                        <span>Custom</span>
+                        <strong>₱&hellip;</strong>
+                    </button>
+                </div>
+                <label class="admin-payment-qr-custom" data-qr-custom-wrap hidden>
+                    <span>Custom amount (₱)</span>
+                    <input type="text" inputmode="decimal" data-qr-custom-amount placeholder="0.00"
+                        autocomplete="off" data-mori-filter="decimal" name="qrCustomAmount" />
+                </label>
+                <p class="admin-payment-prices-hint">QRPh accepts ₱1.00&ndash;₱50,000.00, up to the balance due.</p>
+            </div>
+            <div class="admin-payment-qr-loading" data-qr-loading hidden role="status" aria-live="polite">
+                <div class="admin-payment-qr-loading-frame" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M3 11h8V3H3v8zm2-6h4v4H5V5zM3 21h8v-8H3v8zm2-6h4v4H5v-4zM13 3v8h8V3h-8zm6 6h-4V5h4v4zM13 13h2v2h-2v-2zm4 0h2v2h-2v-2zm-4 4h2v2h-2v-2zm4 0h2v2h-2v-2zm2-4h2v2h-2v-2zm0 4h2v2h-2v-2z"/>
+                    </svg>
+                </div>
+                <p class="admin-payment-qr-loading-title">Generating QR&hellip;</p>
+                <p class="admin-payment-qr-loading-sub">Contacting Xendit — this takes a second.</p>
+            </div>
+            <div class="admin-payment-qr-stage" data-qr-stage hidden>
+                <p class="admin-payment-qr-expiry" data-qr-expiry hidden></p>
+                <div class="admin-payment-qr-success" data-qr-success hidden aria-live="polite">
+                    <span class="admin-payment-qr-success-ring" aria-hidden="true">
+                        <svg viewBox="0 0 64 64">
+                            <circle class="qr-success-circle" cx="32" cy="32" r="29" />
+                            <path class="qr-success-check" d="M20 33.5 28.5 42 45 24" />
+                        </svg>
+                    </span>
+                    <p class="admin-payment-qr-success-title">Payment received</p>
+                    <p class="admin-payment-qr-success-amount" data-qr-success-amount></p>
+                    <p class="admin-payment-qr-success-note" data-qr-success-note></p>
+                </div>
+                <div class="admin-payment-qr-card" data-qr-card>
+                    <header class="admin-payment-qr-card-head">
+                        <span class="admin-payment-qr-merchant">Mori International Hotel</span>
+                        <span class="admin-payment-qr-brand" aria-label="QRPh">QR<em>Ph</em></span>
+                    </header>
+                    <p class="admin-payment-qr-scanline">Scan with any QRPh-enabled app</p>
+                    <div class="admin-payment-qr-frame">
+                        <img class="admin-payment-qr-img" data-qr-image alt="QRPh payment code" />
+                    </div>
+                    <div class="admin-payment-qr-wallets" aria-label="Apps that can scan this QR">
+                        <span class="w-gcash"><b aria-hidden="true">G</b>GCash</span>
+                        <span class="w-maya"><b aria-hidden="true">M</b>Maya</span>
+                        <span class="w-bpi"><b aria-hidden="true">B</b>BPI</span>
+                        <span class="w-bdo"><b aria-hidden="true">B</b>BDO</span>
+                        <span class="w-ub"><b aria-hidden="true">U</b>UnionBank</span>
+                    </div>
+                    <div class="admin-payment-qr-amountbox">
+                        <span class="admin-payment-qr-paylabel">Amount to pay</span>
+                        <strong class="admin-payment-qr-amount" data-qr-amount></strong>
+                    </div>
+                    <p class="admin-payment-qr-ref" data-qr-reference></p>
+                    <p class="admin-payment-qr-secure">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 2 4 5v6c0 5.05 3.4 9.76 8 11 4.6-1.24 8-5.95 8-11V5l-8-3zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11V12z"/></svg>
+                        Payment processed securely via Xendit
+                    </p>
+                </div>
+                <p class="admin-payment-qr-status" data-qr-status></p>
+            </div>
+        </div>
+        <footer class="admin-booking-detail-actions">
+            <button type="button" data-payment-qr-close>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                Close</button>
+            <button type="button" data-qr-cancel hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M6.5 6.5l11 11"/></svg>
+                Cancel QR</button>
+            <button type="button" data-qr-simulate hidden>
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+                Simulate payment</button>
+            <button type="button" class="admin-booking-confirm" data-qr-generate>
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 11h8V3H3v8zm2-6h4v4H5V5zM3 21h8v-8H3v8zm2-6h4v4H5v-4zM13 3v8h8V3h-8zm6 6h-4V5h4v4zM13 13h2v2h-2v-2zm4 0h2v2h-2v-2zm-4 4h2v2h-2v-2zm4 0h2v2h-2v-2zm2-4h2v2h-2v-2zm0 4h2v2h-2v-2z"/></svg>
+                <span data-qr-generate-label>Generate QR</span></button>
         </footer>
     </section>
 </div>
@@ -438,14 +561,6 @@
             </div>
 
             <div class="admin-payment-form">
-                <label>
-                    <span>Method</span>
-                    <select data-payment-method>
-                        <option value="Cash">Cash</option>
-                        <option value="EWallet">E-wallet (InstaPay QR)</option>
-                    </select>
-                </label>
-
                 <div class="admin-payment-cash-panel" data-payment-cash-panel>
                     <p class="admin-payment-panel-title">Cash tender</p>
                     <label>
@@ -466,18 +581,6 @@
                         Guest cash − amount due = change
                     </p>
                     </div>
-                </div>
-
-                <div class="admin-payment-epay-panel" data-payment-epay-panel hidden>
-                    <p class="admin-payment-panel-title">Digital payment</p>
-                    <p class="admin-payment-prices-hint" data-payment-epay-hint>
-                        Guest pays via hotel InstaPay QR (e-wallet). Verify the receipt on the
-                        guest’s phone before saving.
-                    </p>
-                    <label>
-                        <span><span data-payment-epay-amount-label>Amount paid (₱)</span> <em>locked</em></span>
-                        <input type="text" inputmode="decimal" data-payment-epay-amount readonly tabindex="-1" />
-                    </label>
                 </div>
 
                 <label>

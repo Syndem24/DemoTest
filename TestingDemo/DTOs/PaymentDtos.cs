@@ -52,7 +52,9 @@ public sealed record BookingPaymentSummaryDto(
     decimal StayTotal,
     decimal AmountPaid,
     decimal BalanceDue,
-    IReadOnlyList<PaymentRecordDto> Payments);
+    IReadOnlyList<PaymentRecordDto> Payments,
+    bool QrPaymentsEnabled = false,
+    int? PendingQrIntentId = null);
 
 public sealed record PagedPaymentsDto(
     IReadOnlyList<PaymentRecordDto> Items,
