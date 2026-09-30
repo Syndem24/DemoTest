@@ -2,8 +2,10 @@ using System.Data;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.AspNetCore.SignalR;
 using TestingDemo.Data;
 using TestingDemo.DTOs;
+using TestingDemo.Hubs;
 using TestingDemo.Models;
 
 namespace TestingDemo.Services;
@@ -92,11 +94,17 @@ public sealed class StayReviewService : IStayReviewService
     private readonly HotelBookingDbContext _db;
     private readonly ISystemAuditRecorder _audit;
     private readonly IMemoryCache _cache;
+    private readonly IHubContext<BookingNotificationsHub, IBookingNotificationsClient> _hub;
 
-    public StayReviewService(HotelBookingDbContext db, ISystemAuditRecorder audit, IMemoryCache cache)
+    public StayReviewService(
+        HotelBookingDbContext db,
+        ISystemAuditRecorder audit,
+        IMemoryCache cache,
+        IHubContext<BookingNotificationsHub, IBookingNotificationsClient> hub)
     {
         _db = db;
         _audit = audit;
+        _hub = hub;
         _cache = cache;
     }
 
@@ -110,8 +118,12 @@ public sealed class StayReviewService : IStayReviewService
             return 0L;
         });
 
-    private void InvalidateAdminCounts() =>
+    private void InvalidateAdminCounts()
+    {
         _cache.Set(AdminCountVersionKey, AdminCountVersion() + 1, TimeSpan.FromDays(7));
+        // Push to staff dashboards — review create/edit/publish/reply/delete all funnel here.
+        _ = _hub.Clients.All.ReviewChanged();
+    }
 
     public async Task<StayReviewPublicPageDto> GetPublicAsync(
         int take = 12,

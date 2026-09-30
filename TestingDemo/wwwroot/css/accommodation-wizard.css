@@ -4001,3 +4001,330 @@ body.wiz-lock {
     box-shadow: 0 0 0 4px rgba(45, 212, 191, 0.28), 0 8px 24px rgba(13, 148, 136, 0.44);
   }
 }
+
+
+/* ---------- deposit checkout ---------- */
+
+@keyframes wiz-spin {
+  to { transform: rotate(360deg); }
+}
+
+.wiz-confirm-note {
+  margin: 0.8rem auto 0;
+  padding: 0.7rem 0.9rem;
+  border-radius: 10px;
+  background: var(--wiz-teal-tint);
+  border-left: 3px solid var(--wiz-teal);
+  color: var(--wiz-navy);
+  font-size: 0.78rem;
+  text-align: left;
+  max-width: 26rem;
+}
+
+.wiz-confirm-note[hidden] {
+  display: none;
+}
+
+.wiz-breakdown-deposit {
+  margin-top: 0.7rem;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--wiz-teal);
+}
+
+.wiz-pay-title {
+  margin: 0 0 0.4rem;
+  font-family: var(--guest-display);
+  font-size: 1.35rem;
+  color: var(--wiz-navy);
+}
+
+.wiz-pay-amount {
+  margin: 1rem 0 1.2rem;
+  padding: 1.05rem 1.15rem;
+  border-radius: 14px;
+  background: var(--wiz-navy-deep);
+  color: #fff;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.wiz-pay-amount strong {
+  font-family: var(--guest-display);
+  font-size: 1.85rem;
+  color: #fff;
+}
+
+.wiz-pay-amount > span {
+  font-size: 0.74rem;
+  color: rgba(241, 245, 249, 0.7);
+}
+
+.wiz-pay-held {
+  font-size: 0.68rem !important;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--wiz-teal-bright) !important;
+}
+
+.wiz-pay-methods {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+  margin-bottom: 1rem;
+}
+
+.wiz-pay-method {
+  appearance: none;
+  border: 1.5px solid var(--wiz-border-mid);
+  border-radius: 14px;
+  background: #fff;
+  padding: 0.85rem 0.9rem;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.wiz-pay-method:hover {
+  transform: translateY(-2px);
+  border-color: var(--wiz-teal-border);
+}
+
+.wiz-pay-method.is-on {
+  border-color: var(--wiz-teal);
+  box-shadow: 0 0 0 3px var(--wiz-teal-tint);
+}
+
+.wiz-pay-method.is-off {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.wiz-pay-method:focus-visible {
+  outline: 3px solid var(--wiz-teal);
+  outline-offset: 3px;
+}
+
+.wiz-pay-method-head strong {
+  font-size: 0.84rem;
+}
+
+.wiz-pay-method-sub {
+  font-size: 0.64rem;
+  color: var(--wiz-text-sub);
+  line-height: 1.4;
+}
+
+.wiz-pay-brands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 30px;
+}
+
+.wiz-pay-brands img {
+  height: 22px;
+  width: auto;
+  min-width: 40px;
+  max-width: 88px;
+  object-fit: contain;
+  display: block;
+  background: #fff;
+  border: 1px solid rgba(11, 31, 58, 0.12);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+/* Only four card networks — give them room to breathe. */
+[data-wiz-pay-brands='Card'] img {
+  height: 40px;
+  min-width: 72px;
+  max-width: 120px;
+  padding: 6px 14px;
+}
+
+[data-wiz-pay-brands='Card'] {
+  min-height: 54px;
+}
+
+.wiz-pay-off {
+  margin: 0 0 0.8rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 10px;
+  background: rgba(11, 31, 58, 0.05);
+  color: var(--wiz-text-sub);
+  font-size: 0.72rem;
+  text-align: center;
+}
+
+.wiz-pay-off[hidden] {
+  display: none;
+}
+
+.wiz-pay-qr-wrap {
+  width: min(240px, 80%);
+  aspect-ratio: 1;
+  margin: 0 auto 1rem;
+  border-radius: 14px;
+  border: 1.5px solid var(--wiz-border-mid);
+  background: #fff;
+  display: grid;
+  place-items: center;
+  padding: 0.9rem;
+}
+
+.wiz-pay-qr {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  animation: wiz-pop 300ms var(--wiz-ease) both;
+}
+
+.wiz-pay-waiting {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.9rem;
+  font-size: 0.76rem;
+  color: var(--wiz-text-sub);
+}
+
+.wiz-pay-spinner {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid rgba(26, 166, 166, 0.25);
+  border-top-color: var(--wiz-teal);
+  animation: wiz-spin 800ms linear infinite;
+}
+
+.wiz-pay-confirming {
+  display: flex;
+  justify-content: center;
+  padding: 2.5rem 0;
+}
+
+.wiz-pay-confirming .wiz-pay-spinner {
+  width: 1.2rem;
+  height: 1.2rem;
+  border-width: 2.5px;
+}
+
+.wiz-pay-qr-actions {
+  margin-bottom: 0.6rem;
+}
+
+/* ---------- processing overlay ---------- */
+
+.wiz-pay-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: rgba(11, 37, 69, 0.92);
+}
+
+.wiz-pay-overlay[hidden] {
+  display: none;
+}
+
+.wiz-pay-overlay-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.1rem;
+  text-align: center;
+  color: #fff;
+  animation: wiz-fade-up 260ms var(--wiz-ease) both;
+}
+
+.wiz-pay-orbit {
+  position: relative;
+  width: 6rem;
+  height: 6rem;
+  display: grid;
+  place-items: center;
+}
+
+.wiz-pay-orbit-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  border-top-color: var(--wiz-teal-bright);
+  animation: wiz-spin 1100ms linear infinite;
+}
+
+.wiz-pay-orbit-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  z-index: 1;
+}
+
+.wiz-pay-orbit-logo {
+  width: 2.6rem;
+  height: 2.6rem;
+  object-fit: contain;
+}
+
+.wiz-pay-overlay-brand {
+  margin: 0;
+  font-family: var(--guest-display);
+  font-size: 1.1rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.wiz-pay-overlay-status {
+  margin: 0;
+  font-size: 0.78rem;
+  color: rgba(241, 245, 249, 0.75);
+  letter-spacing: 0.02em;
+}
+
+/* confirm check draw-in */
+
+.wiz-confirm-mark svg path {
+  stroke-dasharray: 34;
+  stroke-dashoffset: 34;
+  animation: wiz-draw-check 400ms var(--wiz-ease) 120ms forwards;
+}
+
+@keyframes wiz-draw-check {
+  to { stroke-dashoffset: 0; }
+}
+
+@media (max-width: 480px) {
+  .wiz-pay-methods {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wiz-pay-orbit-ring,
+  .wiz-pay-spinner,
+  .wiz-pay-qr,
+  .wiz-pay-overlay-inner {
+    animation: none;
+  }
+
+  .wiz-confirm-mark svg path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+
+  .wiz-pay-method:hover {
+    transform: none;
+  }
+}

@@ -69,14 +69,20 @@ public sealed class PaymentService : IPaymentService
                 throw new ArgumentException("Archived bookings cannot take new payments.");
             }
 
-            if (booking.Status != BookingStatus.Confirmed)
+            // A Pending online booking may still take its 50% deposit (that is what
+            // confirms it). Every other status/event combination is closed to payments.
+            var depositAllowed = booking.Status == BookingStatus.Pending
+                && request.EventType == PaymentEventType.Deposit;
+            if (booking.Status != BookingStatus.Confirmed && !depositAllowed)
             {
                 throw new ArgumentException(
-                    "Confirm the booking first. Payments can only be recorded after confirmation.");
+                    "This booking can no longer take payments.");
             }
 
             if (booking.CashOnlyPromo
-                && request.EventType is not PaymentEventType.Refund and not PaymentEventType.Adjustment
+                && request.EventType is not PaymentEventType.Deposit
+                    and not PaymentEventType.Refund
+                    and not PaymentEventType.Adjustment
                 && request.Method != PaymentMethod.Cash)
             {
                 throw new ArgumentException(
@@ -144,6 +150,25 @@ public sealed class PaymentService : IPaymentService
 
             _db.PaymentRecords.Add(record);
             booking.UpdatedAtUtc = now;
+
+            var bookingConfirmed = false;
+            if (booking.Status == BookingStatus.Pending
+                && request.EventType == PaymentEventType.Deposit
+                && (postedPaid + amount) >= booking.AmountDueNow - 0.009m)
+            {
+                booking.Status = BookingStatus.Confirmed;
+                booking.DepositDueAtUtc = null;
+                bookingConfirmed = true;
+                _audit.Record(
+                    SystemAuditIntent.AdministrativeAction,
+                    SystemAuditDomain.Booking,
+                    "Booking.Confirmed",
+                    "Booking",
+                    booking.Id.ToString(),
+                    booking.Reference,
+                    summary: $"Confirmed by 50% deposit {record.ReceiptNumber} ({request.Method}).");
+            }
+
             var postedAction = request.EventType == PaymentEventType.Refund
                 ? "Payment.RefundPosted"
                 : "Payment.Posted";
@@ -157,7 +182,7 @@ public sealed class PaymentService : IPaymentService
                 summary: $"{postedAction.Replace("Payment.", string.Empty)} {record.ReceiptNumber} on {booking.Reference} · ₱{amount:N2}.");
             await _db.SaveChangesAsync(ct);
 
-            return Map(record, booking);
+            return Map(record, booking, bookingConfirmed);
         }, cancellationToken);
     }
 
@@ -690,7 +715,8 @@ public sealed class PaymentService : IPaymentService
         return trimmed.Length > maxLen ? trimmed[..maxLen] : trimmed;
     }
 
-    private static PaymentRecordDto Map(PaymentRecord record, Booking booking)
+    private static PaymentRecordDto Map(
+        PaymentRecord record, Booking booking, bool bookingConfirmed = false)
     {
         return new PaymentRecordDto(
             record.Id,
@@ -713,6 +739,7 @@ public sealed class PaymentService : IPaymentService
             record.VoidReason,
             record.VoidedBy,
             record.VerifiedAtUtc,
-            record.VerifiedBy);
+            record.VerifiedBy,
+            bookingConfirmed);
     }
 }

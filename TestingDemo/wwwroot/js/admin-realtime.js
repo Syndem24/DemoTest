@@ -13,6 +13,7 @@
     'BookingArchived',
     'PaymentChanged',
     'OfferEndingSoon',
+    'ReviewChanged',
   ]);
 
   const scopesByBookingEvent = {
@@ -20,7 +21,8 @@
     BookingUpdated: ['bookings', 'dashboard', 'payments', 'audit', 'notifications'],
     BookingArchived: ['bookings', 'dashboard', 'audit', 'notifications'],
     PaymentChanged: ['bookings', 'payments', 'dashboard', 'audit', 'notifications'],
-    OfferEndingSoon: ['notifications', 'offers'],
+    OfferEndingSoon: ['notifications', 'offers', 'dashboard'],
+    ReviewChanged: ['dashboard', 'reviews', 'notifications'],
   };
 
   const scopesByCatalogReason = {
@@ -130,6 +132,16 @@
       bookingHandlers.forEach((fn) => {
         try {
           fn('OfferEndingSoon', payload);
+        } catch (err) {
+          console.error('MoriAdminRealtime booking handler failed:', err);
+        }
+      });
+    });
+    connection.on('ReviewChanged', () => {
+      dispatchRefresh(scopesByBookingEvent.ReviewChanged, 'ReviewChanged');
+      bookingHandlers.forEach((fn) => {
+        try {
+          fn('ReviewChanged', null);
         } catch (err) {
           console.error('MoriAdminRealtime booking handler failed:', err);
         }

@@ -558,7 +558,7 @@
     "wifiTitle": "Wi-Fi in every room",
     "wifiCopy": "Stay connected throughout your visit",
     "ratesTitle": "Rates in Philippine pesos",
-    "ratesCopy": "Pay at the hotel on arrival",
+    "ratesCopy": "Pay 50% online by card or QRPh · balance at the hotel",
     "checkTimesTitle": "Check-in from 2:00 PM",
     "checkTimesCopy": "Check-out by 12:00 NN · late checkout on request",
     "cancelTitle": "Cancellation in the Terms of Stay",
@@ -613,7 +613,7 @@
     "bookingConfirmed": "Booking Confirmed",
     "selectedRooms": "Selected Rooms",
     "enterGuestDetails": "Enter Guest Details",
-    "noPayHint": "No payment collected now · Check-in 2:00 PM · Check-out 12:00 NN",
+    "noPayHint": "50% deposit secures your booking · balance at check-in · Check-in 2:00 PM · Check-out 12:00 NN",
     "whoBooking": "Who is this booking for?",
     "bookingForAria": "Booking for",
     "forMyself": "Booking for myself",
@@ -767,7 +767,43 @@
     "selectRoomTypes": "Select {n} room type to match your stay.",
     "selectRoomTypesPlural": "Select {n} room types to match your stay.",
     "addRoomBeforeSubmit": "Add a room before submitting.",
-    "sending": "Sending…"
+    "sending": "Sending…",
+    "agreePay": "Agree & continue to payment",
+    "stayRule3": "A 50% down payment confirms your booking; the balance is settled at check-in.",
+    "pay": {
+      "kicker": "Secure your stay",
+      "title": "Pay your 50% deposit",
+      "stepTitle": "Payment",
+      "methodsAria": "Payment method",
+      "dueNow": "Due now · 50% deposit",
+      "balance": "Balance at check-in",
+      "balanceAt": "Balance {amount} at check-in",
+      "held": "Room held for {time}",
+      "expiresIn": "Code expires in {time}",
+      "methodCard": "Debit / credit card",
+      "methodCardSub": "Secure checkout by Xendit",
+      "methodQr": "QRPh e-wallet or bank app",
+      "methodQrSub": "Scan with your GCash, Maya or bank app",
+      "go": "Pay {amount} securely",
+      "off": "Online deposit unavailable right now — reception will call to confirm.",
+      "scanTitle": "Scan to pay your deposit",
+      "waiting": "Waiting for payment…",
+      "checkStatus": "I've paid — check status",
+      "changeMethod": "Change method",
+      "newQr": "Generate new QR",
+      "confirming": "Confirming your stay…",
+      "holdExpiredKicker": "Hold released",
+      "holdExpired": "The 30-minute hold has ended and the room was released.",
+      "chooseDates": "Choose new dates",
+      "preparing": "Preparing secure checkout…",
+      "redirecting": "Redirecting to secure card page…",
+      "paidNow": "Paid now",
+      "receipt": "Receipt",
+      "callToConfirm": "Reception will call to confirm your stay; pay on arrival.",
+      "confirmedCopy": "Your deposit was received. Present your reference at the front desk.",
+      "failed": "Payment could not be started. Please try again.",
+      "expiredOrFailed": "That payment attempt ended. You can try again while the hold lasts."
+    }
   },
   "legal": {
     "privacyTitle": "Privacy policy",
@@ -837,15 +873,18 @@
       "stayLi4": "Senior Citizen and PWD discounts (20% off the stay) are applied by hotel staff at the front desk upon verification of valid ID. They cannot be combined with an active special offer or walk-in promo.",
       "ratesTitle": "5. Rates, offers, and payment",
       "ratesP": "Nightly rates and special offers shown on this site apply only while they are active and only for the room types listed. Some offers require cash on arrival. The booking summary before you submit is the amount we will record for the stay, plus any stay fees you select (early check-in, late checkout, extra person).",
-      "cancelTitle": "6. Cancellation",
+      "cancelTitle": "7. Cancellation",
       "cancelP": "Cancellation and prepayment rules can vary by booking and offer. If you need to change or cancel, contact the hotel using the details on our Contact section. We will confirm any charges or refunds in writing when we can.",
-      "dataTitle": "7. Personal data",
+      "dataTitle": "8. Personal data",
       "dataBefore": "How we collect and use your information is explained in the",
       "dataAfter": ". Creating a guest account requires your consent to process personal data for that account, bookings, and stay-related contact.",
-      "contactTitle": "8. Contact",
+      "contactTitle": "9. Contact",
       "contactBefore": "Mori International Hotel, AS Fortuna, Mandaue City, Cebu. Email",
       "contactPhone": ", hotel phone",
-      "contactStaff": ", or 24/7 staff"
+      "contactStaff": ", or 24/7 staff",
+      "depositTitle": "6. Down payment",
+      "depositP1": "A 50% down payment confirms your booking. You can pay it online by card or QRPh right after you agree to the stay terms; the remaining balance is settled at the hotel at check-in.",
+      "depositP2": "While your deposit is unpaid the room is held for 30 minutes — after that the hold is released and the booking is cancelled. Card payments are processed securely by Xendit; the hotel never sees or stores your card number."
     }
   },
   "bookingsPortal": {
@@ -911,7 +950,8 @@
       "Rejected": "Rejected",
       "Cancelled": "Cancelled",
       "CheckedOut": "Checked out"
-    }
+    },
+    "depositPending": "Deposit pending — complete payment"
   },
   "reviews": {
     "eyebrow": "Guest account",
@@ -1059,5 +1099,22 @@
     "city view": "City view",
     "no window": "No window"
   },
-  "roomTypeNames": {}
+  "roomTypeNames": {},
+  "depositReturn": {
+    "title": "Confirming your payment",
+    "confirming": "Confirming your payment…",
+    "working": "Checking with the payment provider.",
+    "confirmed": "Booking confirmed",
+    "confirmedCopy": "Your deposit was received. See you soon.",
+    "reference": "Reference",
+    "receipt": "Receipt",
+    "paidNow": "Paid now",
+    "balanceAt": "Balance at check-in",
+    "failed": "Payment didn't go through",
+    "failedCopy": "No charge was completed. You can try another payment method while the hold lasts.",
+    "tryAgain": "Try another method",
+    "stillProcessing": "Still processing",
+    "stillProcessingCopy": "We'll email you once the booking is confirmed.",
+    "backHome": "Back to home"
+  }
 }

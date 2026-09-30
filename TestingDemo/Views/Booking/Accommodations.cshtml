@@ -325,7 +325,7 @@
                 <span class="wiz-policy-icon" aria-hidden="true">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M2 7h12" stroke="currentColor" stroke-width="1.4"/></svg>
                 </span>
-                <p><strong data-i18n="wiz.ratesTitle">Rates in Philippine pesos</strong><span data-i18n="wiz.ratesCopy">Pay at the hotel on arrival</span></p>
+                <p><strong data-i18n="wiz.ratesTitle">Rates in Philippine pesos</strong><span data-i18n="wiz.ratesCopy">Pay 50% online by card or QRPh · balance at the hotel</span></p>
             </div>
             <div class="wiz-policy-item">
                 <span class="wiz-policy-icon" aria-hidden="true">
@@ -483,7 +483,7 @@
                 <span data-i18n="wiz.enterGuestDetails">Enter Guest Details</span>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M3 7h8M8 4l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
-            <p class="wiz-hint" data-i18n="wiz.noPayHint">No payment collected now · Check-in 2:00 PM · Check-out 12:00 NN</p>
+            <p class="wiz-hint" data-i18n="wiz.noPayHint">50% deposit secures your booking · balance at check-in</p>
 </div>
 
         <form data-wiz-drawer-step="form" hidden novalidate>
@@ -577,7 +577,7 @@
                 <ul>
                     <li data-i18n="wiz.stayRule1">Check-in 14:00 · check-out 12:00 (Manila). Early check-in and late checkout may be offered for a fee.</li>
                     <li data-i18n="wiz.stayRule2">Each room includes two guests. A third guest is ₱200 per night, subject to room capacity.</li>
-    
+                    <li data-i18n="wiz.stayRule3">A 50% down payment confirms your booking; the balance is settled at check-in.</li>
                 </ul>
             </section>
 
@@ -603,10 +603,77 @@
 
             <div class="wiz-actions">
                 <button type="button" class="wiz-btn wiz-btn-ghost" data-wiz-review-back data-i18n="wiz.back">← Back</button>
-                <button type="button" class="wiz-btn wiz-btn-primary" data-wiz-submit disabled aria-disabled="true" style="flex:1;" data-i18n="wiz.confirmReservation">Confirm Reservation</button>
+                <button type="button" class="wiz-btn wiz-btn-primary" data-wiz-submit disabled aria-disabled="true" style="flex:1;" data-i18n="wiz.agreePay">Agree &amp; continue to payment</button>
     </div>
             <p class="wiz-form-alert" data-wiz-review-alert hidden role="alert"></p>
 </div>
+
+        <div data-wiz-drawer-step="deposit" hidden>
+            <div data-wiz-pay-pane="choose">
+                <p class="wiz-kicker" data-i18n="wiz.pay.kicker">Secure your stay</p>
+                <h3 class="wiz-pay-title" data-i18n="wiz.pay.title">Pay your 50% deposit</h3>
+                <div class="wiz-pay-amount">
+                    <strong data-wiz-pay-due></strong>
+                    <span data-wiz-pay-balance></span>
+                    <span class="wiz-pay-held" data-wiz-pay-held role="status"></span>
+                </div>
+                <p class="wiz-pay-off" data-wiz-pay-off hidden data-i18n="wiz.pay.off">Online deposit unavailable right now — reception will call to confirm.</p>
+                <div class="wiz-pay-methods" role="radiogroup" data-i18n="wiz.pay.methodsAria" data-i18n-attr="aria-label" aria-label="Payment method">
+                    <button type="button" role="radio" aria-checked="false" class="wiz-pay-method" data-wiz-pay-method="Card">
+                        <span class="wiz-pay-method-head"><strong data-i18n="wiz.pay.methodCard">Debit / credit card</strong></span>
+                        <span class="wiz-pay-method-sub" data-i18n="wiz.pay.methodCardSub">Secure checkout by Xendit</span>
+                        <span class="wiz-pay-brands" data-wiz-pay-brands="Card"></span>
+                    </button>
+                    <button type="button" role="radio" aria-checked="false" class="wiz-pay-method" data-wiz-pay-method="QrPh">
+                        <span class="wiz-pay-method-head"><strong data-i18n="wiz.pay.methodQr">QRPh e-wallet or bank app</strong></span>
+                        <span class="wiz-pay-method-sub" data-i18n="wiz.pay.methodQrSub">Scan with your GCash, Maya or bank app</span>
+                        <span class="wiz-pay-brands" data-wiz-pay-brands="QrPh"></span>
+                    </button>
+                </div>
+                <div class="wiz-actions">
+                    <button type="button" class="wiz-btn wiz-btn-ghost" data-wiz-pay-back data-i18n="wiz.back">← Back</button>
+                    <button type="button" class="wiz-btn wiz-btn-primary" data-wiz-pay-go disabled aria-disabled="true" style="flex:1;"></button>
+                </div>
+                <p class="wiz-form-alert" data-wiz-pay-alert hidden role="alert"></p>
+            </div>
+
+            <div data-wiz-pay-pane="qr" hidden>
+                <p class="wiz-kicker">QRPh</p>
+                <h3 class="wiz-pay-title" data-i18n="wiz.pay.scanTitle">Scan to pay your deposit</h3>
+                <div class="wiz-pay-qr-wrap">
+                    <img data-wiz-pay-qr class="wiz-pay-qr" alt="QRPh payment code" />
+                </div>
+                <div class="wiz-pay-amount">
+                    <strong data-wiz-pay-qr-amount></strong>
+                    <span class="wiz-pay-held" data-wiz-pay-qr-expiry role="status"></span>
+                </div>
+                <p class="wiz-pay-waiting" role="status">
+                    <span class="wiz-pay-spinner" aria-hidden="true"></span>
+                    <span data-i18n="wiz.pay.waiting">Waiting for payment…</span>
+                </p>
+                <div class="wiz-actions wiz-pay-qr-actions">
+                    <button type="button" class="wiz-btn wiz-btn-primary" data-wiz-pay-check style="flex:1;" data-i18n="wiz.pay.checkStatus">I've paid — check status</button>
+                </div>
+                <div class="wiz-actions">
+                    <button type="button" class="wiz-btn wiz-btn-ghost" data-wiz-pay-change data-i18n="wiz.pay.changeMethod">Change method</button>
+                    <button type="button" class="wiz-btn wiz-btn-ghost" data-wiz-pay-newqr hidden data-i18n="wiz.pay.newQr">Generate new QR</button>
+                </div>
+                <p class="wiz-form-alert" data-wiz-pay-qr-alert hidden role="alert"></p>
+            </div>
+
+            <div data-wiz-pay-pane="confirming" hidden>
+                <p class="wiz-pay-waiting wiz-pay-confirming" role="status">
+                    <span class="wiz-pay-spinner" aria-hidden="true"></span>
+                    <span data-i18n="wiz.pay.confirming">Confirming your stay…</span>
+                </p>
+            </div>
+
+            <div data-wiz-pay-pane="hold-expired" hidden>
+                <p class="wiz-kicker" data-i18n="wiz.pay.holdExpiredKicker">Hold released</p>
+                <h3 class="wiz-pay-title" data-i18n="wiz.pay.holdExpired">The 30-minute hold has ended and the room was released.</h3>
+                <button type="button" class="wiz-btn wiz-btn-primary" data-wiz-pay-choose-dates style="width:100%;" data-i18n="wiz.pay.chooseDates">Choose new dates</button>
+            </div>
+        </div>
 
         <div class="wiz-confirm" data-wiz-drawer-step="confirm" hidden>
             <div class="wiz-confirm-mark" aria-hidden="true">
@@ -615,6 +682,7 @@
             <p class="wiz-kicker" data-wiz-confirm-kicker data-i18n="wiz.bookingConfirmed">Booking Confirmed</p>
             <h3 data-wiz-confirm-title></h3>
             <p class="wiz-lede" data-wiz-confirm-copy></p>
+            <p class="wiz-lede wiz-confirm-note" data-wiz-confirm-note hidden></p>
             <div class="wiz-rows" data-wiz-confirm-rows></div>
             <button type="button" class="wiz-btn wiz-btn-primary" data-wiz-done style="width:100%;" data-i18n="wiz.done">Done</button>
         </div>
@@ -640,6 +708,17 @@
             <button type="button" class="wiz-btn wiz-btn-ghost" data-wiz-far-checkin-change data-i18n="wiz.farCheckInChange">Change date</button>
             <button type="button" class="wiz-btn wiz-btn-primary" data-wiz-far-checkin-yes data-i18n="wiz.farCheckInYes">Yes, continue</button>
         </div>
+    </div>
+</div>
+
+<div id="wizPayOverlay" class="wiz-pay-overlay" hidden role="status" aria-live="polite" aria-busy="true" tabindex="-1">
+    <div class="wiz-pay-overlay-inner">
+        <div class="wiz-pay-orbit" aria-hidden="true">
+            <span class="wiz-pay-orbit-ring"></span>
+            <span class="wiz-pay-orbit-mark"><img src="~/Images/Logo.png" asp-append-version="true" alt="" class="wiz-pay-orbit-logo" /></span>
+        </div>
+        <p class="wiz-pay-overlay-brand" data-i18n="nav.brand">Mori International Hotel</p>
+        <p class="wiz-pay-overlay-status" data-wiz-overlay-status></p>
     </div>
 </div>
 

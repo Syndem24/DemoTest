@@ -1,0 +1,224 @@
+@{
+    Layout = "~/Views/Shared/_CustomerLayout.cshtml";
+}
+
+<style>
+    .dr-page {
+        min-height: 70vh;
+        display: grid;
+        place-items: center;
+        padding: 4rem 1.25rem;
+        color: var(--navy, #0b1f3a);
+    }
+
+    .dr-card {
+        width: min(440px, 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        text-align: center;
+    }
+
+    .dr-orbit {
+        position: relative;
+        width: 6rem;
+        height: 6rem;
+        display: grid;
+        place-items: center;
+    }
+
+    .dr-orbit-ring {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        border: 2px solid rgba(11, 31, 58, 0.12);
+        border-top-color: var(--teal, #1aa6a6);
+        animation: dr-spin 1100ms linear infinite;
+    }
+
+    .dr-orbit-mark {
+        position: relative;
+        width: 2.6rem;
+        height: 2.6rem;
+        object-fit: contain;
+    }
+
+    .dr-check {
+        width: 4rem;
+        height: 4rem;
+        border-radius: 50%;
+        border: 2px solid rgba(26, 166, 166, 0.3);
+        background: rgba(26, 166, 166, 0.1);
+        color: var(--teal, #1aa6a6);
+        display: grid;
+        place-items: center;
+    }
+
+    .dr-check svg {
+        width: 1.8rem;
+        height: 1.8rem;
+    }
+
+    .dr-check svg path {
+        stroke-dasharray: 40;
+        stroke-dashoffset: 40;
+        animation: dr-draw 400ms ease-out 120ms forwards;
+    }
+
+    .dr-title {
+        margin: 0;
+        font-family: var(--guest-display, "Cormorant Garamond", serif);
+        font-size: 1.7rem;
+    }
+
+    .dr-status {
+        margin: 0;
+        font-size: 0.85rem;
+        color: rgba(11, 31, 58, 0.6);
+    }
+
+    .dr-rows {
+        width: 100%;
+        margin: 0.4rem 0;
+        padding: 1rem;
+        border-radius: 14px;
+        border: 1px solid rgba(11, 31, 58, 0.09);
+        background: #f4f8fa;
+        text-align: left;
+    }
+
+    .dr-rows > div {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.35rem 0;
+        font-size: 0.8rem;
+    }
+
+    .dr-rows span {
+        color: rgba(11, 31, 58, 0.55);
+    }
+
+    .dr-rows strong {
+        font-weight: 600;
+    }
+
+    .dr-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.7rem;
+        margin-top: 0.4rem;
+    }
+
+    .dr-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 2.7rem;
+        padding: 0 1.4rem;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        border: none;
+        font-family: inherit;
+        transition: transform 160ms ease, box-shadow 160ms ease;
+    }
+
+    .dr-btn-primary {
+        background: linear-gradient(135deg, #0d9488, #0f766e);
+        color: #fff;
+        box-shadow: 0 4px 20px rgba(13, 148, 136, 0.3);
+    }
+
+    .dr-btn-primary:hover {
+        transform: translateY(-2px);
+        color: #fff;
+    }
+
+    .dr-btn-ghost {
+        background: transparent;
+        color: rgba(11, 31, 58, 0.6);
+        border: 1.5px solid rgba(11, 31, 58, 0.13);
+    }
+
+    .dr-btn-ghost:hover {
+        border-color: rgba(26, 166, 166, 0.3);
+        color: var(--teal, #1aa6a6);
+    }
+
+    .dr-state[hidden] {
+        display: none;
+    }
+
+    @@keyframes dr-spin {
+        to { transform: rotate(360deg); }
+    }
+
+    @@keyframes dr-draw {
+        to { stroke-dashoffset: 0; }
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .dr-orbit-ring,
+        .dr-check svg path {
+            animation: none;
+        }
+
+        .dr-check svg path {
+            stroke-dashoffset: 0;
+        }
+    }
+</style>
+
+<main class="dr-page"
+      id="drPage"
+      data-ref="@ViewBag.Ref"
+      data-token="@ViewBag.PayToken"
+      data-result="@ViewBag.Result">
+    <form class="visually-hidden" hidden>@Html.AntiForgeryToken()</form>
+
+    <div class="dr-card">
+        <div class="dr-state" data-dr-state="working">
+            <div class="dr-orbit" aria-hidden="true">
+                <span class="dr-orbit-ring"></span>
+                <img src="~/Images/Logo.png" asp-append-version="true" alt="" class="dr-orbit-mark" />
+            </div>
+            <h1 class="dr-title" data-i18n="depositReturn.confirming">Confirming your payment…</h1>
+            <p class="dr-status" data-dr-status data-i18n="depositReturn.working">Checking with the payment provider.</p>
+        </div>
+
+        <div class="dr-state" data-dr-state="success" hidden>
+            <div class="dr-check" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 12.5l5 5L20 6.5" />
+                </svg>
+            </div>
+            <h1 class="dr-title" data-i18n="depositReturn.confirmed">Booking confirmed</h1>
+            <p class="dr-status" data-i18n="depositReturn.confirmedCopy">Your deposit was received. See you soon.</p>
+            <div class="dr-rows" data-dr-rows></div>
+        </div>
+
+        <div class="dr-state" data-dr-state="failed" hidden>
+            <h1 class="dr-title" data-i18n="depositReturn.failed">Payment didn't go through</h1>
+            <p class="dr-status" data-i18n="depositReturn.failedCopy">No charge was completed. You can try another payment method while the hold lasts.</p>
+        </div>
+
+        <div class="dr-state" data-dr-state="pending" hidden>
+            <h1 class="dr-title" data-i18n="depositReturn.stillProcessing">Still processing</h1>
+            <p class="dr-status" data-i18n="depositReturn.stillProcessingCopy">We'll email you once the booking is confirmed.</p>
+        </div>
+
+        <div class="dr-actions" data-dr-actions hidden>
+            <a class="dr-btn dr-btn-primary" data-dr-home href="/" data-i18n="depositReturn.backHome">Back to home</a>
+            <a class="dr-btn dr-btn-ghost" data-dr-retry href="#" data-i18n="depositReturn.tryAgain">Try another method</a>
+        </div>
+    </div>
+</main>
+
+@section Scripts {
+    <script src="~/js/deposit-return.js" asp-append-version="true"></script>
+}

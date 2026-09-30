@@ -16,11 +16,19 @@ DECLARE @nowUtc datetime2 = SYSUTCDATETIME();
 DECLARE @todayUtc datetime2 = CAST(CAST(@nowUtc AS date) AS datetime2);
 
 /* ---- cleanup prior demo data ---------------------------------------- */
+/* QrPaymentIntent → Booking is RESTRICT, so intents go first; the        */
+/* booking delete then cascades to items + payments.                      */
+DELETE qi
+FROM QrPaymentIntent qi
+JOIN Booking b ON b.Id = qi.BookingId
+WHERE b.Reference LIKE 'DMO-%';
 DELETE FROM Booking WHERE Reference LIKE 'DMO-%';  /* cascades items/payments */
 
 /* ---- 50 bookings ----------------------------------------------------- */
 /* i 1-30  : past stays → CheckedOut (80%) / Cancelled / Rejected         */
-/* i 31-50 : upcoming stays → Confirmed / Pending                         */
+/* i 31-50 : upcoming stays → all Confirmed (a 50% deposit is required    */
+/*           to confirm now). i % 3 = 2 → ~7 guests stay on Half (deposit */
+/*           posted, balance due at check-in); the rest pay in full.      */
 WITH n AS (
     SELECT TOP (50) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS i
     FROM master.dbo.spt_values
@@ -32,7 +40,6 @@ src AS (
             WHEN i <= 30 THEN CASE WHEN i % 10 < 8 THEN 'CheckedOut'
                                    WHEN i % 10 = 8 THEN 'Cancelled'
                                    ELSE 'Rejected' END
-            WHEN i % 3 = 2 THEN 'Pending'
             ELSE 'Confirmed'
         END AS status,
         CASE WHEN i <= 30 THEN 'Booking' ELSE 'Reservation' END AS kind,
@@ -41,7 +48,8 @@ src AS (
             ELSE DATEADD(hour, 6, DATEADD(day, 1 + i % 30, @todayUtc))
         END AS checkinUtc,
         1 + (i % 5) AS nights,
-        CASE WHEN i % 3 = 0 THEN 'Half' ELSE 'Full' END AS payOpt,
+        CASE WHEN i <= 30 THEN CASE WHEN i % 3 = 0 THEN 'Half' ELSE 'Full' END
+             ELSE CASE WHEN i % 3 = 2 THEN 'Half' ELSE 'Full' END END AS payOpt,
         CASE i % 5 WHEN 0 THEN 'WalkIn' WHEN 3 THEN 'Agoda' WHEN 4 THEN 'Expedia'
                    ELSE 'Online' END AS channel,
         CASE WHEN i % 2 = 0 THEN N'Queen Rooms' ELSE N'Twin Room' END AS type1Name,
@@ -171,7 +179,7 @@ WHERE b.Reference = 'DMO-0008';
 /* i 51-60 : check-ins spread over the last 7 Manila days — recent ones   */
 /*           still in-house (Confirmed), earlier ones CheckedOut.         */
 /* i 61-75 : upcoming reservations every ~2 days for the next month,      */
-/*           Confirmed (deposit posted) / Pending (unpaid).               */
+/*           all Confirmed — these channels are prepaid, paid in full.    */
 WITH n AS (
     SELECT TOP (25) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS i
     FROM master.dbo.spt_values
@@ -181,7 +189,6 @@ src AS (
         50 + i AS i,
         CASE
             WHEN i <= 10 THEN CASE WHEN i <= 3 THEN 'CheckedOut' ELSE 'Confirmed' END
-            WHEN i % 3 = 0 THEN 'Pending'
             ELSE 'Confirmed'
         END AS status,
         CASE WHEN i <= 10 THEN 'Booking' ELSE 'Reservation' END AS kind,
@@ -190,7 +197,7 @@ src AS (
             ELSE DATEADD(hour, 6, DATEADD(day, 1 + (i - 10) * 2, @todayUtc))
         END AS checkinUtc,
         1 + (i % 4) AS nights,
-        CASE WHEN i % 4 = 0 THEN 'Half' ELSE 'Full' END AS payOpt,
+        CASE WHEN i <= 10 AND i % 4 = 0 THEN 'Half' ELSE 'Full' END AS payOpt,
         CASE WHEN i <= 10 THEN 'Online'
              ELSE CASE i % 4 WHEN 0 THEN 'Agoda' WHEN 1 THEN 'Expedia' ELSE 'Online' END
         END AS channel,
@@ -233,7 +240,7 @@ SELECT b.Id, rt.RoomTypeId, rt.Name, 1 + (x.i % 2), rt.PricePerNight
 FROM Booking b
 CROSS APPLY (SELECT TRY_CAST(RIGHT(b.Reference, 4) AS int) AS i) x
 JOIN RoomType rt ON rt.Name = CASE WHEN x.i % 2 = 0 THEN N'Queen Rooms' ELSE N'Twin Room' END
-WHERE b.Reference LIKE 'DMO-00%' AND x.i > 50;
+WHERE b.Reference LIKE 'DMO-%' AND x.i > 50;
 
 /* Payments for the arrival/reservation batch:
    Confirmed → posted deposit (e-wallet every 3rd); CheckedOut → settled. */
@@ -258,7 +265,7 @@ SELECT
     NULL, NULL, NULL
 FROM Booking b
 CROSS APPLY (SELECT TRY_CAST(RIGHT(b.Reference, 4) AS int) AS i) x
-WHERE b.Reference LIKE 'DMO-00%' AND x.i > 50
+WHERE b.Reference LIKE 'DMO-%' AND x.i > 50
   AND b.Status IN ('Confirmed', 'CheckedOut');
 
 /* CheckedOut half-paid arrivals: balance settled at checkout. */
@@ -277,13 +284,13 @@ SELECT
     NULL, NULL, NULL, NULL, NULL, NULL
 FROM Booking b
 CROSS APPLY (SELECT TRY_CAST(RIGHT(b.Reference, 4) AS int) AS i) x
-WHERE b.Reference LIKE 'DMO-00%' AND x.i > 50
+WHERE b.Reference LIKE 'DMO-%' AND x.i > 50
   AND b.Status = 'CheckedOut' AND b.PaymentOption = 'Half';
 
 /* ---- reservation wave across the next 6 months (DMO-0076..0105) ------- */
 /* Spread one every ~6 days so ANY forward report range — including the     */
 /* availability-by-type grid — shows bookings deducting inventory.          */
-/* Confirmed ones carry a posted deposit; Pending ones are unpaid.          */
+/* All Confirmed and fully paid (OTA channels settle at booking time).      */
 WITH n AS (
     SELECT TOP (30) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS i
     FROM master.dbo.spt_values
@@ -291,11 +298,11 @@ WITH n AS (
 src AS (
     SELECT
         75 + i AS i,
-        CASE WHEN i % 4 = 0 THEN 'Pending' ELSE 'Confirmed' END AS status,
+        'Confirmed' AS status,
         'Reservation' AS kind,
         DATEADD(hour, 6, DATEADD(day, 1 + (i - 1) * 6, @todayUtc)) AS checkinUtc,
         1 + (i % 4) AS nights,
-        CASE WHEN i % 3 = 0 THEN 'Half' ELSE 'Full' END AS payOpt,
+        'Full' AS payOpt,
         CASE i % 4 WHEN 0 THEN 'Agoda' WHEN 1 THEN 'Expedia' WHEN 2 THEN 'Online'
                    ELSE 'OtherThirdParty' END AS channel,
         CASE WHEN i % 2 = 0 THEN N'Queen Rooms' ELSE N'Twin Room' END AS type1Name,
@@ -337,9 +344,9 @@ SELECT b.Id, rt.RoomTypeId, rt.Name, 1 + (x.i % 2), rt.PricePerNight
 FROM Booking b
 CROSS APPLY (SELECT TRY_CAST(RIGHT(b.Reference, 4) AS int) AS i) x
 JOIN RoomType rt ON rt.Name = CASE WHEN x.i % 2 = 0 THEN N'Queen Rooms' ELSE N'Twin Room' END
-WHERE b.Reference LIKE 'DMO-00%' AND x.i > 75;
+WHERE b.Reference LIKE 'DMO-%' AND x.i > 75;
 
-/* Deposits on the Confirmed reservations (e-wallet every 3rd). */
+/* Payments on the Confirmed reservations — all settled in full (e-wallet every 3rd). */
 INSERT INTO PaymentRecord (
     BookingId, ReceiptNumber, EventType, Method, Amount,
     StayTotalAtPosting, BalanceAfter, PaidAtUtc, ReceivedBy,
@@ -361,7 +368,141 @@ SELECT
     NULL, NULL, NULL
 FROM Booking b
 CROSS APPLY (SELECT TRY_CAST(RIGHT(b.Reference, 4) AS int) AS i) x
-WHERE b.Reference LIKE 'DMO-00%' AND x.i > 75
+WHERE b.Reference LIKE 'DMO-%' AND x.i > 75
+  AND b.Status = 'Confirmed';
+
+/* ---- 5 guests checking in TODAY (DMO-0106..0110) ---------------------- */
+/* Confirmed + fully paid + no room assignment — they land at the top of   */
+/* front-desk attention (Bookings) and can be assigned right away.         */
+WITH n AS (
+    SELECT TOP (5) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS i
+    FROM master.dbo.spt_values
+),
+src AS (
+    SELECT
+        105 + i AS i,
+        'Confirmed' AS status,
+        'Booking' AS kind,
+        /* Manila-today 2:00 PM = Manila-midnight date + 6h as a UTC instant. */
+        DATEADD(hour, 6,
+            CAST(CAST(DATEADD(hour, 8, @nowUtc) AS date) AS datetime2)) AS checkinUtc,
+        1 + (i % 3) AS nights,
+        'Full' AS payOpt,
+        CASE i % 3 WHEN 0 THEN 'WalkIn' ELSE 'Online' END AS channel,
+        CASE WHEN i % 2 = 0 THEN N'Queen Rooms' ELSE N'Twin Room' END AS type1Name,
+        1 + (i % 2) AS qty1
+    FROM n
+)
+INSERT INTO Booking (
+    Reference, GuestName, GuestEmail, GuestPhone,
+    CheckInAtUtc, CheckoutTimeUtc, Kind, PaymentOption, Status, Channel,
+    ArrivalDiscountRequest, CashOnlyPromo, SpecialOfferId,
+    TotalAmount, AmountDueNow,
+    AdultCount, ChildCount, GuestPartyJson,
+    CreatedAtUtc, UpdatedAtUtc, IsArchived, ArchivedAtUtc,
+    IsNotificationCleared, GuestEditsSeenByStaff
+)
+SELECT
+    'DMO-' + RIGHT('0000' + CAST(s.i AS varchar(4)), 4),
+    N'Demo Guest ' + RIGHT('000' + CAST(s.i AS varchar(4)), 3),
+    'demo.guest' + RIGHT('000' + CAST(s.i AS varchar(4)), 3) + '@demo.test',
+    '+63 9' + RIGHT('000000000' + CAST(170000000 + s.i * 137 AS varchar(10)), 9),
+    s.checkinUtc,
+    DATEADD(day, s.nights, s.checkinUtc),
+    s.kind, s.payOpt, s.status, s.channel,
+    'None', 0, NULL,
+    s.qty1 * rt1.PricePerNight * s.nights,
+    s.qty1 * rt1.PricePerNight * s.nights,          /* Full = paid upfront */
+    s.qty1, 0,
+    '[{"adults":' + CAST(s.qty1 AS varchar(2)) + ',"children":0}]',
+    DATEADD(day, -4, @nowUtc),
+    @nowUtc,
+    0, NULL, 0, 1
+FROM src s
+JOIN RoomType rt1 ON rt1.Name = s.type1Name;
+
+/* ---- 7 deposit-only reservations (DMO-0111..0117) --------------------- */
+/* Confirmed with a 50% deposit posted and the balance still due — they   */
+/* land in the Reservations bucket of front-desk attention with a         */
+/* Payments action. Check-ins split across today + tomorrow (Manila).     */
+WITH n AS (
+    SELECT TOP (7) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS i
+    FROM master.dbo.spt_values
+),
+src AS (
+    SELECT
+        110 + i AS i,
+        'Confirmed' AS status,
+        'Reservation' AS kind,
+        /* odd i → Manila today 2:00 PM, even i → tomorrow 2:00 PM. */
+        DATEADD(hour, 6,
+            DATEADD(day, 1 - (i % 2),
+                CAST(CAST(DATEADD(hour, 8, @nowUtc) AS date) AS datetime2))) AS checkinUtc,
+        1 + (i % 3) AS nights,
+        'Half' AS payOpt,
+        CASE i % 5 WHEN 0 THEN 'Agoda' WHEN 4 THEN 'Expedia' ELSE 'Online' END AS channel,
+        CASE WHEN i % 2 = 0 THEN N'Queen Rooms' ELSE N'Twin Room' END AS type1Name,
+        1 + (i % 2) AS qty1
+    FROM n
+)
+INSERT INTO Booking (
+    Reference, GuestName, GuestEmail, GuestPhone,
+    CheckInAtUtc, CheckoutTimeUtc, Kind, PaymentOption, Status, Channel,
+    ArrivalDiscountRequest, CashOnlyPromo, SpecialOfferId,
+    TotalAmount, AmountDueNow,
+    AdultCount, ChildCount, GuestPartyJson,
+    CreatedAtUtc, UpdatedAtUtc, IsArchived, ArchivedAtUtc,
+    IsNotificationCleared, GuestEditsSeenByStaff
+)
+SELECT
+    'DMO-' + RIGHT('0000' + CAST(s.i AS varchar(4)), 4),
+    N'Demo Guest ' + RIGHT('000' + CAST(s.i AS varchar(4)), 3),
+    'demo.guest' + RIGHT('000' + CAST(s.i AS varchar(4)), 3) + '@demo.test',
+    '+63 9' + RIGHT('000000000' + CAST(170000000 + s.i * 137 AS varchar(10)), 9),
+    s.checkinUtc,
+    DATEADD(day, s.nights, s.checkinUtc),
+    s.kind, s.payOpt, s.status, s.channel,
+    'None', 0, NULL,
+    s.qty1 * rt1.PricePerNight * s.nights,
+    ROUND(s.qty1 * rt1.PricePerNight * s.nights / 2, 2),   /* Half = 50% due */
+    s.qty1, 0,
+    '[{"adults":' + CAST(s.qty1 AS varchar(2)) + ',"children":0}]',
+    DATEADD(day, -3, @nowUtc),
+    @nowUtc,
+    0, NULL, 0, 1
+FROM src s
+JOIN RoomType rt1 ON rt1.Name = s.type1Name;
+
+INSERT INTO BookingItem (BookingId, RoomTypeId, RoomTypeName, Quantity, PricePerNight)
+SELECT b.Id, rt.RoomTypeId, rt.Name, 1 + (x.i % 2), rt.PricePerNight
+FROM Booking b
+CROSS APPLY (SELECT TRY_CAST(RIGHT(b.Reference, 4) AS int) AS i) x
+JOIN RoomType rt ON rt.Name = CASE WHEN x.i % 2 = 0 THEN N'Queen Rooms' ELSE N'Twin Room' END
+WHERE b.Reference LIKE 'DMO-%' AND x.i > 105;
+
+/* Full stay posted as the confirming deposit (e-wallet every 3rd). */
+INSERT INTO PaymentRecord (
+    BookingId, ReceiptNumber, EventType, Method, Amount,
+    StayTotalAtPosting, BalanceAfter, PaidAtUtc, ReceivedBy,
+    Notes, Status, ExternalReference,
+    VerifiedAtUtc, VerifiedBy, VoidedAtUtc, VoidReason, VoidedBy
+)
+SELECT
+    b.Id,
+    'RCP-D' + RIGHT('0000' + CAST(x.i AS varchar(4)), 4) + '-1',
+    'Deposit',
+    CASE WHEN x.i % 3 = 0 THEN 'EWallet' ELSE 'Cash' END,
+    b.AmountDueNow,
+    b.TotalAmount,
+    b.TotalAmount - b.AmountDueNow,
+    DATEADD(hour, 2, b.CreatedAtUtc), 'Demo Seed', NULL, 'Posted',
+    CASE WHEN x.i % 3 = 0 THEN 'TEST-EPAY-' + RIGHT('0000' + CAST(x.i AS varchar(4)), 4) ELSE NULL END,
+    CASE WHEN x.i % 3 = 0 THEN DATEADD(hour, 3, b.CreatedAtUtc) ELSE NULL END,
+    CASE WHEN x.i % 3 = 0 THEN 'Demo Seed' ELSE NULL END,
+    NULL, NULL, NULL
+FROM Booking b
+CROSS APPLY (SELECT TRY_CAST(RIGHT(b.Reference, 4) AS int) AS i) x
+WHERE b.Reference LIKE 'DMO-%' AND x.i > 105
   AND b.Status = 'Confirmed';
 
 COMMIT;

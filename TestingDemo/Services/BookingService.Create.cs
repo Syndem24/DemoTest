@@ -1,5 +1,6 @@
 using System.Data;
 using System.Globalization;
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
@@ -100,6 +101,7 @@ public sealed partial class BookingService
                     "Senior Citizen / PWD discount cannot be combined with an active special offer promo.");
             }
 
+            var cashOnly = offersByType.Values.Any(SpecialOfferService.ForcesCashOnArrival);
             var booking = new Booking
             {
                 Reference = CreateReference(),
@@ -108,13 +110,15 @@ public sealed partial class BookingService
                 GuestPhone = (request.GuestPhone ?? string.Empty).Trim(),
                 CheckInAtUtc = checkInAtUtc,
                 CheckoutTimeUtc = checkoutTimeUtc,
-                PaymentOption = PaymentOption.Full,
-                Kind = BookingKind.Booking,
+                PaymentOption = PaymentOption.Half,
+                Kind = Classify(PaymentOption.Half),
                 Status = BookingStatus.Pending,
                 Channel = BookingChannel.Online,
                 SpecialOfferId = appliedOffer?.Id,
                 ArrivalDiscountRequest = arrivalDiscount,
-                CashOnlyPromo = offersByType.Values.Any(SpecialOfferService.ForcesCashOnArrival),
+                CashOnlyPromo = cashOnly,
+                GuestPayToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant(),
+                DepositDueAtUtc = nowUtc.Add(DepositHold),
                 CreatedAtUtc = nowUtc,
                 UpdatedAtUtc = nowUtc
             };

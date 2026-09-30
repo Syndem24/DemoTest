@@ -36,6 +36,18 @@ public class BookingController : Controller
     [HttpGet("/plan")]
     public IActionResult Plan() => Redirect("/#room-types");
 
+    [HttpGet]
+    public IActionResult DepositReturn(string? @ref, string? t, string? r)
+    {
+        ViewData["Title"] = "Confirming your payment";
+        ViewData["I18nTitle"] = "depositReturn.title";
+        ViewData["GuestImmersive"] = true;
+        ViewBag.Ref = @ref ?? string.Empty;
+        ViewBag.PayToken = t ?? string.Empty;
+        ViewBag.Result = r ?? string.Empty;
+        return View();
+    }
+
     private async Task<BookingPageViewModel> BuildPageModelAsync(int takeReviews, CancellationToken cancellationToken)
     {
         var rooms = await _roomService.GetAllAsync(cancellationToken);

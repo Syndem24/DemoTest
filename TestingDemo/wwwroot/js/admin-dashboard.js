@@ -488,6 +488,8 @@
       attentionRoot.replaceChildren();
       attention.forEach(function (item) {
         const li = document.createElement("li");
+        const itemKind = item.bucket ?? item.Bucket ?? "";
+        if (itemKind) li.setAttribute("data-attn-kind", itemKind);
         const link = document.createElement("a");
         link.href = item.href ?? item.Href ?? "#";
         const strong = document.createElement("strong");
@@ -511,6 +513,12 @@
           li.append(wrap);
         } else if (bookingId && action === "arrival") {
           wrap.append(attentionActionButton("done", bookingId, "Done", false));
+          li.append(wrap);
+        } else if (bookingId && action === "open" && String(itemKind) === "Booking") {
+          wrap.append(attentionActionButton("assign", bookingId, "Assign", false));
+          li.append(wrap);
+        } else if (bookingId && action === "open" && String(itemKind) === "Reservation") {
+          wrap.append(attentionActionButton("payments", bookingId, "Payments", false));
           li.append(wrap);
         }
 
@@ -597,9 +605,15 @@
           const chips = document.createElement("div");
           chips.className = "dash-roomchips";
           members.forEach(function (r) {
-            const chip = document.createElement("span");
+            const chip = document.createElement("button");
+            chip.type = "button";
             chip.className = `dash-roomchip ${group.css}`;
             chip.textContent = r.roomNumber ?? r.RoomNumber ?? "";
+            chip.setAttribute("data-dash-room-id", String(r.id ?? r.Id ?? 0));
+            chip.setAttribute("data-dash-room-number", r.roomNumber ?? r.RoomNumber ?? "");
+            chip.setAttribute("data-dash-room-status", r.status ?? r.Status ?? "");
+            chip.setAttribute("data-dash-room-type", name);
+            chip.setAttribute("aria-label", `Room ${chip.textContent} — ${group.label} — view details`);
             chips.append(chip);
           });
           grp.append(label, chips);
@@ -679,6 +693,16 @@
       const id = btn.getAttribute("data-dash-booking-id");
       if (!act || !id) return;
 
+      if (act === "assign") {
+        void openDashBooking(Number(id), "Assign rooms", { assign: true });
+        return;
+      }
+
+      if (act === "payments") {
+        void openDashBooking(Number(id), "Payments", { payments: true });
+        return;
+      }
+
       if (act === "reject" && !window.confirm("Reject this pending booking? The guest’s request will be declined.")) {
         return;
       }
@@ -721,19 +745,48 @@
     });
 
   /* Room-type booking switch — bulk open/close via /api/rooms/types/{id}/open.
-     Occupied rooms are skipped server-side and reported back as a stop warning. */
-  document
-    .querySelector("[data-dash-widget='room-types']")
-    ?.addEventListener("click", function (event) {
-      const btn = event.target.closest("[data-dash-roomtype-id]");
-      if (!btn) return;
-      event.preventDefault();
+     Closing asks for confirmation first (branded modal). Occupied rooms are
+     skipped server-side and reported back as a stop warning. */
+  const roomTypeConfirmModal = document.querySelector("[data-roomtype-confirm-modal]");
+  let roomTypeConfirmResolve = null;
 
-      const id = btn.getAttribute("data-dash-roomtype-id");
-      const name = btn.getAttribute("data-dash-roomtype-name") || "Room type";
-      const open = btn.getAttribute("aria-checked") !== "true";
-      if (!id) return;
+  function askRoomTypeClose(name) {
+    return new Promise(function (resolve) {
+      if (!roomTypeConfirmModal) {
+        resolve(window.confirm(`Proceed closing ${name}? Guests will no longer be able to book it online.`));
+        return;
+      }
+      const nameEl = roomTypeConfirmModal.querySelector("[data-roomtype-confirm-name]");
+      if (nameEl) nameEl.textContent = name;
+      roomTypeConfirmResolve = resolve;
+      roomTypeConfirmModal.hidden = false;
+      document.body.classList.add("admin-booking-modal-open");
+      roomTypeConfirmModal.querySelector("[data-roomtype-confirm-ok]")?.focus?.();
+    });
+  }
 
+  function settleRoomTypeConfirm(confirmed) {
+    if (!roomTypeConfirmModal) return;
+    roomTypeConfirmModal.hidden = true;
+    document.body.classList.remove("admin-booking-modal-open");
+    const resolve = roomTypeConfirmResolve;
+    roomTypeConfirmResolve = null;
+    if (resolve) resolve(confirmed);
+  }
+
+  roomTypeConfirmModal
+    ?.querySelectorAll("[data-roomtype-confirm-cancel]")
+    .forEach(function (el) {
+      el.addEventListener("click", function () { settleRoomTypeConfirm(false); });
+    });
+  roomTypeConfirmModal
+    ?.querySelector("[data-roomtype-confirm-ok]")
+    ?.addEventListener("click", function () { settleRoomTypeConfirm(true); });
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && roomTypeConfirmResolve) settleRoomTypeConfirm(false);
+  });
+
+  function setRoomTypeOpen(btn, id, name, open) {
       btn.disabled = true;
       fetch(`/api/rooms/types/${encodeURIComponent(id)}/open`, {
         method: "POST",
@@ -773,6 +826,28 @@
             window.showMoriNotice(err.message || "Couldn't update the room type.", "error");
           }
         });
+  }
+
+  document
+    .querySelector("[data-dash-widget='room-types']")
+    ?.addEventListener("click", function (event) {
+      const btn = event.target.closest("[data-dash-roomtype-id]");
+      if (!btn) return;
+      event.preventDefault();
+
+      const id = btn.getAttribute("data-dash-roomtype-id");
+      const name = btn.getAttribute("data-dash-roomtype-name") || "Room type";
+      const open = btn.getAttribute("aria-checked") !== "true";
+      if (!id) return;
+
+      if (!open) {
+        void askRoomTypeClose(name).then(function (confirmed) {
+          if (confirmed) setRoomTypeOpen(btn, id, name, open);
+        });
+        return;
+      }
+
+      setRoomTypeOpen(btn, id, name, open);
     });
 
   /* ---- Detail modal: open a booking or review in place so staff never
@@ -970,13 +1045,21 @@
     return Math.round(ms / 86400000);
   }
 
-  async function openDashBooking(bookingId, fallbackTitle) {
+  async function openDashBooking(bookingId, fallbackTitle, options) {
     openDashDetail(fallbackTitle || "Booking details", "Reservation");
     let booking;
     try {
       booking = await dashFetchJson(`/api/admin/bookings/${bookingId}`);
     } catch (error) {
       dashModalFail(error?.message || "Could not load booking details.");
+      return;
+    }
+    if (options?.assign) {
+      void renderDashAssign(booking);
+      return;
+    }
+    if (options?.payments) {
+      void renderDashPayments(booking);
       return;
     }
     renderDashBooking(booking, null);
@@ -1110,11 +1193,734 @@
       });
     }
 
+    const unassigned = (booking.items || []).every(
+      (item) => !(item.assignedRooms || []).length);
+    if (booking.status === "Confirmed" && !booking.isArchived) {
+      const actionWrap = document.createElement("div");
+      actionWrap.className = "dash-attention-actions";
+      if (balance > 0.009) {
+        const payBtn = document.createElement("button");
+        payBtn.type = "button";
+        payBtn.textContent = `Payments · ${money(balance)} due`;
+        payBtn.addEventListener("click", function () {
+          void renderDashPayments(booking, paySummary);
+        });
+        actionWrap.append(payBtn);
+      } else if (unassigned) {
+        const assignBtn = document.createElement("button");
+        assignBtn.type = "button";
+        assignBtn.textContent = "Assign rooms";
+        assignBtn.addEventListener("click", function () {
+          void renderDashAssign(booking, paySummary);
+        });
+        actionWrap.append(assignBtn);
+      }
+      if (actionWrap.hasChildNodes()) detailActions.appendChild(actionWrap);
+    }
+
     const manage = document.createElement("a");
     manage.className = "dash-detail-manage";
     manage.href = `/AdminBookings?booking=${booking.id}`;
     manage.textContent = "Open full booking view →";
     detailActions.appendChild(manage);
+  }
+
+  /* Rooms may be assigned from the Manila arrival date onward — same rule as
+     the bookings page. */
+  function dashManilaIso(date) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date);
+    const get = (type) => parts.find((p) => p.type === type)?.value || "";
+    return `${get("year")}-${get("month")}-${get("day")}`;
+  }
+
+  async function renderDashAssign(booking, paySummary) {
+    if (!detailBody || !detailActions || !detailModal || detailModal.hidden) return;
+    detailBody.replaceChildren();
+    detailActions.replaceChildren();
+
+    const backButton = document.createElement("button");
+    backButton.type = "button";
+    backButton.className = "is-quiet";
+    backButton.textContent = "Back";
+    backButton.addEventListener("click", function () {
+      renderDashBooking(booking, paySummary ?? null);
+    });
+    const backWrap = function () {
+      const wrap = document.createElement("div");
+      wrap.className = "dash-attention-actions";
+      wrap.append(backButton);
+      return wrap;
+    };
+
+    const blocked = function (message) {
+      const p = document.createElement("p");
+      p.className = "admin-booking-assign-error";
+      p.setAttribute("role", "alert");
+      p.textContent = message;
+      detailBody.append(p);
+      detailActions.append(backWrap());
+    };
+
+    let balance = Math.max(0, Number(booking.totalAmount || 0) - Number(booking.paidTotal || 0));
+    if (paySummary && paySummary.balanceDue != null) {
+      balance = Number(paySummary.balanceDue);
+    } else {
+      try {
+        const summary = await dashFetchJson(`/api/admin/payments/booking/${booking.id}`);
+        if (summary && summary.balanceDue != null) balance = Number(summary.balanceDue);
+      } catch (_) { /* fall back to booking totals */ }
+    }
+    if (!detailBody || detailModal.hidden) return;
+
+    if (balance > 0.009) {
+      blocked(`Guest must be fully paid before assigning rooms. Balance due: ${money(balance)}.`);
+      return;
+    }
+
+    const arrivalDate = booking.checkInAtUtc
+      ? dashManilaIso(new Date(booking.checkInAtUtc)) : "";
+    if (!arrivalDate || dashManilaIso(new Date()) < arrivalDate) {
+      blocked(
+        `Assign rooms is locked until the check-in date (${dashManilaWhen(booking.checkInAtUtc)}, Philippines time). ` +
+        "If the guest arrives earlier, use Adjust stay on the full booking view to move check-in.");
+      return;
+    }
+
+    const intro = document.createElement("p");
+    intro.className = "admin-booking-assign-intro";
+    intro.textContent = "Pick room numbers for this fully paid stay.";
+    detailBody.append(intro);
+
+    const groups = document.createElement("div");
+    groups.className = "admin-booking-assign-groups";
+    const localError = document.createElement("p");
+    localError.className = "admin-booking-assign-error";
+    localError.hidden = true;
+    localError.setAttribute("role", "alert");
+    const setAssignError = function (message) {
+      localError.hidden = !message;
+      localError.textContent = message || "";
+    };
+
+    let assignable;
+    try {
+      assignable = await dashFetchJson(`/api/admin/bookings/${booking.id}/assignable-rooms`);
+    } catch (error) {
+      if (detailModal.hidden) return;
+      blocked(error?.message || "Unable to load rooms.");
+      return;
+    }
+    if (detailModal.hidden) return;
+
+    const syncAssignOptions = function () {
+      const selected = new Set(
+        Array.from(groups.querySelectorAll("select"))
+          .map((s) => s.value)
+          .filter(Boolean));
+      groups.querySelectorAll("select").forEach((select) => {
+        const current = select.value;
+        Array.from(select.options).forEach((option) => {
+          if (!option.value) return;
+          option.disabled = selected.has(option.value) && option.value !== current;
+        });
+      });
+    };
+
+    if (!assignable?.length) {
+      groups.textContent = "No room types found on this booking.";
+    } else {
+      assignable.forEach(function (group) {
+        const section = document.createElement("section");
+        section.className = "admin-booking-assign-group";
+        section.dataset.roomTypeId = String(group.roomTypeId ?? group.RoomTypeId);
+
+        const title = document.createElement("h3");
+        title.textContent = `${group.roomTypeName ?? group.RoomTypeName} · pick ${group.quantityNeeded ?? group.QuantityNeeded}`;
+        section.append(title);
+
+        const rooms = group.rooms ?? group.Rooms ?? [];
+        const needed = Number(group.quantityNeeded ?? group.QuantityNeeded ?? 0);
+        if (!rooms.length) {
+          const empty = document.createElement("p");
+          empty.className = "admin-booking-assign-empty";
+          empty.textContent = `No free ${group.roomTypeName ?? group.RoomTypeName} rooms for these dates (held by overlapping bookings or already occupied).`;
+          section.append(empty);
+        } else {
+          for (let index = 0; index < needed; index += 1) {
+            const field = document.createElement("label");
+            const caption = document.createElement("span");
+            caption.textContent = needed > 1 ? `Room ${index + 1}` : "Room number";
+            const select = document.createElement("select");
+            select.required = true;
+            select.dataset.roomTypeId = String(group.roomTypeId ?? group.RoomTypeId);
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = "Select room…";
+            select.append(placeholder);
+            rooms.forEach(function (room) {
+              const option = document.createElement("option");
+              option.value = String(room.roomId ?? room.RoomId);
+              option.textContent = room.roomNumber ?? room.RoomNumber;
+              select.append(option);
+            });
+            select.addEventListener("change", function () {
+              select.classList.remove("is-invalid");
+              setAssignError("");
+              syncAssignOptions();
+            });
+            field.append(caption, select);
+            section.append(field);
+          }
+        }
+        groups.append(section);
+      });
+    }
+
+    detailBody.append(groups, localError);
+
+    const assignButton = document.createElement("button");
+    assignButton.type = "button";
+    assignButton.textContent = "Assign rooms";
+    assignButton.addEventListener("click", function () {
+      const payloadAssignments = [];
+      const used = new Set();
+      let valid = true;
+      groups.querySelectorAll(".admin-booking-assign-group").forEach((section) => {
+        const roomTypeId = Number(section.dataset.roomTypeId);
+        const selects = Array.from(section.querySelectorAll("select"));
+        const roomIds = [];
+        selects.forEach((select) => {
+          const value = Number(select.value);
+          if (!value || used.has(value)) {
+            valid = false;
+            select.classList.add("is-invalid");
+            return;
+          }
+          select.classList.remove("is-invalid");
+          used.add(value);
+          roomIds.push(value);
+        });
+        if (roomIds.length !== selects.length) valid = false;
+        if (roomIds.length) payloadAssignments.push({ roomTypeId, roomIds });
+      });
+      if (!valid || !payloadAssignments.length) {
+        setAssignError("Select a unique available room for each booking quantity.");
+        return;
+      }
+      setAssignError("");
+      assignButton.disabled = true;
+      assignButton.textContent = "Assigning…";
+      dashWriteJson(`/api/admin/bookings/${booking.id}/assign-rooms`, "POST", {
+        assignments: payloadAssignments,
+      })
+        .then(function () {
+          closeDashDetail();
+          if (typeof window.showMoriNotice === "function") {
+            window.showMoriNotice(`${booking.reference} rooms assigned.`, "success");
+          }
+          void refreshSnapshot();
+        })
+        .catch(function (error) {
+          assignButton.disabled = false;
+          assignButton.textContent = "Assign rooms";
+          setAssignError(error?.message || "Unable to assign rooms.");
+        });
+    });
+    const assignWrap = document.createElement("div");
+    assignWrap.className = "dash-attention-actions";
+    assignWrap.append(backButton, assignButton);
+    detailActions.append(assignWrap);
+    syncAssignOptions();
+  }
+
+  /* Payments view inside the dashboard modal — walk-in/front-desk collection:
+     history from the booking ledger + cash collection for the remaining
+     balance. Receptionists can post; void/refund stays admin-only (enforced
+     server-side by the payments API). */
+  async function renderDashPayments(booking, paySummary) {
+    if (!detailBody || !detailActions || !detailModal || detailModal.hidden) return;
+    detailBody.replaceChildren();
+    detailActions.replaceChildren();
+    detailBody.innerHTML = '<p class="admin-reviews-empty">Loading payments…</p>';
+
+    const backButton = document.createElement("button");
+    backButton.type = "button";
+    backButton.className = "is-quiet";
+    backButton.textContent = "Back";
+    backButton.addEventListener("click", function () {
+      renderDashBooking(booking, paySummary ?? null);
+    });
+    const actionWrap = function () {
+      const wrap = document.createElement("div");
+      wrap.className = "dash-attention-actions";
+      return wrap;
+    };
+
+    let summary = paySummary;
+    try {
+      summary = await dashFetchJson(`/api/admin/payments/booking/${booking.id}`);
+    } catch (error) {
+      if (!detailModal.hidden) dashModalFail(error?.message || "Could not load payments.");
+      return;
+    }
+    if (detailModal.hidden) return;
+    detailBody.innerHTML = "";
+
+    const total = Number(summary?.stayTotal ?? summary?.StayTotal ?? booking.totalAmount ?? 0);
+    const paid = Number(summary?.amountPaid ?? summary?.AmountPaid ?? booking.paidTotal ?? 0);
+    const balance = Number(
+      summary?.balanceDue ?? summary?.BalanceDue ?? Math.max(0, total - paid));
+
+    detailBody.appendChild(dashSection("Totals", [
+      dashField("Stay total", money(total), "peso"),
+      dashField("Paid", money(paid), "wallet"),
+      dashField("Balance", money(balance), "wallet"),
+    ]));
+
+    const payments = summary?.payments ?? summary?.Payments ?? [];
+    const history = document.createElement("section");
+    history.className = "dash-detail-section";
+    const historyTitle = document.createElement("h3");
+    historyTitle.className = "dash-detail-section-title";
+    historyTitle.textContent = "Payment history";
+    history.append(historyTitle);
+
+    if (!payments.length) {
+      const empty = document.createElement("p");
+      empty.className = "dash-pay-empty";
+      empty.textContent = "No payments recorded yet.";
+      history.append(empty);
+    } else {
+      const wrap = document.createElement("div");
+      wrap.className = "dash-pay-table-wrap";
+      const table = document.createElement("table");
+      table.className = "dash-pay-table";
+      const head = document.createElement("thead");
+      const headRow = document.createElement("tr");
+      ["Receipt", "Type", "Method", "Amount", "Status"].forEach(function (label) {
+        const th = document.createElement("th");
+        th.textContent = label;
+        if (label === "Amount") th.className = "num";
+        headRow.appendChild(th);
+      });
+      head.appendChild(headRow);
+      table.appendChild(head);
+      const tbody = document.createElement("tbody");
+      const fmtMethod = function (v) {
+        if (["EWallet", "BankTransfer", "Maya", "GCash"].includes(v)) return "E-wallet";
+        return v || "—";
+      };
+      const fmtEvent = function (v) {
+        return {
+          Deposit: "Deposit (50%)",
+          ArrivalPayment: "Arrival",
+          BalanceSettlement: "Balance",
+          Refund: "Refund",
+          Adjustment: "Adjustment",
+        }[v] || v || "—";
+      };
+      payments.forEach(function (p) {
+        const g = function (k) { return p[k] ?? p[k.charAt(0).toUpperCase() + k.slice(1)]; };
+        const voided = g("status") === "Voided";
+        const tr = document.createElement("tr");
+        if (voided) tr.classList.add("is-voided");
+        [g("receiptNumber") || "—", fmtEvent(g("eventType")), fmtMethod(g("method"))]
+          .forEach(function (text) {
+            const td = document.createElement("td");
+            td.textContent = text;
+            tr.appendChild(td);
+          });
+        const amountTd = document.createElement("td");
+        amountTd.className = "num";
+        amountTd.textContent = money(g("amount"));
+        tr.appendChild(amountTd);
+        const statusTd = document.createElement("td");
+        const badge = document.createElement("span");
+        badge.className = "dash-pay-status" + (voided ? " is-voided" : "");
+        badge.textContent = voided ? "Refunded" : "Posted";
+        statusTd.appendChild(badge);
+        tr.appendChild(statusTd);
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      history.append(wrap);
+    }
+    detailBody.appendChild(history);
+
+    const qrEnabled = Boolean(summary?.qrPaymentsEnabled ?? summary?.QrPaymentsEnabled);
+    const pendingQrId = Number(summary?.pendingQrIntentId ?? summary?.PendingQrIntentId ?? 0);
+
+    if (balance <= 0.009) {
+      const wrap = actionWrap();
+      wrap.append(backButton);
+      detailActions.append(wrap);
+      return;
+    }
+    if (booking.status !== "Confirmed") {
+      const note = document.createElement("p");
+      note.className = "admin-booking-assign-tip";
+      note.textContent = "Payments can be recorded once the booking is confirmed.";
+      detailBody.appendChild(note);
+      const wrap = actionWrap();
+      wrap.append(backButton);
+      detailActions.append(wrap);
+      return;
+    }
+
+    const form = document.createElement("div");
+    form.className = "admin-booking-assign-groups";
+    const group = document.createElement("section");
+    group.className = "admin-booking-assign-group";
+    const formTitle = document.createElement("h3");
+    formTitle.textContent = "Collect cash payment";
+    group.appendChild(formTitle);
+
+    const makeField = function (label, type, value, attrs) {
+      const field = document.createElement("label");
+      const caption = document.createElement("span");
+      caption.textContent = label;
+      const input = document.createElement("input");
+      input.type = type;
+      if (value != null) input.value = value;
+      Object.entries(attrs || {}).forEach(function ([k, v]) { input.setAttribute(k, v); });
+      field.append(caption, input);
+      group.appendChild(field);
+      return input;
+    };
+
+    const amountInput = makeField(
+      "Amount (₱)", "number", balance.toFixed(2),
+      { min: "0.01", step: "0.01", inputmode: "decimal" });
+    const tenderedInput = makeField(
+      "Cash received (₱)", "number", "",
+      { min: "0", step: "0.01", inputmode: "decimal", placeholder: balance.toFixed(2) });
+    const notesInput = makeField("Notes (optional)", "text", "", {});
+
+    const localError = document.createElement("p");
+    localError.className = "admin-booking-assign-error";
+    localError.hidden = true;
+    localError.setAttribute("role", "alert");
+    const setPayError = function (message) {
+      localError.hidden = !message;
+      localError.textContent = message || "";
+    };
+
+    form.append(group, localError);
+    detailBody.appendChild(form);
+
+    const wrap = actionWrap();
+    if (qrEnabled) {
+      const qrButton = document.createElement("button");
+      qrButton.type = "button";
+      qrButton.className = "is-quiet";
+      qrButton.textContent = pendingQrId > 0 ? "Show pending QR" : "QR code";
+      qrButton.addEventListener("click", function () {
+        const amount = Number(amountInput.value);
+        if (!(amount > 0)) {
+          setPayError("Enter the amount the guest is paying.");
+          amountInput.focus();
+          return;
+        }
+        if (amount > 50000) {
+          setPayError("QRPh accepts at most ₱50,000.00.");
+          return;
+        }
+        if (amount > balance + 0.009) {
+          setPayError("Amount cannot exceed the balance due.");
+          return;
+        }
+        setPayError("");
+        void renderDashQr(booking, amount, pendingQrId);
+      });
+      wrap.append(qrButton);
+    }
+
+    const payButton = document.createElement("button");
+    payButton.type = "button";
+    payButton.textContent = `Pay cash · ${money(balance)}`;
+    payButton.addEventListener("click", function () {
+      const amount = Number(amountInput.value);
+      const tendered = Number(tenderedInput.value || 0);
+      let notes = (notesInput.value || "").trim();
+      if (!(amount > 0)) {
+        setPayError("Enter the amount the guest is paying.");
+        return;
+      }
+      if (!(tendered > 0)) {
+        setPayError("Enter cash received from the guest.");
+        return;
+      }
+      if (tendered + 0.001 < amount) {
+        setPayError("Cash from guest is less than the amount due.");
+        return;
+      }
+      const change = Math.round((tendered - amount) * 100) / 100;
+      const cashNote = `Cash tendered ${money(tendered)} · Change ${money(change)}`;
+      notes = notes ? `${notes}\n${cashNote}` : cashNote;
+      setPayError("");
+      payButton.disabled = true;
+      payButton.textContent = "Posting…";
+      dashWriteJson("/api/admin/payments", "POST", {
+        bookingId: booking.id,
+        eventType: "ArrivalPayment",
+        method: "Cash",
+        amount,
+        externalReference: null,
+        bankTransferReference: null,
+        notes,
+      })
+        .then(function () {
+          if (typeof window.showMoriNotice === "function") {
+            window.showMoriNotice(
+              `${booking.reference} payment posted (${money(amount)}).`, "success");
+          }
+          void refreshSnapshot();
+          void renderDashPayments(booking, null);
+        })
+        .catch(function (error) {
+          payButton.disabled = false;
+          payButton.textContent = `Pay cash · ${money(balance)}`;
+          setPayError(error?.message || "Unable to record payment.");
+        });
+    });
+    wrap.append(backButton, payButton);
+    detailActions.append(wrap);
+  }
+
+  /* Front-desk QRPh collection — same flow as the bookings page QR modal:
+     create intent → show QR → poll until paid. Reuses the shared
+     admin-payment-qr-* card styles. */
+  async function renderDashQr(booking, amount, existingIntentId) {
+    if (!detailBody || !detailActions || !detailModal || detailModal.hidden) return;
+    detailBody.replaceChildren();
+    detailActions.replaceChildren();
+    detailBody.innerHTML = '<p class="admin-reviews-empty">Generating QR…</p>';
+
+    let qrPollTimer = null;
+    let qrPollCount = 0;
+    const stopQrPoll = function () {
+      if (qrPollTimer) {
+        clearInterval(qrPollTimer);
+        qrPollTimer = null;
+      }
+    };
+
+    const backButton = document.createElement("button");
+    backButton.type = "button";
+    backButton.className = "is-quiet";
+    backButton.textContent = "Back";
+    backButton.addEventListener("click", function () {
+      stopQrPoll();
+      void renderDashPayments(booking, null);
+    });
+
+    const statusLine = function (text, tone) {
+      const p = document.createElement("p");
+      p.className = "admin-payment-qr-status" + (tone ? ` ${tone}` : "");
+      p.textContent = text;
+      return p;
+    };
+
+    const paintQr = function (intent) {
+      if (detailModal.hidden) return;
+      detailBody.innerHTML = "";
+      detailActions.replaceChildren();
+      const status = String(intent.status || intent.Status || "");
+      const pending = status === "Pending";
+
+      const stage = document.createElement("div");
+      stage.className = "admin-payment-qr-stage";
+
+      const card = document.createElement("div");
+      card.className = "admin-payment-qr-card";
+
+      const head = document.createElement("header");
+      head.className = "admin-payment-qr-card-head";
+      const merchant = document.createElement("span");
+      merchant.className = "admin-payment-qr-merchant";
+      merchant.textContent = "Mori International Hotel";
+      const brand = document.createElement("span");
+      brand.className = "admin-payment-qr-brand";
+      const brandImg = document.createElement("img");
+      brandImg.src = "/Images/payments/qrph.svg";
+      brandImg.alt = "QRPh";
+      brand.append(brandImg);
+      head.append(merchant, brand);
+
+      const scanline = document.createElement("p");
+      scanline.className = "admin-payment-qr-scanline";
+      scanline.textContent = "Scan with any QRPh-enabled app";
+
+      const frame = document.createElement("div");
+      frame.className = "admin-payment-qr-frame";
+      const img = document.createElement("img");
+      img.className = "admin-payment-qr-img";
+      img.src = intent.qrImageDataUrl ?? intent.QrImageDataUrl ?? "";
+      img.alt = "QRPh payment code";
+      frame.append(img);
+
+      const amountBox = document.createElement("div");
+      amountBox.className = "admin-payment-qr-amountbox";
+      const payLabel = document.createElement("span");
+      payLabel.className = "admin-payment-qr-paylabel";
+      payLabel.textContent = "Amount to pay";
+      const amountEl = document.createElement("strong");
+      amountEl.className = "admin-payment-qr-amount";
+      amountEl.textContent = money(intent.amount ?? intent.Amount ?? amount);
+      amountBox.append(payLabel, amountEl);
+
+      const refEl = document.createElement("p");
+      refEl.className = "admin-payment-qr-ref";
+      refEl.textContent = intent.bookingReference ?? intent.BookingReference ?? booking.reference ?? "";
+
+      card.append(head, scanline, frame, amountBox, refEl);
+      stage.append(card);
+
+      if (pending) {
+        stage.append(statusLine("Waiting for the guest to scan…"));
+      } else if (status === "Paid") {
+        stage.append(statusLine("Payment received — posted to the ledger."));
+      } else {
+        stage.append(statusLine(`QR ${status.toLowerCase()} — you can generate a new one.`));
+      }
+      detailBody.append(stage);
+
+      const wrap = document.createElement("div");
+      wrap.className = "dash-attention-actions";
+      if (pending) {
+        const cancelBackBtn = document.createElement("button");
+        cancelBackBtn.type = "button";
+        cancelBackBtn.className = "is-danger";
+        cancelBackBtn.textContent = "Cancel and back";
+        cancelBackBtn.addEventListener("click", function () {
+          cancelBackBtn.disabled = true;
+          cancelBackBtn.textContent = "Cancelling…";
+          dashWriteJson(
+            `/api/admin/payments/qr/${intent.id ?? intent.Id}/cancel`, "POST", {})
+            .then(function () {
+              stopQrPoll();
+              void renderDashPayments(booking, null);
+            })
+            .catch(function (error) {
+              cancelBackBtn.disabled = false;
+              cancelBackBtn.textContent = "Cancel and back";
+              cancelBackBtn.title = error?.message || "Unable to cancel.";
+              cancelBackBtn.classList.add("is-error");
+            });
+        });
+        const simBtn = document.createElement("button");
+        simBtn.type = "button";
+        simBtn.textContent = "Simulate payment";
+        simBtn.addEventListener("click", function () {
+          simBtn.disabled = true;
+          simBtn.textContent = "Simulating…";
+          dashWriteJson(
+            `/api/admin/payments/qr/${intent.id ?? intent.Id}/simulate`, "POST", {})
+            .then(function (fresh) {
+              const simStatus = String(fresh?.status ?? fresh?.Status ?? "");
+              if (simStatus === "Paid") {
+                stopQrPoll();
+                paintQr(fresh);
+                if (typeof window.showMoriNotice === "function") {
+                  window.showMoriNotice(
+                    `${booking.reference} QR payment received (${money(fresh.amount ?? fresh.Amount ?? amount)}).`,
+                    "success");
+                }
+                void refreshSnapshot();
+                window.setTimeout(function () {
+                  if (!detailModal.hidden) void renderDashPayments(booking, null);
+                }, 1600);
+              } else {
+                paintQr(fresh);
+              }
+            })
+            .catch(function (error) {
+              simBtn.disabled = false;
+              simBtn.textContent = "Simulate payment";
+              simBtn.title = error?.message || "Unable to simulate.";
+              simBtn.classList.add("is-error");
+            });
+        });
+        wrap.append(cancelBackBtn, simBtn);
+      } else {
+        wrap.append(backButton);
+        if (status !== "Paid") {
+          const newBtn = document.createElement("button");
+          newBtn.type = "button";
+          newBtn.textContent = "New QR";
+          newBtn.addEventListener("click", function () {
+            stopQrPoll();
+            void renderDashQr(booking, amount, 0);
+          });
+          wrap.append(newBtn);
+        }
+      }
+      detailActions.append(wrap);
+    };
+
+    let intent;
+    try {
+      intent = existingIntentId > 0
+        ? await dashFetchJson(`/api/admin/payments/qr/${existingIntentId}`)
+        : await dashWriteJson("/api/admin/payments/qr", "POST", {
+            bookingId: booking.id,
+            amount,
+          });
+    } catch (error) {
+      if (detailModal.hidden) return;
+      detailBody.innerHTML = "";
+      const p = document.createElement("p");
+      p.className = "admin-booking-assign-error";
+      p.setAttribute("role", "alert");
+      p.textContent = error?.message || "Unable to create the QR payment.";
+      detailBody.append(p);
+      const wrap = document.createElement("div");
+      wrap.className = "dash-attention-actions";
+      wrap.append(backButton);
+      detailActions.append(wrap);
+      return;
+    }
+    if (detailModal.hidden) return;
+
+    paintQr(intent);
+    if (String(intent.status || intent.Status || "") === "Pending") {
+      const intentId = intent.id ?? intent.Id;
+      qrPollTimer = setInterval(async function () {
+        if (detailModal.hidden) {
+          stopQrPoll();
+          return;
+        }
+        qrPollCount += 1;
+        const reconcile = qrPollCount > 7 && qrPollCount % 3 === 0;
+        try {
+          const fresh = await dashFetchJson(
+            `/api/admin/payments/qr/${intentId}${reconcile ? "?reconcile=true" : ""}`);
+          const status = String(fresh?.status ?? fresh?.Status ?? "");
+          if (status === "Paid") {
+            stopQrPoll();
+            paintQr(fresh);
+            if (typeof window.showMoriNotice === "function") {
+              window.showMoriNotice(
+                `${booking.reference} QR payment received (${money(fresh.amount ?? fresh.Amount ?? amount)}).`,
+                "success");
+            }
+            void refreshSnapshot();
+            window.setTimeout(function () {
+              if (!detailModal.hidden) void renderDashPayments(booking, null);
+            }, 1600);
+          } else if (status !== "Pending") {
+            stopQrPoll();
+            paintQr(fresh);
+          }
+        } catch { /* transient poll failure — next tick retries */ }
+      }, 3000);
+    }
   }
 
   /* Same heuristic + endpoint as the review-moderation page — comments in
@@ -1736,6 +2542,474 @@
       void refreshSnapshot();
     }
   });
+
+  /* --- Revenue widget flip: chart <-> recent payments table --- */
+  (function initPaymentsFlip() {
+    const flip = document.querySelector("[data-dash-flip]");
+    const toggle = document.querySelector("[data-dash-pay-toggle]");
+    const heading = document.querySelector("[data-dash-pay-heading]");
+    const rowsEl = document.querySelector("[data-dash-pay-rows]");
+    const searchInput = document.querySelector("[data-dash-pay-search]");
+    if (!flip || !toggle || !rowsEl) return;
+
+    const PH_TZ = "Asia/Manila";
+    const frontFace = flip.querySelector(".dash-flip-face");
+    const backFace = flip.querySelector(".dash-flip-back");
+    let searchTerm = "";
+    let searchTimer = null;
+
+    function fmtWhen(value) {
+      const raw = String(value || "");
+      const stamped = /(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(raw) || !raw.includes("T") ? raw : raw + "Z";
+      const d = new Date(stamped);
+      return Number.isNaN(d.getTime())
+        ? "—"
+        : d.toLocaleString("en-PH", {
+            timeZone: PH_TZ,
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit"
+          });
+    }
+
+    function fmtEvent(v) {
+      return {
+        Deposit: "Deposit (50%)",
+        ArrivalPayment: "Arrival",
+        BalanceSettlement: "Balance",
+        Refund: "Refund",
+        Adjustment: "Adjustment"
+      }[v] || v || "";
+    }
+
+    function fmtMethod(v) {
+      if (["EWallet", "BankTransfer", "Maya", "GCash"].includes(v)) return "E-wallet";
+      if (v === "Card") return "Card";
+      return v || "";
+    }
+
+    function cell(row, label, text, isNum) {
+      const td = document.createElement("td");
+      td.dataset.label = label;
+      td.textContent = text;
+      if (isNum) td.classList.add("num");
+      row.appendChild(td);
+      return td;
+    }
+
+    function emptyRow(text) {
+      rowsEl.innerHTML = "";
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 7;
+      td.className = "dash-pay-empty";
+      td.textContent = text;
+      tr.appendChild(td);
+      rowsEl.appendChild(tr);
+    }
+
+    async function loadPayments() {
+      emptyRow("Loading payments…");
+      try {
+        const query = new URLSearchParams({ page: "1", pageSize: "10" });
+        if (searchTerm) query.set("search", searchTerm);
+        const res = await fetch("/api/admin/payments?" + query.toString(), {
+          credentials: "same-origin",
+          headers: { Accept: "application/json" }
+        });
+        if (!res.ok) throw new Error("Request failed (" + res.status + ")");
+        const payload = await res.json();
+        const items = payload.items || payload.Items || [];
+        if (!items.length) {
+          emptyRow(searchTerm ? "No payments match this search." : "No payments recorded yet.");
+          return;
+        }
+        rowsEl.innerHTML = "";
+        items.forEach(function (p) {
+          const g = function (k) { return p[k] ?? p[k.charAt(0).toUpperCase() + k.slice(1)]; };
+          const tr = document.createElement("tr");
+          const voided = g("status") === "Voided";
+          if (voided) tr.classList.add("is-voided");
+          cell(tr, "When (PH)", fmtWhen(g("paidAtUtc")));
+          cell(tr, "Receipt", g("receiptNumber") || "—");
+          cell(tr, "Guest", g("guestName") || "—");
+          cell(tr, "Event", fmtEvent(g("eventType")));
+          cell(tr, "Method", fmtMethod(g("method")));
+          cell(tr, "Amount", money(g("amount")), true);
+          const statusTd = cell(tr, "Status", "");
+          const badge = document.createElement("span");
+          badge.className = "dash-pay-status" + (voided ? " is-voided" : "");
+          badge.textContent = voided ? "Refunded" : "Posted";
+          statusTd.appendChild(badge);
+          tr.title = (g("bookingReference") || "") + " · " + (g("receivedBy") || "");
+          rowsEl.appendChild(tr);
+        });
+      } catch (err) {
+        emptyRow(err instanceof Error ? err.message : "Unable to load payments.");
+      }
+    }
+
+    function setFlipped(on) {
+      flip.classList.toggle("is-flipped", on);
+      toggle.setAttribute("aria-pressed", on ? "true" : "false");
+      toggle.setAttribute("aria-label", on ? "Show revenue chart" : "Show recent payments table");
+      toggle.title = on ? "Back to chart" : "Recent payments";
+      if (heading) {
+        heading.textContent = on ? "Recent payments" : "Posted revenue & arrivals · 7 days";
+      }
+      if (frontFace) frontFace.toggleAttribute("inert", on);
+      if (backFace) backFace.toggleAttribute("inert", !on);
+      if (on) void loadPayments();
+    }
+
+    toggle.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+    toggle.addEventListener("click", function () {
+      setFlipped(!flip.classList.contains("is-flipped"));
+    });
+
+    if (searchInput) {
+      searchInput.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+      searchInput.addEventListener("input", function () {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(function () {
+          searchTerm = searchInput.value.trim();
+          void loadPayments();
+        }, 300);
+      });
+    }
+
+    window.addEventListener("mori:admin-refresh", function (event) {
+      const scopes = event.detail?.scopes || [];
+      if (!flip.classList.contains("is-flipped")) return;
+      if (scopes.includes("all") || scopes.includes("payments")) void loadPayments();
+    });
+  })();
+
+  /* --- Room chips: details modal + close/reopen confirmation --- */
+  (function initRoomDetails() {
+    const roomModal = document.querySelector("[data-dash-room-modal]");
+    const confirmModal = document.querySelector("[data-dash-roomconfirm-modal]");
+    const roomsRoot = document.querySelector("[data-dash-widget='room-types']");
+    if (!roomModal || !confirmModal || !roomsRoot) return;
+
+    let currentRoom = null;
+    let lastFocus = null;
+
+    const els = {
+      type: roomModal.querySelector("[data-dash-room-type]"),
+      title: roomModal.querySelector("[data-dash-room-title]"),
+      status: roomModal.querySelector("[data-dash-room-status]"),
+      rate: roomModal.querySelector("[data-dash-room-rate]"),
+      occupancy: roomModal.querySelector("[data-dash-room-occupancy]"),
+      beds: roomModal.querySelector("[data-dash-room-beds]"),
+      desc: roomModal.querySelector("[data-dash-room-desc]"),
+      descItem: roomModal.querySelector("[data-dash-room-acc-item='desc']"),
+      inclusions: roomModal.querySelector("[data-dash-room-inclusions]"),
+      inclItem: roomModal.querySelector("[data-dash-room-acc-item='inclusions']"),
+      occupant: roomModal.querySelector("[data-dash-room-occupant]"),
+      guest: roomModal.querySelector("[data-dash-room-guest]"),
+      stay: roomModal.querySelector("[data-dash-room-stay]"),
+      warning: roomModal.querySelector("[data-dash-room-warning]"),
+      warningText: roomModal.querySelector("[data-dash-room-warning-text]"),
+      error: roomModal.querySelector("[data-dash-room-error]"),
+      bookingLink: roomModal.querySelector("[data-dash-room-booking]"),
+      toggle: roomModal.querySelector("[data-dash-room-toggle]")
+    };
+    const confirmTitle = confirmModal.querySelector("[data-dash-roomconfirm-title]");
+    const confirmName = confirmModal.querySelector("[data-dash-roomconfirm-name]");
+    const confirmDesc = confirmModal.querySelector("[data-dash-roomconfirm-desc]");
+    const confirmError = confirmModal.querySelector("[data-dash-roomconfirm-error]");
+    const confirmOk = confirmModal.querySelector("[data-dash-roomconfirm-ok]");
+
+    function pick(obj, key) {
+      return obj?.[key] ?? obj?.[key.charAt(0).toUpperCase() + key.slice(1)];
+    }
+
+    function fmtWhen(value) {
+      const raw = String(value || "");
+      const stamped = /(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(raw) || !raw.includes("T") ? raw : raw + "Z";
+      const d = new Date(stamped);
+      return Number.isNaN(d.getTime())
+        ? "—"
+        : d.toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium", timeStyle: "short" });
+    }
+
+    async function apiGet(url) {
+      const res = await fetch(url, { credentials: "same-origin", headers: { Accept: "application/json" } });
+      if (!res.ok) throw new Error("Request failed (" + res.status + ")");
+      return res.json();
+    }
+
+    function showModal(modal) {
+      modal.hidden = false;
+      modal.querySelector(".admin-reviews-modal-close, button")?.focus?.();
+    }
+
+    function hideModal(modal) {
+      modal.hidden = true;
+    }
+
+    function closeAll() {
+      hideModal(confirmModal);
+      hideModal(roomModal);
+      if (lastFocus) lastFocus.focus?.();
+      lastFocus = null;
+    }
+
+    function paintRoom(room, stay) {
+      const status = pick(room, "status") || "Available";
+      const occupied = status === "Occupied";
+      els.type.textContent = pick(room, "name") || "";
+      els.title.textContent = "Room " + (pick(room, "roomNumber") || "");
+      els.status.textContent = status === "Cleaning" || status === "Unavailable" ? "Maintaining" : status;
+      els.status.classList.toggle("is-voided", status !== "Available");
+      els.rate.textContent = money(pick(room, "pricePerNight"));
+      els.occupancy.textContent = String(pick(room, "maxOccupancy") ?? "—");
+      els.beds.textContent = String(pick(room, "bedCount") ?? "—");
+
+      const desc = pick(room, "description") || "";
+      els.desc.textContent = desc;
+      els.descItem.hidden = !desc;
+
+      const inclusions = pick(room, "inclusions") || [];
+      els.inclusions.innerHTML = "";
+      inclusions.forEach(function (item) {
+        const li = document.createElement("li");
+        li.textContent = String(item);
+        els.inclusions.appendChild(li);
+      });
+      els.inclItem.hidden = !inclusions.length;
+
+      roomModal.querySelectorAll("[data-dash-room-acc]").forEach(function (head) {
+        head.setAttribute("aria-expanded", "false");
+      });
+      roomModal.querySelectorAll("[data-dash-room-acc-body]").forEach(function (body) {
+        body.hidden = true;
+      });
+
+      const guest = pick(room, "currentGuestName") || (stay && pick(stay, "guestName")) || null;
+      const ref = pick(room, "currentBookingReference") || (stay && pick(stay, "reference")) || null;
+      els.occupant.hidden = !occupied;
+      if (occupied) {
+        els.guest.textContent = guest || "Guest";
+        els.stay.textContent = stay
+          ? `${ref || ""} · ${fmtWhen(pick(stay, "checkInAtUtc"))} → ${fmtWhen(pick(stay, "checkoutTimeUtc"))}`
+          : (ref ? `Stay ${ref}` : "");
+        const bookingId = pick(room, "currentBookingId") || (stay && pick(stay, "id")) || 0;
+        els.bookingLink.hidden = !bookingId;
+        if (bookingId) els.bookingLink.href = "/AdminBookings?booking=" + bookingId;
+      } else {
+        els.bookingLink.hidden = true;
+      }
+
+      els.warning.hidden = !occupied;
+      if (occupied) {
+        els.warningText.textContent =
+          `This room is occupied${guest ? " by " + guest : ""}. Closing it is blocked — check out the guest first.`;
+      }
+
+      els.error.hidden = true;
+      els.toggle.textContent = status === "Cleaning" || status === "Unavailable" ? "Reopen room" : "Close room";
+      els.toggle.dataset.open = status === "Available" ? "false" : "true";
+      els.toggle.disabled = occupied;
+      els.toggle.setAttribute("aria-disabled", occupied ? "true" : "false");
+    }
+
+    async function openRoomModal(roomId, fallback) {
+      lastFocus = document.activeElement;
+      currentRoom = { id: roomId, status: fallback?.status || "Available" };
+      els.title.textContent = "Room " + (fallback?.number || "");
+      els.type.textContent = fallback?.type || "";
+      els.error.hidden = true;
+      showModal(roomModal);
+      try {
+        const rooms = await apiGet("/api/rooms");
+        const room = (rooms || []).find(function (r) { return Number(pick(r, "id")) === roomId; });
+        if (!room) throw new Error("Room was not found.");
+        let stay = null;
+        if (pick(room, "status") === "Occupied") {
+          stay = await apiGet(`/api/rooms/${roomId}/current-stay`).catch(() => null);
+        }
+        currentRoom = { id: roomId, status: pick(room, "status") || "Available" };
+        paintRoom(room, stay);
+      } catch (err) {
+        els.error.hidden = false;
+        els.error.textContent = err instanceof Error ? err.message : "Unable to load room.";
+      }
+    }
+
+    function openConfirm() {
+      if (!currentRoom) return;
+      const closing = els.toggle.dataset.open !== "true";
+      const number = roomModal.querySelector("[data-dash-room-title]")?.textContent?.replace("Room ", "") || "";
+      confirmTitle.childNodes[0].textContent = closing ? "Close Room " : "Reopen Room ";
+      confirmName.textContent = number;
+      confirmDesc.textContent = closing
+        ? "Are you sure you want to close this room? It will show as Maintaining and stop taking guests until reopened."
+        : "Reopen this room for guests? It will be bookable again right away.";
+      confirmOk.textContent = closing ? "Yes, close it" : "Yes, reopen it";
+      confirmError.hidden = true;
+      showModal(confirmModal);
+      confirmOk.focus?.();
+    }
+
+    async function submitToggle() {
+      if (!currentRoom) return;
+      confirmOk.disabled = true;
+      confirmError.hidden = true;
+      try {
+        const res = await fetch(`/api/rooms/${currentRoom.id}/open`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            RequestVerificationToken: readAntiForgeryToken()
+          },
+          body: JSON.stringify({ open: els.toggle.dataset.open === "true" })
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(payload.message || `Request failed (${res.status}).`);
+        closeAll();
+        void refreshSnapshot();
+      } catch (err) {
+        confirmError.hidden = false;
+        confirmError.textContent = err instanceof Error ? err.message : "Unable to update the room.";
+      } finally {
+        confirmOk.disabled = false;
+      }
+    }
+
+    roomsRoot.addEventListener("click", function (event) {
+      const chip = event.target.closest("[data-dash-room-id]");
+      if (!chip || !roomsRoot.contains(chip)) return;
+      openRoomModal(Number(chip.getAttribute("data-dash-room-id")), {
+        number: chip.getAttribute("data-dash-room-number"),
+        status: chip.getAttribute("data-dash-room-status"),
+        type: chip.getAttribute("data-dash-room-type")
+      });
+    });
+
+    roomModal.querySelectorAll("[data-dash-room-close]").forEach(function (btn) {
+      btn.addEventListener("click", function () { hideModal(roomModal); });
+    });
+    confirmModal.querySelectorAll("[data-dash-roomconfirm-cancel]").forEach(function (btn) {
+      btn.addEventListener("click", function () { hideModal(confirmModal); });
+    });
+    els.toggle.addEventListener("click", openConfirm);
+
+    roomModal.querySelectorAll("[data-dash-room-acc]").forEach(function (head) {
+      head.addEventListener("click", function () {
+        const body = roomModal.querySelector(
+          `[data-dash-room-acc-body='${head.getAttribute("data-dash-room-acc")}']`);
+        const opening = head.getAttribute("aria-expanded") !== "true";
+        roomModal.querySelectorAll("[data-dash-room-acc]").forEach(function (other) {
+          other.setAttribute("aria-expanded", "false");
+        });
+        roomModal.querySelectorAll("[data-dash-room-acc-body]").forEach(function (otherBody) {
+          otherBody.hidden = true;
+        });
+        if (opening && body) {
+          head.setAttribute("aria-expanded", "true");
+          body.hidden = false;
+        }
+      });
+    });
+    confirmOk.addEventListener("click", function () { void submitToggle(); });
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape") return;
+      if (!confirmModal.hidden) hideModal(confirmModal);
+      else if (!roomModal.hidden) { hideModal(roomModal); if (lastFocus) { lastFocus.focus?.(); lastFocus = null; } }
+    });
+  })();
+
+  /* --- Attention widget: Bookings/Reservations filter + guest search --- */
+  (function initAttentionFilter() {
+    const root = document.querySelector("[data-dash-widget='attention']");
+    const controls = document.querySelector(".dash-attn-controls");
+    if (!root || !controls) return;
+
+    const kindButtons = controls.querySelectorAll("[data-dash-attn-kind]");
+    const searchBtn = controls.querySelector("[data-dash-attn-search-toggle]");
+    const searchPop = controls.querySelector("[data-dash-attn-search-pop]");
+    const searchInput = controls.querySelector("[data-dash-attn-search]");
+    let kindFilter = "";
+    let searchTerm = "";
+    let emptyLi = null;
+
+    function flipAnimate() {
+      root.classList.remove("is-flipping");
+      void root.offsetWidth;
+      root.classList.add("is-flipping");
+    }
+
+    function apply() {
+      let visible = 0;
+      Array.from(root.children).forEach(function (li) {
+        if (li === emptyLi) return;
+        const kind = li.getAttribute("data-attn-kind") || "";
+        const text = li.textContent.toLowerCase();
+        const show = (!kindFilter || kind === kindFilter)
+          && (!searchTerm || text.includes(searchTerm));
+        li.hidden = !show;
+        if (show) visible++;
+      });
+      if (!emptyLi) {
+        emptyLi = document.createElement("li");
+        emptyLi.className = "dash-attn-empty";
+        emptyLi.textContent = "No guests match this filter.";
+      }
+      if (visible === 0 && root.children.length) {
+        if (emptyLi.parentNode !== root) root.appendChild(emptyLi);
+      } else if (emptyLi.parentNode === root) {
+        emptyLi.remove();
+      }
+    }
+
+    kindButtons.forEach(function (btn) {
+      btn.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+      btn.addEventListener("click", function () {
+        const kind = btn.getAttribute("data-dash-attn-kind");
+        kindFilter = kindFilter === kind ? "" : kind;
+        kindButtons.forEach(function (b) {
+          b.setAttribute(
+            "aria-pressed",
+            b.getAttribute("data-dash-attn-kind") === kindFilter ? "true" : "false");
+        });
+        flipAnimate();
+        apply();
+      });
+    });
+
+    function setSearchOpen(open) {
+      if (!searchPop || !searchBtn) return;
+      searchPop.hidden = !open;
+      searchBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) searchInput?.focus();
+    }
+
+    searchBtn?.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+    searchBtn?.addEventListener("click", function () { setSearchOpen(searchPop.hidden); });
+    searchInput?.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+    let searchTimer = 0;
+    searchInput?.addEventListener("input", function () {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () {
+        searchTerm = searchInput.value.trim().toLowerCase();
+        apply();
+      }, 220);
+    });
+    searchInput?.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { setSearchOpen(false); searchBtn?.focus(); }
+    });
+    document.addEventListener("click", function (e) {
+      if (!searchPop || searchPop.hidden) return;
+      if (!controls.contains(e.target)) setSearchOpen(false);
+    });
+
+    new MutationObserver(function () { apply(); }).observe(root, { childList: true });
+  })();
 
 })();
 

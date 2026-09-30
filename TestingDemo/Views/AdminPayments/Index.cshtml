@@ -121,11 +121,20 @@
                 Verify payment
             </button>
             <button type="button" data-payment-detail-close>Close</button>
-            <button type="button" class="admin-booking-delete" data-payment-void hidden>Refund payment</button>
+            @if (User.IsInRole(TestingDemo.Models.AppRoles.AdminManager))
+            {
+                <button type="button" class="admin-booking-delete" data-payment-void hidden>Refund payment</button>
+            }
         </footer>
+        @if (!User.IsInRole(TestingDemo.Models.AppRoles.AdminManager))
+        {
+            <p class="admin-payments-final-note">Payment records are final. Ask an administrator for corrections.</p>
+        }
     </section>
 </div>
 
+@if (User.IsInRole(TestingDemo.Models.AppRoles.AdminManager))
+{
 <div class="admin-payment-refund-overlay" data-payment-refund-modal hidden>
     <button type="button" class="admin-payment-refund-backdrop" data-payment-refund-cancel aria-label="Cancel refund"></button>
     <section class="admin-payment-refund-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentRefundTitle">
@@ -156,6 +165,7 @@
         </footer>
     </section>
 </div>
+}
 
 <div class="admin-payment-refund-overlay" data-payments-day-filter-modal hidden>
     <button type="button" class="admin-payment-refund-backdrop" data-payments-day-filter-close aria-label="Close day filter"></button>

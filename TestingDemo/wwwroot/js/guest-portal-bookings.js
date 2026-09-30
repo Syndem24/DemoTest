@@ -292,6 +292,19 @@
       ? `<span class="guest-portal-booking-paid-label">${t('bookingsPortal.fullyPaid')}</span>`
       : '';
 
+    const depositPending =
+      booking.status === 'Pending'
+      && booking.paymentOption === 'Half'
+      && balance > 0.009
+      && booking.guestPayToken;
+    const depositLink = depositPending
+      ? `<a class="guest-btn guest-btn-primary guest-portal-booking-deposit-link" href="/Booking/Accommodations?resume=${encodeURIComponent(
+          booking.reference
+        )}&t=${encodeURIComponent(booking.guestPayToken)}&id=${Number(booking.id)}">${escapeHtml(
+          t('bookingsPortal.depositPending') || 'Deposit pending — complete payment'
+        )}</a>`
+      : '';
+
     return `<article class="guest-portal-booking-card" data-booking-id="${Number(
       booking.id
     )}">
@@ -328,6 +341,7 @@
           )}</strong></p>
         </div>
 
+        ${depositLink ? `<div class="guest-portal-booking-actions">${depositLink}</div>` : ''}
         ${actions ? `<div class="guest-portal-booking-actions">${actions}</div>` : ''}
       </div>
     </article>`;

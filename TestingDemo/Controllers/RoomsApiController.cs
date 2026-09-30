@@ -115,6 +115,38 @@ public class RoomsApiController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Open (guest-ready) or close (maintaining) a single vacant room. Occupied rooms
+    /// are rejected — the guest must be checked out first.
+    /// </summary>
+    [HttpPost("{id:int}/open")]
+    [ValidateAntiForgeryToken]
+    public async Task<ActionResult<object>> SetRoomOpen(
+        int id,
+        [FromBody] SetRoomTypeOpenRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var room = await _roomService.SetGuestReadyAsync(id, request.Open, cancellationToken);
+            if (room is null)
+            {
+                return NotFound(new { message = "Room was not found." });
+            }
+
+            return Ok(new
+            {
+                room.Id,
+                room.RoomNumber,
+                Status = room.Status.ToString()
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
+
     [HttpGet("{id:int}/current-stay")]
     public async Task<ActionResult<BookingDto>> GetCurrentStay(
         int id,

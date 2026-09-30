@@ -43,7 +43,9 @@ public sealed record PaymentRecordDto(
     string? VoidReason,
     string? VoidedBy,
     DateTime? VerifiedAtUtc,
-    string? VerifiedBy);
+    string? VerifiedBy,
+    /// <summary>True when this posting was the 50% deposit that confirmed the booking.</summary>
+    bool BookingConfirmed = false);
 
 public sealed record BookingPaymentSummaryDto(
     int BookingId,

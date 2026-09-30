@@ -75,6 +75,25 @@ public interface IXenditQrPaymentService
     /// <summary>Returns false only when the callback token does not match the vault token.</summary>
     Task<bool> HandleWebhookAsync(
         string? callbackToken, JsonDocument body, CancellationToken cancellationToken = default);
+    /// <summary>Guest deposit checkout: create (or reuse) an open intent on the QRPh or Card channel.</summary>
+    Task<QrPaymentIntentDto> CreateGuestDepositAsync(
+        int bookingId, string payToken, XenditChannel channel, string originBaseUrl,
+        CancellationToken cancellationToken = default);
+    Task<QrPaymentIntentDto?> GetGuestAsync(
+        int bookingId, int intentId, string payToken, bool reconcile,
+        CancellationToken cancellationToken = default);
+    Task<QrPaymentIntentDto?> GetCurrentGuestAsync(
+        int bookingId, string payToken, CancellationToken cancellationToken = default);
+    /// <summary>Same as GetCurrentGuestAsync but resolves the booking by its public reference.</summary>
+    Task<QrPaymentIntentDto?> GetCurrentGuestByReferenceAsync(
+        string reference, string payToken, CancellationToken cancellationToken = default);
+    Task<QrPaymentIntentDto> CancelGuestAsync(
+        int bookingId, int intentId, string payToken, CancellationToken cancellationToken = default);
+    /// <summary>Xendit Invoice (hosted card checkout) callback. Same token contract as HandleWebhookAsync.</summary>
+    Task<bool> HandleInvoiceWebhookAsync(
+        string? callbackToken, JsonDocument body, CancellationToken cancellationToken = default);
+    /// <summary>Best-effort cancel of all open intents for a booking (deposit hold released).</summary>
+    Task ExpireStaleIntentsAsync(int bookingId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -92,6 +111,7 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
     private readonly IPaymentService _paymentService;
     private readonly ISystemAuditRecorder _audit;
     private readonly IHubContext<BookingNotificationsHub, IBookingNotificationsClient> _hub;
+    private readonly IGuestCatalogNotifier _guestCatalog;
     private readonly XenditTelemetry _telemetry;
     private readonly ILogger<XenditQrPaymentService> _logger;
 
@@ -102,6 +122,7 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
         IPaymentService paymentService,
         ISystemAuditRecorder audit,
         IHubContext<BookingNotificationsHub, IBookingNotificationsClient> hub,
+        IGuestCatalogNotifier guestCatalog,
         XenditTelemetry telemetry,
         ILogger<XenditQrPaymentService> logger)
     {
@@ -111,6 +132,7 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
         _paymentService = paymentService;
         _audit = audit;
         _hub = hub;
+        _guestCatalog = guestCatalog;
         _telemetry = telemetry;
         _logger = logger;
     }
@@ -184,7 +206,7 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
             .FirstOrDefaultAsync(cancellationToken);
         if (existing is not null)
         {
-            return Map(existing, booking.Reference, null);
+            return Map(existing, booking, null);
         }
 
         var rounded = decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
@@ -203,8 +225,33 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
                 $"QRPh amount cannot exceed the balance due ({money(balanceDue)}).");
         }
 
-        var referenceId = $"MORI-{booking.Reference}-{Guid.NewGuid():N}"[..Math.Min(64, 6 + booking.Reference.Length + 12)]
-            .ToUpperInvariant();
+        var intent = await CreateQrIntentCoreAsync(
+            booking,
+            rounded,
+            PaymentEventType.ArrivalPayment,
+            XenditChannel.QrPh,
+            createdBy,
+            secretKey,
+            cancellationToken);
+
+        return Map(intent, booking, null);
+    }
+
+    /// <summary>
+    /// Create a Xendit QRPh payment_request and persist the Pending intent row.
+    /// Shared by the staff front-desk path and the guest deposit picker.
+    /// </summary>
+    private async Task<QrPaymentIntent> CreateQrIntentCoreAsync(
+        Booking booking,
+        decimal amount,
+        PaymentEventType eventType,
+        XenditChannel channel,
+        string createdBy,
+        string secretKey,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var referenceId = NewReferenceId(booking);
         var payload = new
         {
             reference_id = referenceId,
@@ -212,7 +259,7 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
             country = "PH",
             currency = "PHP",
             channel_code = "QRPH",
-            request_amount = rounded,
+            request_amount = amount,
             description = $"Mori International Hotel · {booking.Reference}",
             metadata = new
             {
@@ -230,7 +277,7 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             _telemetry.RecordError(ex.GetType().Name);
-            _logger.LogWarning(ex, "Xendit create payment request failed for booking {BookingId}.", bookingId);
+            _logger.LogWarning(ex, "Xendit create payment request failed for booking {BookingId}.", booking.Id);
             throw;
         }
 
@@ -278,7 +325,9 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
             BookingId = booking.Id,
             ReferenceId = referenceId,
             XenditPaymentRequestId = paymentRequestId,
-            Amount = rounded,
+            EventType = eventType,
+            Channel = channel,
+            Amount = amount,
             Currency = "PHP",
             Status = QrPaymentIntentStatus.Pending,
             QrString = qrString,
@@ -296,10 +345,16 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
             "QrPaymentIntent",
             intent.Id.ToString(),
             intent.ReferenceId,
-            summary: $"QRPh intent {intent.ReferenceId} created for {booking.Reference} · ₱{rounded:N2}.");
+            summary: $"QRPh intent {intent.ReferenceId} created for {booking.Reference} · ₱{amount:N2}.");
         await _db.SaveChangesAsync(cancellationToken);
 
-        return Map(intent, booking.Reference, null);
+        return intent;
+    }
+
+    private static string NewReferenceId(Booking booking)
+    {
+        return $"MORI-{booking.Reference}-{Guid.NewGuid():N}"[..Math.Min(64, 6 + booking.Reference.Length + 12)]
+            .ToUpperInvariant();
     }
 
     public async Task<QrPaymentIntentDto?> GetAsync(
@@ -325,7 +380,7 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
                 .FirstAsync(i => i.Id == intentId, cancellationToken);
         }
 
-        return Map(intent, intent.Booking.Reference, intent.PaymentRecord?.ReceiptNumber);
+        return Map(intent, intent.Booking, intent.PaymentRecord?.ReceiptNumber);
     }
 
     public async Task<QrPaymentIntentDto> CancelAsync(
@@ -337,43 +392,485 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
             .FirstOrDefaultAsync(i => i.Id == intentId, cancellationToken)
             ?? throw new KeyNotFoundException("QR payment was not found.");
 
-        if (intent.Status == QrPaymentIntentStatus.Pending)
-        {
-            intent.Status = QrPaymentIntentStatus.Cancelled;
-            intent.UpdatedAtUtc = DateTime.UtcNow;
-            _audit.Record(
-                SystemAuditIntent.AdministrativeAction,
-                SystemAuditDomain.Payment,
-                "Payment.QrCancelled",
-                "QrPaymentIntent",
-                intent.Id.ToString(),
-                intent.ReferenceId,
-                summary: $"QRPh intent {intent.ReferenceId} cancelled on {intent.Booking.Reference}.");
-            await _db.SaveChangesAsync(cancellationToken);
+        await CancelIntentAsync(intent, cancellationToken);
 
-            var secretKey = await _vault.GetAsync(SecureSettingKeys.XenditSecretKey, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(secretKey))
+        return Map(intent, intent.Booking, intent.PaymentRecord?.ReceiptNumber);
+    }
+
+    /// <summary>
+    /// Local cancel wins; the remote cancel/expire is best-effort so Xendit can
+    /// still expire on its own when the API is unreachable.
+    /// </summary>
+    private async Task CancelIntentAsync(QrPaymentIntent intent, CancellationToken cancellationToken)
+    {
+        if (intent.Status != QrPaymentIntentStatus.Pending)
+        {
+            return;
+        }
+
+        intent.Status = QrPaymentIntentStatus.Cancelled;
+        intent.UpdatedAtUtc = DateTime.UtcNow;
+        _audit.Record(
+            SystemAuditIntent.AdministrativeAction,
+            SystemAuditDomain.Payment,
+            "Payment.QrCancelled",
+            "QrPaymentIntent",
+            intent.Id.ToString(),
+            intent.ReferenceId,
+            summary: $"QRPh intent {intent.ReferenceId} cancelled on {intent.Booking.Reference}.");
+        await _db.SaveChangesAsync(cancellationToken);
+
+        var secretKey = await _vault.GetAsync(SecureSettingKeys.XenditSecretKey, cancellationToken);
+        if (string.IsNullOrWhiteSpace(secretKey))
+        {
+            return;
+        }
+
+        try
+        {
+            if (intent.Channel == XenditChannel.Card)
             {
-                try
+                if (!string.IsNullOrWhiteSpace(intent.XenditInvoiceId))
                 {
                     await SendAsync(
                         HttpMethod.Post,
-                        $"v3/payment_requests/{intent.XenditPaymentRequestId}/cancel",
+                        $"v2/invoices/{intent.XenditInvoiceId}/expire!",
                         null,
                         secretKey,
                         cancellationToken);
-                    _telemetry.RecordOk();
-                }
-                catch (Exception ex)
-                {
-                    // Local cancel already won — Xendit will expire the request on its own.
-                    _logger.LogWarning(
-                        ex, "Best-effort Xendit cancel failed for intent {IntentId}.", intent.Id);
                 }
             }
+            else if (!string.IsNullOrWhiteSpace(intent.XenditPaymentRequestId))
+            {
+                await SendAsync(
+                    HttpMethod.Post,
+                    $"v3/payment_requests/{intent.XenditPaymentRequestId}/cancel",
+                    null,
+                    secretKey,
+                    cancellationToken);
+            }
+
+            _telemetry.RecordOk();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException
+            or XenditApiException)
+        {
+            _logger.LogWarning(
+                ex, "Best-effort Xendit cancel failed for intent {IntentId}.", intent.Id);
+        }
+    }
+
+    public async Task<QrPaymentIntentDto> CreateGuestDepositAsync(
+        int bookingId,
+        string payToken,
+        XenditChannel channel,
+        string originBaseUrl,
+        CancellationToken cancellationToken = default)
+    {
+        var booking = await _db.Bookings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Id == bookingId, cancellationToken);
+        EnsureGuestToken(booking, payToken);
+
+        if (booking!.IsArchived)
+        {
+            throw new ArgumentException("Archived bookings cannot take new payments.");
         }
 
-        return Map(intent, intent.Booking.Reference, intent.PaymentRecord?.ReceiptNumber);
+        if (booking.Status != BookingStatus.Pending)
+        {
+            throw new ArgumentException("This booking no longer needs a deposit.");
+        }
+
+        var now = DateTime.UtcNow;
+        if (booking.DepositDueAtUtc is null || booking.DepositDueAtUtc <= now)
+        {
+            throw new ArgumentException("The 30-minute hold for this booking has ended.");
+        }
+
+        var secretKey = await _vault.GetAsync(SecureSettingKeys.XenditSecretKey, cancellationToken);
+        var webhookToken = await _vault.HasValueAsync(SecureSettingKeys.XenditWebhookToken, cancellationToken);
+        if (string.IsNullOrWhiteSpace(secretKey) || !webhookToken)
+        {
+            throw new InvalidOperationException(
+                "Xendit is not connected. Add the API key and webhook token on the Integrations page.");
+        }
+
+        var postedPaid = await PostedPaidAsync(bookingId, cancellationToken);
+        var amount = decimal.Round(booking.AmountDueNow - postedPaid, 2, MidpointRounding.AwayFromZero);
+        if (amount <= 0m)
+        {
+            throw new ArgumentException("Deposit already received.");
+        }
+
+        var openIntents = await _db.QrPaymentIntents
+            .Include(i => i.Booking)
+            .Where(i => i.BookingId == bookingId
+                && i.Status == QrPaymentIntentStatus.Pending
+                && (i.ExpiresAtUtc == null || i.ExpiresAtUtc > now))
+            .OrderByDescending(i => i.Id)
+            .ToListAsync(cancellationToken);
+
+        var sameChannel = openIntents.FirstOrDefault(i => i.Channel == channel);
+        if (sameChannel is not null)
+        {
+            return Map(sameChannel, booking, null, BalanceDue(booking, postedPaid));
+        }
+
+        foreach (var other in openIntents.Where(i => i.Channel != channel))
+        {
+            await CancelIntentAsync(other, cancellationToken);
+        }
+
+        var intent = channel == XenditChannel.Card
+            ? await CreateCardIntentCoreAsync(
+                booking, amount, payToken, originBaseUrl, secretKey, cancellationToken)
+            : await CreateQrIntentCoreAsync(
+                booking, amount, PaymentEventType.Deposit, channel, "Guest online", secretKey, cancellationToken);
+
+        return Map(intent, booking, null, BalanceDue(booking, postedPaid));
+    }
+
+    /// <summary>Xendit Invoice (hosted card checkout) intent for the guest deposit.</summary>
+    private async Task<QrPaymentIntent> CreateCardIntentCoreAsync(
+        Booking booking,
+        decimal amount,
+        string payToken,
+        string originBaseUrl,
+        string secretKey,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var referenceId = NewReferenceId(booking);
+        var returnUrl =
+            $"{originBaseUrl.TrimEnd('/')}/Booking/DepositReturn" +
+            $"?ref={Uri.EscapeDataString(booking.Reference)}&t={Uri.EscapeDataString(payToken)}";
+
+        var customer = new Dictionary<string, string>();
+        if (!string.IsNullOrWhiteSpace(booking.GuestName))
+        {
+            customer["given_names"] = booking.GuestName.Trim();
+        }
+        if (!string.IsNullOrWhiteSpace(booking.GuestEmail))
+        {
+            customer["email"] = booking.GuestEmail.Trim();
+        }
+        if (!string.IsNullOrWhiteSpace(booking.GuestPhone))
+        {
+            customer["mobile_number"] = booking.GuestPhone.Trim();
+        }
+
+        var payload = new
+        {
+            external_id = referenceId,
+            amount,
+            currency = "PHP",
+            description = $"Mori International Hotel · {booking.Reference} · 50% deposit",
+            invoice_duration = Math.Max(
+                60, (int)Math.Ceiling((booking.DepositDueAtUtc!.Value - now).TotalSeconds)),
+            payment_methods = new[] { "CREDIT_CARD" },
+            customer,
+            success_redirect_url = $"{returnUrl}&r=success",
+            failure_redirect_url = $"{returnUrl}&r=failed",
+            metadata = new
+            {
+                bookingId = booking.Id.ToString(),
+                bookingReference = booking.Reference
+            }
+        };
+
+        JsonElement root;
+        try
+        {
+            root = await SendAsync(HttpMethod.Post, "v2/invoices", payload, secretKey, cancellationToken);
+            _telemetry.RecordOk();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            _telemetry.RecordError(ex.GetType().Name);
+            _logger.LogWarning(ex, "Xendit create invoice failed for booking {BookingId}.", booking.Id);
+            throw;
+        }
+
+        var invoiceId = root.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+        var checkoutUrl = root.TryGetProperty("invoice_url", out var urlEl) ? urlEl.GetString() : null;
+        if (string.IsNullOrWhiteSpace(invoiceId) || string.IsNullOrWhiteSpace(checkoutUrl))
+        {
+            _telemetry.RecordError("missing_invoice");
+            throw new InvalidOperationException("Xendit did not return a checkout URL.");
+        }
+
+        DateTime? expiresAtUtc = null;
+        if (root.TryGetProperty("expiry_date", out var expEl)
+            && expEl.ValueKind == JsonValueKind.String
+            && DateTimeOffset.TryParse(expEl.GetString(), out var expiresAt))
+        {
+            expiresAtUtc = expiresAt.UtcDateTime;
+        }
+
+        var intent = new QrPaymentIntent
+        {
+            BookingId = booking.Id,
+            ReferenceId = referenceId,
+            XenditPaymentRequestId = null,
+            XenditInvoiceId = invoiceId,
+            EventType = PaymentEventType.Deposit,
+            Channel = XenditChannel.Card,
+            Amount = amount,
+            Currency = "PHP",
+            Status = QrPaymentIntentStatus.Pending,
+            QrString = null,
+            CheckoutUrl = checkoutUrl,
+            ExpiresAtUtc = expiresAtUtc,
+            CreatedBy = "Guest online",
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now,
+            IsTestMode = secretKey.StartsWith("xnd_development_", StringComparison.Ordinal)
+        };
+        _db.QrPaymentIntents.Add(intent);
+        _audit.Record(
+            SystemAuditIntent.AdministrativeAction,
+            SystemAuditDomain.Payment,
+            "Payment.QrCreated",
+            "QrPaymentIntent",
+            intent.Id.ToString(),
+            intent.ReferenceId,
+            summary: $"Card invoice {intent.ReferenceId} created for {booking.Reference} · ₱{amount:N2}.");
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return intent;
+    }
+
+    public async Task<QrPaymentIntentDto?> GetGuestAsync(
+        int bookingId,
+        int intentId,
+        string payToken,
+        bool reconcile,
+        CancellationToken cancellationToken = default)
+    {
+        var intent = await _db.QrPaymentIntents
+            .AsNoTracking()
+            .Include(i => i.Booking)
+            .Include(i => i.PaymentRecord)
+            .FirstOrDefaultAsync(i => i.Id == intentId && i.BookingId == bookingId, cancellationToken);
+        EnsureGuestToken(intent?.Booking, payToken);
+
+        if (reconcile && intent!.Status == QrPaymentIntentStatus.Pending)
+        {
+            await ReconcileAsync(intent, cancellationToken);
+            intent = await _db.QrPaymentIntents
+                .AsNoTracking()
+                .Include(i => i.Booking)
+                .Include(i => i.PaymentRecord)
+                .FirstAsync(i => i.Id == intentId, cancellationToken);
+        }
+
+        var postedPaid = await PostedPaidAsync(bookingId, cancellationToken);
+        return Map(intent!, intent!.Booking, intent.PaymentRecord?.ReceiptNumber,
+            BalanceDue(intent.Booking, postedPaid));
+    }
+
+    public async Task<QrPaymentIntentDto?> GetCurrentGuestAsync(
+        int bookingId, string payToken, CancellationToken cancellationToken = default)
+    {
+        var booking = await _db.Bookings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Id == bookingId, cancellationToken);
+        EnsureGuestToken(booking, payToken);
+        return await GetCurrentForBookingAsync(booking!, cancellationToken);
+    }
+
+    public async Task<QrPaymentIntentDto?> GetCurrentGuestByReferenceAsync(
+        string reference, string payToken, CancellationToken cancellationToken = default)
+    {
+        var booking = await _db.Bookings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Reference == reference, cancellationToken);
+        EnsureGuestToken(booking, payToken);
+        return await GetCurrentForBookingAsync(booking!, cancellationToken);
+    }
+
+    private async Task<QrPaymentIntentDto?> GetCurrentForBookingAsync(
+        Booking booking, CancellationToken cancellationToken)
+    {
+        var intent = await _db.QrPaymentIntents
+            .AsNoTracking()
+            .Include(i => i.PaymentRecord)
+            .Where(i => i.BookingId == booking.Id
+                && (i.Status == QrPaymentIntentStatus.Pending
+                    || i.Status == QrPaymentIntentStatus.Processing))
+            .OrderByDescending(i => i.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (intent is null && booking.Status == BookingStatus.Confirmed)
+        {
+            intent = await _db.QrPaymentIntents
+                .AsNoTracking()
+                .Include(i => i.PaymentRecord)
+                .Where(i => i.BookingId == booking.Id && i.Status == QrPaymentIntentStatus.Paid)
+                .OrderByDescending(i => i.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        // Resume after a failed/expired checkout still needs the deposit amount —
+        // fall back to the latest intent of any status.
+        if (intent is null)
+        {
+            intent = await _db.QrPaymentIntents
+                .AsNoTracking()
+                .Include(i => i.PaymentRecord)
+                .Where(i => i.BookingId == booking.Id)
+                .OrderByDescending(i => i.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        if (intent is null)
+        {
+            return null;
+        }
+
+        var postedPaid = await PostedPaidAsync(booking.Id, cancellationToken);
+        return Map(intent, booking, intent.PaymentRecord?.ReceiptNumber,
+            BalanceDue(booking, postedPaid));
+    }
+
+    public async Task<QrPaymentIntentDto> CancelGuestAsync(
+        int bookingId, int intentId, string payToken, CancellationToken cancellationToken = default)
+    {
+        var intent = await _db.QrPaymentIntents
+            .Include(i => i.Booking)
+            .Include(i => i.PaymentRecord)
+            .FirstOrDefaultAsync(i => i.Id == intentId && i.BookingId == bookingId, cancellationToken);
+        EnsureGuestToken(intent?.Booking, payToken);
+
+        await CancelIntentAsync(intent!, cancellationToken);
+
+        var postedPaid = await PostedPaidAsync(bookingId, cancellationToken);
+        return Map(intent!, intent!.Booking, intent.PaymentRecord?.ReceiptNumber,
+            BalanceDue(intent.Booking, postedPaid));
+    }
+
+    public async Task ExpireStaleIntentsAsync(int bookingId, CancellationToken cancellationToken = default)
+    {
+        var open = await _db.QrPaymentIntents
+            .Include(i => i.Booking)
+            .Where(i => i.BookingId == bookingId && i.Status == QrPaymentIntentStatus.Pending)
+            .ToListAsync(cancellationToken);
+        foreach (var intent in open)
+        {
+            await CancelIntentAsync(intent, cancellationToken);
+        }
+    }
+
+    public async Task<bool> HandleInvoiceWebhookAsync(
+        string? callbackToken, JsonDocument body, CancellationToken cancellationToken = default)
+    {
+        if (!await VerifyCallbackTokenAsync(callbackToken, cancellationToken))
+        {
+            return false;
+        }
+
+        _telemetry.RecordWebhook();
+
+        var root = body.RootElement;
+        var invoiceId = root.TryGetProperty("id", out var iEl) ? iEl.GetString() : null;
+        var externalId = root.TryGetProperty("external_id", out var eEl) ? eEl.GetString() : null;
+        if (string.IsNullOrWhiteSpace(invoiceId) && string.IsNullOrWhiteSpace(externalId))
+        {
+            return true;
+        }
+
+        var intent = await _db.QrPaymentIntents
+            .FirstOrDefaultAsync(i =>
+                (invoiceId != null && i.XenditInvoiceId == invoiceId)
+                || (externalId != null && i.ReferenceId == externalId),
+                cancellationToken);
+        if (intent is null)
+        {
+            // Unknown invoice — still 200 so Xendit stops retrying.
+            return true;
+        }
+
+        var status = root.TryGetProperty("status", out var sEl) ? sEl.GetString() : null;
+        var paymentId = root.TryGetProperty("payment_id", out var pEl)
+            && pEl.ValueKind == JsonValueKind.String
+            ? pEl.GetString()
+            : invoiceId;
+        var currency = root.TryGetProperty("currency", out var cEl) ? cEl.GetString() : null;
+        var paidAmount = root.TryGetProperty("paid_amount", out var aEl)
+            && aEl.ValueKind == JsonValueKind.Number
+            && aEl.TryGetDecimal(out var an)
+            ? an
+            : (decimal?)null;
+        await ApplyInvoiceStatusAsync(intent, status, paymentId, currency, paidAmount, cancellationToken);
+        return true;
+    }
+
+    private async Task ApplyInvoiceStatusAsync(
+        QrPaymentIntent intent,
+        string? status,
+        string? paymentId,
+        string? currency,
+        decimal? paidAmount,
+        CancellationToken cancellationToken)
+    {
+        switch ((status ?? string.Empty).ToUpperInvariant())
+        {
+            case "PAID":
+            case "SETTLED":
+                if (!string.Equals(currency, "PHP", StringComparison.OrdinalIgnoreCase)
+                    || (paidAmount.HasValue && paidAmount.Value != intent.Amount))
+                {
+                    _logger.LogWarning(
+                        "Xendit invoice amount/currency mismatch for intent {IntentId}: expected {Expected} PHP, got {Amount} {Currency}.",
+                        intent.Id, intent.Amount, paidAmount, currency);
+                    await MarkFailedAsync(intent.Id, "AMOUNT_MISMATCH", cancellationToken);
+                    return;
+                }
+
+                await PostLedgerAsync(intent, paymentId, cancellationToken);
+                return;
+
+            case "EXPIRED":
+                await SetStatusAsync(intent.Id, QrPaymentIntentStatus.Expired, cancellationToken);
+                return;
+
+            default:
+                return; // PENDING / unknown — still waiting on the guest.
+        }
+    }
+
+    /// <summary>
+    /// Wrong token and missing booking are deliberately indistinguishable (404).
+    /// </summary>
+    private static void EnsureGuestToken(Booking? booking, string? payToken)
+    {
+        if (booking is null
+            || string.IsNullOrEmpty(booking.GuestPayToken)
+            || string.IsNullOrEmpty(payToken))
+        {
+            throw new KeyNotFoundException("Booking was not found.");
+        }
+
+        var expected = Encoding.UTF8.GetBytes(booking.GuestPayToken);
+        var provided = Encoding.UTF8.GetBytes(payToken);
+        if (expected.Length != provided.Length
+            || !CryptographicOperations.FixedTimeEquals(expected, provided))
+        {
+            throw new KeyNotFoundException("Booking was not found.");
+        }
+    }
+
+    private async Task<decimal> PostedPaidAsync(int bookingId, CancellationToken cancellationToken)
+    {
+        return await _db.PaymentRecords
+            .Where(p => p.BookingId == bookingId && p.Status == PaymentRecordStatus.Posted)
+            .SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0m;
+    }
+
+    private static decimal BalanceDue(Booking booking, decimal postedPaid)
+    {
+        return decimal.Round(booking.TotalAmount - postedPaid, 2, MidpointRounding.AwayFromZero);
     }
 
     public async Task<QrPaymentIntentDto> SimulateAsync(
@@ -416,8 +913,8 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
         return refreshed!;
     }
 
-    public async Task<bool> HandleWebhookAsync(
-        string? callbackToken, JsonDocument body, CancellationToken cancellationToken = default)
+    private async Task<bool> VerifyCallbackTokenAsync(
+        string? callbackToken, CancellationToken cancellationToken)
     {
         var vaultToken = await _vault.GetAsync(SecureSettingKeys.XenditWebhookToken, cancellationToken);
         if (string.IsNullOrWhiteSpace(vaultToken) || string.IsNullOrWhiteSpace(callbackToken))
@@ -427,8 +924,14 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
 
         var expected = Encoding.UTF8.GetBytes(vaultToken);
         var provided = Encoding.UTF8.GetBytes(callbackToken);
-        if (expected.Length != provided.Length
-            || !CryptographicOperations.FixedTimeEquals(expected, provided))
+        return expected.Length == provided.Length
+            && CryptographicOperations.FixedTimeEquals(expected, provided);
+    }
+
+    public async Task<bool> HandleWebhookAsync(
+        string? callbackToken, JsonDocument body, CancellationToken cancellationToken = default)
+    {
+        if (!await VerifyCallbackTokenAsync(callbackToken, cancellationToken))
         {
             return false;
         }
@@ -437,7 +940,9 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
 
         var root = body.RootElement;
         var eventName = root.TryGetProperty("event", out var ev) ? ev.GetString() : null;
-        if (eventName is not ("payment.capture" or "payment.authorization" or "payment.failure"))
+        if (eventName is not ("payment.capture" or "payment.authorization" or "payment.failure"
+                              or "payment_request.expiry" or "payment_request.canceled"
+                              or "payment_request.cancelled"))
         {
             return true;
         }
@@ -483,6 +988,35 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
 
         try
         {
+            if (intent.Channel == XenditChannel.Card)
+            {
+                if (string.IsNullOrWhiteSpace(intent.XenditInvoiceId))
+                {
+                    return;
+                }
+
+                var invoice = await SendAsync(
+                    HttpMethod.Get,
+                    $"v2/invoices/{intent.XenditInvoiceId}",
+                    null,
+                    secretKey,
+                    cancellationToken);
+                _telemetry.RecordOk();
+                var invoiceStatus = invoice.TryGetProperty("status", out var ist) ? ist.GetString() : null;
+                var invoicePaymentId = invoice.TryGetProperty("payment_id", out var ipid) && ipid.ValueKind == JsonValueKind.String
+                    ? ipid.GetString()
+                    : invoice.TryGetProperty("id", out var iid) ? iid.GetString() : null;
+                var invoiceCurrency = invoice.TryGetProperty("currency", out var icur) ? icur.GetString() : null;
+                var paidAmount = invoice.TryGetProperty("paid_amount", out var pamt)
+                    && pamt.ValueKind == JsonValueKind.Number
+                    && pamt.TryGetDecimal(out var pn)
+                    ? pn
+                    : (decimal?)null;
+                await ApplyInvoiceStatusAsync(
+                    intent, invoiceStatus, invoicePaymentId, invoiceCurrency, paidAmount, cancellationToken);
+                return;
+            }
+
             var root = await SendAsync(
                 HttpMethod.Get,
                 $"v3/payment_requests/{intent.XenditPaymentRequestId}",
@@ -575,15 +1109,18 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
 
         try
         {
+            var isCard = intent.Channel == XenditChannel.Card;
             var record = await _paymentService.RecordAsync(new RecordPaymentRequest
             {
                 BookingId = intent.BookingId,
-                EventType = PaymentEventType.ArrivalPayment,
-                Method = PaymentMethod.EWallet,
+                EventType = intent.EventType,
+                Method = isCard ? PaymentMethod.Card : PaymentMethod.EWallet,
                 Amount = intent.Amount,
                 ReceivedBy = intent.CreatedBy,
                 ExternalReference = paymentId,
-                Notes = $"Xendit QRPh · {intent.ReferenceId}"
+                Notes = isCard
+                    ? $"Xendit Card · {intent.ReferenceId}"
+                    : $"Xendit QRPh · {intent.ReferenceId}"
             }, cancellationToken);
             var posted = await _paymentService.VerifyAsync(record.Id, cancellationToken);
 
@@ -605,6 +1142,28 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
                 summary: $"QRPh intent {intent.ReferenceId} paid · {posted.ReceiptNumber} · ₱{intent.Amount:N2}.");
             await _db.SaveChangesAsync(cancellationToken);
             await _hub.Clients.All.PaymentChanged(intent.BookingId);
+
+            if (record.BookingConfirmed)
+            {
+                var confirmed = await _db.Bookings
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(b => b.Id == intent.BookingId, cancellationToken);
+                if (confirmed is not null)
+                {
+                    await _hub.Clients.All.BookingUpdated(new BookingNotificationDto(
+                        confirmed.Id,
+                        confirmed.Reference,
+                        confirmed.GuestName,
+                        confirmed.Kind,
+                        confirmed.Status,
+                        confirmed.CheckInAtUtc,
+                        confirmed.CreatedAtUtc,
+                        false,
+                        "Deposit received — booking confirmed"));
+                }
+
+                await _guestCatalog.NotifyChangedAsync("availability", cancellationToken);
+            }
         }
         catch (ArgumentException ex)
         {
@@ -754,15 +1313,16 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
     }
 
     private static QrPaymentIntentDto Map(
-        QrPaymentIntent intent, string bookingReference, string? receiptNumber)
+        QrPaymentIntent intent, Booking booking, string? receiptNumber, decimal? balanceDue = null)
     {
         var qrImage = intent.Status == QrPaymentIntentStatus.Pending
+            && !string.IsNullOrEmpty(intent.QrString)
             ? RenderQrDataUrl(intent.QrString)
             : string.Empty;
         return new QrPaymentIntentDto(
             intent.Id,
             intent.BookingId,
-            bookingReference,
+            booking.Reference,
             intent.ReferenceId,
             intent.Amount,
             intent.Status.ToString(),
@@ -772,7 +1332,11 @@ public sealed class XenditQrPaymentService : IXenditQrPaymentService
             intent.PaidAtUtc,
             receiptNumber,
             intent.FailureCode,
-            intent.IsTestMode);
+            intent.IsTestMode,
+            intent.Channel.ToString(),
+            intent.CheckoutUrl,
+            booking.Status.ToString(),
+            balanceDue);
     }
 
     private static readonly byte[] QrDark = { 0x0b, 0x1f, 0x3a };

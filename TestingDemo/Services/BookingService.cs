@@ -24,6 +24,9 @@ public sealed partial class BookingService : IBookingService
     /// </summary>
     private static readonly TimeSpan PendingUnverifiedGrace = TimeSpan.FromHours(4);
 
+    /// <summary>How long an online booking holds rooms while the 50% deposit is unpaid.</summary>
+    public static readonly TimeSpan DepositHold = TimeSpan.FromMinutes(30);
+
     /// <summary>
     /// How long history export audit logs remain before auto-deletion.
     /// </summary>

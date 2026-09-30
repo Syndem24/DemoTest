@@ -3,7 +3,7 @@ namespace TestingDemo.Models;
 public enum PaymentMethod
 {
     Cash = 0,
-    /// <summary>Legacy. Prefer EWallet for new payments.</summary>
+    /// <summary>Debit/credit card via Xendit hosted checkout.</summary>
     Card = 1,
     /// <summary>E-wallet via hotel InstaPay QR (value kept from former GCash).</summary>
     EWallet = 2,

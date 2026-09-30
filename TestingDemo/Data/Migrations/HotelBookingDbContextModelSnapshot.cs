@@ -313,6 +313,9 @@ namespace TestingDemo.Data.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<DateTime?>("DepositDueAtUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("GuestEditedFieldsJson")
                         .HasColumnType("nvarchar(max)");
 
@@ -332,6 +335,10 @@ namespace TestingDemo.Data.Migrations
                     b.Property<string>("GuestPartyJson")
                         .HasMaxLength(4000)
                         .HasColumnType("nvarchar(4000)");
+
+                    b.Property<string>("GuestPayToken")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<string>("GuestPhone")
                         .IsRequired()
@@ -383,6 +390,10 @@ namespace TestingDemo.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("GuestPayToken")
+                        .IsUnique()
+                        .HasFilter("[GuestPayToken] IS NOT NULL");
 
                     b.HasIndex("Reference")
                         .IsUnique();
@@ -656,6 +667,15 @@ namespace TestingDemo.Data.Migrations
                     b.Property<int>("BookingId")
                         .HasColumnType("int");
 
+                    b.Property<int>("Channel")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("CheckoutUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
@@ -668,6 +688,11 @@ namespace TestingDemo.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(3)
                         .HasColumnType("nvarchar(3)");
+
+                    b.Property<int>("EventType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<DateTime?>("ExpiresAtUtc")
                         .HasColumnType("datetime2");
@@ -686,7 +711,6 @@ namespace TestingDemo.Data.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("QrString")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ReferenceId")
@@ -702,12 +726,15 @@ namespace TestingDemo.Data.Migrations
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("XenditInvoiceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<string>("XenditPaymentId")
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
                     b.Property<string>("XenditPaymentRequestId")
-                        .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
@@ -720,12 +747,17 @@ namespace TestingDemo.Data.Migrations
                     b.HasIndex("ReferenceId")
                         .IsUnique();
 
+                    b.HasIndex("XenditInvoiceId")
+                        .IsUnique()
+                        .HasFilter("[XenditInvoiceId] IS NOT NULL");
+
                     b.HasIndex("XenditPaymentId")
                         .IsUnique()
                         .HasFilter("[XenditPaymentId] IS NOT NULL");
 
                     b.HasIndex("XenditPaymentRequestId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[XenditPaymentRequestId] IS NOT NULL");
 
                     b.ToTable("QrPaymentIntent", (string)null);
                 });

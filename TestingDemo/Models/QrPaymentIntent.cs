@@ -11,6 +11,13 @@ public enum QrPaymentIntentStatus
     Processing = 5
 }
 
+/// <summary>Xendit product the intent was created against.</summary>
+public enum XenditChannel
+{
+    QrPh = 0,
+    Card = 1
+}
+
 /// <summary>
 /// Table <c>QrPaymentIntent</c> — a Xendit QRPh payment request for a walk-in/booking balance.
 /// </summary>
@@ -23,16 +30,25 @@ public class QrPaymentIntent
     /// <summary>Our idempotency reference sent to Xendit ("MORI-{bookingRef}-{8 hex}").</summary>
     public string ReferenceId { get; set; } = string.Empty;
 
-    /// <summary>Xendit payment_request_id.</summary>
-    public string XenditPaymentRequestId { get; set; } = string.Empty;
+    /// <summary>Xendit payment_request_id (QRPh intents only).</summary>
+    public string? XenditPaymentRequestId { get; set; }
+
+    /// <summary>Xendit invoice id (Card hosted-checkout intents only).</summary>
+    public string? XenditInvoiceId { get; set; }
 
     /// <summary>Xendit payment_id once captured — enforces post-once via unique index.</summary>
     public string? XenditPaymentId { get; set; }
 
+    /// <summary>Ledger event this intent posts when paid (Deposit for guest checkout).</summary>
+    public PaymentEventType EventType { get; set; } = PaymentEventType.ArrivalPayment;
+    public XenditChannel Channel { get; set; } = XenditChannel.QrPh;
+
     public decimal Amount { get; set; }
     public string Currency { get; set; } = "PHP";
     public QrPaymentIntentStatus Status { get; set; } = QrPaymentIntentStatus.Pending;
-    public string QrString { get; set; } = string.Empty;
+    public string? QrString { get; set; }
+    /// <summary>Hosted checkout redirect URL (Card intents only).</summary>
+    public string? CheckoutUrl { get; set; }
     public DateTime? ExpiresAtUtc { get; set; }
     public DateTime? PaidAtUtc { get; set; }
     public int? PaymentRecordId { get; set; }

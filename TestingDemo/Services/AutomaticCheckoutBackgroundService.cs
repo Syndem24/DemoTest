@@ -47,6 +47,7 @@ public sealed class AutomaticCheckoutBackgroundService : BackgroundService
                     using var scope = _scopeFactory.CreateScope();
                     var bookingService = scope.ServiceProvider.GetRequiredService<IBookingService>();
                     var guestCatalog = scope.ServiceProvider.GetRequiredService<IGuestCatalogNotifier>();
+                    var xendit = scope.ServiceProvider.GetRequiredService<IXenditQrPaymentService>();
 
                 // 0. Pending call-guest warnings (check-in − 20m)
                 var pendingCalls = await bookingService.ProcessPendingCallWarningsAsync(stoppingToken);
@@ -101,6 +102,21 @@ public sealed class AutomaticCheckoutBackgroundService : BackgroundService
                     await _hubContext.Clients.All.BookingArchived(booking.Id);
                 }
 
+                // 3b. Release online bookings whose 30-minute deposit hold expired unpaid
+                var depositExpired = await bookingService.AutoCancelUnpaidDepositsAsync(stoppingToken);
+                foreach (var booking in depositExpired)
+                {
+                    _logger.LogInformation(
+                        "Released booking {Reference} (Guest: {GuestName}) — deposit not received within the 30-minute hold.",
+                        booking.Reference,
+                        booking.GuestName);
+
+                    await xendit.ExpireStaleIntentsAsync(booking.Id, stoppingToken);
+                    await _hubContext.Clients.All.BookingUpdated(
+                        ToNotification(booking, "Deposit not received — booking released after 30-minute hold"));
+                    await _hubContext.Clients.All.BookingArchived(booking.Id);
+                }
+
                 // 4. Process automatic checkouts for expired stay durations
                 var autoCheckedOutBookings = await bookingService.AutoCheckoutExpiredBookingsAsync(stoppingToken);
                 foreach (var booking in autoCheckedOutBookings)
@@ -113,7 +129,7 @@ public sealed class AutomaticCheckoutBackgroundService : BackgroundService
                     await _hubContext.Clients.All.BookingUpdated(ToNotification(booking, booking.Status == BookingStatus.CheckedOut ? "Auto-Checkout Completed: Client duration done" : "No-show: confirmed guest never arrived — booking archived"));
                 }
 
-                if (autoCancelled.Count > 0 || autoCheckedOutBookings.Count > 0)
+                if (autoCancelled.Count > 0 || depositExpired.Count > 0 || autoCheckedOutBookings.Count > 0)
                 {
                     await guestCatalog.NotifyChangedAsync("availability", stoppingToken);
                 }

@@ -64,4 +64,47 @@ public sealed class XenditWebhookController : ControllerBase
 
         return Ok();
     }
+
+    /// <summary>
+    /// Xendit Invoice callbacks (hosted card checkout). Same shared token, same
+    /// always-200-on-verified contract — configure this second URL in the Xendit dashboard.
+    /// </summary>
+    [HttpPost("invoices")]
+    public async Task<IActionResult> Invoices(CancellationToken cancellationToken)
+    {
+        if (Request.ContentLength > MaxBodyBytes)
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge);
+        }
+
+        var callbackToken = Request.Headers["x-callback-token"].ToString();
+
+        JsonDocument body;
+        try
+        {
+            using var reader = new StreamReader(Request.Body);
+            var text = await reader.ReadToEndAsync(cancellationToken);
+            if (Encoding.UTF8.GetByteCount(text) > MaxBodyBytes)
+            {
+                return StatusCode(StatusCodes.Status413PayloadTooLarge);
+            }
+
+            body = JsonDocument.Parse(text);
+        }
+        catch (JsonException)
+        {
+            return BadRequest();
+        }
+
+        using (body)
+        {
+            var accepted = await _xendit.HandleInvoiceWebhookAsync(callbackToken, body, cancellationToken);
+            if (!accepted)
+            {
+                return Unauthorized();
+            }
+        }
+
+        return Ok();
+    }
 }

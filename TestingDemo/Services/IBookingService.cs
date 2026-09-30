@@ -75,6 +75,11 @@ public interface IBookingService
         int endHour = 18,
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<BookingDto>> AutoCancelExpiredPendingAsync(CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Release online bookings whose 30-minute deposit hold expired without payment
+    /// (skips bookings with a still-open Xendit intent or a posted deposit).
+    /// </summary>
+    Task<IReadOnlyList<BookingDto>> AutoCancelUnpaidDepositsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AssignableRoomsByTypeDto>> GetAssignableRoomsAsync(
         int bookingId,
         CancellationToken cancellationToken = default);

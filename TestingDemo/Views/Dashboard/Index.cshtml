@@ -118,10 +118,46 @@
         <div class="grid-stack-item" gs-id="revenue-chart" gs-x="0" gs-y="4" gs-w="8" gs-h="4" gs-min-w="4" gs-min-h="3">
             <article class="grid-stack-item-content dash-widget">
                 <header class="dash-widget-handle">
-                    <h2>Posted revenue &amp; arrivals · 7 days</h2>
+                    <h2 data-dash-pay-heading>Posted revenue &amp; arrivals · 7 days</h2>
+                    <button type="button" class="dash-pay-toggle" data-dash-pay-toggle aria-pressed="false" aria-label="Show recent payments table" title="Recent payments">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false"><path d="M8.5 6h12M8.5 12h12M8.5 18h12"/><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" stroke-linecap="round" stroke-width="2.8"/></svg>
+                    </button>
                 </header>
-                <div class="dash-chart-wrap">
-                    <canvas id="dashRevenueChart" aria-label="Seven day posted revenue and arrivals"></canvas>
+                <div class="dash-flip" data-dash-flip>
+                    <div class="dash-flip-inner">
+                        <div class="dash-flip-face">
+                            <div class="dash-chart-wrap">
+                                <canvas id="dashRevenueChart" aria-label="Seven day posted revenue and arrivals"></canvas>
+                            </div>
+                        </div>
+                        <div class="dash-flip-face dash-flip-back" inert>
+                            <div class="dash-pay-panel">
+                                <label class="dash-pay-search">
+                                    <span class="visually-hidden">Search payments</span>
+                                    <input type="search" placeholder="Search receipt, booking, guest…" data-dash-pay-search autocomplete="off" />
+                                </label>
+                                <div class="dash-pay-table-wrap">
+                                    <table class="dash-pay-table">
+                                        <thead>
+                                            <tr>
+                                                <th>When (PH)</th>
+                                                <th>Receipt</th>
+                                                <th>Guest</th>
+                                                <th>Event</th>
+                                                <th>Method</th>
+                                                <th class="num">Amount</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody data-dash-pay-rows>
+                                            <tr><td colspan="7" class="dash-pay-empty">Recent payments load here.</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p class="dash-pay-note">Latest 10 posted payments · <a href="/AdminPayments">All payments</a></p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </article>
         </div>
@@ -196,18 +232,32 @@
             <article class="grid-stack-item-content dash-widget">
                 <header class="dash-widget-handle">
                     <h2>Front desk attention</h2>
-                    <a href="/AdminBookings">Open list</a>
+                    <div class="dash-attn-controls">
+                        <div class="dash-attn-filter" role="group" aria-label="Filter by booking type">
+                            <button type="button" data-dash-attn-kind="Booking" aria-pressed="false">Bookings</button>
+                            <button type="button" data-dash-attn-kind="Reservation" aria-pressed="false">Reservations</button>
+                        </div>
+                        <div class="dash-attn-search">
+                            <button type="button" class="dash-attn-search-btn" data-dash-attn-search-toggle aria-expanded="false" aria-label="Search guests" title="Search guests">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+                            </button>
+                            <div class="dash-attn-search-pop" data-dash-attn-search-pop hidden>
+                                <input type="search" placeholder="Search guest or reference…" data-dash-attn-search aria-label="Search attention list" autocomplete="off" />
+                            </div>
+                        </div>
+                        <a href="/AdminBookings">Open list</a>
+                    </div>
                 </header>
                 @if (Model.Attention.Count == 0)
                 {
-                    <p class="dash-widget-empty">No pending calls or same-day arrivals in the next window.</p>
+                    <p class="dash-widget-empty">No pending calls or upcoming stays.</p>
                 }
                 else
                 {
                     <ul class="dash-attention" data-dash-widget="attention">
                         @foreach (var item in Model.Attention)
                         {
-                            <li>
+                            <li data-attn-kind="@item.Bucket">
                                 <a href="@item.Href" data-dash-open-booking="@item.BookingId">
                                     <strong>@item.Title</strong>
                                     <span>@item.Detail</span>
@@ -223,6 +273,18 @@
                                 {
                                     <div class="dash-attention-actions">
                                         <button type="button" data-dash-attention-act="done" data-dash-booking-id="@item.BookingId">Done</button>
+                                    </div>
+                                }
+                                else if (item.Action == "open" && item.Bucket == "Booking")
+                                {
+                                    <div class="dash-attention-actions">
+                                        <button type="button" data-dash-attention-act="assign" data-dash-booking-id="@item.BookingId">Assign</button>
+                                    </div>
+                                }
+                                else if (item.Action == "open" && item.Bucket == "Reservation")
+                                {
+                                    <div class="dash-attention-actions">
+                                        <button type="button" data-dash-attention-act="payments" data-dash-booking-id="@item.BookingId">Payments</button>
                                     </div>
                                 }
                             </li>
@@ -289,7 +351,13 @@
                                             <div class="dash-roomchips">
                                                 @foreach (var room in group.Rooms)
                                                 {
-                                                    <span class="dash-roomchip @group.Css">@room.RoomNumber</span>
+                                                    <button type="button"
+                                                            class="dash-roomchip @group.Css"
+                                                            data-dash-room-id="@room.Id"
+                                                            data-dash-room-number="@room.RoomNumber"
+                                                            data-dash-room-status="@room.Status"
+                                                            data-dash-room-type="@t.Name"
+                                                            aria-label="Room @room.RoomNumber — @group.Label — view details">@room.RoomNumber</button>
                                                 }
                                             </div>
                                         </div>
@@ -349,6 +417,144 @@
             <p class="admin-reviews-empty">Loading…</p>
         </div>
         <footer class="dash-detail-actions" data-dash-detail-actions></footer>
+    </section>
+</div>
+
+<div class="admin-reviews-modal dash-roomtype-confirm" data-roomtype-confirm-modal hidden>
+    <button type="button" class="admin-reviews-modal-backdrop" data-roomtype-confirm-cancel aria-label="Keep room type open"></button>
+    <section class="admin-reviews-modal-card dash-roomtype-confirm-card" role="alertdialog" aria-modal="true"
+        aria-labelledby="roomtypeConfirmTitle" aria-describedby="roomtypeConfirmDesc">
+        <header class="admin-reviews-modal-head">
+            <div class="dash-detail-head-main">
+                <div class="dash-detail-meta">
+                    <span class="dash-detail-kicker">Room availability</span>
+                </div>
+                <h2 id="roomtypeConfirmTitle">Proceed closing <span data-roomtype-confirm-name>this room type</span>?</h2>
+            </div>
+            <button type="button" class="admin-reviews-modal-close" data-roomtype-confirm-cancel aria-label="Keep room type open">×</button>
+        </header>
+        <div class="admin-reviews-modal-body">
+            <p class="dash-roomtype-confirm-note" id="roomtypeConfirmDesc">
+                <span class="dash-roomtype-confirm-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 2.6 19.5h18.8L12 3.5z"/><path d="M12 9.5v4.6"/><circle cx="12" cy="17" r="0.5" fill="currentColor" stroke="none"/></svg>
+                </span>
+                <span>Guests will stop seeing and booking these rooms online right away. Rooms already checked in or assigned stay as they are — this only blocks new bookings.</span>
+            </p>
+        </div>
+        <footer class="dash-detail-actions">
+            <div class="dash-attention-actions">
+                <button type="button" class="dash-roomtype-confirm-keep" data-roomtype-confirm-cancel>Keep open</button>
+                <button type="button" class="dash-roomtype-confirm-proceed" data-roomtype-confirm-ok>Yes, close it</button>
+            </div>
+        </footer>
+    </section>
+</div>
+
+<div class="admin-reviews-modal dash-room-modal" data-dash-room-modal hidden>
+    <button type="button" class="admin-reviews-modal-backdrop" data-dash-room-close aria-label="Close room details"></button>
+    <section class="admin-reviews-modal-card" role="dialog" aria-modal="true" aria-labelledby="dashRoomTitle">
+        <header class="admin-reviews-modal-head">
+            <div class="dash-detail-head-main">
+                <div class="dash-detail-meta">
+                    <span class="dash-detail-kicker">Room</span>
+                    <span class="dash-detail-ref" data-dash-room-type></span>
+                </div>
+                <h2 id="dashRoomTitle" data-dash-room-title>Room</h2>
+            </div>
+            <button type="button" class="admin-reviews-modal-close" data-dash-room-close aria-label="Close room details">×</button>
+        </header>
+        <div class="admin-reviews-modal-body">
+            <dl class="dash-room-facts">
+                <div>
+                    <dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v4.5l3 1.7"/></svg>Status</dt>
+                    <dd><span class="dash-pay-status" data-dash-room-status></span></dd>
+                </div>
+                <div>
+                    <dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg>Rate / night</dt>
+                    <dd data-dash-room-rate></dd>
+                </div>
+                <div>
+                    <dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="10" cy="8" r="3.2"/><path d="M4.5 19.5c.6-3.4 2.8-5 5.5-5s4.9 1.6 5.5 5"/><path d="M15.5 5.4a3.2 3.2 0 0 1 0 5.2M18.8 14.8c1.2.8 2 2 2.4 4.7"/></svg>Max guests</dt>
+                    <dd data-dash-room-occupancy></dd>
+                </div>
+                <div>
+                    <dt><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><path d="M3.5 18.5v-9.8M3.5 12.4h17M20.5 18.5v-4.1M6.5 12.4V9.2h5v3.2"/></svg>Beds</dt>
+                    <dd data-dash-room-beds></dd>
+                </div>
+            </dl>
+            <div class="dash-room-acc">
+                <div class="dash-room-acc-item" data-dash-room-acc-item="desc">
+                    <button type="button" class="dash-room-acc-head" data-dash-room-acc="desc" aria-expanded="false" aria-controls="dashRoomDescBody">
+                        <span class="dash-room-acc-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M7 3.5h7.5L19 8v12.5H7z"/><path d="M14 3.5V8.5h5M9.5 12h5.5M9.5 15.5h5.5"/></svg></span>
+                        <span>Description</span>
+                        <span class="dash-room-acc-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></svg></span>
+                    </button>
+                    <div class="dash-room-acc-body" id="dashRoomDescBody" data-dash-room-acc-body="desc" hidden>
+                        <p data-dash-room-desc></p>
+                    </div>
+                </div>
+                <div class="dash-room-acc-item" data-dash-room-acc-item="inclusions">
+                    <button type="button" class="dash-room-acc-head" data-dash-room-acc="inclusions" aria-expanded="false" aria-controls="dashRoomInclBody">
+                        <span class="dash-room-acc-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 4.5 4.5L19.5 6.5"/><path d="M4.5 6h.01M4.5 19h.01" opacity=".4"/></svg></span>
+                        <span>Inclusions</span>
+                        <span class="dash-room-acc-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></svg></span>
+                    </button>
+                    <div class="dash-room-acc-body" id="dashRoomInclBody" data-dash-room-acc-body="inclusions" hidden>
+                        <ul class="dash-room-inclusions" data-dash-room-inclusions></ul>
+                    </div>
+                </div>
+            </div>
+            <div class="dash-room-occupant" data-dash-room-occupant hidden>
+                <em>Currently occupied by</em>
+                <strong data-dash-room-guest></strong>
+                <span data-dash-room-stay></span>
+            </div>
+            <p class="dash-roomtype-confirm-note dash-room-warning" data-dash-room-warning hidden role="alert">
+                <span class="dash-roomtype-confirm-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 2.6 19.5h18.8L12 3.5z"/><path d="M12 9.5v4.6"/><circle cx="12" cy="17" r="0.5" fill="currentColor" stroke="none"/></svg>
+                </span>
+                <span data-dash-room-warning-text></span>
+            </p>
+            <p class="dash-offer-error" data-dash-room-error hidden role="alert"></p>
+        </div>
+        <footer class="dash-detail-actions">
+            <div class="dash-attention-actions">
+                <button type="button" class="is-quiet" data-dash-room-close>Close</button>
+                <a class="dash-detail-manage" data-dash-room-booking href="/AdminBookings" hidden>Open booking →</a>
+                <button type="button" data-dash-room-toggle>Close room</button>
+            </div>
+        </footer>
+    </section>
+</div>
+
+<div class="admin-reviews-modal dash-roomtype-confirm" data-dash-roomconfirm-modal hidden>
+    <button type="button" class="admin-reviews-modal-backdrop" data-dash-roomconfirm-cancel aria-label="Keep room as is"></button>
+    <section class="admin-reviews-modal-card dash-roomtype-confirm-card" role="alertdialog" aria-modal="true"
+        aria-labelledby="roomConfirmTitle" aria-describedby="roomConfirmDesc">
+        <header class="admin-reviews-modal-head">
+            <div class="dash-detail-head-main">
+                <div class="dash-detail-meta">
+                    <span class="dash-detail-kicker">Room availability</span>
+                </div>
+                <h2 id="roomConfirmTitle" data-dash-roomconfirm-title>Close Room <span data-dash-roomconfirm-name>this room</span>?</h2>
+            </div>
+            <button type="button" class="admin-reviews-modal-close" data-dash-roomconfirm-cancel aria-label="Cancel">×</button>
+        </header>
+        <div class="admin-reviews-modal-body">
+            <p class="dash-roomtype-confirm-note" id="roomConfirmDesc">
+                <span class="dash-roomtype-confirm-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 2.6 19.5h18.8L12 3.5z"/><path d="M12 9.5v4.6"/><circle cx="12" cy="17" r="0.5" fill="currentColor" stroke="none"/></svg>
+                </span>
+                <span data-dash-roomconfirm-desc>Are you sure you want to close this room?</span>
+            </p>
+            <p class="dash-offer-error" data-dash-roomconfirm-error hidden role="alert"></p>
+        </div>
+        <footer class="dash-detail-actions">
+            <div class="dash-attention-actions">
+                <button type="button" class="dash-roomtype-confirm-keep" data-dash-roomconfirm-cancel>Cancel</button>
+                <button type="button" class="dash-roomtype-confirm-proceed" data-dash-roomconfirm-ok>Yes, close it</button>
+            </div>
+        </footer>
     </section>
 </div>
 

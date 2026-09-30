@@ -106,7 +106,10 @@ public sealed class BookingsApiController : ControllerBase
                     booking.Status,
                     booking.TotalAmount,
                     booking.AmountDueNow,
-                    booking.Items));
+                    booking.Items,
+                    booking.Id,
+                    booking.GuestPayToken,
+                    booking.DepositDueAtUtc));
         }
         catch (BookingAvailabilityException ex)
         {

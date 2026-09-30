@@ -79,6 +79,11 @@ public class Booking
     /// <summary>When true, payments must be Cash (walk-in LimitedTime promo).</summary>
     public bool CashOnlyPromo { get; set; }
 
+    /// <summary>UTC deadline for the 50% online deposit before the room hold is released.</summary>
+    public DateTime? DepositDueAtUtc { get; set; }
+    /// <summary>Secret token that authorizes the guest deposit endpoints for this booking.</summary>
+    public string? GuestPayToken { get; set; }
+
     /// <summary>JSON array of field labels the guest last changed online (e.g. ["Check-in","Rooms"]).</summary>
     public string? GuestEditedFieldsJson { get; set; }
     /// <summary>When the guest last edited the booking through the guest portal.</summary>

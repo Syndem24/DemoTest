@@ -179,7 +179,9 @@ public sealed record BookingDto(
     IReadOnlyList<string>? GuestEditedFields = null,
     DateTime? LastGuestEditAtUtc = null,
     /// <summary>True when unseen guest edits exist — shows the count badge on the row.</summary>
-    bool GuestEditsPending = false);
+    bool GuestEditsPending = false,
+    string? GuestPayToken = null,
+    DateTime? DepositDueAtUtc = null);
 
 public sealed record CreateBookingResponse(
     string Reference,
@@ -188,7 +190,10 @@ public sealed record CreateBookingResponse(
     BookingStatus Status,
     decimal TotalAmount,
     decimal AmountDueNow,
-    IReadOnlyList<BookingItemDto> Items);
+    IReadOnlyList<BookingItemDto> Items,
+    int Id = 0,
+    string? PayToken = null,
+    DateTime? DepositDueAtUtc = null);
 
 public sealed class UpdateBookingStatusRequest
 {

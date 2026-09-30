@@ -397,6 +397,8 @@ public static class DatabaseBootstrap
                         OR COL_LENGTH(N'dbo.Booking', N'ArrivalWarningSentAtUtc') IS NULL
                         OR COL_LENGTH(N'dbo.Booking', N'PendingCallWarningSentAtUtc') IS NULL
                         OR COL_LENGTH(N'dbo.Booking', N'CheckoutWarningSentAtUtc') IS NULL
+                        OR COL_LENGTH(N'dbo.Booking', N'DepositDueAtUtc') IS NULL
+                        OR COL_LENGTH(N'dbo.QrPaymentIntent', N'XenditInvoiceId') IS NULL
                         OR NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Booking_List_Created' AND object_id = OBJECT_ID(N'dbo.Booking'))
                         OR OBJECT_ID(N'[dbo].[PaymentRecord]', N'U') IS NULL
                         OR OBJECT_ID(N'[dbo].[BookingCharge]', N'U') IS NULL

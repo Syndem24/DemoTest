@@ -215,7 +215,7 @@ public sealed class ChatRuleMatchTranslator : IChatRuleMatchTranslator
         if (string.IsNullOrWhiteSpace(tl))
             tl = "en";
 
-        var cacheKey = "chat.public.tr.v1." + tl + ":" + trimmed;
+        var cacheKey = "chat.public.tr.v2." + tl + ":" + trimmed;
         if (_cache.TryGetValue(cacheKey, out string? cached) && !string.IsNullOrWhiteSpace(cached))
             return cached;
 
@@ -225,7 +225,8 @@ public sealed class ChatRuleMatchTranslator : IChatRuleMatchTranslator
             if (string.IsNullOrWhiteSpace(translated)
                 || string.Equals(translated.Trim(), trimmed, StringComparison.OrdinalIgnoreCase))
             {
-                translated = await TranslateViaMyMemoryAsync(trimmed, "auto", tl, cancellationToken);
+                var source = DetectScriptLanguage(trimmed) ?? "auto";
+                translated = await TranslateViaMyMemoryAsync(trimmed, source, tl, cancellationToken);
             }
 
             if (string.IsNullOrWhiteSpace(translated))
@@ -248,8 +249,13 @@ public sealed class ChatRuleMatchTranslator : IChatRuleMatchTranslator
         string target,
         CancellationToken cancellationToken)
     {
+        var mappedSource = MapMyMemoryLang(source);
+        // MyMemory has no autodetect — "Autodetect|xx" makes it echo an error sentence.
+        if (mappedSource == "Autodetect")
+            return null;
+
         var client = _httpClientFactory.CreateClient("chat-translate");
-        var langpair = $"{MapMyMemoryLang(source)}|{MapMyMemoryLang(target)}";
+        var langpair = $"{mappedSource}|{MapMyMemoryLang(target)}";
         var sb = new StringBuilder();
         foreach (var chunk in SplitChunks(text))
         {
@@ -269,13 +275,31 @@ public sealed class ChatRuleMatchTranslator : IChatRuleMatchTranslator
                 || translatedEl.ValueKind != JsonValueKind.String)
                 return null;
 
+            // MyMemory reports quota/validation failures inside a 200 envelope.
+            if (doc.RootElement.TryGetProperty("responseStatus", out var statusEl)
+                && ((statusEl.ValueKind == JsonValueKind.Number && statusEl.GetInt32() != 200)
+                    || (statusEl.ValueKind == JsonValueKind.String
+                        && statusEl.GetString() is { } statusText
+                        && statusText != "OK" && statusText != "200")))
+                return null;
+
             var part = translatedEl.GetString();
-            if (string.IsNullOrWhiteSpace(part))
+            if (string.IsNullOrWhiteSpace(part) || LooksLikeMyMemoryError(part))
                 return null;
             sb.Append(part);
         }
 
         return sb.Length == 0 ? null : sb.ToString();
+    }
+
+    private static bool LooksLikeMyMemoryError(string text)
+    {
+        var upper = text.Trim().ToUpperInvariant();
+        return upper.StartsWith("MYMEMORY", StringComparison.Ordinal)
+            || upper.StartsWith("PLEASE SELECT", StringComparison.Ordinal)
+            || upper.StartsWith("QUERY LENGTH", StringComparison.Ordinal)
+            || upper.StartsWith("INVALID", StringComparison.Ordinal)
+            || upper.Contains("AVAILABLE FREE TRANSLATIONS", StringComparison.Ordinal);
     }
 
     private static string MapMyMemoryLang(string gtx) =>

@@ -98,6 +98,23 @@
   let stayPromptActive = false;
   let lastNightsShown = 0;
   let lastConfirm = null;
+
+  /* ===== 50% deposit checkout (QRPh / Xendit hosted card) ===== */
+  const FALLBACK_PAY_BRANDS = {
+    Card: [['visa', 'Visa'], ['mastercard', 'Mastercard'], ['jcb', 'JCB'], ['amex', 'American Express']],
+    QrPh: [['qrph', 'QRPh'], ['gcash', 'GCash'], ['maya', 'Maya'], ['bpi', 'BPI'], ['unionbank', 'UnionBank'], ['landbank', 'Landbank'], ['rcbc', 'RCBC'], ['metrobank', 'Metrobank']],
+  };
+  const payOverlay = document.getElementById('wizPayOverlay');
+  const payOverlayStatus = payOverlay?.querySelector('[data-wiz-overlay-status]');
+  let depositCtx = null;
+  let depositIntent = null;
+  let depositMethod = null;
+  let depositMethods = null;
+  let depositPayState = 'choose';
+  let payPollTimer = null;
+  let payPollTick = 0;
+  let holdTicker = null;
+  let payOverlayShownAt = 0;
   let farCheckInAck = '';
   /** @type {((ok: boolean) => void) | null} */
   let farCheckInResolver = null;
@@ -1854,6 +1871,8 @@
           ? t('wiz.guestDetails')
           : name === 'review'
             ? t('wiz.reviewAgree')
+            : name === 'deposit'
+              ? t('wiz.pay.stepTitle')
             : name === 'confirm'
               ? t('wiz.bookingConfirmed')
               : t('wiz.yourBooking');
@@ -1961,7 +1980,14 @@
       const rows = breakdownRows()
         .map((row) => `<div class="wiz-break-row${row.save ? ' is-save' : ''}"><span>${escapeHtml(row.label)}</span><strong>${row.amount}</strong></div>`)
         .join('');
-      box.innerHTML = `${rows}${signupPayStayHtml('pill')}<div class="wiz-break-sum"><span>${t('booking.stayTotal')}</span><strong>${money(grandTotal())}</strong></div>`;
+      const total = grandTotal();
+      const due = Math.round((total / 2) * 100) / 100;
+      const depositRows =
+        `<div class="wiz-breakdown-deposit">
+            <div class="wiz-break-row"><span>${t('wiz.pay.dueNow')}</span><strong>${money(due)}</strong></div>
+            <div class="wiz-break-row"><span>${t('wiz.pay.balance')}</span><strong>${money(Math.round((total - due) * 100) / 100)}</strong></div>
+          </div>`;
+      box.innerHTML = `${rows}${signupPayStayHtml('pill')}<div class="wiz-break-sum"><span>${t('booking.stayTotal')}</span><strong>${money(total)}</strong></div>${depositRows}`;
     }
     const cash = document.querySelector('[data-wiz-cash-note]');
     const offer = selectedRateOffer();
@@ -1987,6 +2013,11 @@
   }
 
   function closeDrawer() {
+    if (drawerStep === 'deposit') {
+      stopPayPoll();
+      stopHoldTicker();
+      if (depositPayState === 'qr') cancelDepositIntent();
+    }
     document.body.classList.remove('wiz-lock');
     if (drawer) drawer.hidden = true;
     if (drawerBack) drawerBack.hidden = true;
@@ -2697,31 +2728,433 @@
     };
   }
 
-  function paintConfirm(payload, bookerName, bookerEmail) {
-    lastConfirm = { payload, bookerName, bookerEmail };
+  function paintConfirm(payload, bookerName, bookerEmail, deposit, noteText) {
+    lastConfirm = { payload, bookerName, bookerEmail, deposit, noteText };
     const kind = String(payload.kind || 'Booking');
     const kicker = document.querySelector('[data-wiz-confirm-kicker]');
-    if (kicker) kicker.textContent = kind.toLowerCase() === 'reservation' ? t('wiz.reservationReceived') : t('wiz.bookingConfirmedShort');
+    if (kicker) {
+      kicker.textContent = deposit
+        ? t('wiz.bookingConfirmed')
+        : kind.toLowerCase() === 'reservation'
+          ? t('wiz.reservationReceived')
+          : t('wiz.bookingConfirmedShort');
+    }
     const title = document.querySelector('[data-wiz-confirm-title]');
     if (title) title.innerHTML = `${escapeHtml(t('wiz.allSet'))}<br />${escapeHtml(bookerName || t('wiz.valuedGuest'))}!`;
     const copy = document.querySelector('[data-wiz-confirm-copy]');
     if (copy) {
-      copy.innerHTML = t('wiz.confirmSent', { email: `<strong>${escapeHtml(bookerEmail)}</strong>` });
+      copy.innerHTML = bookerEmail
+        ? t('wiz.confirmSent', { email: `<strong>${escapeHtml(bookerEmail)}</strong>` })
+        : t('wiz.pay.confirmedCopy');
+    }
+    const note = document.querySelector('[data-wiz-confirm-note]');
+    if (note) {
+      note.hidden = !noteText;
+      note.textContent = noteText || '';
     }
     const rows = document.querySelector('[data-wiz-confirm-rows]');
     if (rows) {
+      const roomLabel = deposit?.roomsLabel
+        || cart.map((line) => (line.qty > 1 ? `${line.qty}× ${line.name}` : line.name)).join(', ');
       const list = [
-        [t('wiz.room'), cart.map((line) => (line.qty > 1 ? `${line.qty}× ${line.name}` : line.name)).join(', ')],
-        [t('wiz.checkIn'), checkInEl.value],
-        [t('wiz.checkOut'), checkOutEl.value],
-        [t('wiz.nights'), String(nights())],
+        roomLabel ? [t('wiz.room'), roomLabel] : null,
+        checkInEl?.value ? [t('wiz.checkIn'), checkInEl.value] : null,
+        checkOutEl?.value ? [t('wiz.checkOut'), checkOutEl.value] : null,
+        checkInEl?.value && checkOutEl?.value ? [t('wiz.nights'), String(nights())] : null,
         [t('wiz.total'), money(payload.totalAmount ?? grandTotal())],
+        deposit?.receiptNumber ? [t('wiz.pay.receipt'), deposit.receiptNumber] : null,
+        deposit?.paidNow != null ? [t('wiz.pay.paidNow'), money(deposit.paidNow)] : null,
+        deposit?.balanceDue != null ? [t('wiz.pay.balance'), money(deposit.balanceDue)] : null,
         [t('wiz.reference'), payload.reference || '—'],
-      ];
+      ].filter(Boolean);
       rows.innerHTML = list
         .map(([label, value]) => `<div><span>${label}</span><strong class="${label === t('wiz.reference') ? 'is-ref' : ''}">${value}</strong></div>`)
         .join('');
     }
+  }
+
+  function showPayOverlay(statusText) {
+    if (!payOverlay) return;
+    payOverlayShownAt = Date.now();
+    if (payOverlayStatus && statusText) payOverlayStatus.textContent = statusText;
+    payOverlay.hidden = false;
+    document.body.style.overflow = 'hidden';
+    payOverlay.focus();
+  }
+
+  function setPayOverlayStatus(text) {
+    if (payOverlayStatus) payOverlayStatus.textContent = text;
+  }
+
+  async function hidePayOverlay() {
+    if (!payOverlay || payOverlay.hidden) return;
+    const wait = Math.max(0, 600 - (Date.now() - payOverlayShownAt));
+    if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+    payOverlay.hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  function payAlert(message, pane) {
+    const box = document.querySelector(
+      pane === 'qr' ? '[data-wiz-pay-qr-alert]' : '[data-wiz-pay-alert]');
+    if (!box) return;
+    box.hidden = !message;
+    box.textContent = message || '';
+  }
+
+  function brandList(channel) {
+    const key = channel === 'Card' ? 'cardBrands' : 'qrPhBrands';
+    const list = depositMethods?.[key];
+    if (Array.isArray(list) && list.length) {
+      return list.map((b) => ({ file: b.file, label: b.label }));
+    }
+    return (FALLBACK_PAY_BRANDS[channel] || [])
+      .map(([key2, label]) => ({ file: `/Images/payments/${key2}.svg`, label }));
+  }
+
+  function channelEnabled(channel) {
+    if (!depositMethods) return true; // optimistic until the methods fetch resolves
+    return channel === 'Card' ? !!depositMethods.cardEnabled : !!depositMethods.qrPhEnabled;
+  }
+
+  function paintPayBrands() {
+    document.querySelectorAll('[data-wiz-pay-brands]').forEach((el) => {
+      const channel = el.getAttribute('data-wiz-pay-brands');
+      el.innerHTML = brandList(channel)
+        .map((b) => `<img src="${b.file}" alt="${escapeHtml(b.label)}" height="24" loading="lazy" />`)
+        .join('');
+    });
+  }
+
+  function selectPayMethod(method) {
+    depositMethod = method;
+    document.querySelectorAll('[data-wiz-pay-method]').forEach((btn) => {
+      const on = btn.getAttribute('data-wiz-pay-method') === method;
+      btn.classList.toggle('is-on', on);
+      btn.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+    syncPayGo();
+  }
+
+  function syncPayGo() {
+    const go = document.querySelector('[data-wiz-pay-go]');
+    if (!go) return;
+    go.textContent = t('wiz.pay.go', { amount: money(depositCtx?.amountDueNow ?? 0) });
+    const ready = Boolean(depositMethod) && channelEnabled(depositMethod);
+    go.disabled = !ready;
+    go.setAttribute('aria-disabled', ready ? 'false' : 'true');
+  }
+
+  function syncPayMethods() {
+    let anyEnabled = false;
+    document.querySelectorAll('[data-wiz-pay-method]').forEach((btn) => {
+      const channel = btn.getAttribute('data-wiz-pay-method');
+      const enabled = channelEnabled(channel);
+      anyEnabled = anyEnabled || enabled;
+      btn.classList.toggle('is-off', !enabled);
+      btn.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+      if (!enabled && depositMethod === channel) selectPayMethod(null);
+    });
+    const off = document.querySelector('[data-wiz-pay-off]');
+    if (off) off.hidden = anyEnabled;
+    syncPayGo();
+  }
+
+  async function loadDepositMethods() {
+    try {
+      const res = await fetch('/api/guest/deposit/methods', { headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error('methods');
+      depositMethods = await res.json();
+    } catch {
+      depositMethods = { qrPhEnabled: false, cardEnabled: false };
+    }
+    paintPayBrands();
+    syncPayMethods();
+  }
+
+  function setPayState(state) {
+    depositPayState = state;
+    document.querySelectorAll('[data-wiz-pay-pane]').forEach((pane) => {
+      pane.hidden = pane.getAttribute('data-wiz-pay-pane') !== state;
+    });
+    const first = document.querySelector(
+      `[data-wiz-pay-pane="${state}"] .wiz-pay-title, [data-wiz-pay-pane="${state}"] button`);
+    first?.focus?.();
+  }
+
+  function depositBalanceDue() {
+    if (depositCtx?.balanceDue != null) return depositCtx.balanceDue;
+    if (depositCtx) return Math.max(0, Number(depositCtx.total) - Number(depositCtx.amountDueNow));
+    return 0;
+  }
+
+  function paintDepositChoose() {
+    const due = document.querySelector('[data-wiz-pay-due]');
+    if (due) due.textContent = money(depositCtx?.amountDueNow ?? 0);
+    const bal = document.querySelector('[data-wiz-pay-balance]');
+    if (bal) bal.textContent = t('wiz.pay.balanceAt', { amount: money(depositBalanceDue()) });
+    startHoldTicker();
+  }
+
+  function fmtCountdown(ms) {
+    const mm = Math.floor(ms / 60000);
+    const ss = Math.floor((ms % 60000) / 1000);
+    return `${mm}:${String(ss).padStart(2, '0')}`;
+  }
+
+  function tickHold() {
+    const heldEl = document.querySelector('[data-wiz-pay-held]');
+    const due = depositCtx?.dueAtUtc ? Date.parse(depositCtx.dueAtUtc) : NaN;
+    if (heldEl) {
+      if (Number.isFinite(due) && due > Date.now()) {
+        heldEl.hidden = false;
+        heldEl.textContent = t('wiz.pay.held', { time: fmtCountdown(due - Date.now()) });
+      } else {
+        heldEl.hidden = true;
+        heldEl.textContent = '';
+      }
+    }
+    const qrExpEl = document.querySelector('[data-wiz-pay-qr-expiry]');
+    const exp = depositIntent?.expiresAtUtc ? Date.parse(depositIntent.expiresAtUtc) : NaN;
+    if (qrExpEl) {
+      qrExpEl.textContent = Number.isFinite(exp) && exp > Date.now()
+        ? t('wiz.pay.expiresIn', { time: fmtCountdown(exp - Date.now()) })
+        : '';
+    }
+    if (Number.isFinite(due) && due <= Date.now()) onHoldExpired();
+  }
+
+  function startHoldTicker() {
+    stopHoldTicker();
+    tickHold();
+    holdTicker = setInterval(tickHold, 1000);
+  }
+
+  function stopHoldTicker() {
+    if (holdTicker) {
+      clearInterval(holdTicker);
+      holdTicker = null;
+    }
+  }
+
+  function onHoldExpired() {
+    stopPayPoll();
+    stopHoldTicker();
+    if (depositPayState !== 'confirming' && drawerStep === 'deposit') {
+      setPayState('hold-expired');
+    }
+  }
+
+  async function createDepositIntent() {
+    const res = await fetch(`/api/guest/deposit/${depositCtx.id}/intent`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        RequestVerificationToken: token,
+      },
+      body: JSON.stringify({ payToken: depositCtx.payToken, channel: depositMethod }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(data.message || t('wiz.pay.failed'));
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  }
+
+  async function onPayGo() {
+    if (!depositCtx || !depositMethod) return;
+    payAlert('');
+    showPayOverlay(t('wiz.pay.preparing'));
+    try {
+      const intent = await createDepositIntent();
+      depositIntent = intent;
+      if (intent.channel === 'Card' && intent.checkoutUrl) {
+        setPayOverlayStatus(t('wiz.pay.redirecting'));
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.max(0, 600 - (Date.now() - payOverlayShownAt))));
+        window.location.assign(intent.checkoutUrl);
+        return;
+      }
+      await hidePayOverlay();
+      paintQr(intent);
+      setPayState('qr');
+      startPayPoll();
+    } catch (err) {
+      await hidePayOverlay();
+      if (/hold for this booking has ended/i.test(err?.message || '')) {
+        onHoldExpired();
+        return;
+      }
+      payAlert(err?.message || t('wiz.pay.failed'));
+    }
+  }
+
+  function paintQr(intent) {
+    const img = document.querySelector('[data-wiz-pay-qr]');
+    if (img) img.src = intent.qrImageDataUrl || '';
+    const amt = document.querySelector('[data-wiz-pay-qr-amount]');
+    if (amt) amt.textContent = money(intent.amount);
+    const newQr = document.querySelector('[data-wiz-pay-newqr]');
+    if (newQr) newQr.hidden = true;
+    payAlert('', 'qr');
+    tickHold();
+  }
+
+  function startPayPoll() {
+    stopPayPoll();
+    payPollTick = 0;
+    payPollTimer = setInterval(() => void pollIntent(false), 3000);
+  }
+
+  function stopPayPoll() {
+    if (payPollTimer) {
+      clearInterval(payPollTimer);
+      payPollTimer = null;
+    }
+  }
+
+  async function pollIntent(forceReconcile) {
+    if (!depositCtx || !depositIntent) return;
+    payPollTick += 1;
+    const reconcile = forceReconcile || payPollTick % 5 === 0;
+    try {
+      const res = await fetch(
+        `/api/guest/deposit/${depositCtx.id}/intent/${depositIntent.id}?payToken=${encodeURIComponent(depositCtx.payToken)}${reconcile ? '&reconcile=true' : ''}`,
+        { headers: { Accept: 'application/json' } });
+      if (res.status === 404) {
+        onHoldExpired();
+        return;
+      }
+      if (!res.ok) return;
+      const intent = await res.json();
+      depositIntent = intent;
+      await onIntentUpdate(intent);
+    } catch {
+      /* transient network blip — keep polling */
+    }
+  }
+
+  async function onIntentUpdate(intent) {
+    const status = String(intent.status || '');
+    if (status === 'Paid' || intent.bookingStatus === 'Confirmed') {
+      stopPayPoll();
+      stopHoldTicker();
+      setPayState('confirming');
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      paintConfirm(
+        {
+          reference: depositCtx.reference,
+          totalAmount: depositCtx.total || (intent.balanceDue ?? 0) + intent.amount,
+          kind: 'Reservation',
+        },
+        val('wizFirstName'),
+        bookingFor === 'someone' ? val('wizGuestEmail') : val('wizEmail'),
+        {
+          receiptNumber: intent.receiptNumber,
+          paidNow: intent.amount,
+          balanceDue: intent.balanceDue,
+          roomsLabel: depositCtx.roomsLabel,
+        });
+      setDrawerStep('confirm');
+      return;
+    }
+    if (status === 'Failed' || status === 'Expired' || status === 'Cancelled') {
+      stopPayPoll();
+      setPayState('qr');
+      payAlert(t('wiz.pay.expiredOrFailed'), 'qr');
+      const newQr = document.querySelector('[data-wiz-pay-newqr]');
+      if (newQr) newQr.hidden = false;
+    }
+  }
+
+  function cancelDepositIntent() {
+    if (!depositCtx || !depositIntent || depositIntent.status !== 'Pending') return;
+    fetch(`/api/guest/deposit/${depositCtx.id}/intent/${depositIntent.id}/cancel`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        RequestVerificationToken: token,
+      },
+      body: JSON.stringify({ payToken: depositCtx.payToken }),
+      keepalive: true,
+    }).catch(() => {});
+  }
+
+  function leaveDepositToChoose() {
+    stopPayPoll();
+    cancelDepositIntent();
+    depositIntent = null;
+    selectPayMethod(null);
+    payAlert('');
+    payAlert('', 'qr');
+    setPayState('choose');
+    paintDepositChoose();
+  }
+
+  async function resumeDepositIfRequested() {
+    const params = new URLSearchParams(location.search);
+    const ref = params.get('resume');
+    const tk = params.get('t');
+    const id = Number(params.get('id') || 0);
+    if (!ref || !tk || !id) return;
+    history.replaceState(null, '', location.pathname + location.hash);
+    depositCtx = {
+      id,
+      reference: ref,
+      payToken: tk,
+      dueAtUtc: null,
+      amountDueNow: 0,
+      total: 0,
+      balanceDue: null,
+      roomsLabel: '',
+    };
+    document.body.classList.add('wiz-lock');
+    if (drawer) drawer.hidden = false;
+    if (drawerBack) drawerBack.hidden = false;
+    try {
+      const res = await fetch(
+        `/api/guest/deposit/by-reference/${encodeURIComponent(ref)}/current?payToken=${encodeURIComponent(tk)}`,
+        { headers: { Accept: 'application/json' } });
+      if (res.ok) {
+        const cur = await res.json();
+        depositCtx.id = cur.bookingId || id;
+        depositCtx.amountDueNow = cur.amount ?? 0;
+        depositCtx.balanceDue = cur.balanceDue ?? null;
+        depositCtx.total = (cur.amount ?? 0) + (cur.balanceDue ?? 0);
+        // Terminal intents (Failed/Expired/Cancelled) are only a source of
+        // amounts — never assign them to depositIntent or the poll/cancel paths.
+        depositIntent = (cur.status === 'Pending' || cur.status === 'Processing') ? cur : null;
+        if (cur.bookingStatus === 'Confirmed' || cur.status === 'Paid') {
+          paintConfirm(
+            { reference: cur.bookingReference || ref, totalAmount: depositCtx.total, kind: 'Reservation' },
+            '',
+            '',
+            { receiptNumber: cur.receiptNumber, paidNow: cur.amount, balanceDue: cur.balanceDue });
+          setDrawerStep('confirm');
+          void loadDepositMethods();
+          return;
+        }
+        if (cur.status === 'Pending' && cur.channel === 'QrPh' && cur.qrImageDataUrl) {
+          setDrawerStep('deposit');
+          paintQr(cur);
+          setPayState('qr');
+          startPayPoll();
+          startHoldTicker();
+          void loadDepositMethods();
+          return;
+        }
+      }
+    } catch {
+      /* fall through to the method picker */
+    }
+    setDrawerStep('deposit');
+    setPayState('choose');
+    selectPayMethod(null);
+    void loadDepositMethods();
+    paintDepositChoose();
   }
 
   async function submitBooking() {
@@ -2785,7 +3218,7 @@
           guestPhone: guest.guestPhone,
           checkInAtUtc: toManilaIso(checkInEl.value, CHECKIN_TIME),
           checkoutTimeUtc: toManilaIso(checkOutEl.value, CHECKOUT_TIME),
-          paymentOption: 'Full',
+          paymentOption: 'Half',
           acceptTerms: Boolean(document.getElementById('wizConsentData')?.checked),
           extraPersons: extraPersons(),
           arrivalDiscountRequest,
@@ -2806,13 +3239,38 @@
               : t('booking.toastSubmitFailed'))
         );
       }
-      paintConfirm(payload, val('wizFirstName'), bookingFor === 'someone' ? val('wizGuestEmail') : val('wizEmail'));
+      depositCtx = {
+        id: payload.id,
+        reference: payload.reference,
+        payToken: payload.payToken,
+        dueAtUtc: payload.depositDueAtUtc || null,
+        amountDueNow: payload.amountDueNow,
+        total: payload.totalAmount,
+        balanceDue: Number(payload.totalAmount) - Number(payload.amountDueNow),
+        roomsLabel: cart.map((line) => (line.qty > 1 ? `${line.qty}× ${line.name}` : line.name)).join(', '),
+      };
       clearWizDraft();
       stayRooms.forEach((room) => { room.roomTypeId = null; });
       rebuildCartFromAssignments();
       paintStayRooms();
       paintCartChrome();
-      setDrawerStep('confirm');
+      if (depositCtx.payToken && depositCtx.dueAtUtc) {
+        depositIntent = null;
+        selectPayMethod(null);
+        setDrawerStep('deposit');
+        setPayState('choose');
+        void loadDepositMethods();
+        paintDepositChoose();
+      } else {
+        // No pay token / hold returned — fall back to the confirmed-by-reception note.
+        paintConfirm(
+          payload,
+          val('wizFirstName'),
+          bookingFor === 'someone' ? val('wizGuestEmail') : val('wizEmail'),
+          null,
+          t('wiz.pay.callToConfirm'));
+        setDrawerStep('confirm');
+      }
     } catch (err) {
       const message = err?.message || t('booking.toastSubmitFailed');
       if (isAvailabilityConflictMessage(message)) {
@@ -2831,7 +3289,7 @@
       }
     } finally {
       if (submitBtn) {
-        submitBtn.textContent = submitBtn.dataset.original || t('wiz.confirmReservation');
+        submitBtn.textContent = submitBtn.dataset.original || t('wiz.agreePay');
         syncConfirmReady();
       }
     }
@@ -2998,6 +3456,50 @@
   });
   document.querySelector('[data-wiz-form-back]')?.addEventListener('click', () => setDrawerStep('summary'));
   document.querySelector('[data-wiz-review-back]')?.addEventListener('click', () => setDrawerStep('form'));
+
+  document.querySelectorAll('[data-wiz-pay-method]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (btn.classList.contains('is-off')) return;
+      selectPayMethod(btn.getAttribute('data-wiz-pay-method'));
+    });
+  });
+  document.querySelector('.wiz-pay-methods')?.addEventListener('keydown', (event) => {
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    const methods = [...document.querySelectorAll('[data-wiz-pay-method]')]
+      .filter((b) => !b.classList.contains('is-off'));
+    const idx = methods.indexOf(document.activeElement);
+    if (idx < 0 || methods.length < 2) return;
+    event.preventDefault();
+    const dir = event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 1;
+    const next = methods[(idx + dir + methods.length) % methods.length];
+    next.focus();
+    selectPayMethod(next.getAttribute('data-wiz-pay-method'));
+  });
+  document.querySelector('[data-wiz-pay-back]')?.addEventListener('click', () => {
+    leaveDepositToChoose();
+    setDrawerStep('review');
+  });
+  document.querySelector('[data-wiz-pay-go]')?.addEventListener('click', () => {
+    if (document.querySelector('[data-wiz-pay-go]')?.disabled) return;
+    void onPayGo();
+  });
+  document.querySelector('[data-wiz-pay-check]')?.addEventListener('click', () => void pollIntent(true));
+  document.querySelector('[data-wiz-pay-change]')?.addEventListener('click', () => leaveDepositToChoose());
+  document.querySelector('[data-wiz-pay-newqr]')?.addEventListener('click', () => {
+    depositMethod = 'QrPh';
+    void onPayGo();
+  });
+  document.querySelector('[data-wiz-pay-choose-dates]')?.addEventListener('click', () => {
+    depositCtx = null;
+    depositIntent = null;
+    setDrawerStep('summary');
+    closeDrawer();
+    setStep(1);
+  });
+  payOverlay?.addEventListener('keydown', (event) => {
+    // Focus-trap + Esc-swallow while the processing overlay is up.
+    if (event.key === 'Tab' || event.key === 'Escape') event.preventDefault();
+  });
   document.querySelector('[data-wiz-submit]')?.addEventListener('click', () => {
     if (submitBtn?.disabled) return;
     submitBooking();
@@ -3089,6 +3591,7 @@
 
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
+    if (payOverlay && !payOverlay.hidden) return;
     if (document.body.classList.contains('hotel-photo-zoom-open')) return;
     if (farCheckInSheet && !farCheckInSheet.hidden) {
       closeFarCheckInDialog(false);
@@ -3296,7 +3799,7 @@
       paintDateAdjustNights();
     }
     if (drawerStep === 'confirm' && lastConfirm) {
-      paintConfirm(lastConfirm.payload, lastConfirm.bookerName, lastConfirm.bookerEmail);
+      paintConfirm(lastConfirm.payload, lastConfirm.bookerName, lastConfirm.bookerEmail, lastConfirm.deposit, lastConfirm.noteText);
     }
   }
 
@@ -3322,4 +3825,5 @@
   initStayAvailabilityRealtime();
   scheduleStayAvailabilityRefresh();
   if (!occupancyConfirmed) maybeOpenGuestsOnArrive();
+  void resumeDepositIfRequested();
 })();

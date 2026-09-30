@@ -111,6 +111,7 @@ public sealed class AdminPaymentsApiController : ControllerBase
 
     [HttpPost("{id:int}/refund")]
     [HttpPost("{id:int}/void")]
+    [Authorize(Roles = AppRoles.AdminManager)]
     [ValidateAntiForgeryToken]
     public async Task<ActionResult<PaymentRecordDto>> RefundPayment(
         int id,
@@ -257,6 +258,7 @@ public sealed class AdminPaymentsApiController : ControllerBase
     }
 
     [HttpGet("flush-logs")]
+    [Authorize(Roles = AppRoles.AdminManager)]
     public async Task<ActionResult<IReadOnlyList<PaymentFlushLogDto>>> GetPaymentFlushLogs(
         CancellationToken cancellationToken)
     {
@@ -264,6 +266,7 @@ public sealed class AdminPaymentsApiController : ControllerBase
     }
 
     [HttpPost("flush")]
+    [Authorize(Roles = AppRoles.AdminManager)]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> FlushPayments(
         [FromBody] FlushPaymentsRequest request,

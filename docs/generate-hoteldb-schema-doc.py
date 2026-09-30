@@ -84,7 +84,7 @@ TABLES = [
         ("Kind", "nvarchar(20)", "", "Booking | Reservation (lead-time split)"),
         ("Status", "nvarchar(20)", "", "Pending | Confirmed | Rejected | Cancelled | CheckedOut"),
         ("Channel", "nvarchar(30)", "", "Online | WalkIn | FrontDeskExtension | Agoda | Expedia | RedDoorz | OtherThirdParty"),
-        ("PaymentOption", "nvarchar(20)", "", "Full | Half due at booking"),
+        ("PaymentOption", "nvarchar(20)", "", "Full | Half due at booking — online guests are Half: 50% deposit to confirm"),
         ("CheckInAtUtc / CheckoutTimeUtc", "datetime2", "NULL col, required by app", "Scheduled stay window"),
         ("TotalAmount", "decimal(18,2)", "", "Room nights + charges (locked at booking rate)"),
         ("AmountDueNow", "decimal(18,2)", "", "Amount due at booking time"),
@@ -96,6 +96,11 @@ TABLES = [
         ("ArrivalWarningSentAtUtc / PendingCallWarningSentAtUtc / CheckoutWarningSentAtUtc", "datetime2", "NULL", "20-min warning timestamps"),
         ("IsNotificationCleared", "bit", "", "Hidden from admin bell"),
         ("IsArchived / ArchivedAtUtc", "bit / datetime2", "", "Soft-delete to history"),
+        ("DepositDueAtUtc", "datetime2", "NULL", "50% deposit hold deadline — online bookings get +30 min; unpaid holds auto-cancel"),
+        ("GuestPayToken", "nvarchar(64)", "NULL, unique filtered idx", "Per-booking secret authorizing the guest deposit endpoints"),
+        ("GuestEditedFieldsJson", "nvarchar(max)", "NULL, JSON", "Fields the guest edited after booking"),
+        ("LastGuestEditAtUtc", "datetime2", "NULL", "When the guest last edited"),
+        ("GuestEditsSeenByStaff", "bit", "", "Cleared on guest edit; set when staff reviews it"),
         ("CreatedAtUtc / UpdatedAtUtc", "datetime2", "", "Audit timestamps"),
      ]),
     ("BookingItem", "Weak entity",
@@ -133,7 +138,7 @@ TABLES = [
         ("BookingId", "int", "FK → Booking, CASCADE", "Owning stay"),
         ("ReceiptNumber", "nvarchar(40)", "unique idx", "Issued receipt no."),
         ("EventType", "nvarchar(30)", "", "Deposit | ArrivalPayment | BalanceSettlement | Refund | Adjustment"),
-        ("Method", "nvarchar(30)", "", "Cash | EWallet | Other (+ legacy Card/BankTransfer/Maya)"),
+        ("Method", "nvarchar(30)", "", "Cash | EWallet | Card (Xendit deposit) | Other (+ legacy BankTransfer/Maya)"),
         ("Amount", "decimal(18,2)", "", "Positive payment; negative = refund/adjustment"),
         ("StayTotalAtPosting / BalanceAfter", "decimal(18,2)", "", "Ledger snapshots at posting"),
         ("PaidAtUtc", "datetime2", "", "When collected"),
@@ -143,6 +148,29 @@ TABLES = [
         ("VerifiedAtUtc / VerifiedBy", "datetime2 / nvarchar(120)", "NULL", "Staff manual verification of e-wallet payment"),
         ("VoidedAtUtc / VoidReason / VoidedBy", "datetime2 / nvarchar(500) / nvarchar(120)", "NULL", "Void details"),
         ("Notes", "nvarchar(1000)", "NULL", "Free text (e.g., cash change given)"),
+     ]),
+    ("QrPaymentIntent", "Weak entity",
+     "A Xendit payment intent tied to a stay — front-desk QRPh collection and the guest 50% deposit "
+     "(QRPh or hosted card checkout). Guest access to an intent is authorized by Booking.GuestPayToken.",
+     [
+        ("Id", "int", "PK, identity", ""),
+        ("BookingId", "int", "FK → Booking, RESTRICT, indexed", "Owning stay"),
+        ("ReferenceId", "nvarchar(64)", "unique", "Our idempotency reference sent to Xendit (MORI-{booking ref}-{8 hex})"),
+        ("XenditPaymentRequestId", "nvarchar(64)", "NULL, unique filtered", "QRPh payment_request_id — null for Card"),
+        ("XenditInvoiceId", "nvarchar(64)", "NULL, unique filtered", "Hosted-invoice id — Card channel only"),
+        ("XenditPaymentId", "nvarchar(64)", "NULL, unique filtered", "Captured payment id — unique index enforces post-once posting"),
+        ("Channel", "int", "enum-as-int", "QrPh(0) | Card(1)"),
+        ("EventType", "int", "enum-as-int, default ArrivalPayment, sentinel -1", "Ledger event posted when paid — Deposit(0) guest checkout | ArrivalPayment(1) front desk"),
+        ("Amount / Currency", "decimal(18,2) / nvarchar(3)", "", "Intent amount, PHP"),
+        ("Status", "nvarchar(20)", "", "Pending | Processing | Paid | Failed | Expired | Cancelled"),
+        ("QrString", "nvarchar(max)", "NULL", "EMV QR payload — QRPh only; null for Card"),
+        ("CheckoutUrl", "nvarchar(512)", "NULL", "Xendit hosted-checkout redirect — Card only"),
+        ("ExpiresAtUtc / PaidAtUtc", "datetime2", "NULL", "Intent expiry + capture time"),
+        ("PaymentRecordId", "int", "FK → PaymentRecord, SET NULL, NULL", "Ledger row this intent posted"),
+        ("CreatedBy", "nvarchar(120)", "", "Staff name, or 'guest' for online deposits"),
+        ("FailureCode", "nvarchar(80)", "NULL", "Xendit failure code"),
+        ("IsTestMode", "bit", "", "Created with the xnd_development key"),
+        ("CreatedAtUtc / UpdatedAtUtc", "datetime2", "", "Audit timestamps"),
      ]),
     ("Room", "Strong entity",
      "One physical guest room (door number).",
@@ -258,6 +286,10 @@ RELATIONSHIPS = [
      "Indexed string link — enforced by app, not a constraint."),
     ("PasswordResetCode", "UserId", "AccountUser", "1 : N (logical)", "no FK",
      "Reset codes reference accounts by id string."),
+    ("QrPaymentIntent", "BookingId", "Booking", "N : 1", "NO ACTION",
+     "Each payment intent belongs to one stay; deleting the stay is blocked while intents exist."),
+    ("QrPaymentIntent", "PaymentRecordId", "PaymentRecord", "N : 0..1", "SET NULL",
+     "A paid intent links to the ledger row it posted; voiding/removing the payment keeps the intent."),
     ("PaymentRecord", "ReceivedBy / VerifiedBy / VoidedBy", "AccountUser", "—", "no FK",
      "Staff names stored as snapshot strings, deliberately not FKs."),
     ("StayReview", "DeletedBy", "AccountUser", "—", "no FK",
@@ -269,7 +301,7 @@ ENTITY_KINDS = [
     ("Strong entity", "Has its own PK and independent existence",
      "AccountUser, AccountRole, Booking, Room, RoomType, SpecialOffer, PaymentRecord, SecureSetting, SystemAuditLog, SystemFlushLog"),
     ("Weak entity", "Existence depends on a parent (composite or parent-owned PK)",
-     "BookingItem, BookingCharge, StayReview, AccountExternalLogin, AccountAuthToken, PasswordResetCode"),
+     "BookingItem, BookingCharge, StayReview, QrPaymentIntent, AccountExternalLogin, AccountAuthToken, PasswordResetCode"),
     ("Associative (junction) entity", "Resolves a many-to-many between two entities",
      "BookingRoomAssignment (BookingItem x Room)"),
 ]
@@ -293,6 +325,22 @@ RELATIONSHIP_KINDS = [
     ("Many-to-many via junction (M : N)", "Associative table with FKs to both sides", "BookingItem ↔ Room through BookingRoomAssignment"),
     ("Optional many-to-one (N : 0..1)", "Nullable FK — child survives parent deletion", "Booking → SpecialOffer (SET NULL), BookingItem → RoomType (SET NULL)"),
     ("Logical link (no FK)", "Id/name stored as string; integrity enforced by app", "StayReview.GuestUserId, PasswordResetCode.UserId, PaymentRecord.ReceivedBy"),
+]
+
+# (migration, scope, what changed vs the previously documented schema)
+SCHEMA_CHANGES = [
+    ("20260926034455_AddGuestEditTracking", "Booking",
+     "Added GuestEditedFieldsJson, LastGuestEditAtUtc, GuestEditsSeenByStaff — tracks guest "
+     "self-edits after booking and whether staff has seen them."),
+    ("20260927091818_AddQrPaymentIntent", "QrPaymentIntent (new table)",
+     "Xendit QRPh walk-in payment intents: unique ReferenceId, post-once XenditPaymentId, "
+     "FK to Booking (RESTRICT) and to PaymentRecord (SET NULL)."),
+    ("20260930094927_AddGuestDepositCheckout", "Booking + QrPaymentIntent",
+     "Online 50% deposit checkout: Booking gains GuestPayToken (unique, filtered) and "
+     "DepositDueAtUtc (30-minute hold). QrPaymentIntent gains Channel (QrPh|Card), "
+     "EventType (Deposit|ArrivalPayment, stored as int with a -1 sentinel), XenditInvoiceId "
+     "(unique, filtered) and CheckoutUrl; XenditPaymentRequestId and QrString become nullable "
+     "for hosted card checkouts."),
 ]
 
 CARDINALITY_NOTES = [
@@ -320,7 +368,7 @@ def write_markdown():
         "`sys.tables` / `sys.columns` / `sys.foreign_keys` on `HotelDb`. SQL Server (LocalDB),",
         "dates stored in UTC, shown in Manila time.",
         "",
-        "17 tables. Identity tables are named `Account*` (`AccountUser`, `AccountRole`,",
+        "18 tables. Identity tables are named `Account*` (`AccountUser`, `AccountRole`,",
         "`AccountExternalLogin`, `AccountAuthToken`) — they hold **staff and Google guests**.",
         "`PasswordResetCode` serves both staff and guests (every guest sets a local password on first",
         "login).",
@@ -357,6 +405,10 @@ def write_markdown():
     lines += ["", "### Cardinality & delete rules", "", "| Notation | Meaning | Example here |", "|---|---|---|"]
     for t, m, ex in CARDINALITY_NOTES:
         lines.append(f"| {t} | {_md_escape(m)} | {_md_escape(ex)} |")
+    lines += ["", "---", "", "## 5. Schema changes since the previous revision", "",
+              "| Migration | Scope | What changed |", "|---|---|---|"]
+    for mig, scope, note in SCHEMA_CHANGES:
+        lines.append(f"| `{mig}` | {_md_escape(scope)} | {_md_escape(note)} |")
     lines.append("")
     (OUT_DIR / "HotelDb-Schema.md").write_text("\n".join(lines), encoding="utf-8")
 
@@ -412,7 +464,7 @@ def write_docx():
     body(doc, "Entity–attribute–relationship reference generated from the live EF Core model "
               "(HotelBookingDbContext) and verified against sys.tables/sys.columns/sys.foreign_keys "
               "on HotelDb (SQL Server / LocalDB). Dates are stored in UTC and displayed in Manila time.")
-    body(doc, "17 tables. The Identity tables are named Account* (AccountUser, AccountRole, "
+    body(doc, "18 tables. The Identity tables are named Account* (AccountUser, AccountRole, "
               "AccountExternalLogin, AccountAuthToken) because they hold staff AND Google guests. "
               "PasswordResetCode likewise serves both — every guest sets a local password on "
               "first login.")
@@ -441,6 +493,9 @@ def write_docx():
     grid(doc, ["Type", "Meaning", "Examples"], RELATIONSHIP_KINDS, size=8)
     heading(doc, "Cardinality & delete rules", 3)
     grid(doc, ["Notation", "Meaning", "Example here"], CARDINALITY_NOTES, size=8)
+
+    heading(doc, "5. Schema changes since the previous revision", 2)
+    grid(doc, ["Migration", "Scope", "What changed"], SCHEMA_CHANGES, size=8)
 
     doc.save(OUT_DIR / "HotelDb-Schema.docx")
 

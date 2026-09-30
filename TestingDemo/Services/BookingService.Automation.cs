@@ -347,6 +347,77 @@ public sealed partial class BookingService
         return cancelled;
     }
 
+    public async Task<IReadOnlyList<BookingDto>> AutoCancelUnpaidDepositsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        var candidates = await _db.Bookings
+            .Include(item => item.Items)
+                .ThenInclude(line => line.RoomAssignments)
+                    .ThenInclude(assignment => assignment.Room)
+            .Where(b =>
+                !b.IsArchived
+                && b.Status == BookingStatus.Pending
+                && b.Channel == BookingChannel.Online
+                && b.DepositDueAtUtc != null
+                && b.DepositDueAtUtc <= now)
+            .ToListAsync(cancellationToken);
+
+        if (candidates.Count == 0)
+        {
+            return Array.Empty<BookingDto>();
+        }
+
+        var candidateIds = candidates.Select(b => b.Id).ToList();
+        var openIntentIds = await _db.QrPaymentIntents
+            .Where(i => candidateIds.Contains(i.BookingId)
+                && (i.Status == QrPaymentIntentStatus.Pending
+                    || i.Status == QrPaymentIntentStatus.Processing)
+                && (i.ExpiresAtUtc == null || i.ExpiresAtUtc > now))
+            .Select(i => i.BookingId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var openIntentSet = openIntentIds.ToHashSet();
+
+        var depositPaidIds = await _db.PaymentRecords
+            .Where(p => candidateIds.Contains(p.BookingId)
+                && p.Status == PaymentRecordStatus.Posted
+                && p.EventType == PaymentEventType.Deposit)
+            .Select(p => p.BookingId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var depositPaidSet = depositPaidIds.ToHashSet();
+
+        var expired = candidates
+            .Where(b => !openIntentSet.Contains(b.Id) && !depositPaidSet.Contains(b.Id))
+            .ToList();
+        if (expired.Count == 0)
+        {
+            return Array.Empty<BookingDto>();
+        }
+
+        var cancelled = new List<BookingDto>(expired.Count);
+        foreach (var booking in expired)
+        {
+            booking.Status = BookingStatus.Cancelled;
+            booking.IsArchived = true;
+            booking.ArchivedAtUtc = now;
+            booking.IsNotificationCleared = false;
+            booking.UpdatedAtUtc = now;
+            ReleaseAssignedRooms(booking);
+            AuditBooking(
+                booking,
+                "Booking.DepositExpired",
+                "Deposit not received within the 30-minute hold — booking released.",
+                actorUserId: "system",
+                actorDisplayName: "System");
+            cancelled.Add(MapBooking(booking));
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return cancelled;
+    }
+
     /// <summary>
     /// Auto-cancel deadline for an unverified pending booking.
     /// </summary>

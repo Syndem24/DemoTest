@@ -157,6 +157,10 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.AdultCount).HasDefaultValue(0);
             entity.Property(e => e.ChildCount).HasDefaultValue(0);
             entity.Property(e => e.GuestPartyJson).HasMaxLength(4000);
+            entity.Property(e => e.GuestPayToken).HasMaxLength(64);
+            entity.HasIndex(e => e.GuestPayToken)
+                .IsUnique()
+                .HasFilter("[GuestPayToken] IS NOT NULL");
             entity.HasIndex(e => new { e.IsArchived, e.Status, e.CheckInAtUtc, e.CheckoutTimeUtc });
             entity.HasIndex(e => e.CreatedAtUtc);
             entity.HasIndex(e => new { e.IsArchived, e.Status, e.CreatedAtUtc, e.Id })
@@ -318,16 +322,29 @@ public class HotelBookingDbContext : IdentityDbContext<ApplicationUser>
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ReferenceId).HasMaxLength(64).IsRequired();
             entity.HasIndex(e => e.ReferenceId).IsUnique();
-            entity.Property(e => e.XenditPaymentRequestId).HasMaxLength(64).IsRequired();
-            entity.HasIndex(e => e.XenditPaymentRequestId).IsUnique();
+            entity.Property(e => e.XenditPaymentRequestId).HasMaxLength(64);
+            entity.HasIndex(e => e.XenditPaymentRequestId)
+                .IsUnique()
+                .HasFilter("[XenditPaymentRequestId] IS NOT NULL");
+            entity.Property(e => e.XenditInvoiceId).HasMaxLength(64);
+            entity.HasIndex(e => e.XenditInvoiceId)
+                .IsUnique()
+                .HasFilter("[XenditInvoiceId] IS NOT NULL");
             entity.Property(e => e.XenditPaymentId).HasMaxLength(64);
             entity.HasIndex(e => e.XenditPaymentId)
                 .IsUnique()
                 .HasFilter("[XenditPaymentId] IS NOT NULL");
+            entity.Property(e => e.EventType)
+                .HasConversion<int>()
+                .HasDefaultValue(PaymentEventType.ArrivalPayment)
+                .HasSentinel((PaymentEventType)(-1));
+            entity.Property(e => e.Channel)
+                .HasConversion<int>()
+                .HasDefaultValue(XenditChannel.QrPh);
             entity.Property(e => e.Amount).HasPrecision(18, 2);
             entity.Property(e => e.Currency).HasMaxLength(3).IsRequired();
             entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
-            entity.Property(e => e.QrString).IsRequired();
+            entity.Property(e => e.CheckoutUrl).HasMaxLength(512);
             entity.Property(e => e.CreatedBy).HasMaxLength(120).IsRequired();
             entity.Property(e => e.FailureCode).HasMaxLength(80);
             entity.HasIndex(e => e.BookingId);

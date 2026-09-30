@@ -20,12 +20,13 @@ public sealed record DashboardAttentionItem(
     string Detail,
     string Href,
     int BookingId,
-    string Action);
+    string Action,
+    string Bucket);
 
 public sealed record DashboardSignal(string Title, string Detail, string Level);
 
 /// <summary>One physical room shown as a chip in the room-availability breakdown.</summary>
-public sealed record DashboardRoomCell(string RoomNumber, string Status);
+public sealed record DashboardRoomCell(int Id, string RoomNumber, string Status);
 
 /// <summary>Per-room-type availability row for the dashboard switch list.</summary>
 public sealed record DashboardRoomTypeRow(
@@ -194,7 +195,7 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
         var weekStartUtc = todayStart.AddDays(-6);
 
         var roomFlat = await _db.Rooms.AsNoTracking()
-            .Select(r => new { r.RoomTypeId, TypeName = r.RoomType.Name, r.RoomNumber, r.Status })
+            .Select(r => new { r.Id, r.RoomTypeId, TypeName = r.RoomType.Name, r.RoomNumber, r.Status })
             .ToListAsync(cancellationToken);
         var roomsTotal = roomFlat.Count;
         var roomsAvailable = roomFlat.Count(s => s.Status == RoomStatus.Available);
@@ -213,7 +214,7 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
                 g.Count(r => r.Status == RoomStatus.Available),
                 g.Count(r => r.Status == RoomStatus.Occupied),
                 g.OrderBy(r => r.RoomNumber, StringComparer.OrdinalIgnoreCase)
-                    .Select(r => new DashboardRoomCell(r.RoomNumber, r.Status.ToString()))
+                    .Select(r => new DashboardRoomCell(r.Id, r.RoomNumber, r.Status.ToString()))
                     .ToList()))
             .ToList();
 
@@ -245,7 +246,8 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
                 b.TotalAmount,
                 b.Channel,
                 b.Reference,
-                b.GuestName))
+                b.GuestName,
+                b.IsNotificationCleared))
             .ToListAsync(cancellationToken);
 
         var pending = liveRows.Count(b => b.Status == BookingStatus.Pending);
@@ -372,32 +374,93 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
             pipeline,
             activeOffers);
 
-        // Pending stays always need a decision — list them regardless of how far
-        // out check-in is, nearest first; same-day confirmed arrivals follow.
-        var attentionItems = liveRows
+        // Only arrivals needing attention within the next two Manila days —
+        // pending decisions keep their spot regardless of check-in date, but
+        // confirmed upcoming stays are capped at today + tomorrow so far-out
+        // guests don't flood the list. Guests assignable today sort first.
+        var dayAfterTomorrowStart = tomorrowStart.AddDays(1);
+        var attentionCandidates = liveRows
             .Where(b =>
                 b.Status == BookingStatus.Pending
                 || (b.Status == BookingStatus.Confirmed
                     && b.CheckInAtUtc >= todayStart
-                    && b.CheckInAtUtc < tomorrowStart))
-            .OrderBy(b => b.Status == BookingStatus.Pending ? 0 : 1)
+                    && b.CheckInAtUtc < dayAfterTomorrowStart))
+            .OrderBy(b =>
+                b.Status == BookingStatus.Confirmed && b.CheckInAtUtc < tomorrowStart ? 0
+                : b.Status == BookingStatus.Pending ? 1
+                : 2)
             .ThenBy(b => b.CheckInAtUtc)
-            .Take(8)
+            .Take(60)
+            .ToList();
+
+        // "Booking" = fully paid (posted payments cover the total); anything
+        // short of that — unpaid or deposit-only — stays a "Reservation".
+        var attentionIds = attentionCandidates.Select(r => r.Id).ToList();
+        var postedByBooking = attentionIds.Count == 0
+            ? new Dictionary<int, decimal>()
+            : await _db.PaymentRecords.AsNoTracking()
+                .Where(p => attentionIds.Contains(p.BookingId)
+                            && p.Status == PaymentRecordStatus.Posted)
+                .GroupBy(p => p.BookingId)
+                .Select(g => new { BookingId = g.Key, Net = g.Sum(p => p.Amount) })
+                .ToDictionaryAsync(x => x.BookingId, x => x.Net, cancellationToken);
+
+        // Real room assignments — LoadRoomCountsByBookingAsync deliberately
+        // falls back to requested quantity, so it can never mean "unassigned".
+        var assignedBookingIds = attentionIds.Count == 0
+            ? new HashSet<int>()
+            : (await _db.BookingRoomAssignments.AsNoTracking()
+                .Where(a => attentionIds.Contains(a.BookingItem.BookingId))
+                .Select(a => a.BookingItem.BookingId)
+                .Distinct()
+                .ToListAsync(cancellationToken))
+            .ToHashSet();
+
+        var attentionRows = attentionCandidates
+            .Where(row =>
+            {
+                if (row.Status == BookingStatus.Pending) return true;
+                // Same-day arrivals can be dismissed with Done (marks the
+                // notification cleared); cleared ones stay hidden.
+                if (row.CheckInAtUtc < tomorrowStart) return !row.IsNotificationCleared;
+                var paid = postedByBooking.GetValueOrDefault(row.Id, 0m);
+                var fullyPaid = row.TotalAmount > 0m && paid >= row.TotalAmount;
+                // A settled stay with rooms already assigned needs no attention.
+                return !fullyPaid || !assignedBookingIds.Contains(row.Id);
+            })
+            .Take(30)
+            .ToList();
+
+        var attentionItems = attentionRows
             .Select(row =>
             {
                 var whenManila = PhilippinesTime.ToManila(row.CheckInAtUtc);
                 var when = row.CheckInAtUtc < tomorrowStart
                     ? whenManila.ToString("h:mm tt")
                     : whenManila.ToString("MMM d · h:mm tt");
+                var paid = postedByBooking.GetValueOrDefault(row.Id, 0m);
+                var fullyPaid = row.TotalAmount > 0m && paid >= row.TotalAmount;
+                var unassigned = !assignedBookingIds.Contains(row.Id);
                 var title = row.Status == BookingStatus.Pending
                     ? $"Call · {row.GuestName}"
-                    : $"Arrival · {row.GuestName}";
+                    : fullyPaid && unassigned
+                        ? $"Assign · {row.GuestName}"
+                        : $"Arrival · {row.GuestName}";
+                // Rows still needing payment or rooms get the actionable
+                // Assign/Payments button; only fully-settled + assigned
+                // same-day arrivals keep the dismissible Done action.
+                var action = row.Status == BookingStatus.Pending
+                    ? "review"
+                    : !fullyPaid || unassigned
+                        ? "open"
+                        : "arrival";
                 return new DashboardAttentionItem(
                     title,
                     $"{row.Reference} · {when}",
                     $"/AdminBookings?booking={row.Id}",
                     row.Id,
-                    row.Status == BookingStatus.Pending ? "review" : "arrival");
+                    action,
+                    fullyPaid ? "Booking" : "Reservation");
             })
             .ToList();
 
@@ -902,7 +965,8 @@ public sealed class DashboardAnalyticsService : IDashboardAnalyticsService
         decimal TotalAmount,
         BookingChannel Channel,
         string Reference,
-        string GuestName);
+        string GuestName,
+        bool IsNotificationCleared);
 
     private sealed record StayWindowRow(
         DateTime CheckInAtUtc,

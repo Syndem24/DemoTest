@@ -163,7 +163,7 @@
 
   function formatPaymentEvent(value) {
     const map = {
-      Deposit: 'Deposit',
+      Deposit: 'Deposit (50%)',
       ArrivalPayment: 'Arrival',
       BalanceSettlement: 'Balance',
       Refund: 'Refund',
@@ -181,7 +181,7 @@
     ) {
       return 'E-wallet (InstaPay QR)';
     }
-    if (value === 'Card') return 'Card (legacy)';
+    if (value === 'Card') return 'Card (Xendit)';
     if (value === 'Cash') return 'Cash';
     return String(value || '');
   }

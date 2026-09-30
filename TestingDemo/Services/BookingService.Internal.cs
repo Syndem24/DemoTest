@@ -1110,7 +1110,9 @@ public sealed partial class BookingService
             GuestEditedFields: ParseGuestEditedFields(booking),
             LastGuestEditAtUtc: booking.LastGuestEditAtUtc,
             GuestEditsPending: !booking.GuestEditsSeenByStaff
-                && ParseGuestEditedFields(booking).Count > 0);
+                && ParseGuestEditedFields(booking).Count > 0,
+            GuestPayToken: booking.GuestPayToken,
+            DepositDueAtUtc: booking.DepositDueAtUtc);
     }
 
     private static IReadOnlyList<string> ParseGuestEditedFields(Booking booking)
